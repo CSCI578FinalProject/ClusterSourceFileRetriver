@@ -1,0 +1,47 @@
+3
+-----CSCI578-----
+
+
+
+    public long getCurrentSize() {
+        return currentSize.get();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void sendMessage(Member[] destination, ChannelMessage msg, InterceptorPayload payload)
+            throws ChannelException {
+        boolean async = (msg.getOptions() &
+                Channel.SEND_OPTIONS_ASYNCHRONOUS) == Channel.SEND_OPTIONS_ASYNCHRONOUS;
+        if (async && run) {
+            if ((getCurrentSize()+msg.getMessage().getLength()) > maxQueueSize) {
+                if (alwaysSend) {
+                    super.sendMessage(destination,msg,payload);
+                    return;
+                } else {
+                    throw new ChannelException(sm.getString("messageDispatchInterceptor.queue.full",
+                            Long.toString(maxQueueSize), Long.toString(getCurrentSize())));
+                }
+            }
+            //add to queue
+            if (useDeepClone) {
+                msg = (ChannelMessage)msg.deepclone();
+            }
+            if (!addToQueue(msg, destination, payload)) {
+                throw new ChannelException(
+                        sm.getString("messageDispatchInterceptor.unableAdd.queue"));
+            }
+            addAndGetCurrentSize(msg.getMessage().getLength());
+        } else {
+            super.sendMessage(destination, msg, payload);
+        }
+    }
+-----CSCI578-----
+
+
+
+    public long addAndGetCurrentSize(long inc) {
+        return currentSize.addAndGet(inc);
+    }

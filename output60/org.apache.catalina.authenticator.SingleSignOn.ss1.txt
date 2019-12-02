@@ -1,0 +1,127 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Deregister the specified session.  If it is the last session,
+     * then also get rid of the single sign on identifier
+     *
+     * @param ssoId Single sign on identifier
+     * @param session Session to be deregistered
+     */
+    protected void deregister(String ssoId, Session session) {
+
+        synchronized (reverse) {
+            reverse.remove(session);
+        }
+
+        SingleSignOnEntry sso = lookup(ssoId);
+        if ( sso == null )
+            return;
+
+        sso.removeSession( session );
+
+        // see if we are the last session, if so blow away ssoId
+        Session sessions[] = sso.findSessions();
+        if ( sessions == null || sessions.length == 0 ) {
+            synchronized (cache) {
+                sso = (SingleSignOnEntry) cache.remove(ssoId);
+            }
+        }
+
+    }
+
+
+
+    /**
+     * Deregister the specified single sign on identifier, and invalidate
+     * any associated sessions.
+     *
+     * @param ssoId Single sign on identifier to deregister
+     */
+    protected void deregister(String ssoId) {
+
+        if (containerLog.isDebugEnabled())
+            containerLog.debug("Deregistering sso id '" + ssoId + "'");
+
+        // Look up and remove the corresponding SingleSignOnEntry
+        SingleSignOnEntry sso = null;
+        synchronized (cache) {
+            sso = (SingleSignOnEntry) cache.remove(ssoId);
+        }
+
+        if (sso == null)
+            return;
+
+        // Expire any associated sessions
+        Session sessions[] = sso.findSessions();
+        for (int i = 0; i < sessions.length; i++) {
+            if (containerLog.isTraceEnabled())
+                containerLog.trace(" Invalidating session " + sessions[i]);
+            // Remove from reverse cache first to avoid recursion
+            synchronized (reverse) {
+                reverse.remove(sessions[i]);
+            }
+            // Invalidate this session
+            sessions[i].expire();
+        }
+
+        // NOTE:  Clients may still possess the old single sign on cookie,
+        // but it will be removed on the next request since it is no longer
+        // in the cache
+
+    }
+
+
+
+    /**
+     * Register the specified Principal as being associated with the specified
+     * value for the single sign on identifier.
+     *
+     * @param ssoId Single sign on identifier to register
+     * @param principal Associated user principal that is identified
+     * @param authType Authentication type used to authenticate this
+     *  user principal
+     * @param username Username used to authenticate this user
+     * @param password Password used to authenticate this user
+     */
+    protected void register(String ssoId, Principal principal, String authType,
+                  String username, String password) {
+
+        if (containerLog.isDebugEnabled())
+            containerLog.debug("Registering sso id '" + ssoId + "' for user '" +
+                (principal != null ? principal.getName() : "") + "' with auth type '" + authType + "'");
+
+        synchronized (cache) {
+            cache.put(ssoId, new SingleSignOnEntry(principal, authType,
+                                                   username, password));
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Updates the SingleSignOnEntry to reflect the latest security
+     * information associated with the caller.
+     *
+     * @param principal the <code>Principal</code> returned by the latest
+     *                  call to <code>Realm.authenticate</code>.
+     * @param authType  the type of authenticator used (BASIC, CLIENT_CERT,
+     *                  DIGEST or FORM)
+     * @param username  the username (if any) used for the authentication
+     * @param password  the password (if any) used for the authentication
+     */
+    public void updateCredentials(Principal principal, String authType,
+                                  String username, String password) {
+
+        this.principal = principal;
+        this.authType = authType;
+        this.username = username;
+        this.password = password;
+        this.canReauthenticate =
+            (Constants.BASIC_METHOD.equals(authType)
+                || Constants.FORM_METHOD.equals(authType));
+    }

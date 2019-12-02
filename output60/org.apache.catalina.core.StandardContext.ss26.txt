@@ -1,0 +1,972 @@
+49
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Create a new manager which will use this cluster to replicate its
+     * sessions.
+     *
+     * @param name Name (key) of the application with which the manager is
+     * associated
+     */
+    public Manager createManager(String name);
+-----CSCI578-----
+
+
+    private void registerJMX() {
+        try {
+            if (log.isDebugEnabled()) {
+                log.debug("Checking for " + oname );
+            }
+            if(! Registry.getRegistry(null, null)
+                .getMBeanServer().isRegistered(oname)) {
+                controller = oname;
+                Registry.getRegistry(null, null)
+                    .registerComponent(this, oname, null);
+
+                // Send j2ee.object.created notification
+                if (this.getObjectName() != null) {
+                    Notification notification = new Notification(
+                                                        "j2ee.object.created",
+                                                        this.getObjectName(),
+                                                        sequenceNumber++);
+                    broadcaster.sendNotification(notification);
+                }
+            }
+            Container children[] = findChildren();
+            for (int i=0; children!=null && i<children.length; i++) {
+                ((StandardWrapper)children[i]).registerJMX( this );
+            }
+        } catch (Exception ex) {
+            if(log.isInfoEnabled())
+                log.info("Error registering wrapper with jmx " + this + " " +
+                    oname + " " + ex.toString(), ex );
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the maximum size of the cache in KB.
+     */
+    public void setCacheMaxSize(int cacheMaxSize) {
+        this.cacheMaxSize = cacheMaxSize;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Loader with which this Context is associated.
+     *
+     * @param loader The newly associated loader
+     */
+    public synchronized void setLoader(Loader loader) {
+
+        super.setLoader(loader);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the "correctly configured" flag for this Context.
+     */
+    public boolean getConfigured() {
+
+        return (this.configured);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the "correctly configured" flag for this Context.  This can be
+     * set to false by startup listeners that detect a fatal configuration
+     * error to avoid the application from being made available.
+     *
+     * @param configured The new correctly configured flag
+     */
+    public void setConfigured(boolean configured) {
+
+        boolean oldConfigured = this.configured;
+        this.configured = configured;
+        support.firePropertyChange("configured",
+                                   oldConfigured,
+                                   this.configured);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the maximum size of the cache in KB.
+     */
+    public int getCacheMaxSize() {
+        return cacheMaxSize;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the env context.
+     */
+    public javax.naming.Context getEnvContext() {
+        return this.envCtx;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the "follow standard delegation model" flag used to configure
+     * our ClassLoader.
+     */
+    public boolean getDelegate() {
+
+        return (this.delegate);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set cached.
+     */
+    public void setCached(boolean cached) {
+        this.cached = cached;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get cache TTL.
+     */
+    public int getCacheTTL() {
+        return cacheTTL;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Is linking allowed.
+     */
+    public boolean isAllowLinking() {
+        return allowLinking;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Start this Context component.
+     *
+     * @exception LifecycleException if a startup error occurs
+     */
+    public synchronized void start() throws LifecycleException {
+        //if (lazy ) return;
+        if (started) {
+            if(log.isInfoEnabled())
+                log.info(sm.getString("containerBase.alreadyStarted", logName()));
+            return;
+        }
+        if( !initialized ) {
+            try {
+                init();
+            } catch( Exception ex ) {
+                throw new LifecycleException("Error initializaing ", ex);
+            }
+        }
+        if(log.isDebugEnabled())
+            log.debug("Starting " + ("".equals(getName()) ? "ROOT" : getName()));
+
+        // Set JMX object name for proper pipeline registration
+        preRegisterJMX();
+
+        if ((oname != null) &&
+            (Registry.getRegistry(null, null).getMBeanServer().isRegistered(oname))) {
+            // As things depend on the JMX registration, the context
+            // must be reregistered again once properly initialized
+            Registry.getRegistry(null, null).unregisterComponent(oname);
+        }
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(BEFORE_START_EVENT, null);
+
+        setAvailable(false);
+        setConfigured(false);
+        boolean ok = true;
+
+        // Add missing components as necessary
+        if (webappResources == null) {   // (1) Required by Loader
+            if (log.isDebugEnabled())
+                log.debug("Configuring default Resources");
+            try {
+                if (docBase == null) {
+                    setResources(new EmptyDirContext());
+                } else if (docBase.endsWith(".war")
+                        && !(new File(getBasePath())).isDirectory()) {
+                    setResources(new WARDirContext());
+                } else {
+                    setResources(new FileDirContext());
+                }
+            } catch (IllegalArgumentException e) {
+                log.error("Error initializing resources: " + e.getMessage());
+                ok = false;
+            }
+        }
+        if (ok) {
+            if (!resourcesStart()) {
+                log.error( "Error in resourceStart()");
+                ok = false;
+            }
+        }
+
+        // Look for a realm - that may have been configured earlier.
+        // If the realm is added after context - it'll set itself.
+        // TODO: what is the use case for this ?
+        if( realm == null && mserver != null ) {
+            ObjectName realmName=null;
+            try {
+                realmName=new ObjectName( getEngineName() + ":type=Realm,host=" +
+                        getHostname() + ",path=" + getPath());
+                if( mserver.isRegistered(realmName ) ) {
+                    mserver.invoke(realmName, "init",
+                            new Object[] {},
+                            new String[] {}
+                    );
+                }
+            } catch( Throwable t ) {
+                if(log.isDebugEnabled())
+                    log.debug("No realm for this host " + realmName);
+            }
+        }
+
+        if (getLoader() == null) {
+            WebappLoader webappLoader = new WebappLoader(getParentClassLoader());
+            webappLoader.setDelegate(getDelegate());
+            setLoader(webappLoader);
+        }
+
+        // Initialize character set mapper
+        getCharsetMapper();
+
+        // Post work directory
+        postWorkDirectory();
+
+        // Validate required extensions
+        boolean dependencyCheck = true;
+        try {
+            dependencyCheck = ExtensionValidator.validateApplication
+                (getResources(), this);
+        } catch (IOException ioe) {
+            log.error("Error in dependencyCheck", ioe);
+            dependencyCheck = false;
+        }
+
+        if (!dependencyCheck) {
+            // do not make application available if depency check fails
+            ok = false;
+        }
+
+        // Reading the "catalina.useNaming" environment variable
+        String useNamingProperty = System.getProperty("catalina.useNaming");
+        if ((useNamingProperty != null)
+            && (useNamingProperty.equals("false"))) {
+            useNaming = false;
+        }
+
+        if (ok && isUseNaming()) {
+            if (namingContextListener == null) {
+                namingContextListener = new NamingContextListener();
+                namingContextListener.setName(getNamingContextName());
+                addLifecycleListener(namingContextListener);
+            }
+        }
+
+        // Standard container startup
+        if (log.isDebugEnabled())
+            log.debug("Processing standard container startup");
+
+
+        // Binding thread
+        ClassLoader oldCCL = bindThread();
+
+        boolean mainOk = false;
+
+        try {
+
+            if (ok) {
+
+                started = true;
+
+                // Start our subordinate components, if any
+                if ((loader != null) && (loader instanceof Lifecycle))
+                    ((Lifecycle) loader).start();
+
+                // since the loader just started, the webapp classloader is now
+                // created.
+                // By calling unbindThread and bindThread in a row, we setup the
+                // current Thread CCL to be the webapp classloader
+                unbindThread(oldCCL);
+                oldCCL = bindThread();
+
+                // Initialize logger again. Other components might have used it too early,
+                // so it should be reset.
+                logger = null;
+                getLogger();
+                if ((logger != null) && (logger instanceof Lifecycle))
+                    ((Lifecycle) logger).start();
+
+                if ((cluster != null) && (cluster instanceof Lifecycle))
+                    ((Lifecycle) cluster).start();
+                if ((realm != null) && (realm instanceof Lifecycle))
+                    ((Lifecycle) realm).start();
+                if ((resources != null) && (resources instanceof Lifecycle))
+                    ((Lifecycle) resources).start();
+
+                // Start our child containers, if any
+                Container children[] = findChildren();
+                for (int i = 0; i < children.length; i++) {
+                    if (children[i] instanceof Lifecycle)
+                        ((Lifecycle) children[i]).start();
+                }
+
+                // Start the Valves in our pipeline (including the basic),
+                // if any
+                if (pipeline instanceof Lifecycle) {
+                    ((Lifecycle) pipeline).start();
+                }
+
+                // Notify our interested LifecycleListeners
+                lifecycle.fireLifecycleEvent(START_EVENT, null);
+
+                // Acquire clustered manager
+                Manager contextManager = null;
+                if (manager == null) {
+                    if ( (getCluster() != null) && distributable) {
+                        try {
+                            contextManager = getCluster().createManager(getName());
+                        } catch (Exception ex) {
+                            log.error("standardContext.clusterFail", ex);
+                            ok = false;
+                        }
+                    } else {
+                        contextManager = new StandardManager();
+                    }
+                }
+
+                // Configure default manager if none was specified
+                if (contextManager != null) {
+                    setManager(contextManager);
+                }
+
+                if (manager!=null && (getCluster() != null) && distributable) {
+                    //let the cluster know that there is a context that is distributable
+                    //and that it has its own manager
+                    getCluster().registerManager(manager);
+                }
+
+
+                mainOk = true;
+
+            }
+
+        } finally {
+            // Unbinding thread
+            unbindThread(oldCCL);
+            if (!mainOk) {
+                // An exception occurred
+                // Register with JMX anyway, to allow management
+                registerJMX();
+            }
+        }
+
+        if (!getConfigured()) {
+            log.error( "Error getConfigured");
+            ok = false;
+        }
+
+        // We put the resources into the servlet context
+        if (ok)
+            getServletContext().setAttribute
+                (Globals.RESOURCES_ATTR, getResources());
+
+        // Initialize associated mapper
+        mapper.setContext(getPath(), welcomeFiles, resources);
+
+        // Binding thread
+        oldCCL = bindThread();
+
+        // Set annotation processing parameter for Jasper (unfortunately, since
+        // this can be configured in many places and not just in /WEB-INF/web.xml,
+        // there are not many solutions)
+        // Initialize annotation processor
+        if (ok && !getIgnoreAnnotations()) {
+            if (annotationProcessor == null) {
+                if (isUseNaming() && namingContextListener != null) {
+                    annotationProcessor =
+                        new DefaultAnnotationProcessor(namingContextListener.getEnvContext());
+                } else {
+                    annotationProcessor = new DefaultAnnotationProcessor(null);
+                }
+            }
+            getServletContext().setAttribute
+                (AnnotationProcessor.class.getName(), annotationProcessor);
+        }
+
+        try {
+
+            // Create context attributes that will be required
+            if (ok) {
+                postWelcomeFiles();
+            }
+
+            // Set up the context init params
+            mergeParameters();
+
+            if (ok) {
+                // Notify our interested LifecycleListeners
+                lifecycle.fireLifecycleEvent(AFTER_START_EVENT, null);
+            }
+
+            // Configure and call application event listeners
+            if (ok) {
+                if (!listenerStart()) {
+                    log.error( "Error listenerStart");
+                    ok = false;
+                }
+            }
+
+            try {
+                // Start manager
+                if ((manager != null) && (manager instanceof Lifecycle)) {
+                    ((Lifecycle) getManager()).start();
+                }
+
+                // Start ContainerBackgroundProcessor thread
+                super.threadStart();
+            } catch(Exception e) {
+                log.error("Error manager.start()", e);
+                ok = false;
+            }
+
+            // Configure and call application filters
+            if (ok) {
+                if (!filterStart()) {
+                    log.error( "Error filterStart");
+                    ok = false;
+                }
+            }
+
+            // Load and initialize all "load on startup" servlets
+            if (ok) {
+                loadOnStartup(findChildren());
+            }
+
+        } finally {
+            // Unbinding thread
+            unbindThread(oldCCL);
+        }
+
+        // Set available status depending upon startup success
+        if (ok) {
+            if (log.isDebugEnabled())
+                log.debug("Starting completed");
+            setAvailable(true);
+        } else {
+            log.error(sm.getString("standardContext.startFailed", getName()));
+            try {
+                stop();
+            } catch (Throwable t) {
+                log.error(sm.getString("standardContext.startCleanup"), t);
+            }
+            setAvailable(false);
+        }
+
+        // JMX registration
+        registerJMX();
+
+        startTime=System.currentTimeMillis();
+
+        // Send j2ee.state.running notification
+        if (ok && (this.getObjectName() != null)) {
+            Notification notification =
+                new Notification("j2ee.state.running", this.getObjectName(),
+                                sequenceNumber++);
+            broadcaster.sendNotification(notification);
+        }
+
+        // Close all JARs right away to avoid always opening a peak number
+        // of files on startup
+        if (getLoader() instanceof WebappLoader) {
+            ((WebappLoader) getLoader()).closeJARs(true);
+        }
+
+        // Reinitializing if something went wrong
+        if (!ok && started) {
+            stop();
+        }
+
+        //cacheContext();
+    }
+
+
+    /** Destroy needs to clean up the context completely.
+     *
+     * The problem is that undoing all the config in start() and restoring
+     * a 'fresh' state is impossible. After stop()/destroy()/init()/start()
+     * we should have the same state as if a fresh start was done - i.e
+     * read modified web.xml, etc. This can only be done by completely
+     * removing the context object and remapping a new one, or by cleaning
+     * up everything.
+     *
+     * XXX Should this be done in stop() ?
+     *
+     */
+    public void destroy() throws Exception {
+        if( oname != null ) {
+            // Send j2ee.object.deleted notification
+            Notification notification =
+                new Notification("j2ee.object.deleted", this.getObjectName(),
+                                sequenceNumber++);
+            broadcaster.sendNotification(notification);
+        }
+        super.destroy();
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(DESTROY_EVENT, null);
+
+        synchronized (instanceListenersLock) {
+            instanceListeners = new String[0];
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the "name" property.
+     *
+     * @param name The new name
+     */
+    public void setName(String name) {
+        this.name = name;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Is case sensitive ?
+     */
+    public boolean isCaseSensitive() {
+        return caseSensitive;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the "follow standard delegation model" flag used to configure
+     * our ClassLoader.
+     *
+     * @param delegate The new flag
+     */
+    public void setDelegate(boolean delegate) {
+
+        boolean oldDelegate = this.delegate;
+        this.delegate = delegate;
+        support.firePropertyChange("delegate", new Boolean(oldDelegate),
+                                   new Boolean(this.delegate));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set context, used for wrapper mapping (request dispatcher).
+     *
+     * @param welcomeResources Welcome files defined for this context
+     * @param resources Static resources of the context
+     */
+    public void setContext(String path, String[] welcomeResources,
+                           javax.naming.Context resources) {
+        context.name = path;
+        context.welcomeResources = welcomeResources;
+        context.resources = resources;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the parent class loader (if any) for this web application.
+     * This call is meaningful only <strong>after</strong> a Loader has
+     * been configured.
+     */
+    public ClassLoader getParentClassLoader() {
+        if (parentClassLoader != null)
+            return (parentClassLoader);
+        if (getPrivileged()) {
+            return this.getClass().getClassLoader();
+        } else if (parent != null) {
+            return (parent.getParentClassLoader());
+        }
+        return (ClassLoader.getSystemClassLoader());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get naming context full name.
+     */
+    private String getNamingContextName() {
+    if (namingContextName == null) {
+        Container parent = getParent();
+        if (parent == null) {
+        namingContextName = getName();
+        } else {
+        Stack stk = new Stack();
+        StringBuffer buff = new StringBuffer();
+        while (parent != null) {
+            stk.push(parent.getName());
+            parent = parent.getParent();
+        }
+        while (!stk.empty()) {
+            buff.append("/" + stk.pop());
+        }
+        buff.append(getName());
+        namingContextName = buff.toString();
+        }
+    }
+    return namingContextName;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set cache TTL.
+     */
+    public void setCacheTTL(int cacheTTL) {
+        this.cacheTTL = cacheTTL;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Factory method to create (if necessary) and return our
+     * <code>MBeanServer</code> instance.
+     *
+     */
+    public synchronized MBeanServer getMBeanServer() {
+        long t1=System.currentTimeMillis();
+
+        if (server == null) {
+            if( MBeanServerFactory.findMBeanServer(null).size() > 0 ) {
+                server=(MBeanServer)MBeanServerFactory.findMBeanServer(null).get(0);
+                if( log.isDebugEnabled() ) {
+                    log.debug("Using existing MBeanServer " + (System.currentTimeMillis() - t1 ));
+                }
+            } else {
+                server = ManagementFactory.getPlatformMBeanServer();
+                if( log.isDebugEnabled() ) {
+                    log.debug("Creating MBeanServer"+ (System.currentTimeMillis() - t1 ));
+                }
+            }
+        }
+        return (server);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Java class name of the Wrapper class implementation we use.
+     */
+    private String wrapperClassName = StandardWrapper.class.getName();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the privileged flag for this web application.
+     */
+    public boolean getPrivileged() {
+
+        return (this.privileged);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Post a copy of our current list of welcome files as a servlet context
+     * attribute, so that the default servlet can find them.
+     */
+    private void postWelcomeFiles() {
+
+        getServletContext().setAttribute("org.apache.catalina.WELCOME_FILES",
+                                         welcomeFiles);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the boolean on the annotations parsing.
+     */
+    public boolean getIgnoreAnnotations() {
+        return this.ignoreAnnotations;
+    }
+-----CSCI578-----
+
+
+    public String getHostname() {
+        Container parentHost = getParent();
+        if (parentHost != null) {
+            hostName = parentHost.getName();
+        }
+        if ((hostName == null) || (hostName.length() < 1))
+            hostName = "_";
+        return hostName;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected void registerJMX(StandardContext ctx) {
+
+        String parentName = ctx.getName();
+        parentName = ("".equals(parentName)) ? "/" : parentName;
+
+        String hostName = ctx.getParent().getName();
+        hostName = (hostName==null) ? "DEFAULT" : hostName;
+
+        String domain = ctx.getDomain();
+
+        String webMod= "//" + hostName + parentName;
+        String onameStr = domain + ":j2eeType=Servlet,name=" + getName() +
+                          ",WebModule=" + webMod + ",J2EEApplication=" +
+                          ctx.getJ2EEApplication() + ",J2EEServer=" +
+                          ctx.getJ2EEServer();
+        try {
+            oname=new ObjectName(onameStr);
+            controller=oname;
+            Registry.getRegistry(null, null)
+                .registerComponent(this, oname, null );
+            
+            // Send j2ee.object.created notification 
+            if (this.getObjectName() != null) {
+                Notification notification = new Notification(
+                                                "j2ee.object.created", 
+                                                this.getObjectName(), 
+                                                sequenceNumber++);
+                broadcaster.sendNotification(notification);
+            }
+        } catch( Exception ex ) {
+            log.info("Error registering servlet with jmx " + this, ex);
+        }
+
+        if (isJspServlet) {
+            // Register JSP monitoring mbean
+            onameStr = domain + ":type=JspMonitor,name=" + getName()
+                       + ",WebModule=" + webMod
+                       + ",J2EEApplication=" + ctx.getJ2EEApplication()
+                       + ",J2EEServer=" + ctx.getJ2EEServer();
+            try {
+                jspMonitorON = new ObjectName(onameStr);
+                Registry.getRegistry(null, null)
+                    .registerComponent(instance, jspMonitorON, null);
+            } catch( Exception ex ) {
+                log.info("Error registering JSP monitoring with jmx " +
+                         instance, ex);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return the resources object that is mapped to a specified path.
+     * The path must begin with a "/" and is interpreted as relative to the
+     * current context root.
+     */
+    public DirContext getResources() {
+
+        return context.getResources();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified welcome file name from the list recognized
+     * by this Context.
+     *
+     * @param name Name of the welcome file to be removed
+     */
+    public void removeWelcomeFile(String name) {
+
+        synchronized (welcomeFilesLock) {
+
+            // Make sure this welcome file is currently present
+            int n = -1;
+            for (int i = 0; i < welcomeFiles.length; i++) {
+                if (welcomeFiles[i].equals(name)) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified constraint
+            int j = 0;
+            String results[] = new String[welcomeFiles.length - 1];
+            for (int i = 0; i < welcomeFiles.length; i++) {
+                if (i != n)
+                    results[j++] = welcomeFiles[i];
+            }
+            welcomeFiles = results;
+
+        }
+
+        // Inform interested listeners
+        postWelcomeFiles();
+        fireContainerEvent("removeWelcomeFile", name);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * JSR77 servlets attribute
+     *
+     * @return list of all servlets ( we know about )
+     */
+    public String[] getServlets() {
+
+        String[] result = null;
+
+        Container[] children = findChildren();
+        if (children != null) {
+            result = new String[children.length];
+            for( int i=0; i< children.length; i++ ) {
+                result[i] = ((StandardWrapper)children[i]).getObjectName();
+            }
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+    /**
+     * Return the naming resources associated with this web application.
+     */
+    public javax.naming.directory.DirContext getStaticResources() {
+
+        return getResources();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the naming resources associated with this web application.
+     * FIXME: Fooling introspection ...
+     */
+    public javax.naming.directory.DirContext findStaticResources() {
+
+        return getResources();
+
+    }
+-----CSCI578-----
+
+
+    public void startRecursive() throws LifecycleException {
+        // nothing to start recursive, the servlets will be started by load-on-startup
+        start();
+    }
+-----CSCI578-----
+
+
+
+
+    /**
+     * Set the name of this servlet.  This is an alias for the normal
+     * <code>Container.setName()</code> method, and complements the
+     * <code>getServletName()</code> method required by the
+     * <code>ServletConfig</code> interface.
+     *
+     * @param name The new name of this servlet
+     */
+    public void setServletName(String name) {
+
+        setName(name);
+
+    }
+
+
+
+    /**
+     * Return the name of this servlet.
+     */
+    public String getServletName() {
+
+        return (getName());
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the naming resources associated with this web application.
+     */
+    public javax.naming.directory.DirContext getStaticResources() {
+
+        return ((StandardContext)this.resource).getResources();
+
+    }
+-----CSCI578-----

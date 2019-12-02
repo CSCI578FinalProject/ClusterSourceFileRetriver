@@ -1,0 +1,34 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Load sessionID
+     * @throws IOException if an input/output error occurs
+     */
+    protected String deserializeSessionId(byte[] data) throws IOException {
+        ReplicationStream ois = getReplicationStream(data);
+        String sessionId = ois.readUTF();
+        ois.close();
+        return sessionId;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * send a block of session to sender
+     * @param sender
+     * @param currentSessions
+     * @param sendTimestamp
+     * @throws IOException
+     */
+    protected void sendSessions(Member sender, Session[] currentSessions,long sendTimestamp) throws IOException {
+        byte[] data = serializeSessions(currentSessions);
+        if (log.isDebugEnabled()) log.debug(sm.getString("deltaManager.receiveMessage.unloadingAfter",getName()));
+        SessionMessage newmsg = new SessionMessageImpl(name,SessionMessage.EVT_ALL_SESSION_DATA, data,"SESSION-STATE", "SESSION-STATE-" + getName());
+        newmsg.setTimestamp(sendTimestamp);
+        if (log.isDebugEnabled()) log.debug(sm.getString("deltaManager.createMessage.allSessionData",getName()));
+        counterSend_EVT_ALL_SESSION_DATA++;
+        cluster.send(newmsg, sender);
+    }

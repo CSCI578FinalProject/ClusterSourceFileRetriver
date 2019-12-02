@@ -1,0 +1,106 @@
+4
+-----CSCI578-----
+
+
+
+    @Override
+    public void addIntHeader(String name, int value) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        response.addIntHeader(name, value);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add the specified integer header to the specified value.
+     *
+     * @param name Name of the header to set
+     * @param value Integer value to be set
+     */
+    @Override
+    public void addIntHeader(String name, int value) {
+
+        if (name == null || name.length() == 0) {
+            return;
+        }
+
+        if (isCommitted()) {
+            return;
+        }
+
+        // Ignore any call from an included servlet
+        if (included) {
+            return;
+        }
+
+        addHeader(name, "" + value);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add the specified header to the specified value.
+     *
+     * @param name Name of the header to set
+     * @param value Value to be set
+     */
+    @Override
+    public void addHeader(String name, String value) {
+        addHeader(name, value, null);
+    }
+
+
+
+    private void addHeader(String name, String value, Charset charset) {
+
+        if (name == null || name.length() == 0 || value == null) {
+            return;
+        }
+
+        if (isCommitted()) {
+            return;
+        }
+
+        // Ignore any call from an included servlet
+        if (included) {
+            return;
+        }
+
+        char cc=name.charAt(0);
+        if (cc=='C' || cc=='c') {
+            if (checkSpecialHeader(name, value))
+            return;
+        }
+
+        getCoyoteResponse().addHeader(name, value, charset);
+    }
+-----CSCI578-----
+
+
+
+    public void addHeader(String name, String value) {
+        addHeader(name, value, null);
+    }
+
+
+
+    public void addHeader(String name, String value, Charset charset) {
+        char cc=name.charAt(0);
+        if( cc=='C' || cc=='c' ) {
+            if( checkSpecialHeader(name, value) )
+            return;
+        }
+        MessageBytes mb = headers.addValue(name);
+        if (charset != null) {
+            mb.setCharset(charset);
+        }
+        mb.setString(value);
+    }

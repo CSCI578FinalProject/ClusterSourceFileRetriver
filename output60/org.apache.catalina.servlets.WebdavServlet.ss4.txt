@@ -1,0 +1,254 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Deletes a collection.
+     *
+     * @param resources Resources implementation associated with the context
+     * @param path Path to the collection to be deleted
+     * @param errorList Contains the list of the errors which occurred
+     */
+    private void deleteCollection(HttpServletRequest req,
+                                  DirContext resources,
+                                  String path,
+                                  Hashtable<String,Integer> errorList) {
+
+        if (debug > 1)
+            log("Delete:" + path);
+
+        // Prevent deletion of special sub-directories
+        if (isSpecialPath(path)) {
+            errorList.put(path, new Integer(WebdavStatus.SC_FORBIDDEN));
+            return;
+        }
+
+        String ifHeader = req.getHeader("If");
+        if (ifHeader == null)
+            ifHeader = "";
+
+        String lockTokenHeader = req.getHeader("Lock-Token");
+        if (lockTokenHeader == null)
+            lockTokenHeader = "";
+
+        Enumeration enumeration = null;
+        try {
+            enumeration = resources.list(path);
+        } catch (NamingException e) {
+            errorList.put(path, new Integer
+                (WebdavStatus.SC_INTERNAL_SERVER_ERROR));
+            return;
+        }
+
+        while (enumeration.hasMoreElements()) {
+            NameClassPair ncPair = (NameClassPair) enumeration.nextElement();
+            String childName = path;
+            if (!childName.equals("/"))
+                childName += "/";
+            childName += ncPair.getName();
+
+            if (isLocked(childName, ifHeader + lockTokenHeader)) {
+
+                errorList.put(childName, new Integer(WebdavStatus.SC_LOCKED));
+
+            } else {
+
+                try {
+                    Object object = resources.lookup(childName);
+                    if (object instanceof DirContext) {
+                        deleteCollection(req, resources, childName, errorList);
+                    }
+
+                    try {
+                        resources.unbind(childName);
+                    } catch (NamingException e) {
+                        if (!(object instanceof DirContext)) {
+                            // If it's not a collection, then it's an unknown
+                            // error
+                            errorList.put
+                                (childName, new Integer
+                                    (WebdavStatus.SC_INTERNAL_SERVER_ERROR));
+                        }
+                    }
+                } catch (NamingException e) {
+                    errorList.put
+                        (childName, new Integer
+                            (WebdavStatus.SC_INTERNAL_SERVER_ERROR));
+                }
+            }
+
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Delete a resource.
+     *
+     * @param req Servlet request
+     * @param resp Servlet response
+     * @return boolean true if the copy is successful
+     */
+    private boolean deleteResource(HttpServletRequest req,
+                                   HttpServletResponse resp)
+        throws ServletException, IOException {
+
+        String path = getRelativePath(req);
+
+        return deleteResource(path, req, resp, true);
+
+    }
+
+
+
+    /**
+     * Delete a resource.
+     *
+     * @param path Path of the resource which is to be deleted
+     * @param req Servlet request
+     * @param resp Servlet response
+     * @param setStatus Should the response status be set on successful
+     *                  completion
+     */
+    private boolean deleteResource(String path, HttpServletRequest req,
+                                   HttpServletResponse resp, boolean setStatus)
+        throws ServletException, IOException {
+
+        String ifHeader = req.getHeader("If");
+        if (ifHeader == null)
+            ifHeader = "";
+
+        String lockTokenHeader = req.getHeader("Lock-Token");
+        if (lockTokenHeader == null)
+            lockTokenHeader = "";
+
+        if (isLocked(path, ifHeader + lockTokenHeader)) {
+            resp.sendError(WebdavStatus.SC_LOCKED);
+            return false;
+        }
+
+        boolean exists = true;
+        Object object = null;
+        try {
+            object = resources.lookup(path);
+        } catch (NamingException e) {
+            exists = false;
+        }
+
+        if (!exists) {
+            resp.sendError(WebdavStatus.SC_NOT_FOUND);
+            return false;
+        }
+
+        boolean collection = (object instanceof DirContext);
+
+        if (!collection) {
+            try {
+                resources.unbind(path);
+            } catch (NamingException e) {
+                resp.sendError(WebdavStatus.SC_INTERNAL_SERVER_ERROR);
+                return false;
+            }
+        } else {
+
+            Hashtable<String,Integer> errorList =
+                new Hashtable<String,Integer>();
+
+            deleteCollection(req, resources, path, errorList);
+            try {
+                resources.unbind(path);
+            } catch (NamingException e) {
+                errorList.put(path, new Integer
+                    (WebdavStatus.SC_INTERNAL_SERVER_ERROR));
+            }
+
+            if (!errorList.isEmpty()) {
+
+                sendReport(req, resp, errorList);
+                return false;
+
+            }
+
+        }
+        if (setStatus) {
+            resp.setStatus(WebdavStatus.SC_NO_CONTENT);
+        }
+        return true;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Unbinds the named object. Removes the terminal atomic name in name 
+     * from the target context--that named by all but the terminal atomic 
+     * part of name.
+     * <p>
+     * This method is idempotent. It succeeds even if the terminal atomic 
+     * name is not bound in the target context, but throws 
+     * NameNotFoundException if any of the intermediate contexts do not exist. 
+     * 
+     * @param name the name to bind; may not be empty
+     * @exception NameNotFoundException if an intermediate context does not 
+     * exist
+     * @exception NamingException if a naming exception is encountered
+     */
+    public void unbind(Name name)
+        throws NamingException {
+        dirContext.unbind(parseName(name));
+        cacheUnload(name.toString());
+    }
+
+
+
+    /**
+     * Unbinds the named object.
+     * 
+     * @param name the name to bind; may not be empty
+     * @exception NameNotFoundException if an intermediate context does not 
+     * exist
+     * @exception NamingException if a naming exception is encountered
+     */
+    public void unbind(String name)
+        throws NamingException {
+        dirContext.unbind(parseName(name));
+        cacheUnload(name);
+    }
+
+
+
+    /**
+     * Destroys the named context and removes it from the namespace. Any 
+     * attributes associated with the name are also removed. Intermediate 
+     * contexts are not destroyed.
+     * <p>
+     * This method is idempotent. It succeeds even if the terminal atomic 
+     * name is not bound in the target context, but throws 
+     * NameNotFoundException if any of the intermediate contexts do not exist. 
+     * 
+     * In a federated naming system, a context from one naming system may be 
+     * bound to a name in another. One can subsequently look up and perform 
+     * operations on the foreign context using a composite name. However, an 
+     * attempt destroy the context using this composite name will fail with 
+     * NotContextException, because the foreign context is not a "subcontext" 
+     * of the context in which it is bound. Instead, use unbind() to remove 
+     * the binding of the foreign context. Destroying the foreign context 
+     * requires that the destroySubcontext() be performed on a context from 
+     * the foreign context's "native" naming system.
+     * 
+     * @param name the name of the context to be destroyed; may not be empty
+     * @exception NameNotFoundException if an intermediate context does not 
+     * exist
+     * @exception NotContextException if the name is bound but does not name 
+     * a context, or does not name a context of the appropriate type
+     */
+    public void destroySubcontext(Name name)
+        throws NamingException {
+        dirContext.destroySubcontext(parseName(name));
+        cacheUnload(name.toString());
+    }
+-----CSCI578-----

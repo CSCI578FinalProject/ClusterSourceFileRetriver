@@ -1,0 +1,57 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns a map with keys - fully qualified class names of the classes that
+     * have pre destroy methods and the values are the corresponding method
+     * names. If there are no such classes an empty map will be returned.
+     *
+     * @return a map with keys - fully qualified class names of the classes that
+     *         have pre destroy methods and the values are the corresponding
+     *         method names.
+     */
+    public Map<String, String> findPreDestroyMethods();
+-----CSCI578-----
+
+
+    private static void loadProperties(Set<String> classNames, String resourceName,
+            String messageKey, Log log) {
+        Properties properties = new Properties();
+        ClassLoader cl = DefaultInstanceManager.class.getClassLoader();
+        try (InputStream is = cl.getResourceAsStream(resourceName)) {
+            if (is == null) {
+                log.error(sm.getString(messageKey, resourceName));
+            } else {
+                properties.load(is);
+            }
+        } catch (IOException ioe) {
+            log.error(sm.getString(messageKey, resourceName), ioe);
+        }
+        if (properties.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<Object, Object> e : properties.entrySet()) {
+            if ("restricted".equals(e.getValue())) {
+                classNames.add(e.getKey().toString());
+            } else {
+                log.warn(sm.getString(
+                        "defaultInstanceManager.restrictedWrongValue",
+                        resourceName, e.getKey(), e.getValue()));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns a map with keys - fully qualified class names of the classes that
+     * have post construct methods and the values are the corresponding method
+     * names. If there are no such classes an empty map will be returned.
+     *
+     * @return a map with keys - fully qualified class names of the classes that
+     *         have post construct methods and the values are the corresponding
+     *         method names.
+     */
+    public Map<String, String> findPostConstructMethods();

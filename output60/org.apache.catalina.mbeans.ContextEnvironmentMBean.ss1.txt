@@ -1,0 +1,98 @@
+5
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- Instance Variables
+
+
+    // ------------------------------------------------------------- Attributes
+
+    
+    /**
+     * Set the value of a specific attribute of this MBean.
+     *
+     * @param attribute The identification of the attribute to be set
+     *  and the new value
+     *
+     * @exception AttributeNotFoundException if this attribute is not
+     *  supported by this MBean
+     * @exception MBeanException if the initializer of an object
+     *  throws an exception
+     * @exception ReflectionException if a Java reflection exception
+     *  occurs when invoking the getter
+     */
+     public void setAttribute(Attribute attribute)
+        throws AttributeNotFoundException, MBeanException,
+        ReflectionException {
+
+        super.setAttribute(attribute);
+        
+        ContextEnvironment ce = null;
+        try {
+            ce = (ContextEnvironment) getManagedResource();
+        } catch (InstanceNotFoundException e) {
+            throw new MBeanException(e);
+        } catch (InvalidTargetObjectTypeException e) {
+             throw new MBeanException(e);
+        }
+        
+        // cannot use side-efects.  It's removed and added back each time 
+        // there is a modification in a resource.
+        NamingResources nr = ce.getNamingResources();
+        nr.removeEnvironment(ce.getName());
+        nr.addEnvironment(ce);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any environment entry with the specified name.
+     *
+     * @param name Name of the environment entry to remove
+     */
+    public void removeEnvironment(String name) {
+
+        entries.remove(name);
+
+        ContextEnvironment environment = null;
+        synchronized (envs) {
+            environment = (ContextEnvironment) envs.remove(name);
+        }
+        if (environment != null) {
+            support.firePropertyChange("environment", environment, null);
+            environment.setNamingResources(null);
+        }
+
+    }
+-----CSCI578-----
+
+
+    void setNamingResources(NamingResources resources) {
+        this.resources = resources;
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Remove any environment entry with the specified name.
+     *
+     * @param envName Name of the environment entry to remove
+     */
+    public void removeEnvironment(String envName) {
+
+        NamingResources nresources = (NamingResources) this.resource;
+        if (nresources == null) {
+            return;
+        }
+        ContextEnvironment env = nresources.findEnvironment(envName);
+        if (env == null) {
+            throw new IllegalArgumentException
+                ("Invalid environment name '" + envName + "'");
+        }
+        nresources.removeEnvironment(envName);
+
+    }

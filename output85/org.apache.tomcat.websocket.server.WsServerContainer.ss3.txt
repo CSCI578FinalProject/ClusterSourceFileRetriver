@@ -1,0 +1,78 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void registerAuthenticatedSession(WsSession wsSession,
+            String httpSessionId) {
+        Set<WsSession> wsSessions = authenticatedSessions.get(httpSessionId);
+        if (wsSessions == null) {
+            wsSessions = Collections.newSetFromMap(
+                     new ConcurrentHashMap<WsSession,Boolean>());
+             authenticatedSessions.putIfAbsent(httpSessionId, wsSessions);
+             wsSessions = authenticatedSessions.get(httpSessionId);
+        }
+        wsSessions.add(wsSession);
+    }
+
+
+
+    private void unregisterAuthenticatedSession(WsSession wsSession,
+            String httpSessionId) {
+        Set<WsSession> wsSessions = authenticatedSessions.get(httpSessionId);
+        // wsSessions will be null if the HTTP session has ended
+        if (wsSessions != null) {
+            wsSessions.remove(wsSession);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isOpen() {
+        return state == State.OPEN;
+    }
+-----CSCI578-----
+
+
+
+    protected void registerSession(Endpoint endpoint, WsSession wsSession) {
+
+        if (!wsSession.isOpen()) {
+            // The session was closed during onOpen. No need to register it.
+            return;
+        }
+        synchronized (endPointSessionMapLock) {
+            if (endpointSessionMap.size() == 0) {
+                BackgroundProcessManager.getInstance().register(this);
+            }
+            Set<WsSession> wsSessions = endpointSessionMap.get(endpoint);
+            if (wsSessions == null) {
+                wsSessions = new HashSet<>();
+                endpointSessionMap.put(endpoint, wsSessions);
+            }
+            wsSessions.add(wsSession);
+        }
+        sessions.put(wsSession, wsSession);
+    }
+
+
+
+    protected void unregisterSession(Endpoint endpoint, WsSession wsSession) {
+
+        synchronized (endPointSessionMapLock) {
+            Set<WsSession> wsSessions = endpointSessionMap.get(endpoint);
+            if (wsSessions != null) {
+                wsSessions.remove(wsSession);
+                if (wsSessions.size() == 0) {
+                    endpointSessionMap.remove(endpoint);
+                }
+            }
+            if (endpointSessionMap.size() == 0) {
+                BackgroundProcessManager.getInstance().unregister(this);
+            }
+        }
+        sessions.remove(wsSession);
+    }

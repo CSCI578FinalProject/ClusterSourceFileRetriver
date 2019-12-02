@@ -1,0 +1,54 @@
+2
+-----CSCI578-----
+
+    
+    protected void setupSocket() throws IOException {
+        if (mcastBindAddress != null) {
+            try {
+                log.info("Attempting to bind the multicast socket to "+address+":"+port);
+                socket = new MulticastSocket(new InetSocketAddress(address,port));
+            } catch (BindException e) {
+                /*
+                 * On some plattforms (e.g. Linux) it is not possible to bind
+                 * to the multicast address. In this case only bind to the
+                 * port.
+                 */
+                log.info("Binding to multicast address, failed. Binding to port only.");
+                socket = new MulticastSocket(port);
+            }
+        } else {
+            socket = new MulticastSocket(port);
+        }
+        socket.setLoopbackMode(false);
+        if (mcastBindAddress != null) {
+			if(log.isInfoEnabled())
+                log.info("Setting multihome multicast interface to:" +mcastBindAddress);
+            socket.setInterface(mcastBindAddress);
+        } //end if
+        //force a so timeout so that we don't block forever
+        if ( mcastSoTimeout <= 0 ) mcastSoTimeout = (int)sendFrequency;
+        if(log.isInfoEnabled())
+            log.info("Setting cluster mcast soTimeout to "+mcastSoTimeout);
+        socket.setSoTimeout(mcastSoTimeout);
+
+        if ( mcastTTL >= 0 ) {
+			if(log.isInfoEnabled())
+                log.info("Setting cluster mcast TTL to " + mcastTTL);
+            socket.setTimeToLive(mcastTTL);
+        }
+    }
+-----CSCI578-----
+
+
+    public void init() throws IOException {
+        setupSocket();
+        sendPacket = new DatagramPacket(new byte[MAX_PACKET_SIZE],MAX_PACKET_SIZE);
+        sendPacket.setAddress(address);
+        sendPacket.setPort(port);
+        receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE],MAX_PACKET_SIZE);
+        receivePacket.setAddress(address);
+        receivePacket.setPort(port);
+        member.setCommand(new byte[0]);
+        member.getData(true, true);
+        if ( membership == null ) membership = new Membership(member);
+    }

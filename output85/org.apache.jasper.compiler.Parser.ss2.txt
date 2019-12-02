@@ -1,0 +1,106 @@
+12
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Attributes ::= (S Attribute)* S?
+     */
+    Attributes parseAttributes() throws JasperException {
+        return parseAttributes(false);
+    }
+
+    Attributes parseAttributes(boolean pageDirective) throws JasperException {
+        UniqueAttributesImpl attrs = new UniqueAttributesImpl(pageDirective);
+
+        reader.skipSpaces();
+        int ws = 1;
+
+        try {
+            while (parseAttribute(attrs)) {
+                if (ws == 0 && STRICT_WHITESPACE) {
+                    err.jspError(reader.mark(),
+                            "jsp.error.attribute.nowhitespace");
+                }
+                ws = reader.skipSpaces();
+            }
+        } catch (IllegalArgumentException iae) {
+            // Duplicate attribute
+            err.jspError(reader.mark(), "jsp.error.attribute.duplicate");
+        }
+
+        return attrs;
+    }
+
+
+    /**
+     * Parse Attributes for a reader, provided for external use
+     *
+     * @param pc The parser
+     * @param reader The source
+     *
+     * @return The parsed attributes
+     *
+     * @throws JasperException If an error occurs during parsing
+     */
+    public static Attributes parseAttributes(ParserController pc,
+            JspReader reader) throws JasperException {
+        Parser tmpParser = new Parser(pc, reader, false, false, null);
+        return tmpParser.parseAttributes(true);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    int nextChar() {
+        if (!hasMoreInput())
+            return -1;
+
+        int ch = current.stream[current.cursor];
+
+        current.cursor++;
+
+        if (ch == '\n') {
+            current.line++;
+            current.col = 0;
+        } else {
+            current.col++;
+        }
+        return ch;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Read ahead one character without moving the cursor.
+     *
+     * @return The next character or -1 if no further input is available
+     */
+    int peekChar() {
+        return peekChar(0);
+    }
+
+
+    /**
+     * Read ahead the given number of characters without moving the cursor.
+     *
+     * @param readAhead The number of characters to read ahead. NOTE: This is
+     *                  zero based.
+     *
+     * @return The requested character or -1 if the end of the input is reached
+     *         first
+     */
+    int peekChar(int readAhead) {
+        int target = current.cursor + readAhead;
+        if (target < current.stream.length) {
+            return current.stream[target];
+        }
+        return -1;
+    }
+-----CSCI578-----
+-----CSCI578-----

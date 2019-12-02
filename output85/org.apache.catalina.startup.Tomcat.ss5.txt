@@ -1,0 +1,80 @@
+8
+-----CSCI578-----
+
+
+
+    /**
+     * Set the location of the default deployment descriptor.
+     *
+     * @param path The path to the default web.xml. If not absolute, it is
+     *             relative to CATALINA_BASE.
+     */
+    public void setDefaultWebXml(String path) {
+        this.defaultWebXml = path;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param host The host in which the context will be deployed
+     * @param contextPath The context mapping to use, "" for root context.
+     * @param docBase Base directory for the context, for static files.
+     *  Must exist, relative to the server home
+     * @return the deployed context
+     * @see #addWebapp(String, String)
+     */
+    public Context addWebapp(Host host, String contextPath, String docBase) {
+        return addWebapp(host,  contextPath, docBase, new ContextConfig());
+    }
+
+
+    /**
+     * @param host The host in which the context will be deployed
+     * @param contextPath The context mapping to use, "" for root context.
+     * @param docBase Base directory for the context, for static files.
+     *  Must exist, relative to the server home
+     * @param config Custom context configurator helper
+     * @return the deployed context
+     * @see #addWebapp(String, String)
+     */
+    public Context addWebapp(Host host, String contextPath, String docBase, ContextConfig config) {
+
+        silence(host, contextPath);
+
+        Context ctx = createContext(host, contextPath);
+        ctx.setPath(contextPath);
+        ctx.setDocBase(docBase);
+        ctx.addLifecycleListener(new DefaultWebXmlListener());
+        ctx.setConfigFile(getWebappConfigFile(docBase, contextPath));
+
+        ctx.addLifecycleListener(config);
+
+        // prevent it from looking ( if it finds one - it'll have dup error )
+        config.setDefaultWebXml(noDefaultWebXmlPath());
+
+        if (host == null) {
+            getHost().addChild(ctx);
+        } else {
+            host.addChild(ctx);
+        }
+
+        return ctx;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void silence(Host host, String contextPath) {
+        String loggerName = getLoggerName(host, contextPath);
+        Logger logger = Logger.getLogger(loggerName);
+        pinnedLoggers.put(loggerName, logger);
+        if (silent) {
+            logger.setLevel(Level.WARNING);
+        } else {
+            logger.setLevel(Level.INFO);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

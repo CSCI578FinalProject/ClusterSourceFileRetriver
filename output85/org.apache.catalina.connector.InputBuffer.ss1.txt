@@ -1,0 +1,68 @@
+6
+-----CSCI578-----
+
+
+
+    public void checkConverter() throws IOException {
+        if (conv == null) {
+            setConverter();
+        }
+    }
+-----CSCI578-----
+
+
+
+    private static B2CConverter createConverter(final Charset charset) throws IOException {
+        if (SecurityUtil.isPackageProtectionEnabled()){
+            try {
+                return AccessController.doPrivileged(
+                        new PrivilegedExceptionAction<B2CConverter>(){
+
+                            @Override
+                            public B2CConverter run() throws IOException {
+                                return new B2CConverter(charset);
+                            }
+                        }
+                );
+            } catch (PrivilegedActionException ex) {
+                Exception e = ex.getException();
+                if (e instanceof IOException) {
+                    throw (IOException) e;
+                } else {
+                    throw new IOException(e);
+                }
+            }
+        } else {
+            return new B2CConverter(charset);
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void setConverter() throws IOException {
+        if (coyoteRequest != null) {
+            enc = coyoteRequest.getCharacterEncoding();
+        }
+
+        if (enc == null) {
+            enc = org.apache.coyote.Constants.DEFAULT_CHARACTER_ENCODING;
+        }
+
+        Charset charset = B2CConverter.getCharset(enc);
+        SynchronizedStack<B2CConverter> stack = encoders.get(charset);
+        if (stack == null) {
+            stack = new SynchronizedStack<>();
+            encoders.putIfAbsent(charset, stack);
+            stack = encoders.get(charset);
+        }
+        conv = stack.pop();
+
+        if (conv == null) {
+            conv = createConverter(charset);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

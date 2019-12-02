@@ -1,0 +1,436 @@
+25
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // code from CookieTools
+
+    /** Add all Cookie found in the headers of a request.
+     */
+    public  void processCookies( MimeHeaders headers ) {
+        if( headers==null )
+            return;// nothing to process
+        // process each "cookie" header
+        int pos=0;
+        while( pos>=0 ) {
+            // Cookie2: version ? not needed
+            pos=headers.findHeader( "Cookie", pos );
+            // no more cookie headers headers
+            if( pos<0 ) break;
+
+            MessageBytes cookieValue=headers.getValue( pos );
+            if( cookieValue==null || cookieValue.isNull() ) {
+                pos++;
+                continue;
+            }
+
+            // Uncomment to test the new parsing code
+            if( cookieValue.getType() == MessageBytes.T_BYTES ) {
+                if( dbg>0 ) log( "Parsing b[]: " + cookieValue.toString());
+                ByteChunk bc = cookieValue.getByteChunk();
+                if (PRESERVE_COOKIE_HEADER) {
+                    int len = bc.getLength();
+                    if (len > 0) {
+                        byte[] buf = new byte[len];
+                        System.arraycopy(bc.getBytes(), bc.getOffset(), buf, 0, len);
+                        processCookieHeader(buf, 0, len);
+                    }
+                } else {
+                    processCookieHeader(bc.getBytes(), bc.getOffset(),
+                            bc.getLength());
+                }
+            } else {
+                if( dbg>0 ) log( "Parsing S: " + cookieValue.toString());
+                processCookieHeader( cookieValue.toString() );
+            }
+            pos++;// search from the next position
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------------------
+    // -------------------- DEPRECATED, OLD --------------------
+
+    private void processCookieHeader(  String cookieString )
+    {
+        if( dbg>0 ) log( "Parsing cookie header " + cookieString );
+        // normal cookie, with a string value.
+        // This is the original code, un-optimized - it shouldn't
+        // happen in normal case
+
+        StringTokenizer tok = new StringTokenizer(cookieString,
+                                                  ";", false);
+        while (tok.hasMoreTokens()) {
+            String token = tok.nextToken();
+            int i = token.indexOf("=");
+            if (i > -1) {
+
+                // XXX
+                // the trims here are a *hack* -- this should
+                // be more properly fixed to be spec compliant
+
+                String name = token.substring(0, i).trim();
+                String value = token.substring(i+1, token.length()).trim();
+                // RFC 2109 and bug
+                value=stripQuote( value );
+                ServerCookie cookie = addCookie();
+
+                cookie.getName().setString(name);
+                cookie.getValue().setString(value);
+                if( dbg > 0 ) log( "Add cookie " + name + "=" + value);
+            } else {
+                // we have a bad cookie.... just let it go
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    public void log(String s ) {
+        if (log.isDebugEnabled())
+            log.debug("Cookies: " + s);
+    }
+-----CSCI578-----
+
+
+    public int getCookieCount() {
+        if( unprocessed ) {
+            unprocessed=false;
+            processCookies(headers);
+        }
+        return cookieCount;
+    }
+-----CSCI578-----
+
+
+    public void setVersion(int v) {
+        version = v;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns true if the byte is a whitespace character as
+     * defined in RFC2619
+     * JVK
+     */
+    public static final boolean isWhiteSpace(final byte c) {
+        // This switch statement is slightly slower
+        // for my vm than the if statement.
+        // Java(TM) 2 Runtime Environment, Standard Edition (build 1.5.0_07-164)
+        /*
+        switch (c) {
+        case ' ':;
+        case '\t':;
+        case '\n':;
+        case '\r':;
+        case '\f':;
+            return true;
+        default:;
+            return false;
+        }
+        */
+       if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f')
+           return true;
+       else
+           return false;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /*
+    List of Separator Characters (see isSeparator())
+    Excluding the '/' char violates the RFC, but
+    it looks like a lot of people put '/'
+    in unquoted values: '/': ; //47
+    '\t':9 ' ':32 '\"':34 '(':40 ')':41 ',':44 ':':58 ';':59 '<':60
+    '=':61 '>':62 '?':63 '@':64 '[':91 '\\':92 ']':93 '{':123 '}':125
+    */
+    public static final char SEPARATORS[] = { '\t', ' ', '\"', '(', ')', ',',
+        ':', ';', '<', '=', '>', '?', '@', '[', '\\', ']', '{', '}' };
+
+    protected static final boolean separators[] = new boolean[128];
+    static {
+        for (int i = 0; i < 128; i++) {
+            separators[i] = false;
+        }
+        for (int i = 0; i < SEPARATORS.length; i++) {
+            separators[SEPARATORS[i]] = true;
+        }
+
+        ALLOW_EQUALS_IN_VALUE = Boolean.valueOf(System.getProperty(
+                "org.apache.tomcat.util.http.ServerCookie.ALLOW_EQUALS_IN_VALUE",
+                "false")).booleanValue();
+
+        String preserveCookieHeader = System.getProperty(
+                "org.apache.tomcat.util.http.ServerCookie.PRESERVE_COOKIE_HEADER");
+        if (preserveCookieHeader == null) {
+            PRESERVE_COOKIE_HEADER = ServerCookie.STRICT_SERVLET_COMPLIANCE;
+        } else {
+            PRESERVE_COOKIE_HEADER =
+                Boolean.valueOf(preserveCookieHeader).booleanValue();
+        }
+    }
+
+    /**
+     *  Construct a new cookie collection, that will extract
+     *  the information from headers.
+     *
+     * @param headers Cookies are lazy-evaluated and will extract the
+     *     information from the provided headers.
+     */
+    public Cookies(MimeHeaders headers) {
+        this.headers=headers;
+    }
+
+
+
+   /**
+     * Returns true if the byte is a separator character as
+     * defined in RFC2619. Since this is called often, this
+     * function should be organized with the most probable
+     * outcomes first.
+     * JVK
+     */
+    public static final boolean isSeparator(final byte c) {
+         if (c > 0 && c < 126)
+             return separators[c];
+         else
+             return false;
+    }
+-----CSCI578-----
+
+
+    // -------------------- Adding cookies --------------------
+
+    /** Register a new, unitialized cookie. Cookies are recycled, and
+     *  most of the time an existing ServerCookie object is returned.
+     *  The caller can set the name/value and attributes for the cookie
+     */
+    public ServerCookie addCookie() {
+        if (limit > -1 && cookieCount >= limit) {
+            throw new IllegalArgumentException(
+                    sm.getString("cookies.maxCountFail", Integer.valueOf(limit)));
+        }
+
+        if (cookieCount >= scookies.length) {
+            int newSize = Math.min(2*cookieCount, limit);
+            ServerCookie scookiesTmp[] = new ServerCookie[newSize];
+            System.arraycopy( scookies, 0, scookiesTmp, 0, cookieCount);
+            scookies=scookiesTmp;
+        }
+
+        ServerCookie c = scookies[cookieCount];
+        if( c==null ) {
+            c= new ServerCookie();
+            scookies[cookieCount]=c;
+        }
+        cookieCount++;
+        return c;
+    }
+-----CSCI578-----
+
+
+    /** Find the index of a header with the given name.
+     */
+    public int findHeader( String name, int starting ) {
+        // We can use a hash - but it's not clear how much
+        // benefit you can get - there is an  overhead 
+        // and the number of headers is small (4-5 ?)
+        // Another problem is that we'll pay the overhead
+        // of constructing the hashtable
+
+        // A custom search tree may be better
+        for (int i = starting; i < count; i++) {
+            if (headers[i].getName().equalsIgnoreCase(name)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+-----CSCI578-----
+
+
+    /**
+     *
+     * Strips quotes from the start and end of the cookie string
+     * This conforms to RFC 2965
+     *
+     * @param value            a <code>String</code> specifying the cookie
+     *                         value (possibly quoted).
+     *
+     * @see #processCookieHeader
+     */
+    private static String stripQuote( String value )
+    {
+        //        log("Strip quote from " + value );
+        if (value.startsWith("\"") && value.endsWith("\"")) {
+            try {
+                return value.substring(1,value.length()-1);
+            } catch (Exception ex) {
+            }
+        }
+        return value;
+    }
+-----CSCI578-----
+
+
+    // XXX will be refactored soon!
+    public static boolean equals( String s, byte b[], int start, int end) {
+        int blen = end-start;
+        if (b == null || blen != s.length()) {
+            return false;
+        }
+        int boff = start;
+        for (int i = 0; i < blen; i++) {
+            if (b[boff++] != s.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the byte chunk, representing the byte[] and offset/length.
+     * Valid only if T_BYTES or after a conversion was made.
+     */
+    public ByteChunk getByteChunk() {
+	return byteC;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the length of the bytes.
+     * XXX need to clean this up
+     */
+    public int getLength() {
+        return end-start;
+    }
+-----CSCI578-----
+
+
+    public int indexOf( String src, int srcOff, int srcLen, int myOff ) {
+        char first=src.charAt( srcOff );
+
+        // Look for first char 
+        int srcEnd = srcOff + srcLen;
+        
+        mainLoop:
+        for( int i=myOff+start; i <= (end - srcLen); i++ ) {
+            if( buff[i] != first ) continue;
+            // found first char, now look for a match
+            int myPos=i+1;
+            for( int srcPos=srcOff + 1; srcPos< srcEnd; ) {
+                if( buff[myPos++] != src.charAt( srcPos++ ))
+                    continue mainLoop;
+            }
+            return i-start; // found it
+        }
+        return -1;
+    }
+
+
+    /**
+     * Returns true if the message bytes starts with the specified string.
+     * @param c the character
+     * @param starting The start position
+     */
+    public int indexOf(char c, int starting) {
+        int ret = indexOf( buff, start+starting, end, c);
+        return (ret >= start) ? ret - start : -1;
+    }
+
+
+    public static int  indexOf( byte bytes[], int off, int end, char qq )
+    {
+        // Works only for UTF 
+        while( off < end ) {
+            byte b=bytes[off];
+            if( b==qq )
+                return off;
+            off++;
+        }
+        return -1;
+    }
+-----CSCI578-----
+
+
+    public void setEnd( int i ) {
+        end=i;
+    }
+-----CSCI578-----
+
+
+    public int available() {
+        return buffered.getLength();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Read bytes.
+     */
+    public int doRead(ByteChunk chunk, org.apache.coyote.Request request)
+            throws IOException {
+        int writeLength = 0;
+        
+        if (chunk.getLimit() > 0 && chunk.getLimit() < input.getLength()) {
+            writeLength = chunk.getLimit();
+        } else {
+        	writeLength = input.getLength();
+        }
+        
+        if(input.getOffset()>= input.getEnd())
+            return -1;
+        
+        input.substract(chunk.getBuffer(), 0, writeLength);
+        chunk.setOffset(0);
+        chunk.setEnd(writeLength);
+        
+        return writeLength;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the content length on the request.
+     */
+    public void setRequest(org.apache.coyote.Request request) {
+        request.setContentLength(input.getLength());
+    }
+-----CSCI578-----
+
+
+    /**
+     * Amount of bytes still available in a buffer.
+     */
+    public int available() {
+        return input.getLength();
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------- OutputBuffer Methods
+
+
+    /**
+     * Write some bytes.
+     * 
+     * @return number of bytes written by the filter
+     */
+    public int doWrite(ByteChunk chunk, Response res)
+        throws IOException {
+
+        return chunk.getLength();
+
+    }
+-----CSCI578-----

@@ -1,0 +1,155 @@
+10
+-----CSCI578-----
+
+
+    public Expression parseExpression(String expression,
+            @SuppressWarnings("unchecked") // API does not use generics
+            Class expectedType,
+			FunctionMapper fMapper) throws ELException {
+		try {
+			ELContextImpl ctx =
+			    new ELContextImpl(ELResolverImpl.getDefaultResolver());
+            if (fMapper != null) {
+                ctx.setFunctionMapper(new FunctionMapperImpl(fMapper));
+            }
+			ValueExpression ve = this.factory.createValueExpression(ctx, expression, expectedType);
+			return new ExpressionImpl(ve);
+		} catch (javax.el.ELException e) {
+			throw new ELParseException(e.getMessage());
+		}
+	}
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Object evaluate(String expression,
+            @SuppressWarnings("unchecked") // API does not use generics
+            Class expectedType,
+			VariableResolver vResolver, FunctionMapper fMapper)
+			throws ELException {
+		return this.parseExpression(expression, expectedType, fMapper).evaluate(vResolver);
+	}
+-----CSCI578-----
+
+	/** @deprecated - Use getDefaultResolver(). Needs to be made private */
+	public final static ELResolver DefaultResolver = new CompositeELResolver();
+
+
+	public static ELResolver getDefaultResolver() {
+	    if (Constants.IS_SECURITY_ENABLED) {
+	        ELResolver defaultResolver = new CompositeELResolver();
+	        ((CompositeELResolver) defaultResolver).add(new MapELResolver());
+	        ((CompositeELResolver) defaultResolver).add(new ResourceBundleELResolver());
+	        ((CompositeELResolver) defaultResolver).add(new ListELResolver());
+	        ((CompositeELResolver) defaultResolver).add(new ArrayELResolver());
+	        ((CompositeELResolver) defaultResolver).add(new BeanELResolver());
+	        return defaultResolver;
+	    } else {
+	        return DefaultResolver;
+	    }
+	}
+-----CSCI578-----
+
+
+	public Object getValue(ELContext context, Object base, Object property)
+			throws NullPointerException, PropertyNotFoundException, ELException {
+		if (context == null) {
+			throw new NullPointerException();
+		}
+
+		if (base == null) {
+			context.setPropertyResolved(true);
+			if (property != null) {
+				try {
+					return this.variableResolver.resolveVariable(property
+							.toString());
+				} catch (javax.servlet.jsp.el.ELException e) {
+					throw new ELException(e.getMessage(), e.getCause());
+				}
+			}
+		}
+
+		if (!context.isPropertyResolved()) {
+			return getDefaultResolver().getValue(context, base, property);
+		}
+		return null;
+	}
+-----CSCI578-----
+
+
+	public Class<?> getType(ELContext context, Object base, Object property)
+			throws NullPointerException, PropertyNotFoundException, ELException {
+		if (context == null) {
+			throw new NullPointerException();
+		}
+
+		if (base == null) {
+			context.setPropertyResolved(true);
+			if (property != null) {
+				try {
+					Object obj = this.variableResolver.resolveVariable(property
+							.toString());
+					return (obj != null) ? obj.getClass() : null;
+				} catch (javax.servlet.jsp.el.ELException e) {
+					throw new ELException(e.getMessage(), e.getCause());
+				}
+			}
+		}
+
+		if (!context.isPropertyResolved()) {
+			return getDefaultResolver().getType(context, base, property);
+		}
+		return null;
+	}
+-----CSCI578-----
+
+
+	public void setValue(ELContext context, Object base, Object property,
+			Object value) throws NullPointerException,
+			PropertyNotFoundException, PropertyNotWritableException,
+			ELException {
+		if (context == null) {
+			throw new NullPointerException();
+		}
+
+		if (base == null) {
+			context.setPropertyResolved(true);
+			throw new PropertyNotWritableException(
+					"Legacy VariableResolver wrapped, not writable");
+		}
+
+		if (!context.isPropertyResolved()) {
+			getDefaultResolver().setValue(context, base, property, value);
+		}
+	}
+-----CSCI578-----
+
+
+	public boolean isReadOnly(ELContext context, Object base, Object property)
+			throws NullPointerException, PropertyNotFoundException, ELException {
+		if (context == null) {
+			throw new NullPointerException();
+		}
+
+		if (base == null) {
+			context.setPropertyResolved(true);
+			return true;
+		}
+
+		return getDefaultResolver().isReadOnly(context, base, property);
+	}
+-----CSCI578-----
+
+
+	public Iterator<java.beans.FeatureDescriptor> getFeatureDescriptors(ELContext context, Object base) {
+		return getDefaultResolver().getFeatureDescriptors(context, base);
+	}
+-----CSCI578-----
+
+
+	public Class<?> getCommonPropertyType(ELContext context, Object base) {
+		if (base == null) {
+			return String.class;
+		}
+		return getDefaultResolver().getCommonPropertyType(context, base);
+	}

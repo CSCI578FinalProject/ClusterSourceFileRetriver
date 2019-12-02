@@ -1,0 +1,474 @@
+11
+-----CSCI578-----
+
+
+    /**
+     * Variable to hold the <code>save()</code> prepared statement.
+     */
+    protected PreparedStatement preparedSaveSql = null;
+
+
+    /**
+     * Save a session to the Store.
+     *
+     * @param session the session to be stored
+     * @exception IOException if an input/output error occurs
+     */
+    public void save(Session session) throws IOException {
+        ObjectOutputStream oos = null;
+        ByteArrayOutputStream bos = null;
+        ByteArrayInputStream bis = null;
+        InputStream in = null;
+
+        synchronized (this) {
+            int numberOfTries = 2;
+            while (numberOfTries > 0) {
+                Connection _conn = getConnection();
+                if (_conn == null) {
+                    return;
+                }
+
+                // If sessions already exist in DB, remove and insert again.
+                // TODO:
+                // * Check if ID exists in database and if so use UPDATE.
+                remove(session.getIdInternal());
+
+                try {
+                    bos = new ByteArrayOutputStream();
+                    oos = new ObjectOutputStream(new BufferedOutputStream(bos));
+
+                    ((StandardSession) session).writeObjectData(oos);
+                    oos.close();
+                    oos = null;
+                    byte[] obs = bos.toByteArray();
+                    int size = obs.length;
+                    bis = new ByteArrayInputStream(obs, 0, size);
+                    in = new BufferedInputStream(bis, size);
+
+                    if (preparedSaveSql == null) {
+                        String saveSql = "INSERT INTO " + sessionTable + " ("
+                           + sessionIdCol + ", " + sessionAppCol + ", "
+                           + sessionDataCol + ", " + sessionValidCol
+                           + ", " + sessionMaxInactiveCol + ", "
+                           + sessionLastAccessedCol
+                           + ") VALUES (?, ?, ?, ?, ?, ?)";
+                       preparedSaveSql = _conn.prepareStatement(saveSql);
+					}
+
+                    preparedSaveSql.setString(1, session.getIdInternal());
+                    preparedSaveSql.setString(2, getName());
+                    preparedSaveSql.setBinaryStream(3, in, size);
+                    preparedSaveSql.setString(4, session.isValid() ? "1" : "0");
+                    preparedSaveSql.setInt(5, session.getMaxInactiveInterval());
+                    preparedSaveSql.setLong(6, session.getLastAccessedTime());
+                    preparedSaveSql.execute();
+                    // Break out after the finally block
+                    numberOfTries = 0;
+                } catch (SQLException e) {
+                    manager.getContainer().getLogger().error(sm.getString(getStoreName() + ".SQLException", e));
+                    if (dbConnection != null)
+                        close(dbConnection);
+                } catch (IOException e) {
+                    // Ignore
+                } finally {
+                    if (oos != null) {
+                        oos.close();
+                    }
+                    if (bis != null) {
+                        bis.close();
+                    }
+                    if (in != null) {
+                        in.close();
+                    }
+
+                    release(_conn);
+                }
+                numberOfTries--;
+            }
+        }
+
+        if (manager.getContainer().getLogger().isDebugEnabled()) {
+            manager.getContainer().getLogger().debug(sm.getString(getStoreName() + ".saving",
+                    session.getIdInternal(), sessionTable));
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Variable to hold the <code>remove()</code> prepared statement.
+     */
+    protected PreparedStatement preparedRemoveSql = null;
+
+
+    /**
+     * Remove the Session with the specified session identifier from
+     * this Store, if present.  If no such Session is present, this method
+     * takes no action.
+     *
+     * @param id Session identifier of the Session to be removed
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public void remove(String id) throws IOException {
+
+        synchronized (this) {
+            int numberOfTries = 2;
+            while (numberOfTries > 0) {
+                Connection _conn = getConnection();
+
+                if (_conn == null) {
+                    return;
+                }
+
+                try {
+                    if (preparedRemoveSql == null) {
+                        String removeSql = "DELETE FROM " + sessionTable
+                                + " WHERE " + sessionIdCol + " = ?  AND "
+                                + sessionAppCol + " = ?";
+                        preparedRemoveSql = _conn.prepareStatement(removeSql);
+                    }
+
+                    preparedRemoveSql.setString(1, id);
+                    preparedRemoveSql.setString(2, getName());
+                    preparedRemoveSql.execute();
+                    // Break out after the finally block
+                    numberOfTries = 0;
+                } catch (SQLException e) {
+                    manager.getContainer().getLogger().error(sm.getString(getStoreName() + ".SQLException", e));
+                    if (dbConnection != null)
+                        close(dbConnection);
+                } finally {
+                    release(_conn);
+                }
+                numberOfTries--;
+            }
+        }
+
+        if (manager.getContainer().getLogger().isDebugEnabled()) {
+            manager.getContainer().getLogger().debug(sm.getString(getStoreName() + ".removing", id, sessionTable));
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Return the Container with which this Manager is associated.
+     */
+    public Container getContainer();
+-----CSCI578-----
+
+
+    
+    /**
+     * Return the name for this instance (built from container name)
+     */
+    public String getName() {
+        if (name == null) {
+            Container container = manager.getContainer();
+            String contextName = container.getName();
+            String hostName = "";
+            String engineName = "";
+
+            if (container.getParent() != null) {
+                Container host = container.getParent();
+                hostName = host.getName();
+                if (host.getParent() != null) {
+                    engineName = host.getParent().getName();
+                }
+            }
+            name = "/" + engineName + "/" + hostName + contextName;
+        }
+        return name;
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Return the name for this Store, used for logging.
+     */
+    @Override
+    public String getStoreName() {
+        return storeName;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Close the specified database connection.
+     *
+     * @param dbConnection The connection to be closed
+     */
+    protected void close(Connection dbConnection) {
+
+        // Do nothing if the database connection is already closed
+        if (dbConnection == null)
+            return;
+
+        // Close our prepared statements (if any)
+        try {
+            preparedSizeSql.close();
+        } catch (Throwable f) {
+            // Ignore
+        }
+        this.preparedSizeSql = null;
+
+        try {
+            preparedKeysSql.close();
+        } catch (Throwable f) {
+            // Ignore
+        }
+        this.preparedKeysSql = null;
+
+        try {
+            preparedSaveSql.close();
+        } catch (Throwable f) {
+            // Ignore
+        }
+        this.preparedSaveSql = null;
+
+        try {
+            preparedClearSql.close();
+        } catch (Throwable f) {
+            // Ignore
+        }
+         
+		try {
+            preparedRemoveSql.close();
+        } catch (Throwable f) {
+            // Ignore
+        }
+        this.preparedRemoveSql = null;
+
+        try {
+            preparedLoadSql.close();
+        } catch (Throwable f) {
+            // Ignore
+        }
+        this.preparedLoadSql = null;
+
+        // Close this database connection, and log any errors
+        try {
+            dbConnection.close();
+        } catch (SQLException e) {
+            manager.getContainer().getLogger().error(sm.getString(getStoreName() + ".close", e.toString())); // Just log it here
+        } finally {
+            this.dbConnection = null;
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Release the connection, not needed here since the
+     * connection is not associated with a connection pool.
+     *
+     * @param conn The connection to be released
+     */
+    protected void release(Connection conn) {
+        // NO-OP
+    }
+-----CSCI578-----
+
+
+    /**
+     * Variable to hold the <code>keys()</code> prepared statement.
+     */
+    protected PreparedStatement preparedKeysSql = null;
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Return an array containing the session identifiers of all Sessions
+     * currently saved in this Store.  If there are no such Sessions, a
+     * zero-length array is returned.
+     *
+     * @exception IOException if an input/output error occurred
+     */
+    public String[] keys() throws IOException {
+        ResultSet rst = null;
+        String keys[] = null;
+        synchronized (this) {
+            int numberOfTries = 2;
+            while (numberOfTries > 0) {
+
+                Connection _conn = getConnection();
+                if (_conn == null) {
+                    return (new String[0]);
+                }
+                try {
+                    if (preparedKeysSql == null) {
+                        String keysSql = "SELECT " + sessionIdCol + " FROM "
+                                + sessionTable + " WHERE " + sessionAppCol
+                                + " = ?";
+                        preparedKeysSql = _conn.prepareStatement(keysSql);
+					}
+
+                    preparedKeysSql.setString(1, getName());
+                    rst = preparedKeysSql.executeQuery();
+                    ArrayList<String> tmpkeys = new ArrayList<String>();
+                    if (rst != null) {
+                        while (rst.next()) {
+                            tmpkeys.add(rst.getString(1));
+                        }
+                    }
+                    keys = tmpkeys.toArray(new String[tmpkeys.size()]);
+                    // Break out after the finally block
+                    numberOfTries = 0;
+                } catch (SQLException e) {
+                    manager.getContainer().getLogger().error(sm.getString(getStoreName() + ".SQLException", e));
+                    keys = new String[0];
+                    // Close the connection so that it gets reopened next time
+                    if (dbConnection != null)
+                        close(dbConnection);
+                } finally {
+                    try {
+                        if (rst != null) {
+                            rst.close();
+                        }
+                    } catch (SQLException e) {
+                        // Ignore
+                    }
+
+                    release(_conn);
+                }
+                numberOfTries--;
+            }
+        }
+
+        return (keys);
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------------- SQL Variables
+
+    /**
+     * Variable to hold the <code>getSize()</code> prepared statement.
+     */
+    protected PreparedStatement preparedSizeSql = null;
+
+
+    /**
+     * Return an integer containing a count of all Sessions
+     * currently saved in this Store.  If there are no Sessions,
+     * <code>0</code> is returned.
+     *
+     * @exception IOException if an input/output error occurred
+     */
+    public int getSize() throws IOException {
+        int size = 0;
+        ResultSet rst = null;
+
+        synchronized (this) {
+            int numberOfTries = 2;
+            while (numberOfTries > 0) {
+                Connection _conn = getConnection();
+
+                if (_conn == null) {
+                    return (size);
+                }
+
+                try {
+                    if (preparedSizeSql == null) {
+                        String sizeSql = "SELECT COUNT(" + sessionIdCol
+                                + ") FROM " + sessionTable + " WHERE "
+                                + sessionAppCol + " = ?";
+                        preparedSizeSql = _conn.prepareStatement(sizeSql);
+					}
+
+                    preparedSizeSql.setString(1, getName());
+                    rst = preparedSizeSql.executeQuery();
+                    if (rst.next()) {
+                        size = rst.getInt(1);
+                    }
+                    // Break out after the finally block
+                    numberOfTries = 0;
+                } catch (SQLException e) {
+                    manager.getContainer().getLogger().error(sm.getString(getStoreName() + ".SQLException", e));
+                    if (dbConnection != null)
+                        close(dbConnection);
+                } finally {
+                    try {
+                        if (rst != null)
+                            rst.close();
+                    } catch (SQLException e) {
+                        // Ignore
+                    }
+
+                    release(_conn);
+                }
+                numberOfTries--;
+            }
+        }
+        return (size);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Variable to hold the <code>clear()</code> prepared statement.
+     */
+    protected PreparedStatement preparedClearSql = null;
+
+
+    /**
+     * Remove all of the Sessions in this Store.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public void clear() throws IOException {
+
+        synchronized (this) {
+            int numberOfTries = 2;
+            while (numberOfTries > 0) {
+                Connection _conn = getConnection();
+                if (_conn == null) {
+                    return;
+                }
+
+                try {
+                    if (preparedClearSql == null) {
+                        String clearSql = "DELETE FROM " + sessionTable
+                             + " WHERE " + sessionAppCol + " = ?";
+                        preparedClearSql = _conn.prepareStatement(clearSql);
+                    }
+
+                    preparedClearSql.setString(1, getName());
+                    preparedClearSql.execute();
+                    // Break out after the finally block
+                    numberOfTries = 0;
+                } catch (SQLException e) {
+                    manager.getContainer().getLogger().error(sm.getString(getStoreName() + ".SQLException", e));
+                    if (dbConnection != null)
+                        close(dbConnection);
+                } finally {
+                    release(_conn);
+                }
+                numberOfTries--;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the ServletContext to which this session belongs.
+     */
+    public ServletContext getServletContext() {
+        if (manager == null) {
+            return null;
+        }
+        Context context = (Context) manager.getContainer();
+        return context.getServletContext();
+    }

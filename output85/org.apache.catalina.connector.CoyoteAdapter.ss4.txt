@@ -1,0 +1,245 @@
+14
+-----CSCI578-----
+
+
+    /**
+     * Indicates whether the generation of an X-Powered-By response header for
+     * Servlet-generated responses is enabled or disabled for this Connector.
+     *
+     * @return <code>true</code> if generation of X-Powered-By response header is enabled,
+     * false otherwise
+     */
+    public boolean getXpoweredBy() {
+        return xpoweredBy;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Service method.
+     */
+    @Override
+    public void service(org.apache.coyote.Request req,
+                        org.apache.coyote.Response res)
+        throws Exception {
+
+        Request request = (Request) req.getNote(ADAPTER_NOTES);
+        Response response = (Response) res.getNote(ADAPTER_NOTES);
+
+        if (request == null) {
+
+            // Create objects
+            request = connector.createRequest();
+            request.setCoyoteRequest(req);
+            response = connector.createResponse();
+            response.setCoyoteResponse(res);
+
+            // Link objects
+            request.setResponse(response);
+            response.setRequest(request);
+
+            // Set as notes
+            req.setNote(ADAPTER_NOTES, request);
+            res.setNote(ADAPTER_NOTES, response);
+
+            // Set query string encoding
+            req.getParameters().setQueryStringEncoding
+                (connector.getURIEncoding());
+
+        }
+
+        if (connector.getXpoweredBy()) {
+            response.addHeader("X-Powered-By", POWERED_BY);
+        }
+
+        boolean async = false;
+        boolean postParseSuccess = false;
+
+        try {
+            // Parse and set Catalina and configuration specific
+            // request parameters
+            req.getRequestProcessor().setWorkerThreadName(THREAD_NAME.get());
+            postParseSuccess = postParseRequest(req, request, res, response);
+            if (postParseSuccess) {
+                //check valves if we support async
+                request.setAsyncSupported(connector.getService().getContainer().getPipeline().isAsyncSupported());
+                // Calling the container
+                connector.getService().getContainer().getPipeline().getFirst().invoke(request, response);
+            }
+            AsyncContextImpl asyncConImpl = (AsyncContextImpl)request.getAsyncContext();
+            if (asyncConImpl != null) {
+                async = true;
+                ReadListener readListener = req.getReadListener();
+                if (readListener != null && request.isFinished()) {
+                    // Possible the all data may have been read during service()
+                    // method so this needs to be checked here
+                    ClassLoader oldCL = null;
+                    try {
+                        oldCL = request.getContext().bind(false, null);
+                        if (req.sendAllDataReadEvent()) {
+                            req.getReadListener().onAllDataRead();
+                        }
+                    } finally {
+                        request.getContext().unbind(false, oldCL);
+                    }
+                }
+            } else {
+                request.finishRequest();
+                response.finishResponse();
+            }
+
+        } catch (IOException e) {
+            // Ignore
+        } finally {
+            // Access log
+            if (!async && postParseSuccess) {
+                // Log only if processing was invoked.
+                // If postParseRequest() failed, it has already logged it.
+                request.getMappingData().context.logAccess(request, response,
+                        System.currentTimeMillis() - req.getStartTime(), false);
+            }
+
+            req.getRequestProcessor().setWorkerThreadName(null);
+            AtomicBoolean error = new AtomicBoolean(false);
+            res.action(ActionCode.IS_ERROR, error);
+
+            // Recycle the wrapper request and response
+            if (!async || error.get()) {
+                request.recycle();
+                response.recycle();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    public final Object getNote(int pos) {
+        return notes[pos];
+    }
+-----CSCI578-----
+
+
+    public void setWorkerThreadName(String workerThreadName) {
+        this.workerThreadName = workerThreadName;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if an attempt has been made to read the request body and all
+     * of the request body has been read
+     */
+    public boolean isFinished() {
+        return coyoteRequest.isFinished();
+    }
+-----CSCI578-----
+
+
+    public boolean sendAllDataReadEvent() {
+        return allDataReadEventSent.compareAndSet(false, true);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Perform whatever actions are required to flush and close the input
+     * stream or reader, in a single operation.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public void finishRequest() throws IOException {
+        // Optionally disable swallowing of additional request data.
+        Context context = getContext();
+        if (context != null &&
+                response.getStatus() == HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE &&
+                !context.getSwallowAbortedUploads()) {
+            coyoteRequest.action(ActionCode.DISABLE_SWALLOW_INPUT, null);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Set the Response with which this Request is associated.
+     *
+     * @param response The new associated response
+     */
+    public void setResponse(org.apache.catalina.connector.Response response) {
+        this.response = response;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the Request with which this Response is associated.
+     *
+     * @param request The new associated request
+     */
+    public void setRequest(org.apache.catalina.connector.Request request) {
+        this.request = request;
+    }
+-----CSCI578-----
+
+
+    // -------------------- Per-Request "notes" --------------------
+
+
+    /**
+     * Used to store private data. Thread data could be used instead - but
+     * if you have the req, getting/setting a note is just a array access, may
+     * be faster than ThreadLocal for very frequent operations.
+     *
+     *  Example use:
+     *   Catalina CoyoteAdapter:
+     *      ADAPTER_NOTES = 1 - stores the HttpServletRequest object ( req/res)
+     *
+     *   To avoid conflicts, note in the range 0 - 8 are reserved for the
+     *   servlet container ( catalina connector, etc ), and values in 9 - 16
+     *   for connector use.
+     *
+     *   17-31 range is not allocated or used.
+     *
+     * @param pos Index to use to store the note
+     * @param value The value to store at that index
+     */
+    public final void setNote(int pos, Object value) {
+        notes[pos] = value;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- Per-Response "notes" --------------------
+
+    public final void setNote(int pos, Object value) {
+        notes[pos] = value;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Returns <code>true</code> if remaining request data will be read
+     * (swallowed) even the request violates a data size constraint.
+     *
+     * @return <code>true</code> if data will be swallowed (default),
+     *    <code>false</code> otherwise.
+     */
+    public boolean getSwallowAbortedUploads();
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean prepare(org.apache.coyote.Request req, org.apache.coyote.Response res)
+            throws IOException, ServletException {
+        Request request = (Request) req.getNote(ADAPTER_NOTES);
+        Response response = (Response) res.getNote(ADAPTER_NOTES);
+
+        return postParseRequest(req, request, res, response);
+    }

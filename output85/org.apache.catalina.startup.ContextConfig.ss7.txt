@@ -1,0 +1,135 @@
+9
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private Set<ServletContainerInitializer> getSCIsForClass(String className) {
+        for (Map.Entry<Class<?>, Set<ServletContainerInitializer>> entry :
+                typeInitializerMap.entrySet()) {
+            Class<?> clazz = entry.getKey();
+            if (!clazz.isAnnotation()) {
+                if (clazz.getName().equals(className)) {
+                    return entry.getValue();
+                }
+            }
+        }
+        return EMPTY_SCI_SET;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void populateSCIsForCacheEntry(JavaClassCacheEntry cacheEntry,
+            Map<String,JavaClassCacheEntry> javaClassCache) {
+        Set<ServletContainerInitializer> result = new HashSet<>();
+
+        // Super class
+        String superClassName = cacheEntry.getSuperclassName();
+        JavaClassCacheEntry superClassCacheEntry =
+                javaClassCache.get(superClassName);
+
+        // Avoid an infinite loop with java.lang.Object
+        if (cacheEntry.equals(superClassCacheEntry)) {
+            cacheEntry.setSciSet(EMPTY_SCI_SET);
+            return;
+        }
+
+        // May be null of the class is not present or could not be loaded.
+        if (superClassCacheEntry != null) {
+            if (superClassCacheEntry.getSciSet() == null) {
+                populateSCIsForCacheEntry(superClassCacheEntry, javaClassCache);
+            }
+            result.addAll(superClassCacheEntry.getSciSet());
+        }
+        result.addAll(getSCIsForClass(superClassName));
+
+        // Interfaces
+        for (String interfaceName : cacheEntry.getInterfaceNames()) {
+            JavaClassCacheEntry interfaceEntry =
+                    javaClassCache.get(interfaceName);
+            // A null could mean that the class not present in application or
+            // that there is nothing of interest. Either way, nothing to do here
+            // so move along
+            if (interfaceEntry != null) {
+                if (interfaceEntry.getSciSet() == null) {
+                    populateSCIsForCacheEntry(interfaceEntry, javaClassCache);
+                }
+                result.addAll(interfaceEntry.getSciSet());
+            }
+            result.addAll(getSCIsForClass(interfaceName));
+        }
+
+        cacheEntry.setSciSet(result.isEmpty() ? EMPTY_SCI_SET : result);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * returns the super class name of this class. In the case that this class is
+     * java.lang.Object, it will return itself (java.lang.Object). This is probably incorrect
+     * but isn't fixed at this time to not break existing clients.
+     *
+     * @return Superclass name.
+     */
+    public String getSuperclassName() {
+        return superclass_name;
+    }
+-----CSCI578-----
+
+
+    private void populateJavaClassCache(String className, JavaClass javaClass,
+            Map<String,JavaClassCacheEntry> javaClassCache) {
+        if (javaClassCache.containsKey(className)) {
+            return;
+        }
+
+        // Add this class to the cache
+        javaClassCache.put(className, new JavaClassCacheEntry(javaClass));
+
+        populateJavaClassCache(javaClass.getSuperclassName(), javaClassCache);
+
+        for (String iterface : javaClass.getInterfaceNames()) {
+            populateJavaClassCache(iterface, javaClassCache);
+        }
+    }
+
+
+    private void populateJavaClassCache(String className,
+            Map<String,JavaClassCacheEntry> javaClassCache) {
+        if (!javaClassCache.containsKey(className)) {
+            String name = className.replace('.', '/') + ".class";
+            try (InputStream is = context.getLoader().getClassLoader().getResourceAsStream(name)) {
+                if (is == null) {
+                    return;
+                }
+                ClassParser parser = new ClassParser(is);
+                JavaClass clazz = parser.parse();
+                populateJavaClassCache(clazz.getClassName(), clazz, javaClassCache);
+            } catch (ClassFormatException e) {
+                log.debug(sm.getString("contextConfig.invalidSciHandlesTypes",
+                        className), e);
+            } catch (IOException e) {
+                log.debug(sm.getString("contextConfig.invalidSciHandlesTypes",
+                        className), e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return Names of implemented interfaces.
+     */
+    public String[] getInterfaceNames() {
+        return interface_names;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the Loader with which this Context is associated.
+     */
+    public Loader getLoader();

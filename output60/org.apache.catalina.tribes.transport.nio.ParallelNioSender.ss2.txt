@@ -1,0 +1,67 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean keepalive() {
+        boolean result = false;
+        for ( Iterator i = nioSenders.entrySet().iterator(); i.hasNext();  ) {
+            Map.Entry entry = (Map.Entry)i.next();
+            NioSender sender = (NioSender)entry.getValue();
+            if ( sender.keepalive() ) {
+                //nioSenders.remove(entry.getKey());
+                i.remove();
+                result = true;
+            } else {
+                try {
+                    sender.read(null);
+                }catch ( IOException x ) {
+                    sender.disconnect();
+                    sender.reset();
+                    //nioSenders.remove(entry.getKey());
+                    i.remove();
+                    result = true;
+                }catch ( Exception x ) {
+                    log.warn("Error during keepalive test for sender:"+sender,x);
+                }
+            }
+        }
+        //clean up any cancelled keys
+        if ( result ) try { selector.selectNow(); }catch (Exception ignore){}
+        return result;
+    }
+-----CSCI578-----
+
+    
+
+    public void disconnect() {
+        try {
+            connecting = false;
+            setConnected(false);
+            if ( socketChannel != null ) {
+                try {
+                    try {socketChannel.socket().close();}catch ( Exception x){}
+                    //error free close, all the way
+                    //try {socket.shutdownOutput();}catch ( Exception x){}
+                    //try {socket.shutdownInput();}catch ( Exception x){}
+                    //try {socket.close();}catch ( Exception x){}
+                    try {socketChannel.close();}catch ( Exception x){}
+                }finally {
+                    socketChannel = null;
+                }
+            }
+        } catch ( Exception x ) {
+            log.error("Unable to disconnect NioSender. msg="+x.getMessage());
+            if ( log.isDebugEnabled() ) log.debug("Unable to disconnect NioSender. msg="+x.getMessage(),x);
+        } finally {
+        }
+
+    }
+-----CSCI578-----
+
+    
+    public void remove(Member member) {
+        //disconnect senders
+        NioSender sender = (NioSender)nioSenders.remove(member);
+        if ( sender != null ) sender.disconnect();
+    }

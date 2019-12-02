@@ -1,0 +1,180 @@
+13
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public synchronized void start() throws LifecycleException {
+        if ( this.started ) return;
+        if( !initialized ) {
+            try {
+                init();
+            } catch( Exception ex ) {
+                throw new LifecycleException("Error initializaing ", ex);
+            }
+        }
+        super.addLifecycleListener(this);
+        try {
+            CatalinaCluster catclust = (CatalinaCluster)this.getCluster();
+            if (this.context == null) this.context = new ReplApplContext(this.getBasePath(), this);
+            if ( catclust != null ) {
+                ReplicatedMap map = new ReplicatedMap(this,catclust.getChannel(),DEFAULT_REPL_TIMEOUT,
+                                                      getName(),getClassLoaders());
+                map.setChannelSendOptions(mapSendOptions);
+                ((ReplApplContext)this.context).setAttributeMap(map);
+                if (getAltDDName() != null) context.setAttribute(Globals.ALT_DD_ATTR, getAltDDName());
+            }
+            super.start();
+        }  catch ( Exception x ) {
+            log.error("Unable to start ReplicatedContext",x);
+            throw new LifecycleException("Failed to start ReplicatedContext",x);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Bind the specified value with the specified context attribute name,
+     * replacing any existing value for that name.
+     *
+     * @param name Attribute name to be bound
+     * @param value New attribute value to be bound
+     */
+    public void setAttribute(String name, Object value) {
+
+        // Name cannot be null
+        if (name == null)
+            throw new IllegalArgumentException
+                (sm.getString("applicationContext.setAttribute.namenull"));
+
+        // Null value is the same as removeAttribute()
+        if (value == null) {
+            removeAttribute(name);
+            return;
+        }
+
+        Object oldValue = null;
+        boolean replaced = false;
+
+        // Add or replace the specified attribute
+        // Check for read only attribute
+        if (readOnlyAttributes.containsKey(name))
+            return;
+        oldValue = attributes.get(name);
+        if (oldValue != null)
+            replaced = true;
+        attributes.put(name, value);
+
+        // Notify interested application event listeners
+        Object listeners[] = context.getApplicationEventListeners();
+        if ((listeners == null) || (listeners.length == 0))
+            return;
+        ServletContextAttributeEvent event = null;
+        if (replaced)
+            event =
+                new ServletContextAttributeEvent(context.getServletContext(),
+                                                 name, oldValue);
+        else
+            event =
+                new ServletContextAttributeEvent(context.getServletContext(),
+                                                 name, value);
+
+        for (int i = 0; i < listeners.length; i++) {
+            if (!(listeners[i] instanceof ServletContextAttributeListener))
+                continue;
+            ServletContextAttributeListener listener =
+                (ServletContextAttributeListener) listeners[i];
+            try {
+                if (replaced) {
+                    context.fireContainerEvent
+                        ("beforeContextAttributeReplaced", listener);
+                    listener.attributeReplaced(event);
+                    context.fireContainerEvent("afterContextAttributeReplaced",
+                                               listener);
+                } else {
+                    context.fireContainerEvent("beforeContextAttributeAdded",
+                                               listener);
+                    listener.attributeAdded(event);
+                    context.fireContainerEvent("afterContextAttributeAdded",
+                                               listener);
+                }
+            } catch (Throwable t) {
+                if (replaced)
+                    context.fireContainerEvent("afterContextAttributeReplaced",
+                                               listener);
+                else
+                    context.fireContainerEvent("afterContextAttributeAdded",
+                                               listener);
+                // FIXME - should we do anything besides log these?
+                log(sm.getString("applicationContext.attributeEvent"), t);
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Writes the specified message to a servlet log file.
+     *
+     * @param message Message to be written
+     */
+    public void log(String message) {
+
+        context.getLogger().info(message);
+
+    }
+
+
+
+    /**
+     * Writes the specified exception and message to a servlet log file.
+     *
+     * @param exception Exception to be reported
+     * @param message Message to be written
+     *
+     * @deprecated As of Java Servlet API 2.1, use
+     *  <code>log(String, Throwable)</code> instead
+     */
+    public void log(Exception exception, String message) {
+
+        context.getLogger().error(message, exception);
+
+    }
+
+
+
+    /**
+     * Writes the specified message and exception to a servlet log file.
+     *
+     * @param message Message to be written
+     * @param throwable Exception to be reported
+     */
+    public void log(String message, Throwable throwable) {
+
+        context.getLogger().error(message, throwable);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set an alternate Deployment Descriptor name.
+     */
+    public void setAltDDName(String altDDName) {
+        this.altDDName = altDDName;
+        if (context != null) {
+            context.setAttribute(Globals.ALT_DD_ATTR,altDDName);
+        }
+    }

@@ -1,0 +1,31 @@
+3
+-----CSCI578-----
+
+
+    @Override
+    public Runnable take() throws InterruptedException {
+        if (parent != null && parent.currentThreadShouldBeStopped()) {
+            return poll(parent.getKeepAliveTime(TimeUnit.MILLISECONDS),
+                    TimeUnit.MILLISECONDS);
+            // yes, this may return null (in case of timeout) which normally
+            // does not occur with take()
+            // but the ThreadPoolExecutor implementation allows this
+        }
+        return super.take();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Runnable poll(long timeout, TimeUnit unit)
+            throws InterruptedException {
+        Runnable runnable = super.poll(timeout, unit);
+        if (runnable == null && parent != null) {
+            // the poll timed out, it gives an opportunity to stop the current
+            // thread if needed to avoid memory leaks.
+            parent.stopCurrentThreadIfNeeded();
+        }
+        return runnable;
+    }
+-----CSCI578-----

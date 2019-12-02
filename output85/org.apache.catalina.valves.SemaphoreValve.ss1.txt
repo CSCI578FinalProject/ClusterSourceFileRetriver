@@ -1,0 +1,84 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Subclass friendly method to add conditions.
+     * @param request The Servlet request
+     * @param response The Servlet response
+     * @return <code>true</code> if the concurrency control should occur
+     *  on this request
+     */
+    public boolean controlConcurrency(Request request, Response response) {
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Subclass friendly method to add error handling when a permit isn't
+     * granted.
+     * @param request The Servlet request
+     * @param response The Servlet response
+     * @throws IOException Error writing output
+     * @throws ServletException Other error
+     */
+    public void permitDenied(Request request, Response response)
+        throws IOException, ServletException {
+        // NO-OP by default
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Do concurrency control on the request using the semaphore.
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be created
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    @Override
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        if (controlConcurrency(request, response)) {
+            boolean shouldRelease = true;
+            try {
+                if (block) {
+                    if (interruptible) {
+                        try {
+                            semaphore.acquire();
+                        } catch (InterruptedException e) {
+                            shouldRelease = false;
+                            permitDenied(request, response);
+                            return;
+                        }
+                    } else {
+                        semaphore.acquireUninterruptibly();
+                    }
+                } else {
+                    if (!semaphore.tryAcquire()) {
+                        shouldRelease = false;
+                        permitDenied(request, response);
+                        return;
+                    }
+                }
+                getNext().invoke(request, response);
+            } finally {
+                if (shouldRelease) {
+                    semaphore.release();
+                }
+            }
+        } else {
+            getNext().invoke(request, response);
+        }
+
+    }

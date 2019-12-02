@@ -1,0 +1,629 @@
+25
+-----CSCI578-----
+
+
+
+    /**
+     * Add a property change listener to this component.
+     *
+     * @param listener The listener to add
+     */
+    public void addPropertyChangeListener(PropertyChangeListener listener) {
+
+        support.addPropertyChangeListener(listener);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add a property change listener to this component.
+     *
+     * @param listener The listener to add
+     */
+    public void addPropertyChangeListener(PropertyChangeListener listener) {
+
+        support.addPropertyChangeListener(listener);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Create the MBeans that correspond to every existing node of our tree.
+     */
+    protected void createMBeans() {
+
+        try {
+
+            MBeanFactory factory = new MBeanFactory();
+            createMBeans(factory);
+            createMBeans(ServerFactory.getServer());
+
+        } catch (MBeanException t) {
+
+            Exception e = t.getTargetException();
+            if (e == null)
+                e = t;
+            log.error("createMBeans: MBeanException", e);
+
+        } catch (Throwable t) {
+
+            log.error("createMBeans: Throwable", t);
+
+        }
+
+    }
+
+
+
+    /**
+     * Create the MBeans for the specified Connector and its nested components.
+     *
+     * @param connector Connector for which to create MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean creation
+     */
+    protected void createMBeans(Connector connector) throws Exception {
+
+        // Create the MBean for the Connnector itself
+//        if (log.isDebugEnabled())
+//            log.debug("Creating MBean for Connector " + connector);
+//        MBeanUtils.createMBean(connector);
+
+    }
+
+
+
+    /**
+     * Create the MBeans for the specified Context and its nested components.
+     *
+     * @param context Context for which to create MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean creation
+     */
+    protected void createMBeans(Context context) throws Exception {
+
+        // Create the MBean for the Context itself
+//        if (log.isDebugEnabled())
+//            log.debug("Creating MBean for Context " + context);
+//        MBeanUtils.createMBean(context);
+        context.addContainerListener(this);
+        if (context instanceof StandardContext) {
+            ((StandardContext) context).addPropertyChangeListener(this);
+            ((StandardContext) context).addLifecycleListener(this);
+        }
+
+        // If the context is privileged, give a reference to it
+        // in a servlet context attribute
+        if (context.getPrivileged()) {
+            context.getServletContext().setAttribute
+                (Globals.MBEAN_REGISTRY_ATTR,
+                 MBeanUtils.createRegistry());
+            context.getServletContext().setAttribute
+                (Globals.MBEAN_SERVER_ATTR,
+                 MBeanUtils.createServer());
+        }
+
+        // Create the MBeans for the associated nested components
+        Loader cLoader = context.getLoader();
+        if (cLoader != null) {
+            if (log.isDebugEnabled())
+                log.debug("Creating MBean for Loader " + cLoader);
+            //MBeanUtils.createMBean(cLoader);
+        }
+        Manager cManager = context.getManager();
+        if (cManager != null) {
+            if (log.isDebugEnabled())
+                log.debug("Creating MBean for Manager " + cManager);
+            //MBeanUtils.createMBean(cManager);
+        }
+        Realm hRealm = context.getParent().getRealm();
+        Realm cRealm = context.getRealm();
+        if ((cRealm != null) && (cRealm != hRealm)) {
+            if (log.isDebugEnabled())
+                log.debug("Creating MBean for Realm " + cRealm);
+            //MBeanUtils.createMBean(cRealm);
+        }
+
+        // Create the MBeans for the NamingResources (if any)
+        NamingResources resources = context.getNamingResources();
+        createMBeans(resources);
+
+    }
+
+
+
+    /**
+     * Create the MBeans for the specified ContextEnvironment entry.
+     *
+     * @param environment ContextEnvironment for which to create MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean creation
+     */
+    protected void createMBeans(ContextEnvironment environment)
+        throws Exception {
+
+        // Create the MBean for the ContextEnvironment itself
+        if (log.isDebugEnabled()) {
+            log.debug("Creating MBean for ContextEnvironment " + environment);
+        }
+        MBeanUtils.createMBean(environment);
+
+    }
+
+
+
+    /**
+     * Create the MBeans for the specified ContextResource entry.
+     *
+     * @param resource ContextResource for which to create MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean creation
+     */
+    protected void createMBeans(ContextResource resource)
+        throws Exception {
+
+        // Create the MBean for the ContextResource itself
+        if (log.isDebugEnabled()) {
+            log.debug("Creating MBean for ContextResource " + resource);
+        }
+        MBeanUtils.createMBean(resource);
+
+    }
+
+
+
+    /**
+     * Create the MBeans for the specified ContextResourceLink entry.
+     *
+     * @param resourceLink ContextResourceLink for which to create MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean creation
+     */
+    protected void createMBeans(ContextResourceLink resourceLink)
+        throws Exception {
+
+        // Create the MBean for the ContextResourceLink itself
+        if (log.isDebugEnabled()) {
+            log.debug("Creating MBean for ContextResourceLink " + resourceLink);
+        }
+        MBeanUtils.createMBean(resourceLink);
+
+    }
+
+
+
+    /**
+     * Create the MBeans for the specified DefaultContext and its nested components.
+     *
+     * @param dcontext DefaultContext for which to create MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean creation
+     */
+    /*
+    protected void createMBeans(DefaultContext dcontext) throws Exception {
+
+        // Create the MBean for the DefaultContext itself
+        if (log.isDebugEnabled())
+            log.debug("Creating MBean for DefaultContext " + dcontext);
+        MBeanUtils.createMBean(dcontext);
+
+        dcontext.addPropertyChangeListener(this);
+
+        // Create the MBeans for the associated nested components
+        Loader dLoader = dcontext.getLoader();
+        if (dLoader != null) {
+            if (log.isDebugEnabled())
+                log.debug("Creating MBean for Loader " + dLoader);
+            //MBeanUtils.createMBean(dLoader);
+        }
+
+        Manager dManager = dcontext.getManager();
+        if (dManager != null) {
+            if (log.isDebugEnabled())
+                log.debug("Creating MBean for Manager " + dManager);
+            //MBeanUtils.createMBean(dManager);
+        }
+
+        // Create the MBeans for the NamingResources (if any)
+        NamingResources resources = dcontext.getNamingResources();
+        createMBeans(resources);
+
+    }
+    */
+
+
+    /**
+     * Create the MBeans for the specified Engine and its nested components.
+     *
+     * @param engine Engine for which to create MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean creation
+     */
+    protected void createMBeans(Engine engine) throws Exception {
+
+        // Create the MBean for the Engine itself
+        if (log.isDebugEnabled()) {
+            log.debug("Creating MBean for Engine " + engine);
+        }
+        //MBeanUtils.createMBean(engine);
+        engine.addContainerListener(this);
+        if (engine instanceof StandardEngine) {
+            ((StandardEngine) engine).addPropertyChangeListener(this);
+        }
+
+        // Create the MBeans for the associated nested components
+        Realm eRealm = engine.getRealm();
+        if (eRealm != null) {
+            if (log.isDebugEnabled())
+                log.debug("Creating MBean for Realm " + eRealm);
+            //MBeanUtils.createMBean(eRealm);
+        }
+
+        // Create the MBeans for each child Host
+        Container hosts[] = engine.findChildren();
+        for (int j = 0; j < hosts.length; j++) {
+            createMBeans((Host) hosts[j]);
+        }
+
+    }
+
+
+
+    /**
+     * Create the MBeans for the specified Host and its nested components.
+     *
+     * @param host Host for which to create MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean creation
+     */
+    protected void createMBeans(Host host) throws Exception {
+
+        // Create the MBean for the Host itself
+        if (log.isDebugEnabled()) {
+            log.debug("Creating MBean for Host " + host);
+        }
+        //MBeanUtils.createMBean(host);
+        host.addContainerListener(this);
+        if (host instanceof StandardHost) {
+            ((StandardHost) host).addPropertyChangeListener(this);
+        }
+
+        // Create the MBeans for the associated nested components
+        Realm eRealm = host.getParent().getRealm();
+        Realm hRealm = host.getRealm();
+        if ((hRealm != null) && (hRealm != eRealm)) {
+            if (log.isDebugEnabled())
+                log.debug("Creating MBean for Realm " + hRealm);
+            //MBeanUtils.createMBean(hRealm);
+        }
+
+        // Create the MBeans for each child Context
+        Container contexts[] = host.findChildren();
+        for (int k = 0; k < contexts.length; k++) {
+            createMBeans((Context) contexts[k]);
+        }
+
+    }
+
+
+
+    /**
+     * Create the MBeans for MBeanFactory.
+     *
+     * @param factory MBeanFactory for which to create MBean
+     *
+     * @exception Exception if an exception is thrown during MBean creation
+     */
+    protected void createMBeans(MBeanFactory factory) throws Exception {
+
+        // Create the MBean for the MBeanFactory
+        if (log.isDebugEnabled())
+            log.debug("Creating MBean for MBeanFactory " + factory);
+        MBeanUtils.createMBean(factory);
+
+    }
+
+
+
+    /**
+     * Create the MBeans for the specified NamingResources and its
+     * nested components.
+     *
+     * @param resources NamingResources for which to create MBeans
+     */
+    protected void createMBeans(NamingResources resources) throws Exception {
+
+        // Create the MBean for the NamingResources itself
+        if (log.isDebugEnabled()) {
+            log.debug("Creating MBean for NamingResources " + resources);
+        }
+        MBeanUtils.createMBean(resources);
+        resources.addPropertyChangeListener(this);
+
+        // Create the MBeans for each child environment entry
+        ContextEnvironment environments[] = resources.findEnvironments();
+        for (int i = 0; i < environments.length; i++) {
+            createMBeans(environments[i]);
+        }
+
+        // Create the MBeans for each child resource entry
+        ContextResource cresources[] = resources.findResources();
+        for (int i = 0; i < cresources.length; i++) {
+            createMBeans(cresources[i]);
+        }
+
+        // Create the MBeans for each child resource link entry
+        ContextResourceLink cresourcelinks[] = resources.findResourceLinks();
+        for (int i = 0; i < cresourcelinks.length; i++) {
+            createMBeans(cresourcelinks[i]);
+        }
+
+    }
+
+
+
+    /**
+     * Create the MBeans for the specified Server and its nested components.
+     *
+     * @param server Server for which to create MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean creation
+     */
+    protected void createMBeans(Server server) throws Exception {
+
+        // Create the MBean for the Server itself
+        if (log.isDebugEnabled())
+            log.debug("Creating MBean for Server " + server);
+        //MBeanUtils.createMBean(server);
+        if (server instanceof StandardServer) {
+            ((StandardServer) server).addPropertyChangeListener(this);
+        }
+
+        // Create the MBeans for the global NamingResources (if any)
+        NamingResources resources = server.getGlobalNamingResources();
+        if (resources != null) {
+            createMBeans(resources);
+        }
+
+        // Create the MBeans for each child Service
+        Service services[] = server.findServices();
+        for (int i = 0; i < services.length; i++) {
+            // FIXME - Warp object hierarchy not currently supported
+            if (services[i].getContainer().getClass().getName().equals
+                ("org.apache.catalina.connector.warp.WarpEngine")) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Skipping MBean for Service " + services[i]);
+                }
+                continue;
+            }
+            createMBeans(services[i]);
+        }
+
+    }
+
+
+
+    /**
+     * Create the MBeans for the specified Service and its nested components.
+     *
+     * @param service Service for which to create MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean creation
+     */
+    protected void createMBeans(Service service) throws Exception {
+
+        if (service instanceof StandardService) {
+            ((StandardService) service).addPropertyChangeListener(this);
+        }
+
+        // Create the MBeans for the corresponding Connectors
+        Connector connectors[] = service.findConnectors();
+        for (int j = 0; j < connectors.length; j++) {
+            createMBeans(connectors[j]);
+        }
+
+        // Create the MBean for the associated Engine and friends
+        Engine engine = (Engine) service.getContainer();
+        if (engine != null) {
+            createMBeans(engine);
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Add a property change listener to this component.
+     *
+     * @param listener The listener to add
+     */
+    public void addPropertyChangeListener(PropertyChangeListener listener) {
+
+        support.addPropertyChangeListener(listener);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * The configuration information registry for our managed beans.
+     */
+    private static Registry registry = createRegistry();
+
+
+    /**
+     * Create and configure (if necessary) and return the registry of
+     * managed object descriptions.
+     */
+    public synchronized static Registry createRegistry() {
+
+        if (registry == null) {
+            registry = Registry.getRegistry(null, null);
+            ClassLoader cl=ServerLifecycleListener.class.getClassLoader();
+
+            registry.loadDescriptors("org.apache.catalina.mbeans",  cl);
+            registry.loadDescriptors("org.apache.catalina.authenticator", cl);
+            registry.loadDescriptors("org.apache.catalina.core", cl);
+            registry.loadDescriptors("org.apache.catalina", cl);
+            registry.loadDescriptors("org.apache.catalina.deploy", cl);
+            registry.loadDescriptors("org.apache.catalina.loader", cl);
+            registry.loadDescriptors("org.apache.catalina.realm", cl);
+            registry.loadDescriptors("org.apache.catalina.session", cl);
+            registry.loadDescriptors("org.apache.catalina.startup", cl);
+            registry.loadDescriptors("org.apache.catalina.users", cl);
+            registry.loadDescriptors("org.apache.catalina.ha", cl);
+            registry.loadDescriptors("org.apache.catalina.connector", cl);
+            registry.loadDescriptors("org.apache.catalina.valves",  cl);
+        }
+        return (registry);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * The <code>MBeanServer</code> for this application.
+     */
+    private static MBeanServer mserver = createServer();
+
+
+
+    /**
+     * Create and configure (if necessary) and return the
+     * <code>MBeanServer</code> with which we will be
+     * registering our <code>DynamicMBean</code> implementations.
+     */
+    public synchronized static MBeanServer createServer() {
+
+        if (mserver == null) {
+            try {
+                mserver = Registry.getRegistry(null, null).getMBeanServer();
+            } catch (Throwable t) {
+                t.printStackTrace(System.out);
+                System.exit(1);
+            }
+        }
+        return (mserver);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------- LifecycleListener Methods
+
+
+    /**
+     * Primary entry point for startup and shutdown events.
+     *
+     * @param event The event that has occurred
+     */
+    public void lifecycleEvent(LifecycleEvent event) {
+
+        Lifecycle lifecycle = event.getLifecycle();
+        if (Lifecycle.START_EVENT.equals(event.getType())) {
+
+            if (lifecycle instanceof Server) {
+                createMBeans();
+            }
+
+            // We are embedded.
+            if( lifecycle instanceof Service ) {
+                try {
+                    MBeanFactory factory = new MBeanFactory();
+                    createMBeans(factory);
+                    createMBeans((Service)lifecycle);
+                } catch( Exception ex ) {
+                    log.error("Create mbean factory");
+                }
+            }
+
+            /*
+            // Ignore events from StandardContext objects to avoid
+            // reregistering the context
+            if (lifecycle instanceof StandardContext)
+                return;
+            createMBeans();
+            */
+
+        } else if (Lifecycle.AFTER_STOP_EVENT.equals(event.getType())) {
+            try {
+                if (lifecycle instanceof Server) {
+                    destroyMBeans((Server)lifecycle);
+                }
+                if (lifecycle instanceof Service) {
+                    destroyMBeans((Service)lifecycle);
+                }
+            } catch (MBeanException t) {
+
+                Exception e = t.getTargetException();
+                if (e == null) {
+                    e = t;
+                }
+                log.error("destroyMBeans: MBeanException", e);
+
+            } catch (Throwable t) {
+
+                log.error("destroyMBeans: Throwable", t);
+
+            }
+            // FIXME: RMI adaptor should be stopped; however, this is
+            // undocumented in MX4J, and reports exist in the MX4J bug DB that
+            // this doesn't work
+
+        }
+
+        if ((Context.RELOAD_EVENT.equals(event.getType()))
+            || (Lifecycle.START_EVENT.equals(event.getType()))) {
+
+            // Give context a new handle to the MBean server if the
+            // context has been reloaded since reloading causes the
+            // context to lose its previous handle to the server
+            if (lifecycle instanceof StandardContext) {
+                // If the context is privileged, give a reference to it
+                // in a servlet context attribute
+                StandardContext context = (StandardContext)lifecycle;
+                if (context.getPrivileged()) {
+                    context.getServletContext().setAttribute
+                        (Globals.MBEAN_REGISTRY_ATTR,
+                         MBeanUtils.createRegistry());
+                    context.getServletContext().setAttribute
+                        (Globals.MBEAN_SERVER_ATTR,
+                         MBeanUtils.createServer());
+                }
+            }
+
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

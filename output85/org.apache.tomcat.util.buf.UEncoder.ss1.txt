@@ -1,0 +1,157 @@
+8
+-----CSCI578-----
+
+
+   /**
+    * URL Encode string, using a specified encoding.
+    *
+    * @param s string to be encoded
+    * @param start the beginning index, inclusive
+    * @param end the ending index, exclusive
+    *
+    * @return A new CharChunk contained the URL encoded string
+    *
+    * @throws IOException If an I/O error occurs
+    */
+   public CharChunk encodeURL(String s, int start, int end)
+       throws IOException {
+       if (c2b == null) {
+           bb = new ByteChunk(8); // small enough.
+           cb = new CharChunk(2); // small enough.
+           output = new CharChunk(64); // small enough.
+           c2b = new C2BConverter(StandardCharsets.UTF_8);
+       } else {
+           bb.recycle();
+           cb.recycle();
+           output.recycle();
+       }
+
+       for (int i = start; i < end; i++) {
+           char c = s.charAt(i);
+           if (safeChars.get(c)) {
+               output.append(c);
+           } else {
+               cb.append(c);
+               c2b.convert(cb, bb);
+
+               // "surrogate" - UTF is _not_ 16 bit, but 21 !!!!
+               // ( while UCS is 31 ). Amazing...
+               if (c >= 0xD800 && c <= 0xDBFF) {
+                   if ((i+1) < end) {
+                       char d = s.charAt(i+1);
+                       if (d >= 0xDC00 && d <= 0xDFFF) {
+                           cb.append(d);
+                           c2b.convert(cb, bb);
+                           i++;
+                       }
+                   }
+               }
+
+               urlEncode(output, bb);
+               cb.recycle();
+               bb.recycle();
+           }
+       }
+
+       return output;
+   }
+-----CSCI578-----
+
+
+   protected void urlEncode(CharChunk out, ByteChunk bb)
+       throws IOException {
+       byte[] bytes = bb.getBuffer();
+       for (int j = bb.getStart(); j < bb.getEnd(); j++) {
+           out.append('%');
+           char ch = Character.forDigit((bytes[j] >> 4) & 0xF, 16);
+           out.append(ch);
+           ch = Character.forDigit(bytes[j] & 0xF, 16);
+           out.append(ch);
+       }
+   }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Resets the message bytes to an uninitialized state.
+     */
+    public void recycle() {
+        //        buff=null;
+        isSet=false; // XXX
+        hasHashCode = false;
+        start=0;
+        end=0;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Convert the given characters to bytes.
+     *
+     * @param cc char input
+     * @param bc byte output
+     * @throws IOException An encoding error occurred
+     */
+    public void convert(CharChunk cc, ByteChunk bc)
+            throws IOException {
+        if ((bb == null) || (bb.array() != bc.getBuffer())) {
+            // Create a new byte buffer if anything changed
+            bb = ByteBuffer.wrap(bc.getBuffer(), bc.getEnd(),
+                    bc.getBuffer().length - bc.getEnd());
+        } else {
+            // Initialize the byte buffer
+            bb.limit(bc.getBuffer().length);
+            bb.position(bc.getEnd());
+        }
+        if ((cb == null) || (cb.array() != cc.getBuffer())) {
+            // Create a new char buffer if anything changed
+            cb = CharBuffer.wrap(cc.getBuffer(), cc.getStart(),
+                    cc.getLength());
+        } else {
+            // Initialize the char buffer
+            cb.limit(cc.getEnd());
+            cb.position(cc.getStart());
+        }
+        CoderResult result = null;
+        // Parse leftover if any are present
+        if (leftovers.position() > 0) {
+            int pos = bb.position();
+            // Loop until one char is encoded or there is a encoder error
+            do {
+                leftovers.put((char) cc.substract());
+                leftovers.flip();
+                result = encoder.encode(leftovers, bb, false);
+                leftovers.position(leftovers.limit());
+                leftovers.limit(leftovers.array().length);
+            } while (result.isUnderflow() && (bb.position() == pos));
+            if (result.isError() || result.isMalformed()) {
+                result.throwException();
+            }
+            cb.position(cc.getStart());
+            leftovers.position(0);
+        }
+        // Do the decoding and get the results into the byte chunk and the char
+        // chunk
+        result = encoder.encode(cb, bb, false);
+        if (result.isError() || result.isMalformed()) {
+            result.throwException();
+        } else if (result.isOverflow()) {
+            // Propagate current positions to the byte chunk and char chunk
+            bc.setEnd(bb.position());
+            cc.setOffset(cb.position());
+        } else if (result.isUnderflow()) {
+            // Propagate current positions to the byte chunk and char chunk
+            bc.setEnd(bb.position());
+            cc.setOffset(cb.position());
+            // Put leftovers in the leftovers char buffer
+            if (cc.getLength() > 0) {
+                leftovers.limit(leftovers.array().length);
+                leftovers.position(cc.getLength());
+                cc.substract(leftovers.array(), 0, cc.getLength());
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

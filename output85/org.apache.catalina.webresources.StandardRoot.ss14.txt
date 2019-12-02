@@ -1,0 +1,47 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    protected void startInternal() throws LifecycleException {
+        mainResources.clear();
+
+        main = createMainResourceSet();
+
+        mainResources.add(main);
+
+        for (List<WebResourceSet> list : allResources) {
+            for (WebResourceSet webResourceSet : list) {
+                webResourceSet.start();
+            }
+        }
+
+        // This has to be called after the other resources have been started
+        // else it won't find all the matching resources
+        processWebInfLib();
+        // Need to start the newly found resources
+        for (WebResourceSet classResource : classResources) {
+            classResource.start();
+        }
+
+        cache.enforceObjectMaxSizeLimit();
+
+        setState(LifecycleState.STARTING);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    void enforceObjectMaxSizeLimit() {
+        long limit = maxSize / OBJECT_MAX_SIZE_FACTOR;
+        if (limit > Integer.MAX_VALUE) {
+            return;
+        }
+        if (objectMaxSize > limit) {
+            log.warn(sm.getString("cache.objectMaxSizeTooBig",
+                    Integer.valueOf(objectMaxSize / 1024), Integer.valueOf((int)limit / 1024)));
+            objectMaxSize = (int) limit;
+        }
+    }

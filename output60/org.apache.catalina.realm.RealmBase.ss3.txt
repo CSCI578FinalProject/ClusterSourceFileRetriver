@@ -1,0 +1,148 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Return the digest algorithm  used for storing credentials.
+     */
+    public String getDigest() {
+
+        return digest;
+
+    }
+
+
+
+    /**
+     * Set the digest algorithm used for storing credentials.
+     *
+     * @param digest The new digest algorithm
+     */
+    public void setDigest(String digest) {
+
+        this.digest = digest;
+
+    }
+
+
+    protected boolean hasMessageDigest() {
+        return !(md == null);
+    }
+
+
+    /**
+     * Return the digest associated with given principal's user name.
+     */
+    protected String getDigest(String username, String realmName) {
+        if (md5Helper == null) {
+            try {
+                md5Helper = MessageDigest.getInstance("MD5");
+            } catch (NoSuchAlgorithmException e) {
+                log.error("Couldn't get MD5 digest: ", e);
+                throw new IllegalStateException(e.getMessage());
+            }
+        }
+
+    	if (hasMessageDigest()) {
+    		// Use pre-generated digest
+    		return getPassword(username);
+    	}
+    	
+        String digestValue = username + ":" + realmName + ":"
+            + getPassword(username);
+
+        byte[] valueBytes = null;
+        if(getDigestEncoding() == null) {
+            valueBytes = digestValue.getBytes();
+        } else {
+            try {
+                valueBytes = digestValue.getBytes(getDigestEncoding());
+            } catch (UnsupportedEncodingException uee) {
+                log.error("Illegal digestEncoding: " + getDigestEncoding(), uee);
+                throw new IllegalArgumentException(uee.getMessage());
+            }
+        }
+
+        byte[] digest = null;
+        // Bugzilla 32137
+        synchronized(md5Helper) {
+            digest = md5Helper.digest(valueBytes);
+        }
+
+        return md5Encoder.encode(digest);
+    }
+
+
+
+    // --------------------------------------------------------- Static Methods
+
+
+    /**
+     * Digest password using the algorithm specified and
+     * convert the result to a corresponding hex string.
+     * If exception, the plain credentials string is returned
+     *
+     * @param credentials Password or other credentials to use in
+     *  authenticating this username
+     * @param algorithm Algorithm used to do the digest
+     * @param encoding Character encoding of the string to digest
+     */
+    public final static String Digest(String credentials, String algorithm,
+                                      String encoding) {
+
+        try {
+            // Obtain a new message digest with "digest" encryption
+            MessageDigest md =
+                (MessageDigest) MessageDigest.getInstance(algorithm).clone();
+
+            // encode the credentials
+            // Should use the digestEncoding, but that's not a static field
+            if (encoding == null) {
+                md.update(credentials.getBytes());
+            } else {
+                md.update(credentials.getBytes(encoding));                
+            }
+
+            // Digest the credentials and return as hexadecimal
+            return (HexUtils.convert(md.digest()));
+        } catch(Exception ex) {
+            log.error(ex);
+            return credentials;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Digest password using the algorithm specified and
+     * convert the result to a corresponding hex string.
+     * If exception, the plain credentials string is returned
+     */
+    public static void main(String args[]) {
+
+        String encoding = null;
+        int firstCredentialArg = 2;
+        
+        if (args.length > 4 && args[2].equalsIgnoreCase("-e")) {
+            encoding = args[3];
+            firstCredentialArg = 4;
+        }
+        
+        if(args.length > firstCredentialArg && args[0].equalsIgnoreCase("-a")) {
+            for(int i=firstCredentialArg; i < args.length ; i++){
+                System.out.print(args[i]+":");
+                System.out.println(Digest(args[i], args[1], encoding));
+            }
+        } else {
+            System.out.println
+                ("Usage: RealmBase -a <algorithm> [-e <encoding>] <credentials>");
+        }
+
+    }
+
+
+    public String getDomain() {
+        return domain;
+    }

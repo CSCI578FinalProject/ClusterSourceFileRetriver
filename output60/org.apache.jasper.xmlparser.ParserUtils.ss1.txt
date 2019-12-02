@@ -1,0 +1,211 @@
+13
+-----CSCI578-----
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Create and return a TreeNode that corresponds to the specified Node,
+     * including processing all of the attributes and children nodes.
+     *
+     * @param parent The parent TreeNode (if any) for the new TreeNode
+     * @param node The XML document Node to be converted
+     */
+    protected TreeNode convert(TreeNode parent, Node node) {
+
+        // Construct a new TreeNode for this node
+        TreeNode treeNode = new TreeNode(node.getNodeName(), parent);
+
+        // Convert all attributes of this node
+        NamedNodeMap attributes = node.getAttributes();
+        if (attributes != null) {
+            int n = attributes.getLength();
+            for (int i = 0; i < n; i++) {
+                Node attribute = attributes.item(i);
+                treeNode.addAttribute(attribute.getNodeName(),
+                                      attribute.getNodeValue());
+            }
+        }
+
+        // Create and attach all children of this node
+        NodeList children = node.getChildNodes();
+        if (children != null) {
+            int n = children.getLength();
+            for (int i = 0; i < n; i++) {
+                Node child = children.item(i);
+                if (child instanceof Comment)
+                    continue;
+                if (child instanceof Text) {
+                    String body = ((Text) child).getData();
+                    if (body != null) {
+                        body = body.trim();
+                        if (body.length() > 0)
+                            treeNode.setBody(body);
+                    }
+                } else {
+                    convert(treeNode, child);
+                }
+            }
+        }
+
+        // Return the completed TreeNode graph
+        return (treeNode);
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Parse the specified XML document, and return a <code>TreeNode</code>
+     * that corresponds to the root node of the document tree.
+     *
+     * @param location Location (eg URI) of the XML document being parsed
+     * @param is Input source containing the deployment descriptor
+     *
+     * @exception JasperException if an input/output error occurs
+     * @exception JasperException if a parsing error occurs
+     */
+    public TreeNode parseXMLDocument(String location, InputSource is)
+        throws JasperException {
+
+        Document document = null;
+
+        // Perform an XML parse of this document, via JAXP
+        ClassLoader original;
+        if (Constants.IS_SECURITY_ENABLED) {
+            PrivilegedGetTccl pa = new PrivilegedGetTccl();
+            original = AccessController.doPrivileged(pa);
+        } else {
+            original = Thread.currentThread().getContextClassLoader();
+        }
+        try {
+            if (Constants.IS_SECURITY_ENABLED) {
+                PrivilegedSetTccl pa =
+                        new PrivilegedSetTccl(ParserUtils.class.getClassLoader());
+                AccessController.doPrivileged(pa);
+            } else {
+                Thread.currentThread().setContextClassLoader(
+                        ParserUtils.class.getClassLoader());
+            }
+            
+            DocumentBuilderFactory factory =
+                DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            factory.setValidating(useValidation);
+            if (useValidation) {
+                // Enable DTD validation
+                factory.setFeature(
+                        "http://xml.org/sax/features/validation",
+                        true);
+                // Enable schema validation
+                factory.setFeature(
+                        "http://apache.org/xml/features/validation/schema",
+                        true);
+            }
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            builder.setEntityResolver(entityResolverInstance);
+            XmlErrorHandler handler = new XmlErrorHandler();
+            builder.setErrorHandler(handler);
+            document = builder.parse(is);
+            if (!handler.getErrors().isEmpty()) {
+                // throw the first to indicate there was a error during processing
+                throw handler.getErrors().iterator().next();
+            }
+        } catch (ParserConfigurationException ex) {
+            throw new JasperException(
+                    Localizer.getMessage("jsp.error.parse.xml", location), ex);
+        } catch (SAXParseException ex) {
+            throw new JasperException(
+                    Localizer.getMessage("jsp.error.parse.xml.line",
+                            location,
+                            Integer.toString(ex.getLineNumber()),
+        			        Integer.toString(ex.getColumnNumber())),
+			        ex);
+        } catch (SAXException sx) {
+            throw new JasperException(
+                    Localizer.getMessage("jsp.error.parse.xml", location), sx);
+        } catch (IOException io) {
+            throw new JasperException(
+                    Localizer.getMessage("jsp.error.parse.xml", location), io);
+        } finally {
+            if (Constants.IS_SECURITY_ENABLED) {
+                PrivilegedSetTccl pa = new PrivilegedSetTccl(original);
+                AccessController.doPrivileged(pa);
+            } else {
+                Thread.currentThread().setContextClassLoader(original);
+            }
+        }
+
+        // Convert the resulting document to a graph of TreeNodes
+        return (convert(null, document.getDocumentElement()));
+    }
+
+
+
+    /**
+     * Parse the specified XML document, and return a <code>TreeNode</code>
+     * that corresponds to the root node of the document tree.
+     *
+     * @param uri URI of the XML document being parsed
+     * @param is Input stream containing the deployment descriptor
+     *
+     * @exception JasperException if an input/output error occurs
+     * @exception JasperException if a parsing error occurs
+     */
+    public TreeNode parseXMLDocument(String uri, InputStream is)
+            throws JasperException {
+
+        return (parseXMLDocument(uri, new InputSource(is)));
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the body text associated with this node (if any).
+     *
+     * @param body The body text (if any)
+     */
+    public void setBody(String body) {
+
+        this.body = body;
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add an attribute to this node, replacing any existing attribute
+     * with the same name.
+     *
+     * @param name The attribute name to add
+     * @param value The new attribute value
+     */
+    public void addAttribute(String name, String value) {
+
+        if (attributes == null)
+            attributes = new HashMap();
+        attributes.put(name, value);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public List<SAXParseException> getErrors() {
+        // Internal use only - don't worry about immutability
+        return errors;
+    }
+-----CSCI578-----
+-----CSCI578-----

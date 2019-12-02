@@ -1,0 +1,93 @@
+7
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public WebResource getResource(String path) {
+        checkPath(path);
+        String webAppMount = getWebAppMount();
+        WebResourceRoot root = getRoot();
+        if (path.startsWith(webAppMount)) {
+            File f = file(path.substring(webAppMount.length()), false);
+            if (f == null) {
+                return new EmptyResource(root, path);
+            }
+            if (!f.exists()) {
+                return new EmptyResource(root, path, f);
+            }
+            if (f.isDirectory() && path.charAt(path.length() - 1) != '/') {
+                path = path + '/';
+            }
+            return new FileResource(root, path, f, isReadOnly(), getManifest());
+        } else {
+            return new EmptyResource(root, path);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public boolean mkdir(String path) {
+        checkPath(path);
+        if (isReadOnly()) {
+            return false;
+        }
+        String webAppMount = getWebAppMount();
+        if (path.startsWith(webAppMount)) {
+            File f = file(path.substring(webAppMount.length()), false);
+            if (f == null) {
+                return false;
+            }
+            return f.mkdir();
+        } else {
+            return false;
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean write(String path, InputStream is, boolean overwrite) {
+        checkPath(path);
+
+        if (is == null) {
+            throw new NullPointerException(
+                    sm.getString("dirResourceSet.writeNpe"));
+        }
+
+        if (isReadOnly()) {
+            return false;
+        }
+
+        File dest = null;
+        String webAppMount = getWebAppMount();
+        if (path.startsWith(webAppMount)) {
+            dest = file(path.substring(webAppMount.length()), false);
+            if (dest == null) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+
+        if (dest.exists() && !overwrite) {
+            return false;
+        }
+
+        try {
+            if (overwrite) {
+                Files.copy(is, dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                Files.copy(is, dest.toPath());
+            }
+        } catch (IOException ioe) {
+            return false;
+        }
+
+        return true;
+    }

@@ -1,0 +1,50 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void unregisterAuthenticatedSession(WsSession wsSession,
+            String httpSessionId) {
+        Set<WsSession> wsSessions = authenticatedSessions.get(httpSessionId);
+        // wsSessions will be null if the HTTP session has ended
+        if (wsSessions != null) {
+            wsSessions.remove(wsSession);
+        }
+    }
+-----CSCI578-----
+
+
+
+    protected void unregisterSession(Endpoint endpoint, WsSession wsSession) {
+
+        synchronized (endPointSessionMapLock) {
+            Set<WsSession> wsSessions = endpointSessionMap.get(endpoint);
+            if (wsSessions != null) {
+                wsSessions.remove(wsSession);
+                if (wsSessions.size() == 0) {
+                    endpointSessionMap.remove(endpoint);
+                }
+            }
+            if (endpointSessionMap.size() == 0) {
+                BackgroundProcessManager.getInstance().unregister(this);
+            }
+        }
+        sessions.remove(wsSession);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Principal getUserPrincipal() {
+        checkState();
+        return userPrincipal;
+    }
+-----CSCI578-----
+
+
+
+    public String getHttpSessionId() {
+        return httpSessionId;
+    }

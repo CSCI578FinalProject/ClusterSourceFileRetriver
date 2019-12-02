@@ -1,0 +1,517 @@
+12
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+    /**
+     * Perform the necessary processing after the HTTP headers have been parsed
+     * to enable the request/response pair to be passed to the start of the
+     * container pipeline for processing.
+     *
+     * @param req      The coyote request object
+     * @param request  The catalina request object
+     * @param res      The coyote response object
+     * @param response The catalina response object
+     *
+     * @return <code>true</code> if the request should be passed on to the start
+     *         of the container pipeline, otherwise <code>false</code>
+     *
+     * @throws IOException If there is insufficient space in a buffer while
+     *                     processing headers
+     * @throws ServletException If the supported methods of the target servlet
+     *                          cannot be determined
+     */
+    protected boolean postParseRequest(org.apache.coyote.Request req, Request request,
+            org.apache.coyote.Response res, Response response) throws IOException, ServletException {
+
+        // If the processor has set the scheme (AJP does this, HTTP does this if
+        // SSL is enabled) use this to set the secure flag as well. If the
+        // processor hasn't set it, use the settings from the connector
+        if (req.scheme().isNull()) {
+            // Use connector scheme and secure configuration, (defaults to
+            // "http" and false respectively)
+            req.scheme().setString(connector.getScheme());
+            request.setSecure(connector.getSecure());
+        } else {
+            // Use processor specified scheme to determine secure state
+            request.setSecure(req.scheme().equals("https"));
+        }
+
+        // At this point the Host header has been processed.
+        // Override if the proxyPort/proxyHost are set
+        String proxyName = connector.getProxyName();
+        int proxyPort = connector.getProxyPort();
+        if (proxyPort != 0) {
+            req.setServerPort(proxyPort);
+        }
+        if (proxyName != null) {
+            req.serverName().setString(proxyName);
+        }
+
+        MessageBytes undecodedURI = req.requestURI();
+
+        // Check for ping OPTIONS * request
+        if (undecodedURI.equals("*")) {
+            if (req.method().equalsIgnoreCase("OPTIONS")) {
+                StringBuilder allow = new StringBuilder();
+                allow.append("GET, HEAD, POST, PUT, DELETE");
+                // Trace if allowed
+                if (connector.getAllowTrace()) {
+                    allow.append(", TRACE");
+                }
+                // Always allow options
+                allow.append(", OPTIONS");
+                res.setHeader("Allow", allow.toString());
+            } else {
+                res.setStatus(404);
+                res.setMessage("Not found");
+            }
+            connector.getService().getContainer().logAccess(
+                    request, response, 0, true);
+            return false;
+        }
+
+        MessageBytes decodedURI = req.decodedURI();
+
+        if (undecodedURI.getType() == MessageBytes.T_BYTES) {
+            // Copy the raw URI to the decodedURI
+            decodedURI.duplicate(undecodedURI);
+
+            // Parse the path parameters. This will:
+            //   - strip out the path parameters
+            //   - convert the decodedURI to bytes
+            parsePathParameters(req, request);
+
+            // URI decoding
+            // %xx decoding of the URL
+            try {
+                req.getURLDecoder().convert(decodedURI, false);
+            } catch (IOException ioe) {
+                res.setStatus(400);
+                res.setMessage("Invalid URI: " + ioe.getMessage());
+                connector.getService().getContainer().logAccess(
+                        request, response, 0, true);
+                return false;
+            }
+            // Normalization
+            if (!normalize(req.decodedURI())) {
+                res.setStatus(400);
+                res.setMessage("Invalid URI");
+                connector.getService().getContainer().logAccess(
+                        request, response, 0, true);
+                return false;
+            }
+            // Character decoding
+            convertURI(decodedURI, request);
+            // Check that the URI is still normalized
+            if (!checkNormalize(req.decodedURI())) {
+                res.setStatus(400);
+                res.setMessage("Invalid URI character encoding");
+                connector.getService().getContainer().logAccess(
+                        request, response, 0, true);
+                return false;
+            }
+        } else {
+            /* The URI is chars or String, and has been sent using an in-memory
+             * protocol handler. The following assumptions are made:
+             * - req.requestURI() has been set to the 'original' non-decoded,
+             *   non-normalized URI
+             * - req.decodedURI() has been set to the decoded, normalized form
+             *   of req.requestURI()
+             */
+            decodedURI.toChars();
+            // Remove all path parameters; any needed path parameter should be set
+            // using the request object rather than passing it in the URL
+            CharChunk uriCC = decodedURI.getCharChunk();
+            int semicolon = uriCC.indexOf(';');
+            if (semicolon > 0) {
+                decodedURI.setChars
+                    (uriCC.getBuffer(), uriCC.getStart(), semicolon);
+            }
+        }
+
+        // Request mapping.
+        MessageBytes serverName;
+        if (connector.getUseIPVHosts()) {
+            serverName = req.localName();
+            if (serverName.isNull()) {
+                // well, they did ask for it
+                res.action(ActionCode.REQ_LOCAL_NAME_ATTRIBUTE, null);
+            }
+        } else {
+            serverName = req.serverName();
+        }
+
+        // Version for the second mapping loop and
+        // Context that we expect to get for that version
+        String version = null;
+        Context versionContext = null;
+        boolean mapRequired = true;
+
+        while (mapRequired) {
+            // This will map the the latest version by default
+            connector.getService().getMapper().map(serverName, decodedURI,
+                    version, request.getMappingData());
+
+            // If there is no context at this point, it is likely no ROOT context
+            // has been deployed
+            if (request.getContext() == null) {
+                res.setStatus(404);
+                res.setMessage("Not found");
+                // No context, so use host
+                Host host = request.getHost();
+                // Make sure there is a host (might not be during shutdown)
+                if (host != null) {
+                    host.logAccess(request, response, 0, true);
+                }
+                return false;
+            }
+
+            // Now we have the context, we can parse the session ID from the URL
+            // (if any). Need to do this before we redirect in case we need to
+            // include the session id in the redirect
+            String sessionID;
+            if (request.getServletContext().getEffectiveSessionTrackingModes()
+                    .contains(SessionTrackingMode.URL)) {
+
+                // Get the session ID if there was one
+                sessionID = request.getPathParameter(
+                        SessionConfig.getSessionUriParamName(
+                                request.getContext()));
+                if (sessionID != null) {
+                    request.setRequestedSessionId(sessionID);
+                    request.setRequestedSessionURL(true);
+                }
+            }
+
+            // Look for session ID in cookies and SSL session
+            parseSessionCookiesId(request);
+            parseSessionSslId(request);
+
+            sessionID = request.getRequestedSessionId();
+
+            mapRequired = false;
+            if (version != null && request.getContext() == versionContext) {
+                // We got the version that we asked for. That is it.
+            } else {
+                version = null;
+                versionContext = null;
+
+                Context[] contexts = request.getMappingData().contexts;
+                // Single contextVersion means no need to remap
+                // No session ID means no possibility of remap
+                if (contexts != null && sessionID != null) {
+                    // Find the context associated with the session
+                    for (int i = (contexts.length); i > 0; i--) {
+                        Context ctxt = contexts[i - 1];
+                        if (ctxt.getManager().findSession(sessionID) != null) {
+                            // We found a context. Is it the one that has
+                            // already been mapped?
+                            if (!ctxt.equals(request.getMappingData().context)) {
+                                // Set version so second time through mapping
+                                // the correct context is found
+                                version = ctxt.getWebappVersion();
+                                versionContext = ctxt;
+                                // Reset mapping
+                                request.getMappingData().recycle();
+                                mapRequired = true;
+                                // Recycle cookies and session info in case the
+                                // correct context is configured with different
+                                // settings
+                                request.recycleSessionInfo();
+                                request.recycleCookieInfo(true);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!mapRequired && request.getContext().getPaused()) {
+                // Found a matching context but it is paused. Mapping data will
+                // be wrong since some Wrappers may not be registered at this
+                // point.
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    // Should never happen
+                }
+                // Reset mapping
+                request.getMappingData().recycle();
+                mapRequired = true;
+            }
+        }
+
+        // Possible redirect
+        MessageBytes redirectPathMB = request.getMappingData().redirectPath;
+        if (!redirectPathMB.isNull()) {
+            String redirectPath = URLEncoder.DEFAULT.encode(redirectPathMB.toString());
+            String query = request.getQueryString();
+            if (request.isRequestedSessionIdFromURL()) {
+                // This is not optimal, but as this is not very common, it
+                // shouldn't matter
+                redirectPath = redirectPath + ";" +
+                        SessionConfig.getSessionUriParamName(
+                            request.getContext()) +
+                    "=" + request.getRequestedSessionId();
+            }
+            if (query != null) {
+                // This is not optimal, but as this is not very common, it
+                // shouldn't matter
+                redirectPath = redirectPath + "?" + query;
+            }
+            response.sendRedirect(redirectPath);
+            request.getContext().logAccess(request, response, 0, true);
+            return false;
+        }
+
+        // Filter trace method
+        if (!connector.getAllowTrace()
+                && req.method().equalsIgnoreCase("TRACE")) {
+            Wrapper wrapper = request.getWrapper();
+            String header = null;
+            if (wrapper != null) {
+                String[] methods = wrapper.getServletMethods();
+                if (methods != null) {
+                    for (int i=0; i<methods.length; i++) {
+                        if ("TRACE".equals(methods[i])) {
+                            continue;
+                        }
+                        if (header == null) {
+                            header = methods[i];
+                        } else {
+                            header += ", " + methods[i];
+                        }
+                    }
+                }
+            }
+            res.setStatus(405);
+            res.addHeader("Allow", header);
+            res.setMessage("TRACE method is not allowed");
+            request.getContext().logAccess(request, response, 0, true);
+            return false;
+        }
+
+        doConnectorAuthenticationAuthorization(req, request);
+
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the scheme that will be assigned to requests received
+     * through this connector.  Default value is "http".
+     */
+    public String getScheme() {
+
+        return (this.scheme);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the proxy server name for this Connector.
+     */
+    public String getProxyName() {
+
+        return (this.proxyName);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Test if IP-based virtual hosting is enabled.
+     *
+     * @return <code>true</code> if IP vhosts are enabled
+     */
+    public boolean getUseIPVHosts() {
+        return useIPVHosts;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set a flag indicating whether or not the requested session ID for this
+     * request came in through a URL.  This is normally called by the
+     * HTTP Connector, when it parses the request headers.
+     *
+     * @param flag The new flag
+     */
+    public void setRequestedSessionURL(boolean flag) {
+
+        this.requestedSessionURL = flag;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the secure connection flag that will be assigned to requests
+     * received through this connector.  Default value is "false".
+     */
+    public boolean getSecure() {
+
+        return (this.secure);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Gets the names of the methods supported by the underlying servlet.
+     *
+     * This is the same set of methods included in the Allow response header
+     * in response to an OPTIONS request method processed by the underlying
+     * servlet.
+     *
+     * @return Array of names of the methods supported by the underlying
+     *         servlet
+     *
+     * @throws ServletException If the target servlet cannot be loaded
+     */
+    public String[] getServletMethods() throws ServletException;
+-----CSCI578-----
+
+
+
+    /**
+     * Check that the URI is normalized following character decoding. This
+     * method checks for "\", 0, "//", "/./" and "/../".
+     *
+     * @param uriMB URI to be checked (should be chars)
+     *
+     * @return <code>false</code> if sequences that are supposed to be
+     *         normalized are still present in the URI, otherwise
+     *         <code>true</code>
+     */
+    public static boolean checkNormalize(MessageBytes uriMB) {
+
+        CharChunk uriCC = uriMB.getCharChunk();
+        char[] c = uriCC.getChars();
+        int start = uriCC.getStart();
+        int end = uriCC.getEnd();
+
+        int pos = 0;
+
+        // Check for '\' and 0
+        for (pos = start; pos < end; pos++) {
+            if (c[pos] == '\\') {
+                return false;
+            }
+            if (c[pos] == 0) {
+                return false;
+            }
+        }
+
+        // Check for "//"
+        for (pos = start; pos < (end - 1); pos++) {
+            if (c[pos] == '/') {
+                if (c[pos + 1] == '/') {
+                    return false;
+                }
+            }
+        }
+
+        // Check for ending with "/." or "/.."
+        if (((end - start) >= 2) && (c[end - 1] == '.')) {
+            if ((c[end - 2] == '/')
+                    || ((c[end - 2] == '.')
+                    && (c[end - 3] == '/'))) {
+                return false;
+            }
+        }
+
+        // Check for "/./"
+        if (uriCC.indexOf("/./", 0, 3, 0) >= 0) {
+            return false;
+        }
+
+        // Check for "/../"
+        if (uriCC.indexOf("/../", 0, 4, 0) >= 0) {
+            return false;
+        }
+
+        return true;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the proxy server port for this Connector.
+     */
+    public int getProxyPort() {
+
+        return (this.proxyPort);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public int indexOf(char c) {
+        return indexOf( c, start);
+    }
+
+
+    /**
+     * @return <code>true</code> if the message bytes starts with the specified string.
+     * @param c the character
+     * @param starting Start position
+     */
+    public int indexOf(char c, int starting) {
+        int ret = indexOf( buff, start+starting, end, c );
+        return (ret >= start) ? ret - start : -1;
+    }
+
+
+    public static int indexOf( char chars[], int off, int cend, char qq )
+    {
+        while( off < cend ) {
+            char b=chars[off];
+            if( b==qq ) {
+                return off;
+            }
+            off++;
+        }
+        return -1;
+    }
+
+
+
+    public int indexOf( String src, int srcOff, int srcLen, int myOff ) {
+        char first=src.charAt( srcOff );
+
+        // Look for first char
+        int srcEnd = srcOff + srcLen;
+
+        for( int i=myOff+start; i <= (end - srcLen); i++ ) {
+            if( buff[i] != first ) {
+                continue;
+            }
+            // found first char, now look for a match
+            int myPos=i+1;
+            for( int srcPos=srcOff + 1; srcPos< srcEnd;) {
+                if( buff[myPos++] != src.charAt( srcPos++ )) {
+                    break;
+                }
+                if( srcPos==srcEnd )
+                 {
+                    return i-start; // found it
+                }
+            }
+        }
+        return -1;
+    }

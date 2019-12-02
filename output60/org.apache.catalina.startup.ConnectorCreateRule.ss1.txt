@@ -1,0 +1,54 @@
+4
+-----CSCI578-----
+
+    
+    public void _setExecutor(Connector con, Executor ex) throws Exception {
+        Method m = IntrospectionUtils.findMethod(con.getProtocolHandler().getClass(),"setExecutor",new Class[] {java.util.concurrent.Executor.class});
+        if (m!=null) {
+            m.invoke(con.getProtocolHandler(), new Object[] {ex});
+        }else {
+            log.warn("Connector ["+con+"] does not support external executors. Method setExecutor(java.util.concurrent.Executor) not found.");
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Retrieves executor by name, null if not found
+     * @param name String
+     * @return Executor
+     */
+    public Executor getExecutor(String name);
+-----CSCI578-----
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the beginning of this element.
+     *
+     * @param attributes The attribute list of this element
+     */
+    public void begin(Attributes attributes) throws Exception {
+        Service svc = (Service)digester.peek();
+        Executor ex = null;
+        if ( attributes.getValue("executor")!=null ) {
+            ex = svc.getExecutor(attributes.getValue("executor"));
+        }
+        Connector con = new Connector(attributes.getValue("protocol"));
+        if ( ex != null )  _setExecutor(con,ex);
+        
+        digester.push(con);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the protocol handler associated with the connector.
+     */
+    public ProtocolHandler getProtocolHandler() {
+
+        return (this.protocolHandler);
+
+    }

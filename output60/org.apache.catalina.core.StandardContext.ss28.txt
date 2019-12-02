@@ -1,0 +1,371 @@
+15
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Allocate resources for this directory context.
+     */
+    public void allocate() {
+        ; // No action taken by the default implementation
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Get the cache used for this context.
+     */
+    public ResourceCache getCache() {
+        return cache;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Allocate resources, including proxy.
+     * Return <code>true</code> if initialization was successfull,
+     * or <code>false</code> otherwise.
+     */
+    public boolean resourcesStart() {
+
+        boolean ok = true;
+
+        Hashtable env = new Hashtable();
+        if (getParent() != null)
+            env.put(ProxyDirContext.HOST, getParent().getName());
+        env.put(ProxyDirContext.CONTEXT, getName());
+
+        try {
+            ProxyDirContext proxyDirContext =
+                new ProxyDirContext(env, webappResources);
+            if (webappResources instanceof FileDirContext) {
+                filesystemBased = true;
+                ((FileDirContext) webappResources).setCaseSensitive
+                    (isCaseSensitive());
+                ((FileDirContext) webappResources).setAllowLinking
+                    (isAllowLinking());
+            }
+            if (webappResources instanceof BaseDirContext) {
+                ((BaseDirContext) webappResources).setDocBase(getBasePath());
+                ((BaseDirContext) webappResources).setCached
+                    (isCachingAllowed());
+                ((BaseDirContext) webappResources).setCacheTTL(getCacheTTL());
+                ((BaseDirContext) webappResources).setCacheMaxSize
+                    (getCacheMaxSize());
+                ((BaseDirContext) webappResources).allocate();
+            }
+            // Register the cache in JMX
+            if (isCachingAllowed() && proxyDirContext.getCache() != null) {
+                ObjectName resourcesName =
+                    new ObjectName(this.getDomain() + ":type=Cache,host="
+                                   + getHostname() + ",path="
+                                   + (("".equals(getPath()))?"/":getPath()));
+                Registry.getRegistry(null, null).registerComponent
+                    (proxyDirContext.getCache(), resourcesName, null);
+            }
+            this.resources = proxyDirContext;
+        } catch (Throwable t) {
+            log.error(sm.getString("standardContext.resourcesStart"), t);
+            ok = false;
+        }
+
+        return (ok);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Configure the set of instantiated application event listeners
+     * for this Context.  Return <code>true</code> if all listeners wre
+     * initialized successfully, or <code>false</code> otherwise.
+     */
+    public boolean listenerStart() {
+
+        if (log.isDebugEnabled())
+            log.debug("Configuring application event listeners");
+
+        // Instantiate the required listeners
+        ClassLoader loader = getLoader().getClassLoader();
+        String listeners[] = findApplicationListeners();
+        Object results[] = new Object[listeners.length];
+        boolean ok = true;
+        for (int i = 0; i < results.length; i++) {
+            if (getLogger().isDebugEnabled())
+                getLogger().debug(" Configuring event listener class '" +
+                    listeners[i] + "'");
+            try {
+                Class clazz = loader.loadClass(listeners[i]);
+                results[i] = clazz.newInstance();
+                // Annotation processing
+                if (!getIgnoreAnnotations()) {
+                    getAnnotationProcessor().processAnnotations(results[i]);
+                    getAnnotationProcessor().postConstruct(results[i]);
+                }
+            } catch (Throwable t) {
+                getLogger().error
+                    (sm.getString("standardContext.applicationListener",
+                                  listeners[i]), t);
+                ok = false;
+            }
+        }
+        if (!ok) {
+            getLogger().error(sm.getString("standardContext.applicationSkipped"));
+            return (false);
+        }
+
+        // Sort listeners in two arrays
+        ArrayList eventListeners = new ArrayList();
+        ArrayList lifecycleListeners = new ArrayList();
+        for (int i = 0; i < results.length; i++) {
+            if ((results[i] instanceof ServletContextAttributeListener)
+                || (results[i] instanceof ServletRequestAttributeListener)
+                || (results[i] instanceof ServletRequestListener)
+                || (results[i] instanceof HttpSessionAttributeListener)) {
+                eventListeners.add(results[i]);
+            }
+            if ((results[i] instanceof ServletContextListener)
+                || (results[i] instanceof HttpSessionListener)) {
+                lifecycleListeners.add(results[i]);
+            }
+        }
+
+        setApplicationEventListeners(eventListeners.toArray());
+        setApplicationLifecycleListeners(lifecycleListeners.toArray());
+
+        // Send application start events
+
+        if (getLogger().isDebugEnabled())
+            getLogger().debug("Sending application start events");
+
+        Object instances[] = getApplicationLifecycleListeners();
+        if (instances == null)
+            return (ok);
+        ServletContextEvent event =
+          new ServletContextEvent(getServletContext());
+        for (int i = 0; i < instances.length; i++) {
+            if (instances[i] == null)
+                continue;
+            if (!(instances[i] instanceof ServletContextListener))
+                continue;
+            ServletContextListener listener =
+                (ServletContextListener) instances[i];
+            try {
+                fireContainerEvent("beforeContextInitialized", listener);
+                listener.contextInitialized(event);
+                fireContainerEvent("afterContextInitialized", listener);
+            } catch (Throwable t) {
+                fireContainerEvent("afterContextInitialized", listener);
+                getLogger().error
+                    (sm.getString("standardContext.listenerStart",
+                                  instances[i].getClass().getName()), t);
+                ok = false;
+            }
+        }
+        return (ok);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of application listener class names configured
+     * for this application.
+     */
+    public String[] findApplicationListeners() {
+
+        return (applicationListeners);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the names of all defined context initialization parameters
+     * for this Context.  If no parameters are defined, a zero-length
+     * array is returned.
+     */
+    public String[] findParameters() {
+
+        synchronized (parameters) {
+            String results[] = new String[parameters.size()];
+            return ((String[]) parameters.keySet().toArray(results));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Merge the context initialization parameters specified in the application
+     * deployment descriptor with the application parameters described in the
+     * server configuration, respecting the <code>override</code> property of
+     * the application parameters appropriately.
+     */
+    private void mergeParameters() {
+        Map<String,String> mergedParams = new HashMap<String,String>();
+
+        String names[] = findParameters();
+        for (int i = 0; i < names.length; i++) {
+            mergedParams.put(names[i], findParameter(names[i]));
+        }
+
+        ApplicationParameter params[] = findApplicationParameters();
+        for (int i = 0; i < params.length; i++) {
+            if (params[i].getOverride()) {
+                if (mergedParams.get(params[i].getName()) == null) {
+                    mergedParams.put(params[i].getName(),
+                            params[i].getValue());
+                }
+            } else {
+                mergedParams.put(params[i].getName(), params[i].getValue());
+            }
+        }
+
+        for (Map.Entry<String,String> entry : mergedParams.entrySet()) {
+            context.setInitParameter(entry.getKey(), entry.getValue());
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public boolean setInitParameter(String name, String value) {
+        if (parameters.containsKey(name)) {
+            return false;
+        }
+
+        parameters.put(name, value);
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of application parameters for this application.
+     */
+    public ApplicationParameter[] findApplicationParameters() {
+
+        synchronized (applicationParametersLock) {
+            return (applicationParameters);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the value for the specified context initialization
+     * parameter name, if any; otherwise return <code>null</code>.
+     *
+     * @param name Name of the parameter to return
+     */
+    public String findParameter(String name) {
+
+        synchronized (parameters) {
+            return ((String) parameters.get(name));
+        }
+
+    }
+-----CSCI578-----
+
+
+    public String getValue() {
+        return (this.value);
+    }
+-----CSCI578-----
+
+
+    public String getName() {
+        return (this.name);
+    }
+-----CSCI578-----
+
+
+    public boolean getOverride() {
+        return (this.override);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new application parameter for this application.
+     *
+     * @param parameter The new application parameter
+     */
+    public void addApplicationParameter(ApplicationParameter parameter) {
+
+        synchronized (applicationParametersLock) {
+            String newName = parameter.getName();
+            for (int i = 0; i < applicationParameters.length; i++) {
+                if (newName.equals(applicationParameters[i].getName()) &&
+                    !applicationParameters[i].getOverride())
+                    return;
+            }
+            ApplicationParameter results[] =
+                new ApplicationParameter[applicationParameters.length + 1];
+            System.arraycopy(applicationParameters, 0, results, 0,
+                             applicationParameters.length);
+            results[applicationParameters.length] = parameter;
+            applicationParameters = results;
+        }
+        fireContainerEvent("addApplicationParameter", parameter);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the application parameter with the specified name from
+     * the set for this application.
+     *
+     * @param name Name of the application parameter to remove
+     */
+    public void removeApplicationParameter(String name) {
+
+        synchronized (applicationParametersLock) {
+
+            // Make sure this parameter is currently present
+            int n = -1;
+            for (int i = 0; i < applicationParameters.length; i++) {
+                if (name.equals(applicationParameters[i].getName())) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified parameter
+            int j = 0;
+            ApplicationParameter results[] =
+                new ApplicationParameter[applicationParameters.length - 1];
+            for (int i = 0; i < applicationParameters.length; i++) {
+                if (i != n)
+                    results[j++] = applicationParameters[i];
+            }
+            applicationParameters = results;
+
+        }
+
+        // Inform interested listeners
+        fireContainerEvent("removeApplicationParameter", name);
+
+    }

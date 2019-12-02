@@ -1,0 +1,110 @@
+17
+
+    /*
+     * War remvoe from watchDir
+     * 
+     * @see org.apache.catalina.ha.deploy.FileChangeListener#fileRemoved(java.io.File)
+     */
+    public void fileRemoved(File removeWar) {
+        try {
+            String contextName = getContextName(removeWar);
+            if (log.isInfoEnabled())
+                log.info("Removing webapp[" + contextName + "]");
+            remove(contextName, true);
+        } catch (Exception x) {
+            log.error("Unable to remove WAR file", x);
+        }
+    }
+
+    /**
+     * Gracefully terminate the active use of the public methods of this
+     * component. This method should be the last one called on a given instance
+     * of this component.
+     * 
+     * @exception LifecycleException
+     *                if this component detects a fatal error that needs to be
+     *                reported
+     */
+    public void stop() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (!started)
+            throw new LifecycleException(sm
+                    .getString("jvmRoute.valve.notStarted"));
+        lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+        started = false;
+        cluster = null;
+        numberOfSessions = 0;
+        if (log.isInfoEnabled())
+            log.info(sm.getString("jvmRoute.valve.stopped"));
+
+    }
+    
+    public void report(double timeTx) {
+        StringBuffer buf = new StringBuffer("ThroughputInterceptor Report[\n\tTx Msg:");
+        buf.append(msgTxCnt).append(" messages\n\tSent:");
+        buf.append(df.format(mbTx));
+        buf.append(" MB (total)\n\tSent:");
+        buf.append(df.format(mbAppTx));
+        buf.append(" MB (application)\n\tTime:");
+        buf.append(df.format(timeTx));
+        buf.append(" seconds\n\tTx Speed:");
+        buf.append(df.format(mbTx/timeTx));
+        buf.append(" MB/sec (total)\n\tTxSpeed:");
+        buf.append(df.format(mbAppTx/timeTx));
+        buf.append(" MB/sec (application)\n\tError Msg:");
+        buf.append(msgTxErr).append("\n\tRx Msg:");
+        buf.append(msgRxCnt);
+        buf.append(" messages\n\tRx Speed:");
+        buf.append(df.format(mbRx/((double)((System.currentTimeMillis()-rxStart)/1000))));
+        buf.append(" MB/sec (since 1st msg)\n\tReceived:");
+        buf.append(df.format(mbRx)).append(" MB]\n");
+        if ( log.isInfoEnabled() ) log.info(buf);
+    }
+
+
+    public void expireSession( String sessionId ) {
+        Session s = sessions.get(sessionId);
+        if (s == null) {
+            if(log.isInfoEnabled())
+                log.info("Session not found " + sessionId);
+            return;
+        }
+        s.expire();
+    }
+
+    public long getLastAccessedTimestamp( String sessionId ) {
+        Session s = sessions.get(sessionId);
+        if (s == null) {
+            return -1;
+        }
+        return s.getLastAccessedTime();
+    }
+  
+    public String getLastAccessedTime( String sessionId ) {
+        Session s = sessions.get(sessionId);
+        if (s == null) {
+            if(log.isInfoEnabled())
+                log.info("Session not found " + sessionId);
+            return "";
+        }
+        return new Date(s.getLastAccessedTime()).toString();
+    }
+
+    public String getCreationTime( String sessionId ) {
+        Session s = sessions.get(sessionId);
+        if (s == null) {
+            if(log.isInfoEnabled())
+                log.info("Session not found " + sessionId);
+            return "";
+        }
+        return new Date(s.getCreationTime()).toString();
+    }
+
+    public long getCreationTimestamp( String sessionId ) {
+        Session s = sessions.get(sessionId);
+        if (s == null) {
+            return -1;
+        }
+        return s.getCreationTime();
+    }

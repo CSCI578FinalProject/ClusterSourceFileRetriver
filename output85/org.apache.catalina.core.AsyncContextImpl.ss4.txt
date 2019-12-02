@@ -1,0 +1,32 @@
+2
+-----CSCI578-----
+
+
+
+    public void fireOnComplete(AsyncEvent event) throws IOException {
+        listener.onComplete(event);
+    }
+-----CSCI578-----
+
+
+
+    private void doFireOnComplete() {
+        List<AsyncListenerWrapper> listenersCopy = new ArrayList<>();
+        listenersCopy.addAll(listeners);
+
+        ClassLoader oldCL = context.bind(Globals.IS_SECURITY_ENABLED, null);
+        try {
+            for (AsyncListenerWrapper listener : listenersCopy) {
+                try {
+                    listener.fireOnComplete(event);
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    log.warn("onComplete() failed for listener of type [" +
+                            listener.getClass().getName() + "]", t);
+                }
+            }
+        } finally {
+            clearServletRequestResponse();
+            context.unbind(Globals.IS_SECURITY_ENABLED, oldCL);
+        }
+    }

@@ -1,0 +1,170 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Save any currently active sessions in the appropriate persistence
+     * mechanism, if any.  If persistence is not supported, this method
+     * returns without doing anything.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public void unload() throws IOException {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                AccessController.doPrivileged(new PrivilegedDoUnload());
+            } catch (PrivilegedActionException ex){
+                Exception exception = ex.getException();
+                if (exception instanceof IOException) {
+                    throw (IOException)exception;
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug("Unreported exception in unLoad()", exception);
+                }
+            }
+        } else {
+            doUnload();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Save any currently active sessions in the appropriate persistence
+     * mechanism, if any.  If persistence is not supported, this method
+     * returns without doing anything.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    protected void doUnload() throws IOException {
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("standardManager.unloading.debug"));
+
+        if (sessions.isEmpty()) {
+            log.debug(sm.getString("standardManager.unloading.nosessions"));
+            return; // nothing to do
+        }
+
+        // Open an output stream to the specified pathname, if any
+        File file = file();
+        if (file == null) {
+            return;
+        }
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("standardManager.unloading", pathname));
+        }
+        FileOutputStream fos = null;
+        ObjectOutputStream oos = null;
+        try {
+            fos = new FileOutputStream(file.getAbsolutePath());
+            oos = new ObjectOutputStream(new BufferedOutputStream(fos));
+        } catch (IOException e) {
+            log.error(sm.getString("standardManager.unloading.ioe", e), e);
+            if (fos != null) {
+                try {
+                    fos.close();
+                } catch (IOException f) {
+                    // Ignore
+                }
+            }
+            throw e;
+        }
+
+        // Write the number of active sessions, followed by the details
+        ArrayList<Session> list = new ArrayList<Session>();
+        synchronized (sessions) {
+            if (log.isDebugEnabled()) {
+                log.debug("Unloading " + sessions.size() + " sessions");
+            }
+            try {
+                oos.writeObject(new Integer(sessions.size()));
+                Iterator<Session> elements = sessions.values().iterator();
+                while (elements.hasNext()) {
+                    StandardSession session = (StandardSession) elements.next();
+                    list.add(session);
+                    session.passivate();
+                    session.writeObjectData(oos);
+                }
+            } catch (IOException e) {
+                log.error(sm.getString("standardManager.unloading.ioe", e), e);
+                try {
+                    oos.close();
+                } catch (IOException f) {
+                    // Ignore
+                }
+                throw e;
+            }
+        }
+
+        // Flush and close the output stream
+        try {
+            oos.close();
+        } catch (IOException e) {
+            try {
+                oos.close();
+            } catch (IOException f) {
+                // Ignore
+            }
+            throw e;
+        }
+
+        // Expire all the sessions we just wrote
+        if (log.isDebugEnabled()) {
+            log.debug("Expiring " + list.size() + " persisted sessions");
+        }
+        Iterator<Session> expires = list.iterator();
+        while (expires.hasNext()) {
+            StandardSession session = (StandardSession) expires.next();
+            try {
+                session.expire(false);
+            } catch (Throwable t) {
+                // Ignore
+            } finally {
+                session.recycle();
+            }
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("Unloading complete");
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+    /**
+     * Return a File object representing the pathname to our
+     * persistence file, if any.
+     */
+    protected File file() {
+        if (pathname == null || pathname.length() == 0) {
+            return null;
+        }
+        File file = new File(pathname);
+        if (!file.isAbsolute()) {
+            ServletContext servletContext = ((Context) container).getServletContext();
+            File tempdir = (File) servletContext.getAttribute(Globals.WORK_DIR_ATTR);
+            if (tempdir != null) {
+                file = new File(tempdir, pathname);
+            }
+        }
+        return file;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Override persistence since they don't go hand in hand with replication for now.
+     */
+    public void unload() throws IOException {
+        if ( !getDistributable() ) {
+            super.unload();
+        }
+    }
+-----CSCI578-----

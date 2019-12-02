@@ -1,0 +1,59 @@
+4
+
+    /** ---------- Access resources in the webapp ---------- */
+
+    /** 
+     * Get the full value of a URI relative to this compilations context
+     * uses current file as the base.
+     */
+    public String resolveRelativeUri(String uri) {
+        // sometimes we get uri's massaged from File(String), so check for
+        // a root directory deperator char
+        if (uri.startsWith("/") || uri.startsWith(File.separator)) {
+            return uri;
+        } else {
+            return baseURI + uri;
+        }
+    }
+
+    /**
+     * Gets a resource as a stream, relative to the meanings of this
+     * context's implementation.
+     * @return a null if the resource cannot be found or represented 
+     *         as an InputStream.
+     */
+    public java.io.InputStream getResourceAsStream(String res) {
+        return context.getResourceAsStream(canonicalURI(res));
+    }
+
+
+    public URL getResource(String res) throws MalformedURLException {
+        URL result = null;
+
+        if (res.startsWith("/META-INF/")) {
+            // This is a tag file packaged in a jar that is being compiled
+            URL jarUrl = tagFileJarUrls.get(res);
+            if (jarUrl == null) {
+                jarUrl = tagFileJarUrl;
+            }
+            if (jarUrl != null) {
+                result = new URL(jarUrl.toExternalForm() + res.substring(1));
+            } else {
+                // May not be in a JAR in some IDE environments
+                result = context.getResource(canonicalURI(res));
+            }
+        } else if (res.startsWith("jar:file:")) {
+                // This is a tag file packaged in a jar that is being checked
+                // for a dependency
+                result = new URL(res);
+
+        } else {
+            result = context.getResource(canonicalURI(res));
+        }
+        return result;
+    }
+
+
+    public Set getResourcePaths(String path) {
+        return context.getResourcePaths(canonicalURI(path));
+    }

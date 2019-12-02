@@ -1,0 +1,34 @@
+4
+    
+    final ReentrantReadWriteLock inLock = new ReentrantReadWriteLock(true);
+    final ReentrantReadWriteLock outLock= new ReentrantReadWriteLock(true);
+
+    public void sendMessage(Member[] destination, ChannelMessage msg, InterceptorPayload payload) throws ChannelException {
+        if ( !okToProcess(msg.getOptions()) ) {
+            super.sendMessage(destination, msg, payload);
+            return;
+        }
+        ChannelException cx = null;
+        for (int i=0; i<destination.length; i++ ) {
+            try {
+                int nr = 0;
+                try {
+                    outLock.writeLock().lock();
+                    nr = incCounter(destination[i]);
+                } finally {
+                    outLock.writeLock().unlock();
+                }
+                //reduce byte copy
+                msg.getMessage().append(nr);
+                try {
+                    getNext().sendMessage(new Member[] {destination[i]}, msg, payload);
+                } finally {
+                    msg.getMessage().trim(4);
+                }
+            }catch ( ChannelException x ) {
+                if ( cx == null ) cx = x;
+                cx.addFaultyMember(x.getFaultyMembers());
+            }
+        }//for
+        if ( cx != null ) throw cx;
+    }

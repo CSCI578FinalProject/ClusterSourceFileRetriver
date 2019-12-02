@@ -1,0 +1,36 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+
+        if (request instanceof HttpServletRequest && response instanceof HttpServletResponse) {
+            MethodType mType = MethodType.MODIFYING_METHOD;
+            String method = ((HttpServletRequest) request).getMethod();
+            if (method != null && NON_MODIFYING_METHODS_PATTERN.matcher(method).matches()) {
+                mType = MethodType.NON_MODIFYING_METHOD;
+            }
+
+            RestCsrfPreventionStrategy strategy;
+            switch (mType) {
+            case NON_MODIFYING_METHOD:
+                strategy = new FetchRequest();
+                break;
+            default:
+                strategy = new StateChangingRequest();
+                break;
+            }
+
+            if (!strategy.apply((HttpServletRequest) request, (HttpServletResponse) response)) {
+                return;
+            }
+        }
+        chain.doFilter(request, response);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

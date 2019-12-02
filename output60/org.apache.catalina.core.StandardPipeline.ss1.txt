@@ -1,0 +1,73 @@
+7
+-----CSCI578-----
+
+    
+    private void unregisterValve(Valve valve) {
+        if( valve instanceof ValveBase ) {
+            try {
+                ValveBase vb=(ValveBase)valve;
+                if( vb.getController()!=null &&
+                        vb.getController() == 
+                        ((ContainerBase)container).getJmxName() ) {
+                    
+                    ObjectName vname=vb.getObjectName();
+                    Registry.getRegistry(null, null).getMBeanServer()
+                        .unregisterMBean(vname);
+                    ((ValveBase)valve).setObjectName(null);
+                }
+            } catch( Throwable t ) {
+                log.info( "Can't unregister valve " + valve , t );
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public ObjectName getController() {
+        return controller;
+    }
+-----CSCI578-----
+
+
+    public ObjectName getJmxName() {
+        return oname;
+    }
+-----CSCI578-----
+
+
+    public void setObjectName(ObjectName oname) {
+        this.oname = oname;
+    }
+-----CSCI578-----
+
+
+    public ObjectName[] getChildren() {
+        ObjectName result[]=new ObjectName[children.size()];
+        Iterator it=children.values().iterator();
+        int i=0;
+        while( it.hasNext() ) {
+            Object next=it.next();
+            if( next instanceof ContainerBase ) {
+                result[i++]=((ContainerBase)next).getJmxName();
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    public ObjectName getContainerName() {
+        if( container instanceof ContainerBase ) {
+            return ((ContainerBase)container).getJmxName();
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    // -------------------- JMX data  --------------------
+
+    public ObjectName getContainerName() {
+        if( container== null) return null;
+        return ((ContainerBase)container).getJmxName();
+    }

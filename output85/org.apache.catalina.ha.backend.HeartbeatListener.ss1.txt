@@ -1,0 +1,92 @@
+6
+-----CSCI578-----
+
+
+    public void refresh() throws Exception {
+        if (mBeanServer == null || objName == null) {
+            throw(new Exception("Not initialized!!!"));
+        }
+        Integer imax = (Integer) mBeanServer.getAttribute(objName, "maxThreads");
+
+        // the currentThreadCount could be 0 before the threads are created...
+        // Integer iready = (Integer) mBeanServer.getAttribute(objName, "currentThreadCount");
+
+        Integer ibusy  = (Integer) mBeanServer.getAttribute(objName, "currentThreadsBusy");
+
+        busy = ibusy.intValue();
+        ready = imax.intValue() - ibusy.intValue();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void lifecycleEvent(LifecycleEvent event) {
+
+        if (Lifecycle.PERIODIC_EVENT.equals(event.getType())) {
+            if (sender == null) {
+                if (proxyList == null)
+                    sender = new MultiCastSender();
+                else
+                    sender = new TcpSender();
+            }
+
+            /* Read busy and ready */
+            if (coll == null) {
+                try {
+                    coll = new CollectedInfo(host, port);
+                    this.port = coll.port;
+                    this.host = coll.host;
+                } catch (Exception ex) {
+                    log.error("Unable to initialize info collection: " + ex);
+                    coll = null;
+                    return;
+                }
+            }
+
+            /* Start or restart sender */
+            try {
+                sender.init(this);
+            } catch (Exception ex) {
+                log.error("Unable to initialize Sender: " + ex);
+                sender = null;
+                return;
+            }
+
+            /* refresh the connector information and send it */
+            try {
+                coll.refresh();
+            } catch (Exception ex) {
+                log.error("Unable to collect load information: " + ex);
+                coll = null;
+                return;
+            }
+            String output = "v=1&ready=" + coll.ready + "&busy=" + coll.busy +
+                    "&port=" + port;
+            try {
+                sender.send(output);
+            } catch (Exception ex) {
+                log.error("Unable to send colllected load information: " + ex);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+  /**
+   * Send the message to the proxies
+   * @param mess The message that will be sent
+   * @return <code>0</code> if no error occurred, <code>-1</code> otherwise
+   * @throws Exception An error occurred
+   */
+  public int send(String mess) throws Exception;
+-----CSCI578-----
+-----CSCI578-----
+
+
+  /**
+   * Set the configuration parameters
+   * @param config The heartbeat listener configuration
+   * @throws Exception An error occurred
+   */
+  public void init(HeartbeatListener config) throws Exception;

@@ -1,0 +1,128 @@
+7
+-----CSCI578-----
+
+
+    @Override
+    public void complete() {
+        if (log.isDebugEnabled()) {
+            logDebug("complete   ");
+        }
+        check();
+        request.getCoyoteRequest().action(ActionCode.ASYNC_COMPLETE, null);
+    }
+-----CSCI578-----
+
+
+
+    public void fireOnError(AsyncEvent event) throws IOException {
+        listener.onError(event);
+    }
+-----CSCI578-----
+
+
+
+    public void setErrorState(Throwable t, boolean fireOnError) {
+        if (t!=null) request.setAttribute(RequestDispatcher.ERROR_EXCEPTION, t);
+        request.getCoyoteRequest().action(ActionCode.ASYNC_ERROR, null);
+
+        if (fireOnError) {
+            AsyncEvent errorEvent = new AsyncEvent(event.getAsyncContext(),
+                    event.getSuppliedRequest(), event.getSuppliedResponse(), t);
+            List<AsyncListenerWrapper> listenersCopy = new ArrayList<>();
+            listenersCopy.addAll(listeners);
+            for (AsyncListenerWrapper listener : listenersCopy) {
+                try {
+                    listener.fireOnError(errorEvent);
+                } catch (Throwable t2) {
+                    ExceptionUtils.handleThrowable(t);
+                    log.warn("onError() failed for listener of type [" +
+                            listener.getClass().getName() + "]", t2);
+                }
+            }
+        }
+
+
+        AtomicBoolean result = new AtomicBoolean();
+        request.getCoyoteRequest().action(ActionCode.ASYNC_IS_ERROR, result);
+        if (result.get()) {
+            // No listener called dispatch() or complete(). This is an error.
+            // SRV.2.3.3.3 (search for "error dispatch")
+            if (servletResponse instanceof HttpServletResponse) {
+                ((HttpServletResponse) servletResponse).setStatus(
+                        HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            }
+
+            Host host = (Host) context.getParent();
+            Valve stdHostValve = host.getPipeline().getBasic();
+            if (stdHostValve instanceof StandardHostValve) {
+                ((StandardHostValve) stdHostValve).throwable(request,
+                        request.getResponse(), t);
+            }
+
+            request.getCoyoteRequest().action(
+                    ActionCode.ASYNC_IS_ERROR, result);
+            if (result.get()) {
+                // Still in the error state. The error page did not call
+                // complete() or dispatch(). Complete the async processing.
+                complete();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the Response with which this Request is associated.
+     */
+    public org.apache.catalina.connector.Response getResponse() {
+        return this.response;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * @return the Valve instance that has been distinguished as the basic
+     * Valve for this Pipeline (if any).
+     */
+    public Valve getBasic();
+-----CSCI578-----
+
+
+
+    public boolean timeout() {
+        AtomicBoolean result = new AtomicBoolean();
+        request.getCoyoteRequest().action(ActionCode.ASYNC_TIMEOUT, result);
+
+        if (result.get()) {
+            ClassLoader oldCL = context.bind(false, null);
+            try {
+                List<AsyncListenerWrapper> listenersCopy = new ArrayList<>();
+                listenersCopy.addAll(listeners);
+                for (AsyncListenerWrapper listener : listenersCopy) {
+                    try {
+                        listener.fireOnTimeout(event);
+                    } catch (Throwable t) {
+                        ExceptionUtils.handleThrowable(t);
+                        log.warn("onTimeout() failed for listener of type [" +
+                                listener.getClass().getName() + "]", t);
+                    }
+                }
+                request.getCoyoteRequest().action(
+                        ActionCode.ASYNC_IS_TIMINGOUT, result);
+            } finally {
+                context.unbind(false, oldCL);
+            }
+        }
+        return !result.get();
+    }
+-----CSCI578-----
+
+
+
+    public void fireOnTimeout(AsyncEvent event) throws IOException {
+        listener.onTimeout(event);
+    }

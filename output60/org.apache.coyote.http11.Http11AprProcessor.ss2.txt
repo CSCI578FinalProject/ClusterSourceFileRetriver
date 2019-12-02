@@ -1,0 +1,1024 @@
+29
+-----CSCI578-----
+
+
+    
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Set the underlying socket.
+     */
+    public void setSocket(long socket) {
+        this.socket = socket;
+        Socket.setsbb(this.socket, bbuf);
+    }
+-----CSCI578-----
+
+
+
+    public int getMaxCookieCount() {
+        return maxCookieCount;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Set the underlying socket.
+     */
+    public void setSocket(long socket) {
+        this.socket = socket;
+        Socket.setrbb(this.socket, bbuf);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Process pipelined HTTP requests using the specified input and output
+     * streams.
+     *
+     * @throws IOException error during an I/O operation
+     */
+    public SocketState process(long socket)
+        throws IOException {
+        RequestInfo rp = request.getRequestProcessor();
+        rp.setStage(org.apache.coyote.Constants.STAGE_PARSE);
+
+        // Set the remote address
+        remoteAddr = null;
+        remoteHost = null;
+        localAddr = null;
+        localName = null;
+        remotePort = -1;
+        localPort = -1;
+
+        // Setting up the socket
+        this.socket = socket;
+        inputBuffer.setSocket(socket);
+        outputBuffer.setSocket(socket);
+
+        // Error flag
+        error = false;
+        comet = false;
+        keepAlive = true;
+
+        int keepAliveLeft = maxKeepAliveRequests;
+        long soTimeout = endpoint.getSoTimeout();
+
+        boolean keptAlive = false;
+        boolean openSocket = false;
+        boolean sendfileInProgress = false;
+
+        while (!error && keepAlive && !comet) {
+
+            // Parsing the request header
+            try {
+                if( !disableUploadTimeout && keptAlive && soTimeout > 0 ) {
+                    Socket.timeoutSet(socket, soTimeout * 1000);
+                }
+                if (!inputBuffer.parseRequestLine(keptAlive)) {
+                    // This means that no data is available right now
+                    // (long keepalive), so that the processor should be recycled
+                    // and the method should return true
+                    openSocket = true;
+                    break;
+                }
+                request.setStartTime(System.currentTimeMillis());
+                keptAlive = true;
+                if (!disableUploadTimeout) {
+                    Socket.timeoutSet(socket, timeout * 1000);
+                }
+                // Set this every time in case limit has been changed via JMX
+                request.getMimeHeaders().setLimit(endpoint.getMaxHeaderCount());
+                request.getCookies().setLimit(getMaxCookieCount());
+                inputBuffer.parseHeaders();
+            } catch (IOException e) {
+                error = true;
+                break;
+            } catch (Throwable t) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("http11processor.header.parse"), t);
+                }
+                // 400 - Bad Request
+                response.setStatus(400);
+                adapter.log(request, response, 0);
+                error = true;
+            }
+
+            if (!error) {
+                // Setting up filters, and parse some request headers
+                rp.setStage(org.apache.coyote.Constants.STAGE_PREPARE);
+                try {
+                    prepareRequest();
+                } catch (Throwable t) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("http11processor.request.prepare"), t);
+                    }
+                    // 400 - Internal Server Error
+                    response.setStatus(400);
+                    adapter.log(request, response, 0);
+                    error = true;
+                }
+            }
+
+            if (maxKeepAliveRequests > 0 && --keepAliveLeft == 0)
+                keepAlive = false;
+
+            // Process the request in the adapter
+            if (!error) {
+                try {
+                    rp.setStage(org.apache.coyote.Constants.STAGE_SERVICE);
+                    adapter.service(request, response);
+                    // Handle when the response was committed before a serious
+                    // error occurred.  Throwing a ServletException should both
+                    // set the status to 500 and set the errorException.
+                    // If we fail here, then the response is likely already
+                    // committed, so we can't try and set headers.
+                    if(keepAlive && !error) { // Avoid checking twice.
+                        error = response.getErrorException() != null ||
+                                statusDropsConnection(response.getStatus());
+                    }
+                } catch (InterruptedIOException e) {
+                    error = true;
+                } catch (Throwable t) {
+                    log.error(sm.getString("http11processor.request.process"), t);
+                    // 500 - Internal Server Error
+                    response.setStatus(500);
+                    adapter.log(request, response, 0);
+                    error = true;
+                }
+            }
+
+            // Finish the handling of the request
+            if (!comet) {
+                // If we know we are closing the connection, don't drain input.
+                // This way uploading a 100GB file doesn't tie up the thread
+                // if the servlet has rejected it.
+                if(error)
+                    inputBuffer.setSwallowInput(false);
+                endRequest();
+            }
+
+            // If there was an error, make sure the request is counted as
+            // and error, and update the statistics counter
+            if (error) {
+                response.setStatus(500);
+            }
+            request.updateCounters();
+
+            if (!comet) {
+                // Next request
+                inputBuffer.nextRequest();
+                outputBuffer.nextRequest();
+            }
+
+            // Do sendfile as needed: add socket to sendfile and end
+            if (sendfileData != null && !error) {
+                sendfileData.socket = socket;
+                if (keepAlive) {
+                    if (inputBuffer.available() == 0) {
+                        sendfileData.keepAliveState = SendfileKeepAliveState.OPEN;
+                    } else {
+                        sendfileData.keepAliveState = SendfileKeepAliveState.PIPELINED;
+                    }
+                } else {
+                    sendfileData.keepAliveState = SendfileKeepAliveState.NONE;
+                }
+                if (!endpoint.getSendfile().add(sendfileData)) {
+                    if (sendfileData.socket == 0) {
+                        // Didn't send all the data but the socket is no longer
+                        // set. Something went wrong. Close the connection.
+                        // Too late to set status code.
+                        if (log.isDebugEnabled()) {
+                            log.debug(sm.getString(
+                                    "http11processor.sendfile.error"));
+                        }
+                        error = true;
+                    } else {
+                        sendfileInProgress = true;
+                    }
+                    break;
+                }
+            }
+
+            rp.setStage(org.apache.coyote.Constants.STAGE_KEEPALIVE);
+
+        }
+
+        rp.setStage(org.apache.coyote.Constants.STAGE_ENDED);
+
+        if (comet) {
+            if (error) {
+                inputBuffer.nextRequest();
+                outputBuffer.nextRequest();
+                recycle();
+                return SocketState.CLOSED;
+            } else {
+                return SocketState.LONG;
+            }
+        } else if (sendfileInProgress) {
+            return SocketState.SENDFILE;
+        } else {
+            recycle();
+            return (openSocket) ? SocketState.OPEN : SocketState.CLOSED;
+        }
+
+    }
+-----CSCI578-----
+
+    public Sendfile getSendfile() {
+        sendfileRoundRobin = (sendfileRoundRobin + 1) % sendfiles.length;
+        return sendfiles[sendfileRoundRobin];
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read the request line. This function is meant to be used during the
+     * HTTP request header parsing. Do NOT attempt to read the request body
+     * using it.
+     *
+     * @throws IOException If an exception occurs during the underlying socket
+     * read operations, or if the given buffer is not big enough to accomodate
+     * the whole line.
+     * @return true if data is properly fed; false if no data is available
+     * immediately and thread should be freed
+     */
+    public boolean parseRequestLine(boolean useAvailableData)
+        throws IOException {
+
+        int start = 0;
+
+        //
+        // Skipping blank lines
+        //
+
+        byte chr = 0;
+        do {
+
+            // Read new bytes if needed
+            if (pos >= lastValid) {
+                if (useAvailableData) {
+                    return false;
+                }
+                if (!fill())
+                    throw new EOFException(sm.getString("iib.eof.error"));
+            }
+
+            chr = buf[pos++];
+
+        } while ((chr == Constants.CR) || (chr == Constants.LF));
+
+        pos--;
+
+        // Mark the current buffer position
+        start = pos;
+
+        if (pos >= lastValid) {
+            if (useAvailableData) {
+                return false;
+            }
+            if (!fill())
+                throw new EOFException(sm.getString("iib.eof.error"));
+        }
+
+        //
+        // Reading the method name
+        // Method name is a token
+        //
+
+        boolean space = false;
+
+        while (!space) {
+
+            // Read new bytes if needed
+            if (pos >= lastValid) {
+                if (!fill())
+                    throw new EOFException(sm.getString("iib.eof.error"));
+            }
+
+            // Spec says method name is a token followed by a single SP but
+            // also be tolerant of multiple SP and/or HT.
+            if (buf[pos] == Constants.SP || buf[pos] == Constants.HT) {
+                space = true;
+                request.method().setBytes(buf, start, pos - start);
+            } else if (!HttpParser.isToken(buf[pos])) {
+                throw new IllegalArgumentException(sm.getString("iib.invalidmethod"));
+            }
+
+            pos++;
+
+        }
+
+        // Spec says single SP but also says be tolerant of multiple SP and/or HT
+        while (space) {
+            // Read new bytes if needed
+            if (pos >= lastValid) {
+                if (!fill())
+                    throw new EOFException(sm.getString("iib.eof.error"));
+            }
+            if (buf[pos] == Constants.SP || buf[pos] == Constants.HT) {
+                pos++;
+            } else {
+                space = false;
+            }
+        }
+
+        // Mark the current buffer position
+        start = pos;
+        int end = 0;
+        int questionPos = -1;
+
+        //
+        // Reading the URI
+        //
+
+        boolean eol = false;
+
+        while (!space) {
+
+            // Read new bytes if needed
+            if (pos >= lastValid) {
+                if (!fill())
+                    throw new EOFException(sm.getString("iib.eof.error"));
+            }
+
+            // Spec says single SP but it also says be tolerant of HT
+            if (buf[pos] == Constants.SP || buf[pos] == Constants.HT) {
+                space = true;
+                end = pos;
+            } else if ((buf[pos] == Constants.CR)
+                       || (buf[pos] == Constants.LF)) {
+                // HTTP/0.9 style request
+                eol = true;
+                space = true;
+                end = pos;
+            } else if ((buf[pos] == Constants.QUESTION)
+                       && (questionPos == -1)) {
+                questionPos = pos;
+            } else if (HttpParser.isNotRequestTarget(buf[pos])) {
+                throw new IllegalArgumentException(sm.getString("iib.invalidRequestTarget"));
+            }
+
+            pos++;
+
+        }
+
+        request.unparsedURI().setBytes(buf, start, end - start);
+        if (questionPos >= 0) {
+            request.queryString().setBytes(buf, questionPos + 1,
+                                           end - questionPos - 1);
+            request.requestURI().setBytes(buf, start, questionPos - start);
+        } else {
+            request.requestURI().setBytes(buf, start, end - start);
+        }
+
+        // Spec says single SP but also says be tolerant of multiple and/or HT
+        while (space) {
+            // Read new bytes if needed
+            if (pos >= lastValid) {
+                if (!fill())
+                    throw new EOFException(sm.getString("iib.eof.error"));
+            }
+            if (buf[pos] == Constants.SP || buf[pos] == Constants.HT) {
+                pos++;
+            } else {
+                space = false;
+            }
+        }
+
+
+        // Mark the current buffer position
+        start = pos;
+        end = 0;
+
+        //
+        // Reading the protocol
+        // Protocol is always "HTTP/" DIGIT "." DIGIT
+        //
+
+        while (!eol) {
+
+            // Read new bytes if needed
+            if (pos >= lastValid) {
+                if (!fill())
+                    throw new EOFException(sm.getString("iib.eof.error"));
+            }
+
+            if (buf[pos] == Constants.CR) {
+                end = pos;
+            } else if (buf[pos] == Constants.LF) {
+                if (end == 0)
+                    end = pos;
+                eol = true;
+            } else if (!HttpParser.isHttpProtocol(buf[pos])) {
+                throw new IllegalArgumentException(sm.getString("iib.invalidHttpProtocol"));
+            }
+
+            pos++;
+
+        }
+
+        if ((end - start) > 0) {
+            request.protocol().setBytes(buf, start, end - start);
+        } else {
+            request.protocol().setString("");
+        }
+
+        return true;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set internal receive ByteBuffer.
+     * This function will preset internal Java ByteBuffer for
+     * consecutive revcvbb/recvbbt calls.
+     * @param sock The socket to use
+     * @param buf The ByteBuffer
+     */
+    public static native void setrbb(long sock, ByteBuffer buf);
+-----CSCI578-----
+
+
+    /**
+     * Set internal send ByteBuffer.
+     * This function will preset internal Java ByteBuffer for
+     * consecutive sendbb calls.
+     * @param sock The socket to use
+     * @param buf The ByteBuffer
+     */
+    public static native void setsbb(long sock, ByteBuffer buf);
+-----CSCI578-----
+-----CSCI578-----
+
+    public int getSoTimeout() { return soTimeout; }
+-----CSCI578-----
+
+
+
+    /**
+     * End processing of current HTTP request.
+     * Note: All bytes of the current request should have been already
+     * consumed. This method only resets all the pointers so that we are ready
+     * to parse the next HTTP request.
+     */
+    public void nextRequest() {
+
+        // Recycle Request object
+        request.recycle();
+
+        // Copy leftover bytes to the beginning of the buffer
+        if (lastValid - pos > 0 && pos > 0) {
+            System.arraycopy(buf, pos, buf, 0, lastValid - pos);
+        }
+
+        // Recycle filters
+        for (int i = 0; i <= lastActiveFilter; i++) {
+            activeFilters[i].recycle();
+        }
+
+        // Reset pointers
+        lastValid = lastValid - pos;
+        pos = 0;
+        lastActiveFilter = -1;
+        parsingHeader = true;
+        swallowInput = true;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * End processing of current HTTP request.
+     * Note: All bytes of the current request should have been already 
+     * consumed. This method only resets all the pointers so that we are ready
+     * to parse the next HTTP request.
+     */
+    public void nextRequest() {
+
+        // Recycle Request object
+        response.recycle();
+
+        // Recycle filters
+        for (int i = 0; i <= lastActiveFilter; i++) {
+            activeFilters[i].recycle();
+        }
+
+        // Reset pointers
+        pos = 0;
+        lastActiveFilter = -1;
+        committed = false;
+        finished = false;
+
+    }
+-----CSCI578-----
+
+
+    public int getSoTimeout() { return endpoint.getSoTimeout(); }
+-----CSCI578-----
+
+
+    public int getSoTimeout() { return endpoint.getSoTimeout(); }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Commit the response.
+     * 
+     * @throws IOException an undelying I/O error occured
+     */
+    protected void commit()
+        throws IOException {
+
+        // The response is now committed
+        committed = true;
+        response.setCommitted(true);
+
+        if (pos > 0) {
+            // Sending the response header buffer
+            bbuf.put(buf, 0, pos);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- ActionHook Methods
+
+
+    /**
+     * Send an action to the connector.
+     *
+     * @param actionCode Type of the action
+     * @param param Action parameter
+     */
+    public void action(ActionCode actionCode, Object param) {
+
+        if (actionCode == ActionCode.ACTION_COMMIT) {
+            // Commit current response
+
+            if (response.isCommitted())
+                return;
+
+            // Validate and write response headers
+            prepareResponse();
+            try {
+                outputBuffer.commit();
+            } catch (IOException e) {
+                // Set error flag
+                error = true;
+            }
+
+        } else if (actionCode == ActionCode.ACTION_ACK) {
+
+            // Acknowlege request
+
+            // Send a 100 status back if it makes sense (response not committed
+            // yet, and client specified an expectation for 100-continue)
+
+            if ((response.isCommitted()) || !expectation)
+                return;
+
+            inputBuffer.setSwallowInput(true);
+            try {
+                outputBuffer.sendAck();
+            } catch (IOException e) {
+                // Set error flag
+                error = true;
+            }
+
+        } else if (actionCode == ActionCode.ACTION_CLIENT_FLUSH) {
+
+            try {
+                outputBuffer.flush();
+            } catch (IOException e) {
+                // Set error flag
+                error = true;
+                response.setErrorException(e);
+            }
+
+        } else if (actionCode == ActionCode.ACTION_CLOSE) {
+            // Close
+
+            // End the processing of the current request, and stop any further
+            // transactions with the client
+
+            comet = false;
+            try {
+                outputBuffer.endRequest();
+            } catch (IOException e) {
+                // Set error flag
+                error = true;
+            }
+
+        } else if (actionCode == ActionCode.ACTION_RESET) {
+
+            // Reset response
+
+            // Note: This must be called before the response is committed
+
+            outputBuffer.reset();
+
+        } else if (actionCode == ActionCode.ACTION_CUSTOM) {
+
+            // Do nothing
+
+        } else if (actionCode == ActionCode.ACTION_REQ_HOST_ADDR_ATTRIBUTE) {
+
+            // Get remote host address
+            if (remoteAddr == null && (socket != 0)) {
+                try {
+                    long sa = Address.get(Socket.APR_REMOTE, socket);
+                    remoteAddr = Address.getip(sa);
+                } catch (Exception e) {
+                    log.warn(sm.getString("http11processor.socket.info"), e);
+                }
+            }
+            request.remoteAddr().setString(remoteAddr);
+
+        } else if (actionCode == ActionCode.ACTION_REQ_LOCAL_NAME_ATTRIBUTE) {
+
+            // Get local host name
+            if (localName == null && (socket != 0)) {
+                try {
+                    long sa = Address.get(Socket.APR_LOCAL, socket);
+                    localName = Address.getnameinfo(sa, 0);
+                } catch (Exception e) {
+                    log.warn(sm.getString("http11processor.socket.info"), e);
+                }
+            }
+            request.localName().setString(localName);
+
+        } else if (actionCode == ActionCode.ACTION_REQ_HOST_ATTRIBUTE) {
+
+            // Get remote host name
+            if (remoteHost == null && (socket != 0)) {
+                try {
+                    long sa = Address.get(Socket.APR_REMOTE, socket);
+                    remoteHost = Address.getnameinfo(sa, 0);
+                    if (remoteHost == null) {
+                        remoteHost = Address.getip(sa);
+                    }
+                } catch (Exception e) {
+                    log.warn(sm.getString("http11processor.socket.info"), e);
+                }
+            }
+            request.remoteHost().setString(remoteHost);
+
+        } else if (actionCode == ActionCode.ACTION_REQ_LOCAL_ADDR_ATTRIBUTE) {
+
+            // Get local host address
+            if (localAddr == null && (socket != 0)) {
+                try {
+                    long sa = Address.get(Socket.APR_LOCAL, socket);
+                    localAddr = Address.getip(sa);
+                } catch (Exception e) {
+                    log.warn(sm.getString("http11processor.socket.info"), e);
+                }
+            }
+
+            request.localAddr().setString(localAddr);
+
+        } else if (actionCode == ActionCode.ACTION_REQ_REMOTEPORT_ATTRIBUTE) {
+
+            // Get remote port
+            if (remotePort == -1 && (socket != 0)) {
+                try {
+                    long sa = Address.get(Socket.APR_REMOTE, socket);
+                    Sockaddr addr = Address.getInfo(sa);
+                    remotePort = addr.port;
+                } catch (Exception e) {
+                    log.warn(sm.getString("http11processor.socket.info"), e);
+                }
+            }
+            request.setRemotePort(remotePort);
+
+        } else if (actionCode == ActionCode.ACTION_REQ_LOCALPORT_ATTRIBUTE) {
+
+            // Get local port
+            if (localPort == -1 && (socket != 0)) {
+                try {
+                    long sa = Address.get(Socket.APR_LOCAL, socket);
+                    Sockaddr addr = Address.getInfo(sa);
+                    localPort = addr.port;
+                } catch (Exception e) {
+                    log.warn(sm.getString("http11processor.socket.info"), e);
+                }
+            }
+            request.setLocalPort(localPort);
+
+        } else if (actionCode == ActionCode.ACTION_REQ_SSL_ATTRIBUTE ) {
+
+            if (ssl && (socket != 0)) {
+                try {
+                    // Cipher suite
+                    Object sslO = SSLSocket.getInfoS(socket, SSL.SSL_INFO_CIPHER);
+                    if (sslO != null) {
+                        request.setAttribute(AprEndpoint.CIPHER_SUITE_KEY, sslO);
+                    }
+                    // Get client certificate and the certificate chain if present
+                    // certLength == -1 indicates an error
+                    int certLength = SSLSocket.getInfoI(socket, SSL.SSL_INFO_CLIENT_CERT_CHAIN);
+                    byte[] clientCert = SSLSocket.getInfoB(socket, SSL.SSL_INFO_CLIENT_CERT);
+                    X509Certificate[] certs = null;
+                    if (clientCert != null  && certLength > -1) {
+                        certs = new X509Certificate[certLength + 1];
+                        CertificateFactory cf;
+                        if (clientCertProvider == null) {
+                            cf = CertificateFactory.getInstance("X.509");
+                        } else {
+                            cf = CertificateFactory.getInstance("X.509",
+                                    clientCertProvider);
+                        }
+                        certs[0] = (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(clientCert));
+                        for (int i = 0; i < certLength; i++) {
+                            byte[] data = SSLSocket.getInfoB(socket, SSL.SSL_INFO_CLIENT_CERT_CHAIN + i);
+                            certs[i+1] = (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(data));
+                        }
+                    }
+                    if (certs != null) {
+                        request.setAttribute(AprEndpoint.CERTIFICATE_KEY, certs);
+                    }
+                    // User key size
+                    sslO = new Integer(SSLSocket.getInfoI(socket, SSL.SSL_INFO_CIPHER_USEKEYSIZE));
+                    request.setAttribute(AprEndpoint.KEY_SIZE_KEY, sslO);
+                    // SSL session ID
+                    sslO = SSLSocket.getInfoS(socket, SSL.SSL_INFO_SESSION_ID);
+                    if (sslO != null) {
+                        request.setAttribute(AprEndpoint.SESSION_ID_KEY, sslO);
+                    }
+                } catch (Exception e) {
+                    log.warn(sm.getString("http11processor.socket.ssl"), e);
+                }
+            }
+
+        } else if (actionCode == ActionCode.ACTION_REQ_SSL_CERTIFICATE) {
+
+            if (ssl && (socket != 0)) {
+                // Consume and buffer the request body, so that it does not
+                // interfere with the client's handshake messages
+                InputFilter[] inputFilters = inputBuffer.getFilters();
+                ((BufferedInputFilter) inputFilters[Constants.BUFFERED_FILTER]).setLimit(maxSavePostSize);
+                inputBuffer.addActiveFilter(inputFilters[Constants.BUFFERED_FILTER]);
+                try {
+                    // Configure connection to require a certificate
+                    SSLSocket.setVerify(socket, SSL.SSL_CVERIFY_REQUIRE,
+                            endpoint.getSSLVerifyDepth());
+                    // Renegotiate certificates
+                    if (SSLSocket.renegotiate(socket) == 0) {
+                        // Don't look for certs unless we know renegotiation worked.
+                        // Get client certificate and the certificate chain if present
+                        // certLength == -1 indicates an error
+                        int certLength = SSLSocket.getInfoI(socket,SSL.SSL_INFO_CLIENT_CERT_CHAIN);
+                        byte[] clientCert = SSLSocket.getInfoB(socket, SSL.SSL_INFO_CLIENT_CERT);
+                        X509Certificate[] certs = null;
+                        if (clientCert != null && certLength > -1) {
+                            certs = new X509Certificate[certLength + 1];
+                            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+                            certs[0] = (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(clientCert));
+                            for (int i = 0; i < certLength; i++) {
+                                byte[] data = SSLSocket.getInfoB(socket, SSL.SSL_INFO_CLIENT_CERT_CHAIN + i);
+                                certs[i+1] = (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(data));
+                            }
+                        }
+                        if (certs != null) {
+                            request.setAttribute(AprEndpoint.CERTIFICATE_KEY, certs);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn(sm.getString("http11processor.socket.ssl"), e);
+                }
+            }
+
+        } else if (actionCode == ActionCode.ACTION_REQ_SET_BODY_REPLAY) {
+            ByteChunk body = (ByteChunk) param;
+
+            InputFilter savedBody = new SavedRequestInputFilter(body);
+            savedBody.setRequest(request);
+
+            InternalAprInputBuffer internalBuffer = (InternalAprInputBuffer)
+                request.getInputBuffer();
+            internalBuffer.addActiveFilter(savedBody);
+
+        } else if (actionCode == ActionCode.ACTION_AVAILABLE) {
+            request.setAvailable(inputBuffer.available());
+        } else if (actionCode == ActionCode.ACTION_COMET_BEGIN) {
+            comet = true;
+        } else if (actionCode == ActionCode.ACTION_COMET_END) {
+            comet = false;
+        } else if (actionCode == ActionCode.ACTION_COMET_CLOSE) {
+            //no op
+        } else if (actionCode == ActionCode.ACTION_COMET_SETTIMEOUT) {
+            //no op
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return SSL Info parameter as String.
+     *
+     * @param sock The socket to read the data from.
+     * @param id Parameter id.
+     * @return String containing info id value.
+     */
+    public static native String getInfoS(long sock, int id)
+        throws Exception;
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Flush the response.
+     * 
+     * @throws IOException an undelying I/O error occured
+     */
+    public void flush()
+        throws IOException {
+
+        if (!committed) {
+
+            // Send the connector a request for commit. The connector should
+            // then validate the headers, send them (using sendHeader) and 
+            // set the filters accordingly.
+            response.action(ActionCode.ACTION_COMMIT, null);
+
+        }
+
+        // go through the filters and if there is gzip filter
+        // invoke it to flush
+        for (int i = 0; i <= lastActiveFilter; i++) {
+            if (activeFilters[i] instanceof GzipOutputFilter) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Flushing the gzip filter at position " + i +
+                            " of the filter chain...");
+                }
+                ((GzipOutputFilter) activeFilters[i]).flush();
+                break;
+            }
+        }
+        
+        // Flush the current buffer
+        flushBuffer();
+
+    }
+-----CSCI578-----
+
+    
+    /**    
+     * Return SSL Info parameter as byte array.
+     *
+     * @param sock The socket to read the data from.
+     * @param id Parameter id.
+     * @return Byte array containing info id value.
+     */
+    public static native byte[] getInfoB(long sock, int id)
+        throws Exception;
+-----CSCI578-----
+
+
+    /**
+     * Return the IP address (in numeric address string format) in
+     * an APR socket address.  APR will allocate storage for the IP address
+     * string from the pool of the apr_sockaddr_t.
+     * @param sa The socket address to reference.
+     * @return The IP address.
+     */
+    public static native String getip(long sa);
+-----CSCI578-----
+
+
+    /**
+     * Return SSL Info parameter as integer.
+     *
+     * @param sock The socket to read the data from.
+     * @param id Parameter id.
+     * @return Integer containing info id value or -1 on error.
+     */
+    public static native int getInfoI(long sock, int id)
+        throws Exception;
+-----CSCI578-----
+
+
+
+    /**
+     * Reset current response.
+     * 
+     * @throws IllegalStateException if the response has already been committed
+     */
+    public void reset() {
+
+        if (committed)
+            throw new IllegalStateException(/*FIXME:Put an error message*/);
+
+        // Recycle Request object
+        response.recycle();
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set Type of Client Certificate verification and Maximum depth of CA
+     * Certificates in Client Certificate verification.
+     * <br>
+     * This is used to change the verification level for a connection prior to
+     * starting a re-negotiation.
+     * <br>
+     * The following levels are available for level:
+     * <PRE>
+     * SSL_CVERIFY_NONE           - No client Certificate is required at all
+     * SSL_CVERIFY_OPTIONAL       - The client may present a valid Certificate
+     * SSL_CVERIFY_REQUIRE        - The client has to present a valid
+     *                              Certificate
+     * SSL_CVERIFY_OPTIONAL_NO_CA - The client may present a valid Certificate
+     *                              but it need not to be (successfully)
+     *                              verifiable
+     * </PRE>
+     * <br>
+     * @param sock  The socket to change.
+     * @param level Type of Client Certificate verification.
+     */
+    public static native void setVerify(long sock, int level, int depth);
+-----CSCI578-----
+
+    /**
+     * Look up the host name from an apr_sockaddr_t.
+     * @param sa The apr_sockaddr_t.
+     * @param flags Special processing flags.
+     * @return The hostname.
+     */
+    public static native String getnameinfo(long sa, int flags);
+-----CSCI578-----
+
+
+    /**
+     * Do a SSL renegotiation.
+     * SSL supports per-directory re-configuration of SSL parameters.
+     * This is implemented by performing an SSL renegotiation of the
+     * re-configured parameters after the request is read, but before the
+     * response is sent. In more detail: the renegotiation happens after the
+     * request line and MIME headers were read, but _before_ the attached
+     * request body is read. The reason simply is that in the HTTP protocol
+     * usually there is no acknowledgment step between the headers and the
+     * body (there is the 100-continue feature and the chunking facility
+     * only), so Apache has no API hook for this step.
+     *
+     * @param thesocket The socket to use
+     */
+    public static native int renegotiate(long thesocket);
+-----CSCI578-----
+
+
+    /**
+     * Return an apr_sockaddr_t from an apr_socket_t
+     * @param which Which interface do we want the apr_sockaddr_t for?
+     * @param sock The socket to use
+     * @return The returned apr_sockaddr_t.
+     */
+    public static native long get(int which, long sock)
+        throws Exception;
+-----CSCI578-----
+
+    public int getSSLVerifyDepth() { return SSLVerifyDepth; }
+-----CSCI578-----
+
+
+
+    /**
+     * Callback to write data from the buffer.
+     */
+    protected void flushBuffer()
+        throws IOException {
+        if (bbuf.position() > 0) {
+            if (Socket.sendbb(socket, 0, bbuf.position()) < 0) {
+                throw new IOException();
+            }
+            bbuf.clear();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * SSL verify depth.
+     */
+    public int getSSLVerifyDepth() { return endpoint.getSSLVerifyDepth(); }

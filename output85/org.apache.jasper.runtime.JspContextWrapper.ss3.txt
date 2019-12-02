@@ -1,0 +1,82 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Copies the variables of the given scope from the virtual page scope of
+     * this JSP context wrapper to the page scope of the invoking JSP context.
+     *
+     * @param scope
+     *            variable scope (one of NESTED, AT_BEGIN, or AT_END)
+     */
+    private void copyTagToPageScope(int scope) {
+        Iterator<String> iter = null;
+
+        switch (scope) {
+        case VariableInfo.NESTED:
+            if (nestedVars != null) {
+                iter = nestedVars.iterator();
+            }
+            break;
+        case VariableInfo.AT_BEGIN:
+            if (atBeginVars != null) {
+                iter = atBeginVars.iterator();
+            }
+            break;
+        case VariableInfo.AT_END:
+            if (atEndVars != null) {
+                iter = atEndVars.iterator();
+            }
+            break;
+        }
+
+        while ((iter != null) && iter.hasNext()) {
+            String varName = iter.next();
+            Object obj = getAttribute(varName);
+            varName = findAlias(varName);
+            if (obj != null) {
+                invokingJspCtxt.setAttribute(varName, obj);
+            } else {
+                invokingJspCtxt.removeAttribute(varName, PAGE_SCOPE);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getAttribute(String name) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        return pageAttributes.get(name);
+    }
+
+
+    @Override
+    public Object getAttribute(String name, int scope) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        if (scope == PAGE_SCOPE) {
+            return pageAttributes.get(name);
+        }
+
+        return rootJspCtxt.getAttribute(name, scope);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Synchronize variables before fragment invocation
+     */
+    public void syncBeforeInvoke() {
+        copyTagToPageScope(VariableInfo.NESTED);
+        copyTagToPageScope(VariableInfo.AT_BEGIN);
+    }

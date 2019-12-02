@@ -1,0 +1,199 @@
+9
+-----CSCI578-----
+
+
+    /**
+     * Remove an existing web application, attached to the specified context
+     * name. If this application is successfully removed, a ContainerEvent of
+     * type <code>REMOVE_EVENT</code> will be sent to all registered
+     * listeners, with the removed <code>Context</code> as an argument.
+     * Deletes the web application war file and/or directory if they exist in
+     * the Host's appBase.
+     *
+     * @param contextName
+     *            The context name of the application to be removed
+     * @param undeploy
+     *            boolean flag to remove web application from server
+     *
+     * @exception IllegalArgumentException
+     *                if the specified context name is malformed
+     * @exception IllegalArgumentException
+     *                if the specified context name does not identify a
+     *                currently installed web application
+     * @exception IOException
+     *                if an input/output error occurs during removal
+     */
+    @Override
+    public void remove(String contextName, boolean undeploy)
+            throws IOException {
+        if (getCluster().getMembers().length > 0) {
+            if (log.isInfoEnabled())
+                log.info(sm.getString("farmWarDeployer.removeStart", contextName));
+            Member localMember = getCluster().getLocalMember();
+            UndeployMessage msg = new UndeployMessage(localMember, System
+                    .currentTimeMillis(), "Undeploy:" + contextName + ":"
+                    + System.currentTimeMillis(), contextName);
+            if (log.isDebugEnabled())
+                log.debug(sm.getString("farmWarDeployer.removeTxMsg", contextName));
+            cluster.send(msg);
+        }
+        // remove locally
+        if (undeploy) {
+            try {
+                if (!isServiced(contextName)) {
+                    addServiced(contextName);
+                    try {
+                        remove(contextName);
+                    } finally {
+                        removeServiced(contextName);
+                    }
+                } else
+                    log.error(sm.getString("farmWarDeployer.removeFailRemote",
+                            contextName));
+
+            } catch (Exception ex) {
+                log.error(sm.getString("farmWarDeployer.removeFailLocal",
+                        contextName), ex);
+            }
+        }
+
+    }
+
+
+    /**
+     * Invoke the remove method on the deployer.
+     * @param contextName The context to remove
+     * @throws Exception If an error occurs removing the context
+     */
+    protected void remove(String contextName) throws Exception {
+        // TODO Handle remove also work dir content !
+        // Stop the context first to be nicer
+        Context context = (Context) host.findChild(contextName);
+        if (context != null) {
+            if(log.isDebugEnabled())
+                log.debug(sm.getString("farmWarDeployer.undeployLocal",
+                        contextName));
+            context.stop();
+            String baseName = context.getBaseName();
+            File war = new File(host.getAppBaseFile(), baseName + ".war");
+            File dir = new File(host.getAppBaseFile(), baseName);
+            File xml = new File(configBase, baseName + ".xml");
+            if (war.exists()) {
+                if (!war.delete()) {
+                    log.error(sm.getString("farmWarDeployer.deleteFail", war));
+                }
+            } else if (dir.exists()) {
+                undeployDir(dir);
+            } else {
+                if (!xml.delete()) {
+                    log.error(sm.getString("farmWarDeployer.deleteFail", xml));
+                }
+            }
+            // Perform new deployment and remove internal HostConfig state
+            check(contextName);
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Delete the specified directory, including all of its contents and
+     * subdirectories recursively.
+     *
+     * @param dir
+     *            File object representing the directory to be deleted
+     */
+    protected void undeployDir(File dir) {
+
+        String files[] = dir.list();
+        if (files == null) {
+            files = new String[0];
+        }
+        for (int i = 0; i < files.length; i++) {
+            File file = new File(dir, files[i]);
+            if (file.isDirectory()) {
+                undeployDir(file);
+            } else {
+                if (!file.delete()) {
+                    log.error(sm.getString("farmWarDeployer.deleteFail", file));
+                }
+            }
+        }
+        if (!dir.delete()) {
+            log.error(sm.getString("farmWarDeployer.deleteFail", dir));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Verified if a context is being services.
+     * @param name The context name
+     * @return <code>true</code> if the context is being serviced
+     * @throws Exception Error invoking the deployer
+     */
+    protected boolean isServiced(String name) throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        Boolean result = (Boolean) mBeanServer.invoke(oname, "isServiced",
+                params, signature);
+        return result.booleanValue();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Mark a context as being services.
+     * @param name The context name
+     * @throws Exception Error invoking the deployer
+     */
+    protected void addServiced(String name) throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "addServiced", params, signature);
+    }
+-----CSCI578-----
+
+
+    /*--Deployer Operations ------------------------------------*/
+
+    /**
+     * Check a context for deployment operations.
+     * @param name The context name
+     * @throws Exception Error invoking the deployer
+     */
+    protected void check(String name) throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "check", params, signature);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Mark a context as no longer being serviced.
+     * @param name The context name
+     * @throws Exception Error invoking the deployer
+     */
+    protected void removeServiced(String name) throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "removeServiced", params, signature);
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the member that represents this node.
+     */
+    public Member getLocalMember();
+-----CSCI578-----
+
+
+    /**
+     * @return the base name to use for WARs, directories or context.xml files
+     * for this context.
+     */
+    public String getBaseName();

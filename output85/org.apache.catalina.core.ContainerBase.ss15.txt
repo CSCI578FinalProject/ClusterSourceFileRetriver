@@ -1,0 +1,54 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Pipeline object that manages the Valves associated with
+     * this Container.
+     */
+    @Override
+    public Pipeline getPipeline() {
+
+        return (this.pipeline);
+
+    }
+-----CSCI578-----
+
+
+    public void add(AccessLog log) {
+        if (log == null) {
+            throw new NullPointerException();
+        }
+        AccessLog newArray[] = Arrays.copyOf(logs, logs.length + 1);
+        newArray[newArray.length - 1] = log;
+        logs = newArray;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public AccessLog getAccessLog() {
+
+        if (accessLogScanComplete) {
+            return accessLog;
+        }
+
+        AccessLogAdapter adapter = null;
+        Valve valves[] = getPipeline().getValves();
+        for (Valve valve : valves) {
+            if (valve instanceof AccessLog) {
+                if (adapter == null) {
+                    adapter = new AccessLogAdapter((AccessLog) valve);
+                } else {
+                    adapter.add((AccessLog) valve);
+                }
+            }
+        }
+        if (adapter != null) {
+            accessLog = adapter;
+        }
+        accessLogScanComplete = true;
+        return accessLog;
+    }
+-----CSCI578-----

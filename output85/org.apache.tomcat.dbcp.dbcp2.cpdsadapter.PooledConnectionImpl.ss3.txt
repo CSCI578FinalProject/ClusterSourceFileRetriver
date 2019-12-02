@@ -1,0 +1,49 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Returns a JDBC connection.
+     *
+     * @return The database connection.
+     * @throws SQLException if the connection is not open or the previous logical connection is still open
+     */
+    @Override
+    public Connection getConnection() throws SQLException {
+        assertOpen();
+        // make sure the last connection is marked as closed
+        if (logicalConnection != null && !logicalConnection.isClosed()) {
+            // should notify pool of error so the pooled connection can
+            // be removed !FIXME!
+            throw new SQLException("PooledConnection was reused, without "
+                    + "its previous Connection being closed.");
+        }
+
+        // the spec requires that this return a new Connection instance.
+        logicalConnection = new ConnectionImpl(
+                this, connection, isAccessToUnderlyingConnectionAllowed());
+        return logicalConnection;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the value of the accessToUnderlyingConnectionAllowed property.
+     *
+     * @return true if access to the underlying is allowed, false otherwise.
+     */
+    public synchronized boolean isAccessToUnderlyingConnectionAllowed() {
+        return this.accessToUnderlyingConnectionAllowed;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Throws an SQLException, if isClosed is true
+     */
+    private void assertOpen() throws SQLException {
+        if (isClosed) {
+            throw new SQLException(CLOSED);
+        }
+    }

@@ -1,0 +1,596 @@
+15
+-----CSCI578-----
+
+
+
+    /**
+     * Render a list of available global JNDI resources.
+     *
+     * @param writer Writer to render to
+     * @param type Fully qualified class name of the resource type of interest,
+     *  or <code>null</code> to list resources of all types
+     * @param smClient i18n support for current client's locale
+     */
+    protected void resources(PrintWriter writer, String type,
+            StringManager smClient) {
+
+        if (debug >= 1) {
+            if (type != null) {
+                log("resources:  Listing resources of type " + type);
+            } else {
+                log("resources:  Listing resources of all types");
+            }
+        }
+
+        // Is the global JNDI resources context available?
+        if (global == null) {
+            writer.println(smClient.getString("managerServlet.noGlobal"));
+            return;
+        }
+
+        // Enumerate the global JNDI resources of the requested type
+        if (type != null) {
+            writer.println(smClient.getString("managerServlet.resourcesType",
+                    type));
+        } else {
+            writer.println(smClient.getString("managerServlet.resourcesAll"));
+        }
+
+        Class<?> clazz = null;
+        try {
+            if (type != null) {
+                clazz = Class.forName(type);
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            log("ManagerServlet.resources[" + type + "]", t);
+            writer.println(smClient.getString("managerServlet.exception",
+                    t.toString()));
+            return;
+        }
+
+        printResources(writer, "", global, type, clazz, smClient);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * List the resources of the given context.
+     * @param writer Writer to render to
+     * @param prefix Path for recursion
+     * @param namingContext The naming context for lookups
+     * @param type Fully qualified class name of the resource type of interest,
+     *  or <code>null</code> to list resources of all types
+     * @param clazz The resource class or <code>null</code> to list
+     *  resources of all types
+     * @param smClient i18n support for current client's locale
+     */
+    protected void printResources(PrintWriter writer, String prefix,
+                                  javax.naming.Context namingContext,
+                                  String type, Class<?> clazz,
+                                  StringManager smClient) {
+
+        try {
+            NamingEnumeration<Binding> items = namingContext.listBindings("");
+            while (items.hasMore()) {
+                Binding item = items.next();
+                if (item.getObject() instanceof javax.naming.Context) {
+                    printResources
+                        (writer, prefix + item.getName() + "/",
+                         (javax.naming.Context) item.getObject(), type, clazz,
+                         smClient);
+                } else {
+                    if ((clazz != null) &&
+                        (!(clazz.isInstance(item.getObject())))) {
+                        continue;
+                    }
+                    writer.print(prefix + item.getName());
+                    writer.print(':');
+                    writer.print(item.getClassName());
+                    // Do we want a description if available?
+                    writer.println();
+                }
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            log("ManagerServlet.resources[" + type + "]", t);
+            writer.println(smClient.getString("managerServlet.exception",
+                    t.toString()));
+        }
+
+    }
+-----CSCI578-----
+
+
+    protected void sslConnectorCiphers(PrintWriter writer,
+            StringManager smClient) {
+        writer.println(smClient.getString(
+                "managerServlet.sslConnectorCiphers"));
+        Map<String,Set<String>> connectorCiphers = getConnectorCiphers();
+        for (Map.Entry<String,Set<String>> entry : connectorCiphers.entrySet()) {
+            writer.println(entry.getKey());
+            for (String cipher : entry.getValue()) {
+                writer.print("  ");
+                writer.println(cipher);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    protected Map<String,Set<String>> getConnectorCiphers() {
+        Map<String,Set<String>> result = new HashMap<>();
+
+        Engine e = (Engine) host.getParent();
+        Service s = e.getService();
+        Connector connectors[] = s.findConnectors();
+        for (Connector connector : connectors) {
+            if (Boolean.TRUE.equals(connector.getProperty("SSLEnabled"))) {
+                SSLHostConfig[] sslHostConfigs = connector.getProtocolHandler().findSslHostConfigs();
+                for (SSLHostConfig sslHostConfig : sslHostConfigs) {
+                    String name = connector.toString() + "-" + sslHostConfig.getHostName();
+                    Set<String> cipherList = new HashSet<>();
+                    String[] cipherNames = sslHostConfig.getEnabledCiphers();
+                    for (String cipherName : cipherNames) {
+                        cipherList.add(cipherName);
+                    }
+                result.put(name, cipherList);
+                }
+            } else {
+                Set<String> cipherList = new HashSet<>();
+                cipherList.add(sm.getString("managerServlet.notSslConnector"));
+                result.put(connector.toString(), cipherList);
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+
+    public SSLHostConfig[] findSslHostConfigs();
+-----CSCI578-----
+
+
+
+    /**
+     * Provide a useful toString() implementation as it may be used when logging
+     * Lifecycle errors to identify the component.
+     */
+    @Override
+    public String toString() {
+        // Not worth caching this right now
+        StringBuilder sb = new StringBuilder("Connector[");
+        sb.append(getProtocol());
+        sb.append('-');
+        int port = getPort();
+        if (port > 0) {
+            sb.append(port);
+        } else {
+            sb.append("auto-");
+            sb.append(getProperty("nameIndex"));
+        }
+        sb.append(']');
+        return sb.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Find and return the set of Connectors associated with this Service.
+     *
+     * @return the set of associated Connectors
+     */
+    public Connector[] findConnectors();
+-----CSCI578-----
+
+
+    /**
+     * Find and return the set of Connectors associated with this Service.
+     * @return an array of string representations of the connectors
+     * @throws MBeanException error accessing the associated service
+     */
+    public String[] findConnectors() throws MBeanException {
+
+        Service service;
+        try {
+            service = (Service)getManagedResource();
+        } catch (InstanceNotFoundException e) {
+            throw new MBeanException(e);
+        } catch (RuntimeOperationsException e) {
+            throw new MBeanException(e);
+        } catch (InvalidTargetObjectTypeException e) {
+            throw new MBeanException(e);
+        }
+
+        Connector[] connectors = service.findConnectors();
+        String[] str = new String[connectors.length];
+
+        for(int i=0; i< connectors.length; i++){
+            str[i] = connectors[i].toString();
+        }
+
+        return str;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Retrieves a formatted JVM information text.
+     * The default StringManager will be used.
+     *
+     * @return the formatted JVM information text
+     */
+    public static String getVMInfo() {
+        return getVMInfo(sm);
+    }
+
+
+    /**
+     * Retrieves a formatted JVM information text.
+     * The given list of locales will be used
+     * to retrieve a StringManager.
+     *
+     * @param requestedLocales list of locales to use
+     * @return the formatted JVM information text
+     */
+    public static String getVMInfo(Enumeration<Locale> requestedLocales) {
+        return getVMInfo(StringManager.getManager(PACKAGE, requestedLocales));
+    }
+
+
+    /**
+     * Retrieve a JVM information text formatted
+     * using the given StringManager.
+     *
+     * @param requestedSm the StringManager to use
+     * @return the formatted JVM information text
+     */
+    public static String getVMInfo(StringManager requestedSm) {
+        StringBuilder sb = new StringBuilder();
+
+        synchronized(timeformat) {
+            sb.append(timeformat.format(new Date()));
+        }
+        sb.append(CRLF);
+
+        sb.append(requestedSm.getString("diagnostics.vmInfoRuntime"));
+        sb.append(":" + CRLF);
+        sb.append(INDENT1 + "vmName: " + runtimeMXBean.getVmName() + CRLF);
+        sb.append(INDENT1 + "vmVersion: " + runtimeMXBean.getVmVersion() + CRLF);
+        sb.append(INDENT1 + "vmVendor: " + runtimeMXBean.getVmVendor() + CRLF);
+        sb.append(INDENT1 + "specName: " + runtimeMXBean.getSpecName() + CRLF);
+        sb.append(INDENT1 + "specVersion: " + runtimeMXBean.getSpecVersion() + CRLF);
+        sb.append(INDENT1 + "specVendor: " + runtimeMXBean.getSpecVendor() + CRLF);
+        sb.append(INDENT1 + "managementSpecVersion: " +
+                  runtimeMXBean.getManagementSpecVersion() + CRLF);
+        sb.append(INDENT1 + "name: " + runtimeMXBean.getName() + CRLF);
+        sb.append(INDENT1 + "startTime: " + runtimeMXBean.getStartTime() + CRLF);
+        sb.append(INDENT1 + "uptime: " + runtimeMXBean.getUptime() + CRLF);
+        sb.append(INDENT1 + "isBootClassPathSupported: " +
+                  runtimeMXBean.isBootClassPathSupported() + CRLF);
+        sb.append(CRLF);
+
+        sb.append(requestedSm.getString("diagnostics.vmInfoOs"));
+        sb.append(":" + CRLF);
+        sb.append(INDENT1 + "name: " + operatingSystemMXBean.getName() + CRLF);
+        sb.append(INDENT1 + "version: " + operatingSystemMXBean.getVersion() + CRLF);
+        sb.append(INDENT1 + "architecture: " + operatingSystemMXBean.getArch() + CRLF);
+        sb.append(INDENT1 + "availableProcessors: " +
+                  operatingSystemMXBean.getAvailableProcessors() + CRLF);
+        sb.append(INDENT1 + "systemLoadAverage: " +
+                  operatingSystemMXBean.getSystemLoadAverage() + CRLF);
+        sb.append(CRLF);
+
+        sb.append(requestedSm.getString("diagnostics.vmInfoThreadMxBean"));
+        sb.append(":" + CRLF);
+        sb.append(INDENT1 + "isCurrentThreadCpuTimeSupported: " +
+                  threadMXBean.isCurrentThreadCpuTimeSupported() + CRLF);
+        sb.append(INDENT1 + "isThreadCpuTimeSupported: " +
+                  threadMXBean.isThreadCpuTimeSupported() + CRLF);
+        sb.append(INDENT1 + "isThreadCpuTimeEnabled: " +
+                  threadMXBean.isThreadCpuTimeEnabled() + CRLF);
+        sb.append(INDENT1 + "isObjectMonitorUsageSupported: " +
+                  threadMXBean.isObjectMonitorUsageSupported() + CRLF);
+        sb.append(INDENT1 + "isSynchronizerUsageSupported: " +
+                  threadMXBean.isSynchronizerUsageSupported() + CRLF);
+        sb.append(INDENT1 + "isThreadContentionMonitoringSupported: " +
+                  threadMXBean.isThreadContentionMonitoringSupported() + CRLF);
+        sb.append(INDENT1 + "isThreadContentionMonitoringEnabled: " +
+                  threadMXBean.isThreadContentionMonitoringEnabled() + CRLF);
+        sb.append(CRLF);
+
+        sb.append(requestedSm.getString("diagnostics.vmInfoThreadCounts"));
+        sb.append(":" + CRLF);
+        sb.append(INDENT1 + "daemon: " + threadMXBean.getDaemonThreadCount() + CRLF);
+        sb.append(INDENT1 + "total: " + threadMXBean.getThreadCount() + CRLF);
+        sb.append(INDENT1 + "peak: " + threadMXBean.getPeakThreadCount() + CRLF);
+        sb.append(INDENT1 + "totalStarted: " +
+                  threadMXBean.getTotalStartedThreadCount() + CRLF);
+        sb.append(CRLF);
+
+        sb.append(requestedSm.getString("diagnostics.vmInfoStartup"));
+        sb.append(":" + CRLF);
+        for (String arg: runtimeMXBean.getInputArguments()) {
+            sb.append(INDENT1 + arg + CRLF);
+        }
+        sb.append(CRLF);
+
+        sb.append(requestedSm.getString("diagnostics.vmInfoPath"));
+        sb.append(":" + CRLF);
+        sb.append(INDENT1 + "bootClassPath: " + runtimeMXBean.getBootClassPath() + CRLF);
+        sb.append(INDENT1 + "classPath: " + runtimeMXBean.getClassPath() + CRLF);
+        sb.append(INDENT1 + "libraryPath: " + runtimeMXBean.getLibraryPath() + CRLF);
+        sb.append(CRLF);
+
+        sb.append(requestedSm.getString("diagnostics.vmInfoClassLoading"));
+        sb.append(":" + CRLF);
+        sb.append(INDENT1 + "loaded: " +
+                  classLoadingMXBean.getLoadedClassCount() + CRLF);
+        sb.append(INDENT1 + "unloaded: " +
+                  classLoadingMXBean.getUnloadedClassCount() + CRLF);
+        sb.append(INDENT1 + "totalLoaded: " +
+                  classLoadingMXBean.getTotalLoadedClassCount() + CRLF);
+        sb.append(INDENT1 + "isVerbose: " +
+                  classLoadingMXBean.isVerbose() + CRLF);
+        sb.append(CRLF);
+
+        sb.append(requestedSm.getString("diagnostics.vmInfoClassCompilation"));
+        sb.append(":" + CRLF);
+        sb.append(INDENT1 + "name: " + compilationMXBean.getName() + CRLF);
+        sb.append(INDENT1 + "totalCompilationTime: " +
+                  compilationMXBean.getTotalCompilationTime() + CRLF);
+        sb.append(INDENT1 + "isCompilationTimeMonitoringSupported: " +
+                  compilationMXBean.isCompilationTimeMonitoringSupported() + CRLF);
+        sb.append(CRLF);
+
+        for (MemoryManagerMXBean mbean: memoryManagerMXBeans) {
+            sb.append(requestedSm.getString("diagnostics.vmInfoMemoryManagers", mbean.getName()));
+            sb.append(":" + CRLF);
+            sb.append(INDENT1 + "isValid: " + mbean.isValid() + CRLF);
+            sb.append(INDENT1 + "mbean.getMemoryPoolNames: " + CRLF);
+            String[] names = mbean.getMemoryPoolNames();
+            Arrays.sort(names);
+            for (String name: names) {
+                sb.append(INDENT2 + name + CRLF);
+            }
+            sb.append(CRLF);
+        }
+
+        for (GarbageCollectorMXBean mbean: garbageCollectorMXBeans) {
+            sb.append(requestedSm.getString("diagnostics.vmInfoGarbageCollectors", mbean.getName()));
+            sb.append(":" + CRLF);
+            sb.append(INDENT1 + "isValid: " + mbean.isValid() + CRLF);
+            sb.append(INDENT1 + "mbean.getMemoryPoolNames: " + CRLF);
+            String[] names = mbean.getMemoryPoolNames();
+            Arrays.sort(names);
+            for (String name: names) {
+                sb.append(INDENT2 + name + CRLF);
+            }
+            sb.append(INDENT1 + "getCollectionCount: " + mbean.getCollectionCount() + CRLF);
+            sb.append(INDENT1 + "getCollectionTime: " + mbean.getCollectionTime() + CRLF);
+            sb.append(CRLF);
+        }
+
+        sb.append(requestedSm.getString("diagnostics.vmInfoMemory"));
+        sb.append(":" + CRLF);
+        sb.append(INDENT1 + "isVerbose: " + memoryMXBean.isVerbose() + CRLF);
+        sb.append(INDENT1 + "getObjectPendingFinalizationCount: " + memoryMXBean.getObjectPendingFinalizationCount() + CRLF);
+        sb.append(formatMemoryUsage("heap", memoryMXBean.getHeapMemoryUsage()));
+        sb.append(formatMemoryUsage("non-heap", memoryMXBean.getNonHeapMemoryUsage()));
+        sb.append(CRLF);
+
+        for (MemoryPoolMXBean mbean: memoryPoolMXBeans) {
+            sb.append(requestedSm.getString("diagnostics.vmInfoMemoryPools", mbean.getName()));
+            sb.append(":" + CRLF);
+            sb.append(INDENT1 + "isValid: " + mbean.isValid() + CRLF);
+            sb.append(INDENT1 + "getType: " + mbean.getType() + CRLF);
+            sb.append(INDENT1 + "mbean.getMemoryManagerNames: " + CRLF);
+            String[] names = mbean.getMemoryManagerNames();
+            Arrays.sort(names);
+            for (String name: names) {
+                sb.append(INDENT2 + name + CRLF);
+            }
+            sb.append(INDENT1 + "isUsageThresholdSupported: " + mbean.isUsageThresholdSupported() + CRLF);
+            try {
+                sb.append(INDENT1 + "isUsageThresholdExceeded: " + mbean.isUsageThresholdExceeded() + CRLF);
+            } catch (UnsupportedOperationException ex) {
+                // IGNORE
+            }
+            sb.append(INDENT1 + "isCollectionUsageThresholdSupported: " + mbean.isCollectionUsageThresholdSupported() + CRLF);
+            try {
+                sb.append(INDENT1 + "isCollectionUsageThresholdExceeded: " + mbean.isCollectionUsageThresholdExceeded() + CRLF);
+            } catch (UnsupportedOperationException ex) {
+                // IGNORE
+            }
+            try {
+                sb.append(INDENT1 + "getUsageThreshold: " + mbean.getUsageThreshold() + CRLF);
+            } catch (UnsupportedOperationException ex) {
+                // IGNORE
+            }
+            try {
+                sb.append(INDENT1 + "getUsageThresholdCount: " + mbean.getUsageThresholdCount() + CRLF);
+            } catch (UnsupportedOperationException ex) {
+                // IGNORE
+            }
+            try {
+                sb.append(INDENT1 + "getCollectionUsageThreshold: " + mbean.getCollectionUsageThreshold() + CRLF);
+            } catch (UnsupportedOperationException ex) {
+                // IGNORE
+            }
+            try {
+                sb.append(INDENT1 + "getCollectionUsageThresholdCount: " + mbean.getCollectionUsageThresholdCount() + CRLF);
+            } catch (UnsupportedOperationException ex) {
+                // IGNORE
+            }
+            sb.append(formatMemoryUsage("current", mbean.getUsage()));
+            sb.append(formatMemoryUsage("collection", mbean.getCollectionUsage()));
+            sb.append(formatMemoryUsage("peak", mbean.getPeakUsage()));
+            sb.append(CRLF);
+        }
+
+
+        sb.append(requestedSm.getString("diagnostics.vmInfoSystem"));
+        sb.append(":" + CRLF);
+        Map<String,String> props = runtimeMXBean.getSystemProperties();
+        ArrayList<String> keys = new ArrayList<>(props.keySet());
+        Collections.sort(keys);
+        for (String prop: keys) {
+            sb.append(INDENT1 + prop + ": " + props.get(prop) + CRLF);
+        }
+        sb.append(CRLF);
+
+        sb.append(requestedSm.getString("diagnostics.vmInfoLogger"));
+        sb.append(":" + CRLF);
+        List<String> loggers = loggingMXBean.getLoggerNames();
+        Collections.sort(loggers);
+        for (String logger: loggers) {
+            sb.append(INDENT1 + logger +
+                      ": level=" + loggingMXBean.getLoggerLevel(logger) +
+                      ", parent=" + loggingMXBean.getParentLoggerName(logger) + CRLF);
+        }
+        sb.append(CRLF);
+
+        return sb.toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write some VM info.
+     *
+     * @param writer The output writer
+     * @param smClient StringManager for the client's locale
+     * @param requestedLocales the client's locales
+     */
+    protected void vmInfo(PrintWriter writer, StringManager smClient,
+            Enumeration<Locale> requestedLocales) {
+        writer.println(smClient.getString("managerServlet.vminfo"));
+        writer.print(Diagnostics.getVMInfo(requestedLocales));
+    }
+-----CSCI578-----
+
+
+    /**
+     * Format contents of a MemoryUsage object.
+     * @param name a text prefix used in formatting
+     * @param usage the MemoryUsage object to format
+     * @return the formatted contents
+     */
+    private static String formatMemoryUsage(String name, MemoryUsage usage) {
+        if (usage != null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(INDENT1 + name + " init: " + usage.getInit() + CRLF);
+            sb.append(INDENT1 + name + " used: " + usage.getUsed() + CRLF);
+            sb.append(INDENT1 + name + " committed: " + usage.getCommitted() + CRLF);
+            sb.append(INDENT1 + name + " max: " + usage.getMax() + CRLF);
+            return sb.toString();
+        }
+        return "";
+    }
+-----CSCI578-----
+
+
+
+    private void writeDeployResult(PrintWriter writer, StringManager smClient,
+            String name, String displayPath) {
+        Context deployed = (Context) host.findChild(name);
+        if (deployed != null && deployed.getConfigured() &&
+                deployed.getState().isAvailable()) {
+            writer.println(smClient.getString(
+                    "managerServlet.deployed", displayPath));
+        } else if (deployed!=null && !deployed.getState().isAvailable()) {
+            writer.println(smClient.getString(
+                    "managerServlet.deployedButNotStarted", displayPath));
+        } else {
+            // Something failed
+            writer.println(smClient.getString(
+                    "managerServlet.deployFailed", displayPath));
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the "correctly configured" flag for this Context.
+     *
+     * @return <code>true</code> if the Context has been correctly configured,
+     *         otherwise <code>false</code>
+     */
+    public boolean getConfigured();
+-----CSCI578-----
+
+
+
+    /**
+     * Copy the specified file or directory to the destination.
+     *
+     * @param src File object representing the source
+     * @param dest File object representing the destination
+     * @param buf Temp byte buffer
+     * @return <code>true</code> if the copy was successful
+     */
+    public static boolean copyInternal(File src, File dest, byte[] buf) {
+
+        boolean result = true;
+
+        String files[] = null;
+        if (src.isDirectory()) {
+            files = src.list();
+            result = dest.mkdir();
+        } else {
+            files = new String[1];
+            files[0] = "";
+        }
+        if (files == null) {
+            files = new String[0];
+        }
+        for (int i = 0; (i < files.length) && result; i++) {
+            File fileSrc = new File(src, files[i]);
+            File fileDest = new File(dest, files[i]);
+            if (fileSrc.isDirectory()) {
+                result = copyInternal(fileSrc, fileDest, buf);
+            } else {
+                try (FileInputStream is = new FileInputStream(fileSrc);
+                        FileOutputStream os = new FileOutputStream(fileDest)){
+                    int len = 0;
+                    while (true) {
+                        len = is.read(buf);
+                        if (len == -1)
+                            break;
+                        os.write(buf, 0, len);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    result = false;
+                }
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Copy the specified file or directory to the destination.
+     *
+     * @param src File object representing the source
+     * @param dest File object representing the destination
+     * @return <code>true</code> if the copy was successful
+     */
+    public static boolean copy(File src, File dest) {
+        boolean result = false;
+        try {
+            if( src != null &&
+                    !src.getCanonicalPath().equals(dest.getCanonicalPath()) ) {
+                result = copyInternal(src, dest, new byte[4096]);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return result;
+    }

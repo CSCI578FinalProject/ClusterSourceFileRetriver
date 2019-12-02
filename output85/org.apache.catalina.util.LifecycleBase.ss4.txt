@@ -1,0 +1,71 @@
+7
+-----CSCI578-----
+
+
+
+    protected abstract void destroyInternal() throws LifecycleException;
+-----CSCI578-----
+
+
+
+    @Override
+    public final synchronized void destroy() throws LifecycleException {
+        if (LifecycleState.FAILED.equals(state)) {
+            try {
+                // Triggers clean-up
+                stop();
+            } catch (LifecycleException e) {
+                // Just log. Still want to destroy.
+                log.warn(sm.getString(
+                        "lifecycleBase.destroyStopFail", toString()), e);
+            }
+        }
+
+        if (LifecycleState.DESTROYING.equals(state) ||
+                LifecycleState.DESTROYED.equals(state)) {
+
+            if (log.isDebugEnabled()) {
+                Exception e = new LifecycleException();
+                log.debug(sm.getString("lifecycleBase.alreadyDestroyed", toString()), e);
+            } else if (log.isInfoEnabled() && !(this instanceof Lifecycle.SingleUse)) {
+                // Rather than have every component that might need to call
+                // destroy() check for SingleUse, don't log an info message if
+                // multiple calls are made to destroy()
+                log.info(sm.getString("lifecycleBase.alreadyDestroyed", toString()));
+            }
+
+            return;
+        }
+
+        if (!state.equals(LifecycleState.STOPPED) &&
+                !state.equals(LifecycleState.FAILED) &&
+                !state.equals(LifecycleState.NEW) &&
+                !state.equals(LifecycleState.INITIALIZED)) {
+            invalidTransition(Lifecycle.BEFORE_DESTROY_EVENT);
+        }
+
+        setStateInternal(LifecycleState.DESTROYING, null, false);
+
+        try {
+            destroyInternal();
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            setStateInternal(LifecycleState.FAILED, null, false);
+            throw new LifecycleException(
+                    sm.getString("lifecycleBase.destroyFail",toString()), t);
+        }
+
+        setStateInternal(LifecycleState.DESTROYED, null, false);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void invalidTransition(String type) throws LifecycleException {
+        String msg = sm.getString("lifecycleBase.invalidTransition", type,
+                toString(), state);
+        throw new LifecycleException(msg);
+    }

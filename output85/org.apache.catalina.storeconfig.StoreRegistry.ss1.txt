@@ -1,0 +1,60 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Find a description for id. Handle interface search when no direct match
+     * found.
+     *
+     * @param id The class name
+     * @return The description
+     */
+    public StoreDescription findDescription(String id) {
+        if (log.isDebugEnabled())
+            log.debug("search descriptor " + id);
+        StoreDescription desc = descriptors.get(id);
+        if (desc == null) {
+            Class<?> aClass = null;
+            try {
+                aClass = Class.forName(id, true, this.getClass()
+                        .getClassLoader());
+            } catch (ClassNotFoundException e) {
+                log.error("ClassName:" + id, e);
+            }
+            if (aClass != null) {
+                desc = descriptors.get(aClass.getName());
+                for (int i = 0; desc == null && i < interfaces.length; i++) {
+                    if (interfaces[i].isAssignableFrom(aClass)) {
+                        desc = descriptors.get(interfaces[i].getName());
+                    }
+                }
+            }
+        }
+        if (log.isDebugEnabled())
+            if (desc != null)
+                log.debug("find descriptor " + id + "#" + desc.getTag() + "#"
+                        + desc.getStoreFactoryClass());
+            else
+                log.debug(("Can't find descriptor for key " + id));
+        return desc;
+    }
+
+
+    /**
+     * Find Description by class.
+     *
+     * @param aClass The class
+     * @return The description
+     */
+    public StoreDescription findDescription(Class<?> aClass) {
+        return findDescription(aClass.getName());
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the storeFactory.
+     */
+    public String getStoreFactoryClass() {
+        return storeFactoryClass;
+    }

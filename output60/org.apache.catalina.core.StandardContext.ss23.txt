@@ -1,0 +1,143 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Add a child Container, only if the proposed child is an implementation
+     * of Wrapper.
+     *
+     * @param child Child container to be added
+     *
+     * @exception IllegalArgumentException if the proposed container is
+     *  not an implementation of Wrapper
+     */
+    public void removeChild(Container child) {
+
+        if (!(child instanceof Wrapper)) {
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.notWrapper"));
+        }
+
+        super.removeChild(child);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the context-relative URI of the JSP file for this servlet.
+     *
+     * @param jspFile JSP file URI
+     */
+    public void setJspFile(String jspFile);
+-----CSCI578-----
+
+
+
+    /**
+     * Return the mappings associated with this wrapper.
+     */
+    public String[] findMappings();
+-----CSCI578-----
+
+
+
+    /**
+     * Add a child Container, only if the proposed child is an implementation
+     * of Wrapper.
+     *
+     * @param child Child container to be added
+     *
+     * @exception IllegalArgumentException if the proposed container is
+     *  not an implementation of Wrapper
+     */
+    public void addChild(Container child) {
+
+        // Global JspServlet
+        Wrapper oldJspServlet = null;
+
+        if (!(child instanceof Wrapper)) {
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.notWrapper"));
+        }
+
+        Wrapper wrapper = (Wrapper) child;
+        boolean isJspServlet = "jsp".equals(child.getName());
+
+        // Allow webapp to override JspServlet inherited from global web.xml.
+        if (isJspServlet) {
+            oldJspServlet = (Wrapper) findChild("jsp");
+            if (oldJspServlet != null) {
+                removeChild(oldJspServlet);
+            }
+        }
+
+        String jspFile = wrapper.getJspFile();
+        if ((jspFile != null) && !jspFile.startsWith("/")) {
+            if (isServlet22()) {
+                if(log.isDebugEnabled())
+                    log.debug(sm.getString("standardContext.wrapper.warning",
+                                       jspFile));
+                wrapper.setJspFile("/" + jspFile);
+            } else {
+                throw new IllegalArgumentException
+                    (sm.getString("standardContext.wrapper.error", jspFile));
+            }
+        }
+
+        super.addChild(child);
+
+        if (isJspServlet && oldJspServlet != null) {
+            /*
+             * The webapp-specific JspServlet inherits all the mappings
+             * specified in the global web.xml, and may add additional ones.
+             */
+            String[] jspMappings = oldJspServlet.findMappings();
+            for (int i=0; jspMappings!=null && i<jspMappings.length; i++) {
+                addServletMapping(jspMappings[i], child.getName());
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove an existing child Container from association with this parent
+     * Container.
+     *
+     * @param child Existing child Container to be removed
+     */
+    public void removeChild(Container child) {
+
+        if (child == null) {
+            return;
+        }
+
+        if (started && (child instanceof Lifecycle)) {
+            try {
+                if( child instanceof ContainerBase ) {
+                    if( ((ContainerBase)child).started ) {
+                        ((Lifecycle) child).stop();
+                    }
+                } else {
+                    ((Lifecycle) child).stop();
+                }
+            } catch (LifecycleException e) {
+                log.error("ContainerBase.removeChild: stop: ", e);
+            }
+        }
+
+        synchronized(children) {
+            if (children.get(child.getName()) == null)
+                return;
+            children.remove(child.getName());
+        }
+
+        fireContainerEvent(REMOVE_CHILD_EVENT, child);
+
+        // child.setParent(null);
+
+    }

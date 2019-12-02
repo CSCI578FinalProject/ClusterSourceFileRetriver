@@ -1,0 +1,136 @@
+11
+-----CSCI578-----
+
+
+    /**
+     * Returns the default catalog.
+     *
+     * @return the default catalog
+     */
+    @Override
+    public String getDefaultCatalog() {
+        return this.defaultCatalog;
+    }
+
+
+    /**
+     * <p>Sets the default catalog.</p>
+     * <p>
+     * Note: this method currently has no effect once the pool has been
+     * initialized.  The pool is initialized the first time one of the
+     * following methods is invoked: <code>getConnection, setLogwriter,
+     * setLoginTimeout, getLoginTimeout, getLogWriter.</code></p>
+     *
+     * @param defaultCatalog the default catalog
+     */
+    public void setDefaultCatalog(String defaultCatalog) {
+        if (defaultCatalog != null && defaultCatalog.trim().length() > 0) {
+            this.defaultCatalog = defaultCatalog;
+        }
+        else {
+            this.defaultCatalog = null;
+        }
+    }
+
+
+    protected void log(String message) {
+        if (logWriter != null) {
+            logWriter.println(message);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Sets the value of the accessToUnderlyingConnectionAllowed property.
+     * It controls if the PoolGuard allows access to the underlying connection.
+     * (Default: false)
+     *
+     * @param allow Access to the underlying connection is granted when true.
+     */
+    public void setAccessToUnderlyingConnectionAllowed(boolean allow) {
+        this.accessToUnderlyingConnectionAllowed = allow;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Obtain a reference to the factory used to create, destroy and validate
+     * the objects used by this pool.
+     *
+     * @return the factory
+     */
+    public PooledObjectFactory<T> getFactory() {
+        return factory;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Creates the actual data source instance.  This method only exists so
+     * that subclasses can replace the implementation class.
+     * @return the data source
+     * @throws SQLException if unable to create a datasource instance
+     */
+    protected DataSource createDataSourceInstance() throws SQLException {
+        PoolingDataSource<PoolableConnection> pds = new PoolingDataSource<>(connectionPool);
+        pds.setAccessToUnderlyingConnectionAllowed(isAccessToUnderlyingConnectionAllowed());
+        return pds;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the value of the accessToUnderlyingConnectionAllowed property.
+     *
+     * @return true if access to the underlying connection is allowed, false
+     * otherwise.
+     */
+    @Override
+    public synchronized boolean isAccessToUnderlyingConnectionAllowed() {
+        return this.accessToUnderlyingConnectionAllowed;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain the correct i18n message for the given key.
+     * @param key The message key
+     * @return the message
+     */
+    public static String getMessage(String key) {
+        return getMessage(key, (Object[]) null);
+    }
+
+
+
+    /**
+     * Obtain the correct i18n message for the given key with placeholders
+     * replaced by the supplied arguments.
+     * @param key The message key
+     * @param args The arguments
+     * @return the message
+     */
+    public static String getMessage(String key, Object... args) {
+        String msg =  messages.getString(key);
+        if (args == null || args.length == 0) {
+            return msg;
+        }
+        MessageFormat mf = new MessageFormat(msg);
+        return mf.format(args, new StringBuffer(), null).toString();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void onSwallowException(Exception e) {
+        if (logExpiredConnections || !(e instanceof LifetimeExceededException)) {
+            log.warn(Utils.getMessage(
+                    "swallowedExceptionLogger.onSwallowedException"), e);
+        }
+    }

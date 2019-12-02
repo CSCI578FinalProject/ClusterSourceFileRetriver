@@ -1,0 +1,78 @@
+5
+
+    /**
+     * Send buffer to cluster listener (callback).
+     * Is message complete receiver send message to callback?
+     *
+     * @see org.apache.catalina.tribes.transport.ReceiverBase#messageDataReceived(ChannelMessage)
+     * @see XByteBuffer#doesPackageExist()
+     * @see XByteBuffer#extractPackage(boolean)
+     *
+     * @return number of received packages/messages
+     * @throws java.io.IOException
+     */
+    public ChannelMessage[] execute() throws java.io.IOException {
+        int pkgCnt = buffer.countPackages();
+        ChannelMessage[] result = new ChannelMessage[pkgCnt];
+        for (int i=0; i<pkgCnt; i++)  {
+            ChannelMessage data = buffer.extractPackage(true);
+            result[i] = data;
+        }
+        return result;
+    }
+    
+    /**
+     * Deserializes a ChannelData object from a byte array
+     */
+    public static ChannelData getDataFromPackage(XByteBuffer xbuf)  {
+        ChannelData data = new ChannelData(false);
+        int offset = 0;
+        data.setOptions(XByteBuffer.toInt(xbuf.getBytesDirect(),offset));
+        offset += 4; //options
+        data.setTimestamp(XByteBuffer.toLong(xbuf.getBytesDirect(),offset));
+        offset += 8; //timestamp
+        data.uniqueId = new byte[XByteBuffer.toInt(xbuf.getBytesDirect(),offset)];
+        offset += 4; //uniqueId length
+        System.arraycopy(xbuf.getBytesDirect(),offset,data.uniqueId,0,data.uniqueId.length);
+        offset += data.uniqueId.length; //uniqueId data
+        //byte[] addr = new byte[XByteBuffer.toInt(xbuf.getBytesDirect(),offset)];
+        int addrlen = XByteBuffer.toInt(xbuf.getBytesDirect(),offset);
+        offset += 4; //addr length
+        //System.arraycopy(xbuf.getBytesDirect(),offset,addr,0,addr.length);
+        data.setAddress(MemberImpl.getMember(xbuf.getBytesDirect(),offset,addrlen));
+        //offset += addr.length; //addr data
+        offset += addrlen;
+        int xsize = XByteBuffer.toInt(xbuf.getBytesDirect(),offset);
+        offset += 4; //xsize length
+        System.arraycopy(xbuf.getBytesDirect(),offset,xbuf.getBytesDirect(),0,xsize);
+        xbuf.setLength(xsize);
+        data.message = xbuf;
+        return data;
+
+    }
+
+    public static ChannelData getDataFromPackage(byte[] b)  {
+        ChannelData data = new ChannelData(false);
+        int offset = 0;
+        data.setOptions(XByteBuffer.toInt(b,offset));
+        offset += 4; //options
+        data.setTimestamp(XByteBuffer.toLong(b,offset));
+        offset += 8; //timestamp
+        data.uniqueId = new byte[XByteBuffer.toInt(b,offset)];
+        offset += 4; //uniqueId length
+        System.arraycopy(b,offset,data.uniqueId,0,data.uniqueId.length);
+        offset += data.uniqueId.length; //uniqueId data
+        byte[] addr = new byte[XByteBuffer.toInt(b,offset)];
+        offset += 4; //addr length
+        System.arraycopy(b,offset,addr,0,addr.length);
+        data.setAddress(MemberImpl.getMember(addr));
+        offset += addr.length; //addr data
+        int xsize = XByteBuffer.toInt(b,offset);
+        //data.message = new XByteBuffer(new byte[xsize],false);
+        data.message = BufferPool.getBufferPool().getBuffer(xsize,false);
+        offset += 4; //message length
+        System.arraycopy(b,offset,data.message.getBytesDirect(),0,xsize);
+        data.message.append(b,offset,xsize);
+        offset += xsize; //message data
+        return data;
+    }

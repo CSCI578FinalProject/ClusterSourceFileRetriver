@@ -1,0 +1,206 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Reads a sequence of bytes from this channel into the given buffer.
+     *
+     * @param dst The buffer into which bytes are to be transferred
+     * @return The number of bytes read, possibly zero, or <tt>-1</tt> if the channel has reached end-of-stream
+     * @throws IllegalStateException if the handshake was not completed
+     */
+    @Override
+    public Future<Integer> read(ByteBuffer dst) {
+        if (!handshakeComplete) {
+            throw new IllegalStateException(sm.getString("channel.nio.ssl.incompleteHandshake"));
+        }
+        return new FutureRead(dst);
+    }
+
+
+    @Override
+    public <A> void read(final ByteBuffer dst,
+            final long timeout, final TimeUnit unit, final A attachment,
+            final CompletionHandler<Integer, ? super A> handler) {
+        // Check state
+        if (closing || closed) {
+            handler.completed(Integer.valueOf(-1), attachment);
+            return;
+        }
+        if (!handshakeComplete) {
+            throw new IllegalStateException(sm.getString("channel.nio.ssl.incompleteHandshake"));
+        }
+        CompletionHandler<Integer, A> readCompletionHandler = new CompletionHandler<Integer, A>() {
+            @Override
+            public void completed(Integer nBytes, A attach) {
+                if (nBytes.intValue() < 0) {
+                    failed(new EOFException(), attach);
+                } else {
+                    try {
+                        ByteBuffer dst2 = dst;
+                        //the data read
+                        int read = 0;
+                        //the SSL engine result
+                        SSLEngineResult unwrap;
+                        do {
+                            //prepare the buffer
+                            netInBuffer.flip();
+                            //unwrap the data
+                            unwrap = sslEngine.unwrap(netInBuffer, dst2);
+                            //compact the buffer
+                            netInBuffer.compact();
+                            if (unwrap.getStatus() == Status.OK || unwrap.getStatus() == Status.BUFFER_UNDERFLOW) {
+                                //we did receive some data, add it to our total
+                                read += unwrap.bytesProduced();
+                                //perform any tasks if needed
+                                if (unwrap.getHandshakeStatus() == HandshakeStatus.NEED_TASK)
+                                    tasks();
+                                //if we need more network data, then bail out for now.
+                                if (unwrap.getStatus() == Status.BUFFER_UNDERFLOW) {
+                                    if (read == 0) {
+                                        sc.read(netInBuffer, timeout, unit, attachment, this);
+                                        return;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            } else if (unwrap.getStatus() == Status.BUFFER_OVERFLOW) {
+                                if (read > 0) {
+                                    // Buffer overflow can happen if we have read data. Return
+                                    // so the destination buffer can be emptied before another
+                                    // read is attempted
+                                    break;
+                                } else {
+                                    // The SSL session has increased the required buffer size
+                                    // since the buffer was created.
+                                    if (dst2 == socket.getSocketBufferHandler().getReadBuffer()) {
+                                        // This is the normal case for this code
+                                        socket.getSocketBufferHandler().expand(
+                                                sslEngine.getSession().getApplicationBufferSize());
+                                        dst2 = socket.getSocketBufferHandler().getReadBuffer();
+                                    } else {
+                                        // Can't expand the buffer as there is no way to signal
+                                        // to the caller that the buffer has been replaced.
+                                        throw new IOException(
+                                                sm.getString("channel.nio.ssl.unwrapFailResize", unwrap.getStatus()));
+                                    }
+                                }
+                            } else {
+                                // Something else went wrong
+                                throw new IOException(sm.getString("channel.nio.ssl.unwrapFail", unwrap.getStatus()));
+                            }
+                        // continue to unwrap as long as the input buffer has stuff
+                        } while (netInBuffer.position() != 0);
+                        if (!dst2.hasRemaining()) {
+                            unwrapBeforeRead = true;
+                        } else {
+                            unwrapBeforeRead = false;
+                        }
+                        // If everything is OK, so complete
+                        handler.completed(Integer.valueOf(read), attach);
+                    } catch (Exception e) {
+                        failed(e, attach);
+                    }
+                }
+            }
+            @Override
+            public void failed(Throwable exc, A attach) {
+                handler.failed(exc, attach);
+            }
+        };
+        if (unwrapBeforeRead || netInBuffer.position() > 0) {
+            readCompletionHandler.completed(Integer.valueOf(netInBuffer.position()), attachment);
+        } else {
+            sc.read(netInBuffer, timeout, unit, attachment, readCompletionHandler);
+        }
+    }
+
+
+    @Override
+    public <A> void read(final ByteBuffer[] dsts, final int offset, final int length,
+            final long timeout, final TimeUnit unit, final A attachment,
+            final CompletionHandler<Long, ? super A> handler) {
+        if (offset < 0 || dsts == null || (offset + length) > dsts.length) {
+            throw new IllegalArgumentException();
+        }
+        if (closing || closed) {
+            handler.completed(Long.valueOf(-1), attachment);
+            return;
+        }
+        if (!handshakeComplete) {
+            throw new IllegalStateException(sm.getString("channel.nio.ssl.incompleteHandshake"));
+        }
+        CompletionHandler<Integer, A> readCompletionHandler = new CompletionHandler<Integer, A>() {
+            @Override
+            public void completed(Integer nBytes, A attach) {
+                if (nBytes.intValue() < 0) {
+                    failed(new EOFException(), attach);
+                } else {
+                    try {
+                        //the data read
+                        long read = 0;
+                        //the SSL engine result
+                        SSLEngineResult unwrap;
+                        do {
+                            //prepare the buffer
+                            netInBuffer.flip();
+                            //unwrap the data
+                            unwrap = sslEngine.unwrap(netInBuffer, dsts, offset, length);
+                            //compact the buffer
+                            netInBuffer.compact();
+                            if (unwrap.getStatus() == Status.OK || unwrap.getStatus() == Status.BUFFER_UNDERFLOW) {
+                                //we did receive some data, add it to our total
+                                read += unwrap.bytesProduced();
+                                //perform any tasks if needed
+                                if (unwrap.getHandshakeStatus() == HandshakeStatus.NEED_TASK)
+                                    tasks();
+                                //if we need more network data, then bail out for now.
+                                if (unwrap.getStatus() == Status.BUFFER_UNDERFLOW) {
+                                    if (read == 0) {
+                                        sc.read(netInBuffer, timeout, unit, attachment, this);
+                                        return;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            } else if (unwrap.getStatus() == Status.BUFFER_OVERFLOW && read > 0) {
+                                //buffer overflow can happen, if we have read data, then
+                                //empty out the dst buffer before we do another read
+                                break;
+                            } else {
+                                //here we should trap BUFFER_OVERFLOW and call expand on the buffer
+                                //for now, throw an exception, as we initialized the buffers
+                                //in the constructor
+                                throw new IOException(sm.getString("channel.nio.ssl.unwrapFail", unwrap.getStatus()));
+                            }
+                        } while (netInBuffer.position() != 0); //continue to unwrapping as long as the input buffer has stuff
+                        int capacity = 0;
+                        final int endOffset = offset + length;
+                        for (int i = offset; i < endOffset; i++) {
+                            capacity += dsts[i].remaining();
+                        }
+                        if (capacity == 0) {
+                            unwrapBeforeRead = true;
+                        } else {
+                            unwrapBeforeRead = false;
+                        }
+                        // If everything is OK, so complete
+                        handler.completed(Long.valueOf(read), attach);
+                    } catch (Exception e) {
+                        failed(e, attach);
+                    }
+                }
+            }
+            @Override
+            public void failed(Throwable exc, A attach) {
+                handler.failed(exc, attach);
+            }
+        };
+        if (unwrapBeforeRead || netInBuffer.position() > 0) {
+            readCompletionHandler.completed(Integer.valueOf(netInBuffer.position()), attachment);
+        } else {
+            sc.read(netInBuffer, timeout, unit, attachment, readCompletionHandler);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

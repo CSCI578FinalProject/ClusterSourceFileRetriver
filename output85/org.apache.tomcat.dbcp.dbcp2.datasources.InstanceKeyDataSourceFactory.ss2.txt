@@ -1,0 +1,73 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Creates an instance of the subclass and sets any properties
+     * contained in the Reference.
+     * @param ref The reference
+     * @return the data source
+     * @throws IOException IO error
+     * @throws ClassNotFoundException Couldn't load data source implementation
+     */
+    protected abstract InstanceKeyDataSource getNewInstance(Reference ref)
+        throws IOException, ClassNotFoundException;
+-----CSCI578-----
+
+
+
+    /**
+     * @param className The class name
+     * @return true if and only if className is the value returned
+     * from getClass().getName().toString()
+     */
+    protected abstract boolean isCorrectClass(String className);
+-----CSCI578-----
+
+
+
+    /**
+     * Implements ObjectFactory to create an instance of SharedPoolDataSource
+     * or PerUserPoolDataSource.
+     */
+    @Override
+    public Object getObjectInstance(Object refObj, Name name,
+                                    Context context, Hashtable<?,?> env)
+        throws IOException, ClassNotFoundException {
+        // The spec says to return null if we can't create an instance
+        // of the reference
+        Object obj = null;
+        if (refObj instanceof Reference) {
+            Reference ref = (Reference) refObj;
+            if (isCorrectClass(ref.getClassName())) {
+                RefAddr ra = ref.get("instanceKey");
+                if (ra != null && ra.getContent() != null) {
+                    // object was bound to jndi via Referenceable api.
+                    obj = instanceMap.get(ra.getContent());
+                }
+                else
+                {
+                    // tomcat jndi creates a Reference out of server.xml
+                    // <ResourceParam> configuration and passes it to an
+                    // instance of the factory given in server.xml.
+                    String key = null;
+                    if (name != null)
+                    {
+                        key = name.toString();
+                        obj = instanceMap.get(key);
+                    }
+                    if (obj == null)
+                    {
+                        InstanceKeyDataSource ds = getNewInstance(ref);
+                        setCommonProperties(ref, ds);
+                        obj = ds;
+                        if (key != null)
+                        {
+                            instanceMap.put(key, ds);
+                        }
+                    }
+                }
+            }
+        }
+        return obj;
+    }

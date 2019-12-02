@@ -1,0 +1,115 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Sets a flag indicating whether the requested feature is supported
+     * by the underlying implementation of <code>org.xml.sax.XMLReader</code>.
+     * See <a href="http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description"
+     * http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description</a>
+     * for information about the standard SAX2 feature flags.  In order to be
+     * effective, this method must be called <strong>before</strong> the
+     * <code>getParser()</code> method is called for the first time, either
+     * directly or indirectly.
+     *
+     * @param feature Name of the feature to set the status for
+     * @param value The new value for this feature
+     *
+     * @exception ParserConfigurationException if a parser configuration error
+     *  occurs
+     * @exception SAXNotRecognizedException if the property name is
+     *  not recognized
+     * @exception SAXNotSupportedException if the property name is
+     *  recognized but not supported
+     */
+    public void setFeature(String feature, boolean value)
+        throws ParserConfigurationException, SAXNotRecognizedException,
+        SAXNotSupportedException {
+
+        getFactory().setFeature(feature, value);
+
+    }
+
+
+
+    /**
+     * Return the SAXParser we will use to parse the input stream.  If there
+     * is a problem creating the parser, return <code>null</code>.
+     */
+    public SAXParser getParser() {
+
+        // Return the parser we already created (if any)
+        if (parser != null) {
+            return (parser);
+        }
+
+        // Create a new parser
+        try {
+            if (validating) {
+                Properties properties = new Properties();
+                properties.put("SAXParserFactory", getFactory());
+                if (schemaLocation != null) {
+                    properties.put("schemaLocation", schemaLocation);
+                    properties.put("schemaLanguage", schemaLanguage);
+                }
+                parser = ParserFeatureSetterFactory.newSAXParser(properties);               } else {
+                parser = getFactory().newSAXParser();
+            }
+        } catch (Exception e) {
+            log.error("Digester.getParser: ", e);
+            return (null);
+        }
+
+        return (parser);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the current value of the specified property for the underlying
+     * <code>XMLReader</code> implementation.
+     * See <a href="http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description"
+     * http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description</a>
+     * for information about the standard SAX2 properties.
+     *
+     * @param property Property name to be retrieved
+     *
+     * @exception SAXNotRecognizedException if the property name is
+     *  not recognized
+     * @exception SAXNotSupportedException if the property name is
+     *  recognized but not supported
+     */
+    public Object getProperty(String property)
+        throws SAXNotRecognizedException, SAXNotSupportedException {
+
+        return (getParser().getProperty(property));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the current value of the specified property for the underlying
+     * <code>XMLReader</code> implementation.
+     * See <a href="http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description"
+     * http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description</a>
+     * for information about the standard SAX2 properties.
+     *
+     * @param property Property name to be set
+     * @param value Property value to be set
+     *
+     * @exception SAXNotRecognizedException if the property name is
+     *  not recognized
+     * @exception SAXNotSupportedException if the property name is
+     *  recognized but not supported
+     */
+    public void setProperty(String property, Object value)
+        throws SAXNotRecognizedException, SAXNotSupportedException {
+
+        getParser().setProperty(property, value);
+
+    }

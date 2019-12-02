@@ -1,0 +1,115 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Create a new pooled object.
+     *
+     * @param key Key associated with new pooled object
+     *
+     * @return The new, wrapped pooled object
+     *
+     * @throws Exception If the objection creation fails
+     */
+    private PooledObject<T> create(K key) throws Exception {
+        int maxTotalPerKeySave = getMaxTotalPerKey(); // Per key
+        int maxTotal = getMaxTotal();   // All keys
+
+        // Check against the overall limit
+        boolean loop = true;
+
+        while (loop) {
+            int newNumTotal = numTotal.incrementAndGet();
+            if (maxTotal > -1 && newNumTotal > maxTotal) {
+                numTotal.decrementAndGet();
+                if (getNumIdle() == 0) {
+                    return null;
+                }
+                clearOldest();
+            } else {
+                loop = false;
+            }
+        }
+
+        ObjectDeque<T> objectDeque = poolMap.get(key);
+        long newCreateCount = objectDeque.getCreateCount().incrementAndGet();
+
+        // Check against the per key limit
+        if (maxTotalPerKeySave > -1 && newCreateCount > maxTotalPerKeySave ||
+                newCreateCount > Integer.MAX_VALUE) {
+            numTotal.decrementAndGet();
+            objectDeque.getCreateCount().decrementAndGet();
+            return null;
+        }
+
+
+        PooledObject<T> p = null;
+        try {
+            p = factory.makeObject(key);
+        } catch (Exception e) {
+            numTotal.decrementAndGet();
+            objectDeque.getCreateCount().decrementAndGet();
+            throw e;
+        }
+
+        createdCount.incrementAndGet();
+        objectDeque.getAllObjects().put(new IdentityWrapper<>(p.getObject()), p);
+        return p;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Clears oldest 15% of objects in pool.  The method sorts the objects into
+     * a TreeMap and then iterates the first 15% for removal.
+     */
+    public void clearOldest() {
+
+        // build sorted map of idle objects
+        final Map<PooledObject<T>, K> map = new TreeMap<>();
+
+        for (K k : poolMap.keySet()) {
+            ObjectDeque<T> queue = poolMap.get(k);
+            // Protect against possible NPE if key has been removed in another
+            // thread. Not worth locking the keys while this loop completes.
+            if (queue != null) {
+                final LinkedBlockingDeque<PooledObject<T>> idleObjects =
+                    queue.getIdleObjects();
+                for (PooledObject<T> p : idleObjects) {
+                    // each item into the map using the PooledObject object as the
+                    // key. It then gets sorted based on the idle time
+                    map.put(p, k);
+                }
+            }
+        }
+
+        // Now iterate created map and kill the first 15% plus one to account
+        // for zero
+        int itemsToRemove = ((int) (map.size() * 0.15)) + 1;
+        Iterator<Map.Entry<PooledObject<T>, K>> iter =
+            map.entrySet().iterator();
+
+        while (iter.hasNext() && itemsToRemove > 0) {
+            Map.Entry<PooledObject<T>, K> entry = iter.next();
+            // kind of backwards on naming.  In the map, each key is the
+            // PooledObject because it has the ordering with the timestamp
+            // value.  Each value that the key references is the key of the
+            // list it belongs to.
+            K key = entry.getValue();
+            PooledObject<T> p = entry.getKey();
+            // Assume the destruction succeeds
+            boolean destroyed = true;
+            try {
+                destroyed = destroy(key, p, false);
+            } catch (Exception e) {
+                swallowException(e);
+            }
+            if (destroyed) {
+                itemsToRemove--;
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

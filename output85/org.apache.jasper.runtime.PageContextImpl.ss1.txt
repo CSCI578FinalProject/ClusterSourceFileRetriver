@@ -1,0 +1,56 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Returns the value of the javax.servlet.error.exception request
+     * attribute value, if present, otherwise the value of the
+     * javax.servlet.jsp.jspException request attribute value.
+     *
+     * This method is called at the beginning of the generated servlet code
+     * for a JSP error page, when the "exception" implicit scripting language
+     * variable is initialized.
+     * @param request The Servlet request
+     * @return the throwable in the error attribute if any
+     */
+    public static Throwable getThrowable(ServletRequest request) {
+        Throwable error = (Throwable) request.getAttribute(
+                RequestDispatcher.ERROR_EXCEPTION);
+        if (error == null) {
+            error = (Throwable) request.getAttribute(PageContext.EXCEPTION);
+            if (error != null) {
+                /*
+                 * The only place that sets JSP_EXCEPTION is
+                 * PageContextImpl.handlePageException(). It really should set
+                 * SERVLET_EXCEPTION, but that would interfere with the
+                 * ErrorReportValve. Therefore, if JSP_EXCEPTION is set, we
+                 * need to set SERVLET_EXCEPTION.
+                 */
+                request.setAttribute(RequestDispatcher.ERROR_EXCEPTION, error);
+            }
+        }
+
+        return error;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the exception associated with this page context, if any.
+     * <p>
+     * Added wrapping for Throwables to avoid ClassCastException: see Bugzilla
+     * 31171 for details.
+     *
+     * @return The Exception associated with this page context, if any.
+     */
+    @Override
+    public Exception getException() {
+        Throwable t = JspRuntimeLibrary.getThrowable(request);
+
+        // Only wrap if needed
+        if ((t != null) && (!(t instanceof Exception))) {
+            t = new JspException(t);
+        }
+
+        return (Exception) t;
+    }

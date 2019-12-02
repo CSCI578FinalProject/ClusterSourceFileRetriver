@@ -1,0 +1,104 @@
+6
+-----CSCI578-----
+
+
+    /** Find the operation info for a method
+     * 
+     * @param oname
+     * @param opName
+     * @return the operation info for the specified operation
+     */ 
+    public MBeanOperationInfo getMethodInfo( ObjectName oname, String opName )
+    {
+        String type=null;
+        MBeanInfo info=null;
+        try {
+            info=server.getMBeanInfo(oname);
+        } catch (Exception e) {
+            log.info( "Can't find metadata " + oname );
+            return null;
+        }
+        MBeanOperationInfo attInfo[]=info.getOperations();
+        for( int i=0; i<attInfo.length; i++ ) {
+            if( opName.equals(attInfo[i].getName())) {
+                return attInfo[i];
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+    
+    
+
+    /** Invoke a operation on a list of mbeans. Can be used to implement
+     * lifecycle operations.
+     *
+     * @param mbeans list of ObjectName on which we'll invoke the operations
+     * @param operation  Name of the operation ( init, start, stop, etc)
+     * @param failFirst  If false, exceptions will be ignored
+     * @throws Exception
+     * @since 1.1
+     */
+    public void invoke( List mbeans, String operation, boolean failFirst )
+            throws Exception
+    {
+        if( mbeans==null ) {
+            return;
+        }
+        Iterator itr=mbeans.iterator();
+        while(itr.hasNext()) {
+            Object current=itr.next();
+            ObjectName oN=null;
+            try {
+                if( current instanceof ObjectName) {
+                    oN=(ObjectName)current;
+                }
+                if( current instanceof String ) {
+                    oN=new ObjectName( (String)current );
+                }
+                if( oN==null ) {
+                    continue;
+                }
+                if( getMethodInfo(oN, operation) == null) {
+                    continue;
+                }
+                getMBeanServer().invoke(oN, operation,
+                        new Object[] {}, new String[] {});
+
+            } catch( Exception t ) {
+                if( failFirst ) throw t;
+                log.info("Error initializing " + current + " " + t.toString());
+            }
+        }
+    }
+-----CSCI578-----
+
+    
+    public void stop() throws LifecycleException {
+        super.stop();
+        if( mbeans != null ) {
+            try {
+                Registry.getRegistry(null, null).invoke(mbeans, "stop", false);
+            } catch (Exception e) {
+                log.error("Error in stop() for " + mbeansFile, e);
+            }
+        }
+    }
+-----CSCI578-----
+
+    
+    public void start() throws Exception {
+        registry.invoke(mbeans, "start", false);        
+    }
+-----CSCI578-----
+
+
+    public void stop() throws Exception {
+        registry.invoke(mbeans, "stop", false);        
+    }
+-----CSCI578-----
+
+    
+    public void destroy() throws Exception {
+        registry.invoke(mbeans, "destroy", false);                
+    }

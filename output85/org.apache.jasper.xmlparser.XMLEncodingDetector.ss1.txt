@@ -1,0 +1,49 @@
+1
+-----CSCI578-----
+
+
+    /**
+     * Autodetects the encoding of the XML document supplied by the given
+     * input stream.
+     *
+     * Encoding autodetection is done according to the XML 1.0 specification,
+     * Appendix F.1: Detection Without External Encoding Information.
+     * @param fname The file name
+     * @param jar The containing jar
+     * @param ctxt The compilation context
+     * @param err The error dispatcher
+     * @return Two-element array, where the first element (of type
+     * java.lang.String) contains the name of the (auto)detected encoding, and
+     * the second element (of type java.lang.Boolean) specifies whether the
+     * encoding was specified using the 'encoding' attribute of an XML prolog
+     * (TRUE) or autodetected (FALSE).
+     * @throws IOException Error reading resource
+     * @throws JasperException Other error, usually a bad encoding
+     */
+    public static Object[] getEncoding(String fname, Jar jar,
+                                       JspCompilationContext ctxt,
+                                       ErrorDispatcher err)
+        throws IOException, JasperException
+    {
+        InputStream inStream = JspUtil.getInputStream(fname, jar, ctxt);
+        XMLEncodingDetector detector = new XMLEncodingDetector();
+        Object[] ret = detector.getEncoding(inStream, err);
+        inStream.close();
+
+        return ret;
+    }
+
+
+    private Object[] getEncoding(InputStream in, ErrorDispatcher err)
+        throws IOException, JasperException
+    {
+        this.stream = in;
+        this.err=err;
+        createInitialReader();
+        scanXMLDecl();
+
+        return new Object[] { this.encoding,
+                              Boolean.valueOf(this.isEncodingSetInProlog),
+                              Boolean.valueOf(this.isBomPresent),
+                              Integer.valueOf(this.skip) };
+    }

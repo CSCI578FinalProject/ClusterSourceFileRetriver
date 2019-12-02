@@ -1,0 +1,184 @@
+17
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------- HTTPS specific properties
+    // ------------------------------------------ passed through to the EndPoint
+
+    public String getDefaultSSLHostConfigName() {
+        return getEndpoint().getDefaultSSLHostConfigName();
+    }
+-----CSCI578-----
+
+    private void registerDefaultSSLHostConfig() {
+        if (defaultSSLHostConfig == null) {
+            defaultSSLHostConfig = new SSLHostConfig();
+            defaultSSLHostConfig.setHostName(getDefaultSSLHostConfigName());
+            getEndpoint().addSslHostConfig(defaultSSLHostConfig);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    public String getDefaultSSLHostConfigName() {
+        return defaultSSLHostConfigName;
+    }
+-----CSCI578-----
+
+
+
+    public void setProtocols(String input) {
+        protocols.clear();
+
+        // List of protocol names, separated by ",", "+" or "-".
+        // Semantics is adding ("+") or removing ("-") from left
+        // to right, starting with an empty protocol set.
+        // Tokens are individual protocol names or "all" for a
+        // default set of supported protocols.
+        // Separator "," is only kept for compatibility and has the
+        // same semantics as "+", except that it warns about a potentially
+        // missing "+" or "-".
+
+        // Split using a positive lookahead to keep the separator in
+        // the capture so we can check which case it is.
+        for (String value: input.split("(?=[-+,])")) {
+            String trimmed = value.trim();
+            // Ignore token which only consists of prefix character
+            if (trimmed.length() > 1) {
+                if (trimmed.charAt(0) == '+') {
+                    trimmed = trimmed.substring(1).trim();
+                    if (trimmed.equalsIgnoreCase(Constants.SSL_PROTO_ALL)) {
+                        protocols.addAll(SSL_PROTO_ALL);
+                    } else {
+                        protocols.add(trimmed);
+                    }
+                } else if (trimmed.charAt(0) == '-') {
+                    trimmed = trimmed.substring(1).trim();
+                    if (trimmed.equalsIgnoreCase(Constants.SSL_PROTO_ALL)) {
+                        protocols.removeAll(SSL_PROTO_ALL);
+                    } else {
+                        protocols.remove(trimmed);
+                    }
+                } else {
+                    if (trimmed.charAt(0) == ',') {
+                        trimmed = trimmed.substring(1).trim();
+                    }
+                    if (!protocols.isEmpty()) {
+                        log.warn(sm.getString("sslHostConfig.prefix_missing",
+                                 trimmed, getHostName()));
+                    }
+                    if (trimmed.equalsIgnoreCase(Constants.SSL_PROTO_ALL)) {
+                        protocols.addAll(SSL_PROTO_ALL);
+                    } else {
+                        protocols.add(trimmed);
+                    }
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    // TODO: All of these SSL setters can be removed once it is no longer
+    // necessary to support the old configuration attributes (Tomcat 10?).
+
+    public void setSslEnabledProtocols(String enabledProtocols) {
+        registerDefaultSSLHostConfig();
+        defaultSSLHostConfig.setProtocols(enabledProtocols);
+    }
+-----CSCI578-----
+
+    public void setSSLProtocol(String sslProtocol) {
+        registerDefaultSSLHostConfig();
+        defaultSSLHostConfig.setProtocols(sslProtocol);
+    }
+-----CSCI578-----
+
+
+
+    public void setTrustMaxCertLength(int certificateVerificationDepth){
+        registerDefaultSSLHostConfig();
+        defaultSSLHostConfig.setCertificateVerificationDepth(certificateVerificationDepth);
+    }
+-----CSCI578-----
+
+    public void setSSLVerifyDepth(int certificateVerificationDepth) {
+        registerDefaultSSLHostConfig();
+        defaultSSLHostConfig.setCertificateVerificationDepth(certificateVerificationDepth);
+    }
+-----CSCI578-----
+
+
+
+    public void setUseServerCipherSuitesOrder(boolean honorCipherOrder) {
+        registerDefaultSSLHostConfig();
+        defaultSSLHostConfig.setHonorCipherOrder(honorCipherOrder);
+    }
+-----CSCI578-----
+
+
+
+    public void setCiphers(String ciphers) {
+        registerDefaultSSLHostConfig();
+        defaultSSLHostConfig.setCiphers(ciphers);
+    }
+-----CSCI578-----
+
+
+
+    public void setCrlFile(String certificateRevocationListFile){
+        registerDefaultSSLHostConfig();
+        defaultSSLHostConfig.setCertificateRevocationListFile(certificateRevocationListFile);
+    }
+-----CSCI578-----
+
+    public void setSSLCARevocationFile(String certificateRevocationListFile) {
+        registerDefaultSSLHostConfig();
+        defaultSSLHostConfig.setCertificateRevocationListFile(certificateRevocationListFile);
+    }
+-----CSCI578-----
+
+
+    protected SSLHostConfig getSSLHostConfig(String sniHostName) {
+        SSLHostConfig result = null;
+
+        if (sniHostName != null) {
+            // First choice - direct match
+            result = sslHostConfigs.get(sniHostName);
+            if (result != null) {
+                return result;
+            }
+            // Second choice, wildcard match
+            int indexOfDot = sniHostName.indexOf('.');
+            if (indexOfDot > -1) {
+                result = sslHostConfigs.get("*" + sniHostName.substring(indexOfDot));
+            }
+        }
+
+        // Fall-back. Use the default
+        if (result == null) {
+            result = sslHostConfigs.get(getDefaultSSLHostConfigName());
+        }
+        if (result == null) {
+            // Should never happen.
+            throw new IllegalStateException();
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    public void setCertificateVerificationDepth(int certificateVerificationDepth) {
+        this.certificateVerificationDepth = certificateVerificationDepth;
+    }
+-----CSCI578-----
+
+
+
+    public void setCertificateRevocationListFile(String certificateRevocationListFile) {
+        this.certificateRevocationListFile = certificateRevocationListFile;
+    }

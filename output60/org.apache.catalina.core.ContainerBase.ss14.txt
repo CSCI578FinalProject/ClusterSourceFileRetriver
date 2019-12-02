@@ -1,0 +1,122 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Prepare for active use of the public methods of this Component.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents it from being started
+     */
+    public synchronized void start() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (started) {
+            if(log.isInfoEnabled())
+                log.info(sm.getString("containerBase.alreadyStarted", logName()));
+            return;
+        }
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(BEFORE_START_EVENT, null);
+
+        started = true;
+
+        // Start our subordinate components, if any
+        if ((loader != null) && (loader instanceof Lifecycle))
+            ((Lifecycle) loader).start();
+        logger = null;
+        getLogger();
+        if ((logger != null) && (logger instanceof Lifecycle))
+            ((Lifecycle) logger).start();
+        if ((manager != null) && (manager instanceof Lifecycle))
+            ((Lifecycle) manager).start();
+        if ((cluster != null) && (cluster instanceof Lifecycle))
+            ((Lifecycle) cluster).start();
+        if ((realm != null) && (realm instanceof Lifecycle))
+            ((Lifecycle) realm).start();
+        if ((resources != null) && (resources instanceof Lifecycle))
+            ((Lifecycle) resources).start();
+
+        // Start our child containers, if any
+        Container children[] = findChildren();
+        for (int i = 0; i < children.length; i++) {
+            if (children[i] instanceof Lifecycle)
+                ((Lifecycle) children[i]).start();
+        }
+
+        // Start the Valves in our pipeline (including the basic), if any
+        if (pipeline instanceof Lifecycle)
+            ((Lifecycle) pipeline).start();
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+
+        // Start our thread
+        threadStart();
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(AFTER_START_EVENT, null);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Logger with which this Container is associated.  If there is
+     * no associated Logger, return the Logger associated with our parent
+     * Container (if any); otherwise return <code>null</code>.
+     */
+    public Log getLogger() {
+
+        if (logger != null)
+            return (logger);
+        logger = LogFactory.getLog(logName());
+        return (logger);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the abbreviated name of this container for logging messsages
+     */
+    protected String logName() {
+
+        if (logName != null) {
+            return logName;
+        }
+        String loggerName = null;
+        Container current = this;
+        while (current != null) {
+            String name = current.getName();
+            if ((name == null) || (name.equals(""))) {
+                name = "/";
+            }
+            loggerName = "[" + name + "]"
+                + ((loggerName != null) ? ("." + loggerName) : "");
+            current = current.getParent();
+        }
+        logName = ContainerBase.class.getName() + "." + loggerName;
+        return logName;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of children Containers associated with this Container.
+     * If this Container has no children, a zero-length array is returned.
+     */
+    public Container[] findChildren() {
+
+        synchronized (children) {
+            Container results[] = new Container[children.size()];
+            return ((Container[]) children.values().toArray(results));
+        }
+
+    }

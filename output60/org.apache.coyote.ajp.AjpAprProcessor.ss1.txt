@@ -1,0 +1,106 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Read at least the specified amount of bytes, and place them
+     * in the input buffer.
+     */
+    protected boolean read(int n)
+        throws IOException {
+
+        if (inputBuffer.capacity() - inputBuffer.limit() <=
+                n - inputBuffer.remaining()) {
+            inputBuffer.compact();
+            inputBuffer.limit(inputBuffer.position());
+            inputBuffer.position(0);
+        }
+        int nRead;
+        while (inputBuffer.remaining() < n) {
+            nRead = Socket.recvbb
+                (socket, inputBuffer.limit(),
+                        inputBuffer.capacity() - inputBuffer.limit());
+            if (nRead > 0) {
+                inputBuffer.limit(inputBuffer.limit() + nRead);
+            } else {
+                throw new IOException(sm.getString("ajpprotocol.failedread"));
+            }
+        }
+
+        return true;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read an AJP message.
+     *
+     * @param first is true if the message is the first in the request, which
+     *        will cause a short duration blocking read
+     * @return true if the message has been read, false if the short read
+     *         didn't return anything
+     * @throws IOException any other failure, including incomplete reads
+     */
+    protected boolean readMessage(AjpMessage message, boolean first,
+            boolean useAvailableData)
+        throws IOException {
+
+        int headerLength = message.getHeaderLength();
+
+        if (first) {
+            if (!readt(headerLength, useAvailableData)) {
+                return false;
+            }
+        } else {
+            read(headerLength);
+        }
+        inputBuffer.get(message.getBuffer(), 0, headerLength);
+        message.processHeader();
+        read(message.getLen());
+        inputBuffer.get(message.getBuffer(), headerLength, message.getLen());
+
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read at least the specified amount of bytes, and place them
+     * in the input buffer.
+     */
+    protected boolean readt(int n, boolean useAvailableData)
+        throws IOException {
+
+        if (useAvailableData && inputBuffer.remaining() == 0) {
+            return false;
+        }
+        if (inputBuffer.capacity() - inputBuffer.limit() <=
+                n - inputBuffer.remaining()) {
+            inputBuffer.compact();
+            inputBuffer.limit(inputBuffer.position());
+            inputBuffer.position(0);
+        }
+        int nRead;
+        while (inputBuffer.remaining() < n) {
+            nRead = Socket.recvbb
+                (socket, inputBuffer.limit(),
+                    inputBuffer.capacity() - inputBuffer.limit());
+            if (nRead > 0) {
+                inputBuffer.limit(inputBuffer.limit() + nRead);
+            } else {
+                if ((-nRead) == Status.ETIMEDOUT || (-nRead) == Status.TIMEUP) {
+                    return false;
+                } else {
+                    throw new IOException(sm.getString("ajpprotocol.failedread"));
+                }
+            }
+        }
+
+        return true;
+
+    }
+-----CSCI578-----

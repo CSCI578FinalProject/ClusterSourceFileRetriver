@@ -1,0 +1,143 @@
+8
+-----CSCI578-----
+
+
+    /** Set a property. Name is a "component.property". JMX should
+     * be used instead.
+     */
+    public void setProperty( String name, String value ) {
+        if( log.isTraceEnabled())
+            log.trace("setProperty " + name + " " + value );
+        getJkMain().setProperty( name, value );
+        properties.put( name, value );
+    }
+-----CSCI578-----
+
+
+    /** Set the base dir of jk2. ( including WEB-INF if in a webapp ).
+     *  We'll try to guess it from classpath if none is set ( for
+     *  example on command line ), but if in a servlet environment
+     *  you need to use Context.getRealPath or a system property or
+     *  set it expliciltey.
+     */
+    public void setJkHome( String s ) {
+        getWorkerEnv().setJkHome(s);
+    }
+-----CSCI578-----
+
+
+    // -------------------- Setting --------------------
+    
+    /** Load a .properties file into and set the values
+     *  into jk2 configuration.
+     */
+    public void setPropertiesFile( String p  ) {
+        propFile=p;
+        if( started ) {
+            loadPropertiesFile();
+        }
+    }
+-----CSCI578-----
+
+
+    /** Pass config info
+     */
+    public void setAttribute( String name, Object value ) {
+        if( log.isDebugEnabled())
+            log.debug("setAttribute " + name + " " + value );
+        if( value instanceof String )
+            this.setProperty( name, (String)value );
+    }
+-----CSCI578-----
+
+
+    /** Set a name/value as a jk2 property
+     */
+    public void setProperty( String n, String v ) {
+        if( "jkHome".equals( n ) ) {
+            setJkHome( v );
+        } 
+        if( "propertiesFile".equals( n ) ) {
+            setPropertiesFile( v );
+        }
+        props.put( n, v );
+        if( started ) {
+            // Replacements need special processing only when started==true,
+            // because preProcessProperties() handles them during startup.
+            String alias = (String) replacements.get(n);
+            if (alias != null) {
+                props.put( alias, v );
+                if (log.isDebugEnabled()) {
+                    log.debug("Substituting " + n + " " + alias + " " + v);
+                }
+            }
+            processProperty( n, v );
+            if (alias != null) {
+                processProperty( alias, v );
+            }
+            saveProperties();
+        }
+    }
+-----CSCI578-----
+
+
+    private void processProperty(String name, String propValue) {
+        String type=name;
+        String fullName=name;
+        String localName="";
+        String propName="";
+        // ignore
+        if( name.startsWith("key.")) return;
+
+        int dot=name.indexOf(".");
+        int lastDot=name.lastIndexOf(".");
+        if( dot > 0 ) {
+            type=name.substring(0, dot );
+            if( dot != lastDot ) {
+                localName=name.substring( dot + 1, lastDot );
+                fullName=type + "." + localName;
+            } else {
+                fullName=type;
+            }
+            propName=name.substring( lastDot+1);
+        } else {
+            return;
+        }
+        
+        if( log.isDebugEnabled() )
+            log.debug( "Processing " + type + ":" + localName + ":" + fullName + " " + propName );
+        if( "class".equals( type ) || "handler".equals( type ) ) {
+            return;
+        }
+        
+        JkHandler comp=getWorkerEnv().getHandler( fullName );
+        if( comp==null ) {
+            comp=newHandler( type, localName, fullName );
+        }
+        if( comp==null )
+            return;
+        
+        if( log.isDebugEnabled() ) 
+            log.debug("Setting " + propName + " on " + fullName + " " + comp);
+        this.setBeanProperty( comp, propName, propValue );
+    }
+-----CSCI578-----
+
+    
+    public void setJkHome( String s ) {
+        home=s;
+    }
+-----CSCI578-----
+
+
+    /* A bit of magic to support workers.properties without giving
+       up the clean get/set
+    */
+    public void setBeanProperty( Object target, String name, String val ) {
+        if( val!=null )
+            val=IntrospectionUtils.replaceProperties( val, props, null );
+        if( log.isDebugEnabled())
+            log.debug( "setProperty " + target + " " + name + "=" + val );
+        
+        IntrospectionUtils.setProperty( target, name, val );
+    }

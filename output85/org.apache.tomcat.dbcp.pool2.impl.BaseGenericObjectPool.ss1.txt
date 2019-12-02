@@ -1,0 +1,65 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Sets the number of milliseconds to sleep between runs of the idle
+     * object evictor thread. When non-positive, no idle object evictor thread
+     * will be run.
+     *
+     * @param timeBetweenEvictionRunsMillis
+     *            number of milliseconds to sleep between evictor runs
+     *
+     * @see #getTimeBetweenEvictionRunsMillis
+     */
+    public final void setTimeBetweenEvictionRunsMillis(
+            long timeBetweenEvictionRunsMillis) {
+        this.timeBetweenEvictionRunsMillis = timeBetweenEvictionRunsMillis;
+        startEvictor(timeBetweenEvictionRunsMillis);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * <p>Starts the evictor with the given delay. If there is an evictor
+     * running when this method is called, it is stopped and replaced with a
+     * new evictor with the specified delay.</p>
+     *
+     * <p>This method needs to be final, since it is called from a constructor.
+     * See POOL-195.</p>
+     *
+     * @param delay time in milliseconds before start and between eviction runs
+     */
+    final void startEvictor(long delay) {
+        synchronized (evictionLock) {
+            if (null != evictor) {
+                EvictionTimer.cancel(evictor);
+                evictor = null;
+                evictionIterator = null;
+            }
+            if (delay > 0) {
+                evictor = new Evictor();
+                EvictionTimer.schedule(evictor, delay, delay);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Remove the specified eviction task from the timer.
+     * @param task      Task to be scheduled
+     */
+    static synchronized void cancel(TimerTask task) {
+        task.cancel();
+        _usageCount--;
+        if (_usageCount == 0) {
+            _timer.cancel();
+            _timer = null;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

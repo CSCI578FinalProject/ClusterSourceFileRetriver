@@ -1,0 +1,66 @@
+6
+-----CSCI578-----
+
+
+
+    protected abstract Object decode(T message) throws DecodeException;
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected Object convert(T message) {
+        return message;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public final void onMessage(T message) {
+
+        if (params.length == 1 && params[0] instanceof DecodeException) {
+            ((WsSession) session).getLocal().onError(session,
+                    (DecodeException) params[0]);
+            return;
+        }
+
+        // Can this message be decoded?
+        Object payload;
+        try {
+            payload = decode(message);
+        } catch (DecodeException de) {
+            ((WsSession) session).getLocal().onError(session, de);
+            return;
+        }
+
+        if (payload == null) {
+            // Not decoded. Convert if required.
+            if (convert) {
+                payload = convert(message);
+            } else {
+                payload = message;
+            }
+        }
+
+        Object[] parameters = params.clone();
+        if (indexSession != -1) {
+            parameters[indexSession] = session;
+        }
+        parameters[indexPayload] = payload;
+
+        Object result = null;
+        try {
+            result = method.invoke(pojo, parameters);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            handlePojoMethodException(e);
+        }
+        processResult(result);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public Endpoint getLocal() {
+        return localEndpoint;
+    }

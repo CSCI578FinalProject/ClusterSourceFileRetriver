@@ -1,0 +1,114 @@
+4
+-----CSCI578-----
+
+    
+    
+    /**
+     * Get object content.
+     */
+    public Object getContent()
+        throws IOException {
+        
+        if (!connected)
+            connect();
+        
+        if (resource != null)
+            return getInputStream();
+        if (collection != null)
+            return collection;
+        if (object != null)
+            return object;
+        
+        throw new FileNotFoundException(
+                getURL() == null ? "null" : getURL().toString());
+        
+    }
+
+    
+    
+    /**
+     * Get object content.
+     */
+    public Object getContent(Class[] classes)
+        throws IOException {
+        
+        Object object = getContent();
+        
+        for (int i = 0; i < classes.length; i++) {
+            if (classes[i].isInstance(object))
+                return object;
+        }
+        
+        return null;
+        
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Get input stream.
+     */
+    public InputStream getInputStream() 
+        throws IOException {
+        
+        if (!connected)
+            connect();
+        
+        if (resource == null) {
+            throw new FileNotFoundException(
+                    getURL() == null ? "null" : getURL().toString());
+        } else {
+            // Reopen resource
+            try {
+                resource = (Resource) context.lookup(getURL().getFile());
+            } catch (NamingException e) {
+            }
+        }
+        
+        return (resource.streamContent());
+        
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+    
+    
+    /**
+     * List children of this collection. The names given are relative to this
+     * URI's path. The full uri of the children is then : path + "/" + name.
+     */
+    public Enumeration list()
+        throws IOException {
+        
+        if (!connected) {
+            connect();
+        }
+        
+        if ((resource == null) && (collection == null)) {
+            throw new FileNotFoundException(
+                    getURL() == null ? "null" : getURL().toString());
+        }
+        
+        Vector result = new Vector();
+        
+        if (collection != null) {
+            try {
+                NamingEnumeration enumeration = context.list(getURL().getFile());
+                while (enumeration.hasMoreElements()) {
+                    NameClassPair ncp = (NameClassPair) enumeration.nextElement();
+                    result.addElement(ncp.getName());
+                }
+            } catch (NamingException e) {
+                // Unexpected exception
+                throw new FileNotFoundException(
+                        getURL() == null ? "null" : getURL().toString());
+            }
+        }
+        
+        return result.elements();
+        
+    }

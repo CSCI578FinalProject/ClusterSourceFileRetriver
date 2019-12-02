@@ -1,0 +1,34 @@
+5
+
+    /*
+     * stop the sender and deregister mbeans (transmitter, senders)
+     * 
+     * @see org.apache.catalina.tribes.ClusterSender#stop()
+     */
+    public synchronized void stop() {
+        getTransport().disconnect();
+    }
+
+    public MultiPointSender getTransport() {
+        return transport;
+    }
+    
+    // ------------------------------------------------------------- public
+    
+    /**
+     * Send data to one member
+     * @see org.apache.catalina.tribes.ChannelSender#sendMessage(ChannelMessage, Member[])
+     */
+    public void sendMessage(ChannelMessage message, Member[] destination) throws ChannelException {
+        MultiPointSender sender = getTransport();
+        sender.sendMessage(destination,message);
+    }
+
+    /**
+     * Call transmitter to check for sender socket status
+     * 
+     * @see org.apache.catalina.ha.tcp.SimpleTcpCluster#backgroundProcess()
+     */
+    public void heartbeat() {
+        if (getTransport()!=null) getTransport().keepalive();
+    }

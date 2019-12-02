@@ -1,0 +1,67 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Invoked if the message is dispatched asynch, and an error occurs
+     * @param x ChannelException - the error that happened
+     * @param id - the unique id for the message
+     * @see Channel#send(Member[], java.io.Serializable, int, ErrorHandler)
+     */
+    public void handleError(ChannelException x, UniqueId id);
+-----CSCI578-----
+
+
+    public ErrorHandler getErrorHandler() {
+        return errorHandler;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Invoked when the message has been sent successfully.
+     * @param id - the unique id for the message
+     * @see Channel#send(Member[], java.io.Serializable, int, ErrorHandler)
+     */
+    public void handleCompletion(UniqueId id);
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    protected void sendAsyncData(ChannelMessage msg, Member[] destination,
+            InterceptorPayload payload) {
+        ErrorHandler handler = null;
+        if (payload != null) {
+            handler = payload.getErrorHandler();
+        }
+        try {
+            super.sendMessage(destination, msg, null);
+            try {
+                if (handler != null) {
+                    handler.handleCompletion(new UniqueId(msg.getUniqueId()));
+                }
+            } catch ( Exception ex ) {
+                log.error(sm.getString("messageDispatchInterceptor.completeMessage.failed"),ex);
+            }
+        } catch ( Exception x ) {
+            ChannelException cx = null;
+            if (x instanceof ChannelException) {
+                cx = (ChannelException) x;
+            } else {
+                cx = new ChannelException(x);
+            }
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("messageDispatchInterceptor.AsyncMessage.failed"),x);
+            }
+            try {
+                if (handler != null) {
+                    handler.handleError(cx, new UniqueId(msg.getUniqueId()));
+                }
+            } catch ( Exception ex ) {
+                log.error(sm.getString("messageDispatchInterceptor.errorMessage.failed"),ex);
+            }
+        } finally {
+            addAndGetCurrentSize(-msg.getMessage().getLength());
+        }
+    }

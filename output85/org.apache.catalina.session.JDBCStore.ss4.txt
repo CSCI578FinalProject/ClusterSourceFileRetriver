@@ -1,0 +1,90 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Open (if necessary) and return a database connection for use by
+     * this Store.
+     *
+     * @return database connection ready to use
+     *
+     * @exception SQLException if a database error occurs
+     */
+    protected Connection open() throws SQLException {
+
+        // Do nothing if there is a database connection already open
+        if (dbConnection != null)
+            return dbConnection;
+
+        if (dataSourceName != null && dataSource == null) {
+            Context initCtx;
+            try {
+                initCtx = new InitialContext();
+                Context envCtx = (Context) initCtx.lookup("java:comp/env");
+                this.dataSource = (DataSource) envCtx.lookup(this.dataSourceName);
+            } catch (NamingException e) {
+                manager.getContext().getLogger().error(
+                        sm.getString(getStoreName() + ".wrongDataSource",
+                                this.dataSourceName), e);
+           }
+        }
+
+        if (dataSource != null) {
+            return dataSource.getConnection();
+        }
+
+        // Instantiate our database driver if necessary
+        if (driver == null) {
+            try {
+                Class<?> clazz = Class.forName(driverName);
+                driver = (Driver) clazz.newInstance();
+            } catch (ClassNotFoundException | InstantiationException | IllegalAccessException e) {
+                manager.getContext().getLogger().error(
+                        sm.getString(getStoreName() + ".checkConnectionClassNotFoundException",
+                        e.toString()));
+                throw new SQLException(e);
+            }
+        }
+
+        // Open a new connection
+        Properties props = new Properties();
+        if (connectionName != null)
+            props.put("user", connectionName);
+        if (connectionPassword != null)
+            props.put("password", connectionPassword);
+        dbConnection = driver.connect(connectionURL, props);
+        dbConnection.setAutoCommit(true);
+        return dbConnection;
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Protected Methods
+
+    /**
+     * Check the connection associated with this store, if it's
+     * <code>null</code> or closed try to reopen it.
+     * Returns <code>null</code> if the connection could not be established.
+     *
+     * @return <code>Connection</code> if the connection succeeded
+     */
+    protected Connection getConnection() {
+        Connection conn = null;
+        try {
+            conn = open();
+            if (conn == null || conn.isClosed()) {
+                manager.getContext().getLogger().info(sm.getString(getStoreName() + ".checkConnectionDBClosed"));
+                conn = open();
+                if (conn == null || conn.isClosed()) {
+                    manager.getContext().getLogger().info(sm.getString(getStoreName() + ".checkConnectionDBReOpenFail"));
+                }
+            }
+        } catch (SQLException ex) {
+            manager.getContext().getLogger().error(sm.getString(getStoreName() + ".checkConnectionSQLException",
+                    ex.toString()));
+        }
+
+        return conn;
+    }

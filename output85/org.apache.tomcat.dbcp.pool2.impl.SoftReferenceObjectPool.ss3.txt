@@ -1,0 +1,67 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Atomically removes all of the elements from this deque.
+     * The deque will be empty after this call returns.
+     */
+    @Override
+    public void clear() {
+        lock.lock();
+        try {
+            for (Node<E> f = first; f != null;) {
+                f.item = null;
+                Node<E> n = f.next;
+                f.prev = null;
+                f.next = null;
+                f = n;
+            }
+            first = last = null;
+            count = 0;
+            notFull.signalAll();
+        } finally {
+            lock.unlock();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Clears any objects sitting idle in the pool.
+     */
+    @Override
+    public synchronized void clear() {
+        if (null != factory) {
+            Iterator<PooledSoftReference<T>> iter = idleReferences.iterator();
+            while (iter.hasNext()) {
+                try {
+                    final PooledSoftReference<T> ref = iter.next();
+                    if (null != ref.getObject()) {
+                        factory.destroyObject(ref);
+                    }
+                } catch (Exception e) {
+                    // ignore error, keep destroying the rest
+                }
+            }
+        }
+        idleReferences.clear();
+        pruneClearedReferences();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the object that the wrapped SoftReference refers to.
+     * <p>
+     * Note that if the reference has been cleared, this method will return
+     * null.
+     *
+     * @return Object referred to by the SoftReference
+     */
+    @Override
+    public T getObject() {
+        return reference.get();
+    }

@@ -1,0 +1,56 @@
+3
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the beginning of this element.
+     *
+     * @param attributes The attribute list of this element
+     */
+    @Override
+    public void begin(String namespace, String name, Attributes attributes) throws Exception {
+
+        if (ignoreCreateExceptions) {
+
+            if (exceptionIgnoredStack == null) {
+                exceptionIgnoredStack = new ArrayStack<>();
+            }
+
+            try {
+                Object instance = creationFactory.createObject(attributes);
+
+                if (digester.log.isDebugEnabled()) {
+                    digester.log.debug("[FactoryCreateRule]{" + digester.match +
+                            "} New " + instance.getClass().getName());
+                }
+                digester.push(instance);
+                exceptionIgnoredStack.push(Boolean.FALSE);
+
+            } catch (Exception e) {
+                // log message and error
+                if (digester.log.isInfoEnabled()) {
+                    digester.log.info("[FactoryCreateRule] Create exception ignored: " +
+                        ((e.getMessage() == null) ? e.getClass().getName() : e.getMessage()));
+                    if (digester.log.isDebugEnabled()) {
+                        digester.log.debug("[FactoryCreateRule] Ignored exception:", e);
+                    }
+                }
+                exceptionIgnoredStack.push(Boolean.TRUE);
+            }
+
+        } else {
+            Object instance = creationFactory.createObject(attributes);
+
+            if (digester.log.isDebugEnabled()) {
+                digester.log.debug("[FactoryCreateRule]{" + digester.match +
+                        "} New " + instance.getClass().getName());
+            }
+            digester.push(instance);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

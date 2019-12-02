@@ -1,0 +1,420 @@
+18
+-----CSCI578-----
+
+
+
+    /**
+     * Return the scheme that will be assigned to requests received
+     * through this connector.  Default value is "http".
+     */
+    public String getScheme() {
+
+        return (this.scheme);
+
+    }
+-----CSCI578-----
+
+
+
+    public UDecoder getURLDecoder() {
+        return urlDecoder;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the mapper.
+     */
+    public Mapper getMapper() {
+        return (mapper);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Wrapper within which this Request is being processed.  This
+     * must be called as soon as the appropriate Wrapper is identified, and
+     * before the Request is ultimately passed to an application servlet.
+     * @param wrapper The newly associated Wrapper
+     */
+    public void setWrapper(Wrapper wrapper) {
+        this.wrapper = wrapper;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the proxy server name for this Connector.
+     */
+    public String getProxyName() {
+
+        return (this.proxyName);
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Parse additional request parameters.
+     */
+    protected boolean postParseRequest(org.apache.coyote.Request req,
+                                       Request request,
+    		                       org.apache.coyote.Response res,
+                                       Response response)
+            throws Exception {
+
+        // XXX the processor needs to set a correct scheme and port prior to this point,
+        // in ajp13 protocols dont make sense to get the port from the connector..
+        // XXX the processor may have set a correct scheme and port prior to this point,
+        // in ajp13 protocols dont make sense to get the port from the connector...
+        // otherwise, use connector configuration
+        if (! req.scheme().isNull()) {
+            // use processor specified scheme to determine secure state
+            request.setSecure(req.scheme().equals("https"));
+        } else {
+            // use connector scheme and secure configuration, (defaults to
+            // "http" and false respectively)
+            req.scheme().setString(connector.getScheme());
+            request.setSecure(connector.getSecure());
+        }
+
+        // FIXME: the code below doesnt belongs to here,
+        // this is only have sense
+        // in Http11, not in ajp13..
+        // At this point the Host header has been processed.
+        // Override if the proxyPort/proxyHost are set
+        String proxyName = connector.getProxyName();
+        int proxyPort = connector.getProxyPort();
+        if (proxyPort != 0) {
+            req.setServerPort(proxyPort);
+        }
+        if (proxyName != null) {
+            req.serverName().setString(proxyName);
+        }
+
+        // Copy the raw URI to the decoded URI
+        MessageBytes decodedURI = req.decodedURI();
+        decodedURI.duplicate(req.requestURI());
+
+        // Parse the path parameters. This will:
+        //   - strip out the path parameters
+        //   - convert the decodedURI to bytes
+        parsePathParameters(req, request);
+
+        // URI decoding
+        // %xx decoding of the URL
+        try {
+            req.getURLDecoder().convert(decodedURI, false);
+        } catch (IOException ioe) {
+            res.setStatus(400);
+            res.setMessage("Invalid URI: " + ioe.getMessage());
+            connector.getService().getContainer().logAccess(
+                    request, response, 0, true);
+            return false;
+        }
+        // Normalization
+        if (!normalize(req.decodedURI())) {
+            res.setStatus(400);
+            res.setMessage("Invalid URI");
+            connector.getService().getContainer().logAccess(
+                    request, response, 0, true);
+            return false;
+        }
+        // Character decoding
+        convertURI(decodedURI, request);
+        // Check that the URI is still normalized
+        if (!checkNormalize(req.decodedURI())) {
+            res.setStatus(400);
+            res.setMessage("Invalid URI character encoding");
+            connector.getService().getContainer().logAccess(
+                    request, response, 0, true);
+            return false;
+        }
+
+        // Set the remote principal
+        String principal = req.getRemoteUser().toString();
+        if (principal != null) {
+            request.setUserPrincipal(new CoyotePrincipal(principal));
+        }
+
+        // Set the authorization type
+        String authtype = req.getAuthType().toString();
+        if (authtype != null) {
+            request.setAuthType(authtype);
+        }
+
+        // Request mapping.
+        MessageBytes serverName;
+        if (connector.getUseIPVHosts()) {
+            serverName = req.localName();
+            if (serverName.isNull()) {
+                // well, they did ask for it
+                res.action(ActionCode.ACTION_REQ_LOCAL_NAME_ATTRIBUTE, null);
+            }
+        } else {
+            serverName = req.serverName();
+        }
+        connector.getMapper().map(serverName, decodedURI,
+                                  request.getMappingData());
+        request.setContext((Context) request.getMappingData().context);
+
+        // If there is no context at this point, it is likely no ROOT context
+        // has been deployed
+        if (request.getContext() == null) {
+            res.setStatus(404);
+            res.setMessage("Not found");
+            connector.getService().getContainer().logAccess(request, response, 0, true);
+            return false;
+        }
+
+        request.setWrapper((Wrapper) request.getMappingData().wrapper);
+
+        // Filter trace method
+        if (!connector.getAllowTrace()
+                && req.method().equalsIgnoreCase("TRACE")) {
+            Wrapper wrapper = request.getWrapper();
+            String header = null;
+            if (wrapper != null) {
+                String[] methods = wrapper.getServletMethods();
+                if (methods != null) {
+                    for (int i=0; i<methods.length; i++) {
+                        if ("TRACE".equals(methods[i])) {
+                            continue;
+                        }
+                        if (header == null) {
+                            header = methods[i];
+                        } else {
+                            header += ", " + methods[i];
+                        }
+                    }
+                }
+            }
+            res.setStatus(405);
+            res.addHeader("Allow", header);
+            res.setMessage("TRACE method is not allowed");
+            request.getContext().logAccess(request, response, 0, true);
+            return false;
+        }
+
+        // Parse session Id
+        String sessionID =
+            request.getPathParameter(Globals.SESSION_PARAMETER_NAME);
+        if (sessionID != null && !isURLRewritingDisabled(request)) {
+            request.setRequestedSessionId(sessionID);
+            request.setRequestedSessionURL(true);
+        }
+        parseSessionCookiesId(req, request);
+
+        // Possible redirect
+        MessageBytes redirectPathMB = request.getMappingData().redirectPath;
+        if (!redirectPathMB.isNull()) {
+            String redirectPath = urlEncoder.encode(redirectPathMB.toString(), "UTF-8");
+            String query = request.getQueryString();
+            if (request.isRequestedSessionIdFromURL()) {
+                // This is not optimal, but as this is not very common, it
+                // shouldn't matter
+                redirectPath = redirectPath + ";" + Globals.SESSION_PARAMETER_NAME + "="
+                    + request.getRequestedSessionId();
+            }
+            if (query != null) {
+                // This is not optimal, but as this is not very common, it
+                // shouldn't matter
+                redirectPath = redirectPath + "?" + query;
+            }
+            response.sendRedirect(redirectPath);
+            request.getContext().logAccess(request, response, 0, true);
+            return false;
+        }
+
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Check that the URI is normalized following character decoding.
+     * <p>
+     * This method checks for "\", 0, "//", "/./" and "/../". This method will
+     * return false if sequences that are supposed to be normalized are still
+     * present in the URI.
+     *
+     * @param uriMB URI to be checked (should be chars)
+     */
+    public static boolean checkNormalize(MessageBytes uriMB) {
+
+        CharChunk uriCC = uriMB.getCharChunk();
+        char[] c = uriCC.getChars();
+        int start = uriCC.getStart();
+        int end = uriCC.getEnd();
+
+        int pos = 0;
+
+        // Check for '\' and 0
+        for (pos = start; pos < end; pos++) {
+            if (c[pos] == '\\') {
+                return false;
+            }
+            if (c[pos] == 0) {
+                return false;
+            }
+        }
+
+        // Check for "//"
+        for (pos = start; pos < (end - 1); pos++) {
+            if (c[pos] == '/') {
+                if (c[pos + 1] == '/') {
+                    return false;
+                }
+            }
+        }
+
+        // Check for ending with "/." or "/.."
+        if (((end - start) >= 2) && (c[end - 1] == '.')) {
+            if ((c[end - 2] == '/')
+                    || ((c[end - 2] == '.')
+                    && (c[end - 3] == '/'))) {
+                return false;
+            }
+        }
+
+        // Check for "/./"
+        if (uriCC.indexOf("/./", 0, 3, 0) >= 0) {
+            return false;
+        }
+
+        // Check for "/../"
+        if (uriCC.indexOf("/../", 0, 4, 0) >= 0) {
+            return false;
+        }
+
+        return true;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Gets the names of the methods supported by the underlying servlet.
+     *
+     * This is the same set of methods included in the Allow response header
+     * in response to an OPTIONS request method processed by the underlying
+     * servlet.
+     *
+     * @return Array of names of the methods supported by the underlying
+     * servlet
+     */
+    public String[] getServletMethods() throws ServletException;
+-----CSCI578-----
+
+
+
+    /**
+     * Return the proxy server port for this Connector.
+     */
+    public int getProxyPort() {
+
+        return (this.proxyPort);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the secure connection flag that will be assigned to requests
+     * received through this connector.  Default value is "false".
+     */
+    public boolean getSecure() {
+
+        return (this.secure);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Test if IP-based virtual hosting is enabled.
+     */
+    public boolean getUseIPVHosts() {
+        return useIPVHosts;
+    }
+-----CSCI578-----
+
+
+    private boolean isURLRewritingDisabled(Request request) {
+        Context context = (Context) request.getMappingData().context;
+        if (context != null)
+            return (context.isDisableURLRewriting());
+        else
+            return (false);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return mapping data.
+     */
+    public MappingData getMappingData() {
+        return (mappingData);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the authentication type used for this request, if any; otherwise
+     * set the type to <code>null</code>.  Typical values are "BASIC",
+     * "DIGEST", or "SSL".
+     *
+     * @param type The authentication type used
+     */
+    public void setAuthType(String type) {
+        this.authType = type;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Principal who has been authenticated for this Request.  This
+     * value is also used to calculate the value to be returned by the
+     * <code>getRemoteUser()</code> method.
+     *
+     * @param principal The user Principal
+     */
+    public void setUserPrincipal(Principal principal) {
+
+        if (Globals.IS_SECURITY_ENABLED){
+            HttpSession session = getSession(false);
+            if ( (subject != null) &&
+                 (!subject.getPrincipals().contains(principal)) ){
+                subject.getPrincipals().add(principal);
+            } else if (session != null &&
+                        session.getAttribute(Globals.SUBJECT_ATTR) == null) {
+                subject = new Subject();
+                subject.getPrincipals().add(principal);
+            }
+            if (session != null){
+                session.setAttribute(Globals.SUBJECT_ATTR, subject);
+            }
+        }
+
+        this.userPrincipal = principal;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected String getPathParameter(String name) {
+        return pathParameters.get(name);
+    }

@@ -1,0 +1,76 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Parses the tag file, and collects information on the directives included
+     * in it. The method is used to obtain the info on the tag file, when the
+     * handler that it represents is referenced. The tag file is not compiled
+     * here.
+     *
+     * @param pc
+     *            the current ParserController used in this compilation
+     * @param name
+     *            the tag name as specified in the TLD
+     * @param path
+     *            the path for the tagfile
+     * @param jar
+     *            the Jar resource containing the tag file
+     * @param tagLibInfo
+     *            the TagLibraryInfo object associated with this TagInfo
+     * @return a TagInfo object assembled from the directives in the tag file.
+     *
+     * @throws JasperException If an error occurs during parsing
+     */
+    @SuppressWarnings("null") // page can't be null
+    public static TagInfo parseTagFileDirectives(ParserController pc,
+            String name, String path, Jar jar, TagLibraryInfo tagLibInfo)
+            throws JasperException {
+
+
+        ErrorDispatcher err = pc.getCompiler().getErrorDispatcher();
+
+        Node.Nodes page = null;
+        try {
+            page = pc.parseTagFileDirectives(path, jar);
+        } catch (IOException e) {
+            err.jspError("jsp.error.file.not.found", path);
+        }
+
+        TagFileDirectiveVisitor tagFileVisitor = new TagFileDirectiveVisitor(pc
+                .getCompiler(), tagLibInfo, name, path);
+        page.visit(tagFileVisitor);
+        tagFileVisitor.postCheck();
+
+        return tagFileVisitor.getTagInfo();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Extracts tag file directive information from the given tag file.
+     *
+     * This is invoked by the compiler
+     *
+     * @param inFileName    The name of the tag file to be parsed.
+     * @param jar The location of the tag file.
+     *
+     * @return The parsed tage file nodes
+     *
+     * @throws JasperException If an error occurs during parsing
+     * @throws IOException If an I/O error occurs such as the file not being
+     *         found
+     */
+    public Node.Nodes parseTagFileDirectives(String inFileName, Jar jar)
+            throws JasperException, IOException {
+        boolean isTagFileSave = isTagFile;
+        boolean directiveOnlySave = directiveOnly;
+        isTagFile = true;
+        directiveOnly = true;
+        Node.Nodes page = doParse(inFileName, null, jar);
+        directiveOnly = directiveOnlySave;
+        isTagFile = isTagFileSave;
+        return page;
+    }
+-----CSCI578-----

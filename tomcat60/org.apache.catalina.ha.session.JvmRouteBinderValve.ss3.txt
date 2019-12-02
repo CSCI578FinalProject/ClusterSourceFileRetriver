@@ -1,0 +1,61 @@
+10
+
+    /**
+     * Sets a new cookie for the given session id and response and see
+     * {@link org.apache.catalina.connector.Request#configureSessionCookie(javax.servlet.http.Cookie)}
+     * 
+     * @param request current request
+     * @param response Tomcat Response
+     * @param sessionId The session id
+     * 
+     * @deprecated Use {@link Request#changeSessionId(String)}
+     */
+    protected void setNewSessionCookie(Request request,
+                                       Response response, String sessionId) {
+        if (response != null) {
+            Context context = request.getContext();
+            if (context.getCookies()) {
+                // set a new session cookie
+                String scName = context.getSessionCookieName();
+                if (scName == null) {
+                    scName = Globals.SESSION_COOKIE_NAME;
+                }
+                Cookie newCookie = new Cookie(scName, sessionId);
+                
+                newCookie.setMaxAge(-1);
+                
+                String contextPath = null;
+                if (!response.getConnector().getEmptySessionPath() &&
+                        (context != null)) {
+                    if (context.getSessionCookiePath() != null) {
+                        contextPath = context.getSessionCookiePath();
+                    } else {
+                        contextPath = context.getEncodedPath();
+                    }
+                }
+                if ((contextPath != null) && (contextPath.length() > 0)) {
+                    newCookie.setPath(contextPath);
+                } else {
+                    newCookie.setPath("/");
+                }
+                
+                if (context.getSessionCookieDomain() != null) {
+                    newCookie.setDomain(context.getSessionCookieDomain());
+                }
+
+                if (request.isSecure()) {
+                    newCookie.setSecure(true);
+                }
+
+                if (log.isDebugEnabled()) {
+                    Object[] args = new Object[] {sessionId,
+                            newCookie.getName(),
+                            newCookie.getPath(),
+                            new Boolean(newCookie.getSecure()),
+                            new Boolean(context.getUseHttpOnly())};
+                    log.debug(sm.getString("jvmRoute.newSessionCookie", args));
+                }
+                response.addCookieInternal(newCookie, context.getUseHttpOnly());
+            }
+        }
+    }

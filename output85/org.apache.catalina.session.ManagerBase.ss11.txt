@@ -1,0 +1,199 @@
+15
+-----CSCI578-----
+
+
+
+    /**
+     * Set the maximum time interval, in seconds, between client requests
+     * before the servlet container will invalidate the session.  A negative
+     * time indicates that the session should never time out.
+     *
+     * @param interval The new maximum interval
+     */
+    public void setMaxInactiveInterval(int interval);
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public Session createSession(String sessionId) {
+
+        if ((maxActiveSessions >= 0) &&
+                (getActiveSessions() >= maxActiveSessions)) {
+            rejectedSessions++;
+            throw new TooManyActiveSessionsException(
+                    sm.getString("managerBase.createSession.ise"),
+                    maxActiveSessions);
+        }
+
+        // Recycle or create a Session instance
+        Session session = createEmptySession();
+
+        // Initialize the properties of the new session and return it
+        session.setNew(true);
+        session.setValid(true);
+        session.setCreationTime(System.currentTimeMillis());
+        session.setMaxInactiveInterval(getContext().getSessionTimeout() * 60);
+        String id = sessionId;
+        if (id == null) {
+            id = generateSessionId();
+        }
+        session.setId(id);
+        sessionCounter++;
+
+        SessionTiming timing = new SessionTiming(session.getCreationTime(), 0);
+        synchronized (sessionCreationTiming) {
+            sessionCreationTiming.add(timing);
+            sessionCreationTiming.poll();
+        }
+        return (session);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the creation time for this session.  This method is called by the
+     * Manager when an existing Session instance is reused.
+     *
+     * @param time The new creation time
+     */
+    public void setCreationTime(long time);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>isNew</code> flag for this session.
+     *
+     * @param isNew The new value for the <code>isNew</code> flag
+     */
+    public void setNew(boolean isNew);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>isValid</code> flag for this session.
+     *
+     * @param isValid The new value for the <code>isValid</code> flag
+     */
+    public void setValid(boolean isValid);
+-----CSCI578-----
+
+
+
+    /**
+     * @return the default session timeout (in minutes) for this
+     * web application.
+     */
+    public int getSessionTimeout();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the creation time for this session.
+     */
+    public long getCreationTime();
+-----CSCI578-----
+
+
+
+    @Override
+    public int getActiveSessions() {
+        return sessions.size();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Generate and return a new session identifier.
+     * @return a new session id
+     */
+    protected String generateSessionId() {
+
+        String result = null;
+
+        do {
+            if (result != null) {
+                // Not thread-safe but if one of multiple increments is lost
+                // that is not a big deal since the fact that there was any
+                // duplicate is a much bigger issue.
+                duplicates++;
+            }
+
+            result = sessionIdGenerator.generateSessionId();
+
+        } while (sessions.containsKey(result));
+
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the session identifier for this session and notifies any associated
+     * listeners that a new session has been created.
+     *
+     * @param id The new session identifier
+     */
+    public void setId(String id);
+
+
+
+    /**
+     * Set the session identifier for this session and optionally notifies any
+     * associated listeners that a new session has been created.
+     *
+     * @param id        The new session identifier
+     * @param notify    Should any associated listeners be notified that a new
+     *                      session has been created?
+     */
+    public void setId(String id, boolean notify);
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public static String getDisplayCreationTimeForSession(Session in_session) {
+        try {
+            if (in_session.getCreationTime() == 0) {
+                return "";
+            }
+            DateFormat formatter = new SimpleDateFormat(DATE_TIME_FORMAT);
+            return formatter.format(new Date(in_session.getCreationTime()));
+        } catch (IllegalStateException ise) {
+            //ignore: invalidated session
+            return "";
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void add(Session session) {
+        sessions.put(session.getIdInternal(), session);
+        int size = getActiveSessions();
+        if( size > maxActive ) {
+            synchronized(maxActiveUpdateLock) {
+                if( size > maxActive ) {
+                    maxActive = size;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public long getCreationTimestamp( String sessionId ) {
+        Session s=sessions.get(sessionId);
+        if(s== null)
+            return -1 ;
+        return s.getCreationTime();
+    }

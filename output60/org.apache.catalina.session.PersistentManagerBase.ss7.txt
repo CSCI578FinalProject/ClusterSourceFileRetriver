@@ -1,0 +1,133 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+
+    /**
+     * Indicates whether sessions are saved when the Manager is shut down
+     * properly. This requires the unload() method to be called.
+     */
+    public boolean getSaveOnRestart() {
+
+        return saveOnRestart;
+
+    }
+
+
+
+    /**
+     * Set the option to save sessions to the Store when the Manager is
+     * shut down, then loaded when the Manager starts again. If set to
+     * false, any sessions found in the Store may still be picked up when
+     * the Manager is started again.
+     *
+     * @param saveOnRestart true if sessions should be saved on restart, false if
+     *     they should be ignored.
+     */
+    public void setSaveOnRestart(boolean saveOnRestart) {
+
+        if (saveOnRestart == this.saveOnRestart)
+            return;
+
+        boolean oldSaveOnRestart = this.saveOnRestart;
+        this.saveOnRestart = saveOnRestart;
+        support.firePropertyChange("saveOnRestart",
+                                   new Boolean(oldSaveOnRestart),
+                                   new Boolean(this.saveOnRestart));
+
+    }
+
+
+    /**
+     * Load all sessions found in the persistence mechanism, assuming
+     * they are marked as valid and have not passed their expiration
+     * limit. If persistence is not supported, this method returns
+     * without doing anything.
+     * <p>
+     * Note that by default, this method is not called by the MiddleManager
+     * class. In order to use it, a subclass must specifically call it,
+     * for example in the start() and/or processPersistenceChecks() methods.
+     */
+    public void load() {
+
+        // Initialize our internal data structures
+        sessions.clear();
+
+        if (store == null)
+            return;
+
+        String[] ids = null;
+        try {
+            if (SecurityUtil.isPackageProtectionEnabled()){
+                try{
+                    ids = (String[])
+                        AccessController.doPrivileged(new PrivilegedStoreKeys());
+                }catch(PrivilegedActionException ex){
+                    Exception exception = ex.getException();
+                    log.error("Exception in the Store during load: "
+                              + exception, exception);
+                    return;
+                }
+            } else {
+                ids = store.keys();
+            }
+        } catch (IOException e) {
+            log.error("Can't load sessions from store, " + e.getMessage(), e);
+            return;
+        }
+
+        int n = ids.length;
+        if (n == 0)
+            return;
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("persistentManager.loading", String.valueOf(n)));
+
+        for (int i = 0; i < n; i++)
+            try {
+                swapIn(ids[i]);
+            } catch (IOException e) {
+                log.error("Failed load session from store, " + e.getMessage(), e);
+            }
+
+    }
+
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called after <code>configure()</code>,
+     * and before any of the public methods of the component are utilized.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (started) {
+            log.info(sm.getString("standardManager.alreadyStarted"));
+            return;
+        }
+        if( ! initialized )
+            init();
+
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+        started = true;
+
+        // Force initialization of the random number generator
+        if (log.isDebugEnabled())
+            log.debug("Force random number initialization starting");
+        String dummy = generateSessionId();
+        if (log.isDebugEnabled())
+            log.debug("Force random number initialization completed");
+
+        if (store == null)
+            log.error("No Store configured, persistence disabled");
+        else if (store instanceof Lifecycle)
+            ((Lifecycle)store).start();
+
+    }
+-----CSCI578-----

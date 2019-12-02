@@ -1,0 +1,53 @@
+10
+    
+    public int getLimit() {
+        return limit;
+    }
+
+    public void setOffset(int off) {
+        if (end < off ) end=off;
+        start=off;
+    }
+
+    /** Set the buffer to the representation of an int
+     */
+    public void setInt(int i) {
+        byteC.allocate(16, 32);
+        int current = i;
+        byte[] buf = byteC.getBuffer();
+        int start = 0;
+        int end = 0;
+        if (i == 0) {
+            buf[end++] = (byte) '0';
+        }
+        if (i < 0) {
+            current = -i;
+            buf[end++] = (byte) '-';
+        }
+        while (current > 0) {
+            int digit = current % 10;
+            current = current / 10;
+            buf[end++] = HexUtils.HEX[digit];
+        }
+        byteC.setOffset(0);
+        byteC.setEnd(end);
+        // Inverting buffer
+        end--;
+        if (i < 0) {
+            start++;
+        }
+        while (end > start) {
+            byte temp = buf[start];
+            buf[start] = buf[end];
+            buf[end] = temp;
+            start++;
+            end--;
+        }
+        intValue=i;
+        hasStrValue=false;
+        hasHashCode=false;
+        hasIntValue=true;
+        hasLongValue=false;
+        hasDateValue=false;
+        type=T_BYTES;
+    }

@@ -1,0 +1,125 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new Wrapper to an existing Context.
+     *
+     * @param hostName Virtual host name this wrapper belongs to
+     * @param contextPath Context path this wrapper belongs to
+     * @param path Wrapper mapping
+     * @param wrapper Wrapper object
+     */
+    public void addWrapper(String hostName, String contextPath, String path,
+                           Object wrapper) {
+        addWrapper(hostName, contextPath, path, wrapper, false);
+    }
+
+
+
+    public void addWrapper(String hostName, String contextPath, String path,
+                           Object wrapper, boolean jspWildCard) {
+        Host[] hosts = this.hosts;
+        int pos = find(hosts, hostName);
+        if (pos < 0) {
+            return;
+        }
+        Host host = hosts[pos];
+        if (host.name.equals(hostName)) {
+            Context[] contexts = host.contextList.contexts;
+            int pos2 = find(contexts, contextPath);
+            if( pos2<0 ) {
+                logger.error("No context found: " + contextPath );
+                return;
+            }
+            Context context = contexts[pos2];
+            if (context.name.equals(contextPath)) {
+                addWrapper(context, path, wrapper, jspWildCard);
+            }
+        }
+    }
+
+
+
+    /**
+     * Add a wrapper to the context associated with this wrapper.
+     *
+     * @param path Wrapper mapping
+     * @param wrapper The Wrapper object
+     */
+    public void addWrapper(String path, Object wrapper) {
+        addWrapper(context, path, wrapper);
+    }
+
+
+
+    public void addWrapper(String path, Object wrapper, boolean jspWildCard) {
+        addWrapper(context, path, wrapper, jspWildCard);
+    }
+
+
+
+    protected void addWrapper(Context context, String path, Object wrapper) {
+        addWrapper(context, path, wrapper, false);
+    }
+
+
+
+    /**
+     * Adds a wrapper to the given context.
+     *
+     * @param context The context to which to add the wrapper
+     * @param path Wrapper mapping
+     * @param wrapper The Wrapper object
+     * @param jspWildCard true if the wrapper corresponds to the JspServlet
+     * and the mapping path contains a wildcard; false otherwise
+     */
+    protected void addWrapper(Context context, String path, Object wrapper,
+                              boolean jspWildCard) {
+
+        synchronized (context) {
+            Wrapper newWrapper = new Wrapper();
+            newWrapper.object = wrapper;
+            newWrapper.jspWildCard = jspWildCard;
+            if (path.endsWith("/*")) {
+                // Wildcard wrapper
+                newWrapper.name = path.substring(0, path.length() - 2);
+                Wrapper[] oldWrappers = context.wildcardWrappers;
+                Wrapper[] newWrappers =
+                    new Wrapper[oldWrappers.length + 1];
+                if (insertMap(oldWrappers, newWrappers, newWrapper)) {
+                    context.wildcardWrappers = newWrappers;
+                    int slashCount = slashCount(newWrapper.name);
+                    if (slashCount > context.nesting) {
+                        context.nesting = slashCount;
+                    }
+                }
+            } else if (path.startsWith("*.")) {
+                // Extension wrapper
+                newWrapper.name = path.substring(2);
+                Wrapper[] oldWrappers = context.extensionWrappers;
+                Wrapper[] newWrappers =
+                    new Wrapper[oldWrappers.length + 1];
+                if (insertMap(oldWrappers, newWrappers, newWrapper)) {
+                    context.extensionWrappers = newWrappers;
+                }
+            } else if (path.equals("/")) {
+                // Default wrapper
+                newWrapper.name = "";
+                context.defaultWrapper = newWrapper;
+            } else {
+                // Exact wrapper
+                newWrapper.name = path;
+                Wrapper[] oldWrappers = context.exactWrappers;
+                Wrapper[] newWrappers =
+                    new Wrapper[oldWrappers.length + 1];
+                if (insertMap(oldWrappers, newWrappers, newWrapper)) {
+                    context.exactWrappers = newWrappers;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

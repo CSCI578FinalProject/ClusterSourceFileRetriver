@@ -1,0 +1,64 @@
+3
+-----CSCI578-----
+
+
+
+    public InputStream getResourceAsStream(String path) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (InputStream) doPrivileged("getResourceAsStream", 
+                                              new Object[]{path});
+        } else {
+            return context.getResourceAsStream(path);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the requested resource as an <code>InputStream</code>.  The
+     * path must be specified according to the rules described under
+     * <code>getResource</code>.  If no such resource can be identified,
+     * return <code>null</code>.
+     *
+     * @param path The path to the desired resource.
+     */
+    public InputStream getResourceAsStream(String path) {
+
+        if (path == null)
+            return (null);
+
+        if (!path.startsWith("/") && Globals.STRICT_SERVLET_COMPLIANCE)
+            return null;
+
+        path = RequestUtil.normalize(path);
+        if (path == null)
+            return (null);
+
+        DirContext resources = context.getResources();
+        if (resources != null) {
+            try {
+                Object resource = resources.lookup(path);
+                if (resource instanceof Resource)
+                    return (((Resource) resource).streamContent());
+            } catch (NamingException e) {
+                // Ignore
+            } catch (Exception e) {
+                // Unexpected
+                log(sm.getString("applicationContext.lookup.error", path,
+                        getContextPath()), e);
+            }
+        }
+        return (null);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the main path associated with this context.
+     */
+    public String getContextPath() {
+        return context.getPath();
+    }

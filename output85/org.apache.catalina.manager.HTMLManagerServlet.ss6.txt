@@ -1,0 +1,201 @@
+18
+-----CSCI578-----
+
+
+    protected Comparator<Session> getComparator(String sortBy) {
+        Comparator<Session> comparator = null;
+        if ("CreationTime".equalsIgnoreCase(sortBy)) {
+            comparator = new BaseSessionComparator<Date>() {
+                @Override
+                public Comparable<Date> getComparableObject(Session session) {
+                    return new Date(session.getCreationTime());
+                }
+            };
+        } else if ("id".equalsIgnoreCase(sortBy)) {
+            comparator = new BaseSessionComparator<String>() {
+                @Override
+                public Comparable<String> getComparableObject(Session session) {
+                    return session.getId();
+                }
+            };
+        } else if ("LastAccessedTime".equalsIgnoreCase(sortBy)) {
+            comparator = new BaseSessionComparator<Date>() {
+                @Override
+                public Comparable<Date> getComparableObject(Session session) {
+                    return new Date(session.getLastAccessedTime());
+                }
+            };
+        } else if ("MaxInactiveInterval".equalsIgnoreCase(sortBy)) {
+            comparator = new BaseSessionComparator<Integer>() {
+                @Override
+                public Comparable<Integer> getComparableObject(Session session) {
+                    return Integer.valueOf(session.getMaxInactiveInterval());
+                }
+            };
+        } else if ("new".equalsIgnoreCase(sortBy)) {
+            comparator = new BaseSessionComparator<Boolean>() {
+                @Override
+                public Comparable<Boolean> getComparableObject(Session session) {
+                    return Boolean.valueOf(session.getSession().isNew());
+                }
+            };
+        } else if ("locale".equalsIgnoreCase(sortBy)) {
+            comparator = new BaseSessionComparator<String>() {
+                @Override
+                public Comparable<String> getComparableObject(Session session) {
+                    return JspHelper.guessDisplayLocaleFromSession(session);
+                }
+            };
+        } else if ("user".equalsIgnoreCase(sortBy)) {
+            comparator = new BaseSessionComparator<String>() {
+                @Override
+                public Comparable<String> getComparableObject(Session session) {
+                    return JspHelper.guessDisplayUserFromSession(session);
+                }
+            };
+        } else if ("UsedTime".equalsIgnoreCase(sortBy)) {
+            comparator = new BaseSessionComparator<Date>() {
+                @Override
+                public Comparable<Date> getComparableObject(Session session) {
+                    return new Date(SessionUtils.getUsedTimeForSession(session));
+                }
+            };
+        } else if ("InactiveTime".equalsIgnoreCase(sortBy)) {
+            comparator = new BaseSessionComparator<Date>() {
+                @Override
+                public Comparable<Date> getComparableObject(Session session) {
+                    return new Date(SessionUtils.getInactiveTimeForSession(session));
+                }
+            };
+        } else if ("TTL".equalsIgnoreCase(sortBy)) {
+            comparator = new BaseSessionComparator<Date>() {
+                @Override
+                public Comparable<Date> getComparableObject(Session session) {
+                    return new Date(SessionUtils.getTTLForSession(session));
+                }
+            };
+        }
+        //TODO: complete this to TTL, etc.
+        return comparator;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * List session.
+     * @param cn Name of the application for which the sessions will be listed
+     * @param req The Servlet request
+     * @param resp The Servlet response
+     * @param smClient StringManager for the client's locale
+     * @throws ServletException Propagated Servlet error
+     * @throws IOException An IO error occurred
+     */
+    protected void displaySessionsListPage(ContextName cn,
+            HttpServletRequest req, HttpServletResponse resp,
+            StringManager smClient)
+            throws ServletException, IOException {
+        List<Session> sessions = getSessionsForName(cn, smClient);
+        String sortBy = req.getParameter("sort");
+        String orderBy = null;
+        if (null != sortBy && !"".equals(sortBy.trim())) {
+            Comparator<Session> comparator = getComparator(sortBy);
+            if (comparator != null) {
+                orderBy = req.getParameter("order");
+                if ("DESC".equalsIgnoreCase(orderBy)) {
+                    comparator = Collections.reverseOrder(comparator);
+                    orderBy = "ASC";
+                } else {
+                    orderBy = "DESC";
+                }
+                try {
+                    Collections.sort(sessions, comparator);
+                } catch (IllegalStateException ise) {
+                    // at least 1 of the sessions is invalidated
+                    req.setAttribute(APPLICATION_ERROR, "Can't sort session list: one session is invalidated");
+                }
+            } else {
+                log("WARNING: unknown sort order: " + sortBy);
+            }
+        }
+        // keep sort order
+        req.setAttribute("sort", sortBy);
+        req.setAttribute("order", orderBy);
+        req.setAttribute("activeSessions", sessions);
+        //strong>NOTE</strong> - This header will be overridden
+        // automatically if a <code>RequestDispatcher.forward()</code> call is
+        // ultimately invoked.
+        resp.setHeader("Pragma", "No-cache"); // HTTP 1.0
+        resp.setHeader("Cache-Control", "no-cache,no-store,max-age=0"); // HTTP 1.1
+        resp.setDateHeader("Expires", 0); // 0 means now
+        getServletContext().getRequestDispatcher(sessionsListJspPath).include(req, resp);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected List<Session> getSessionsForName(ContextName cn,
+            StringManager smClient) {
+        if ((cn == null) || !(cn.getPath().startsWith("/") ||
+                cn.getPath().equals(""))) {
+            String path = null;
+            if (cn != null) {
+                path = cn.getPath();
+            }
+            throw new IllegalArgumentException(smClient.getString(
+                    "managerServlet.invalidPath",
+                    RequestUtil.filter(path)));
+        }
+
+        Context ctxt = (Context) host.findChild(cn.getName());
+        if (null == ctxt) {
+            throw new IllegalArgumentException(smClient.getString(
+                    "managerServlet.noContext",
+                    RequestUtil.filter(cn.getDisplayName())));
+        }
+        Manager manager = ctxt.getManager();
+        List<Session> sessions = new ArrayList<>();
+        sessions.addAll(Arrays.asList(manager.findSessions()));
+        if (manager instanceof DistributedManager && showProxySessions) {
+            // Add dummy proxy sessions
+            Set<String> sessionIds =
+                ((DistributedManager) manager).getSessionIdsFull();
+            // Remove active (primary and backup) session IDs from full list
+            for (Session session : sessions) {
+                sessionIds.remove(session.getId());
+            }
+            // Left with just proxy sessions - add them
+            for (String sessionId : sessionIds) {
+                sessions.add(new DummyProxySession(sessionId));
+            }
+        }
+        return sessions;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the list of all sessions IDS (primary, backup and proxy).
+     *
+     * @return  The complete set of sessions IDs across the cluster.
+     */
+    public Set<String> getSessionIdsFull();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the session identifier for this session.
+     */
+    public String getId();
+-----CSCI578-----

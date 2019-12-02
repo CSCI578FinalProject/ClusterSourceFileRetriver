@@ -1,0 +1,36 @@
+8
+    
+    public void open(Selector selector) {
+        sharedSelector = selector;
+        poller = new BlockPoller();
+        poller.selector = sharedSelector;
+        poller.setDaemon(true);
+        poller.setName("NioBlockingSelector.BlockPoller-"+(++threadCounter));
+        poller.start();
+    }
+
+    public void open() throws IOException {
+        enabled = true;
+        getSharedSelector();
+        if (SHARED) {
+            blockingSelector = new NioBlockingSelector();
+            blockingSelector.open(getSharedSelector());
+        }
+
+    }
+
+    protected Selector getSharedSelector() throws IOException {
+        if (SHARED && SHARED_SELECTOR == null) {
+            synchronized ( NioSelectorPool.class ) {
+                if ( SHARED_SELECTOR == null )  {
+                    SHARED_SELECTOR = Selector.open();
+                    log.info("Using a shared selector for servlet write/read");
+                }
+            }
+        }
+        return  SHARED_SELECTOR;
+    }
+
+    public long getSharedSelectorTimeout() {
+        return sharedSelectorTimeout;
+    }

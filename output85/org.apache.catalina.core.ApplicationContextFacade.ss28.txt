@@ -1,0 +1,61 @@
+3
+-----CSCI578-----
+
+
+
+    @Override
+    public InputStream getResourceAsStream(String path) {
+
+        String validatedPath = validateResourcePath(path, false);
+
+        if (validatedPath == null) {
+            return null;
+        }
+
+        WebResourceRoot resources = context.getResources();
+        if (resources != null) {
+            return resources.getResource(validatedPath).getInputStream();
+        }
+
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public InputStream getResourceAsStream(String path) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (InputStream) doPrivileged("getResourceAsStream",
+                                              new Object[]{path});
+        } else {
+            return context.getResourceAsStream(path);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * Returns null if the input path is not valid or a path that will be
+     * acceptable to resoucres.getResource().
+     */
+    private String validateResourcePath(String path, boolean allowEmptyPath) {
+        if (path == null) {
+            return null;
+        }
+
+        if (path.length() == 0 && allowEmptyPath) {
+            return path;
+        }
+
+        if (!path.startsWith("/")) {
+            if (GET_RESOURCE_REQUIRE_SLASH) {
+                return null;
+            } else {
+                return "/" + path;
+            }
+        }
+
+        return path;
+    }

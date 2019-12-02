@@ -1,0 +1,52 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component. This method should be called after <code>configure()</code>,
+     * and before any of the public methods of the component are utilized.
+     * 
+     * @exception LifecycleException
+     *                if this component detects a fatal error that prevents this
+     *                component from being used
+     */
+    public void start() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (started)
+            throw new LifecycleException(sm
+                    .getString("jvmRoute.valve.alreadyStarted"));
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+        started = true;
+        if (cluster == null) {
+            Container hostContainer = getContainer();
+            // compatibility with JvmRouteBinderValve version 1.1
+            // ( setup at context.xml or context.xml.default )
+            if (!(hostContainer instanceof Host)) {
+                if (log.isWarnEnabled())
+                    log.warn(sm.getString("jvmRoute.configure.warn"));
+                hostContainer = hostContainer.getParent();
+            }
+            if (hostContainer instanceof Host
+                    && ((Host) hostContainer).getCluster() != null) {
+                cluster = (CatalinaCluster) ((Host) hostContainer).getCluster();
+            } else {
+                Container engine = hostContainer.getParent() ;
+                if (engine instanceof Engine
+                        && ((Engine) engine).getCluster() != null) {
+                    cluster = (CatalinaCluster) ((Engine) engine).getCluster();
+                }
+            }
+        }
+        
+        if (log.isInfoEnabled()) {
+            log.info(sm.getString("jvmRoute.valve.started"));
+            if (cluster == null)
+                log.info(sm.getString("jvmRoute.noCluster"));
+        }
+
+    }
+-----CSCI578-----

@@ -1,0 +1,167 @@
+4
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Method used to initialize classpath for compiles.
+     * @return the compilation classpath
+     */
+    private String initClassPath() {
+
+        StringBuilder cpath = new StringBuilder();
+
+        if (parentClassLoader instanceof URLClassLoader) {
+            URL [] urls = ((URLClassLoader)parentClassLoader).getURLs();
+
+            for (int i = 0; i < urls.length; i++) {
+                // Tomcat can use URLs other than file URLs. However, a protocol
+                // other than file: will generate a bad file system path, so
+                // only add file: protocol URLs to the classpath.
+
+                if (urls[i].getProtocol().equals("file") ) {
+                    try {
+                        // Need to decode the URL, primarily to convert %20
+                        // sequences back to spaces
+                        String decoded = URLDecoder.decode(urls[i].getPath(), "UTF-8");
+                        cpath.append(decoded + File.pathSeparator);
+                    } catch (UnsupportedEncodingException e) {
+                        // All JREs are required to support UTF-8
+                    }
+                }
+            }
+        }
+
+        cpath.append(options.getScratchDir() + File.pathSeparator);
+
+        String cp = (String) context.getAttribute(Constants.SERVLET_CLASSPATH);
+        if (cp == null || cp.equals("")) {
+            cp = options.getClassPath();
+        }
+
+        String path = cpath.toString() + cp;
+
+        if(log.isDebugEnabled()) {
+            log.debug("Compilation classpath initialized: " + path);
+        }
+        return path;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the classpath used to compile generated Servlets
+     */
+    public String getClassPath();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Helper class to allow initSecurity() to return two items
+     */
+    private static class SecurityHolder{
+        private final CodeSource cs;
+        private final PermissionCollection pc;
+        private SecurityHolder(CodeSource cs, PermissionCollection pc){
+            this.cs = cs;
+            this.pc = pc;
+        }
+    }
+
+    /**
+     * Method used to initialize SecurityManager data.
+     */
+    private SecurityHolder initSecurity() {
+
+        // Setup the PermissionCollection for this web app context
+        // based on the permissions configured for the root of the
+        // web app context directory, then add a file read permission
+        // for that directory.
+        Policy policy = Policy.getPolicy();
+        CodeSource source = null;
+        PermissionCollection permissions = null;
+        if( policy != null ) {
+            try {
+                // Get the permissions for the web app context
+                String docBase = context.getRealPath("/");
+                if( docBase == null ) {
+                    docBase = options.getScratchDir().toString();
+                }
+                String codeBase = docBase;
+                if (!codeBase.endsWith(File.separator)){
+                    codeBase = codeBase + File.separator;
+                }
+                File contextDir = new File(codeBase);
+                URL url = contextDir.getCanonicalFile().toURI().toURL();
+                source = new CodeSource(url,(Certificate[])null);
+                permissions = policy.getPermissions(source);
+
+                // Create a file read permission for web app context directory
+                if (!docBase.endsWith(File.separator)){
+                    permissions.add
+                        (new FilePermission(docBase,"read"));
+                    docBase = docBase + File.separator;
+                } else {
+                    permissions.add
+                        (new FilePermission
+                            (docBase.substring(0,docBase.length() - 1),"read"));
+                }
+                docBase = docBase + "-";
+                permissions.add(new FilePermission(docBase,"read"));
+
+                // Spec says apps should have read/write for their temp
+                // directory. This is fine, as no security sensitive files, at
+                // least any that the app doesn't have full control of anyway,
+                // will be written here.
+                String workDir = options.getScratchDir().toString();
+                if (!workDir.endsWith(File.separator)){
+                    permissions.add
+                        (new FilePermission(workDir,"read,write"));
+                    workDir = workDir + File.separator;
+                }
+                workDir = workDir + "-";
+                permissions.add(new FilePermission(
+                        workDir,"read,write,delete"));
+
+                // Allow the JSP to access org.apache.jasper.runtime.HttpJspBase
+                permissions.add( new RuntimePermission(
+                    "accessClassInPackage.org.apache.jasper.runtime") );
+
+                if (parentClassLoader instanceof URLClassLoader) {
+                    URL [] urls = ((URLClassLoader)parentClassLoader).getURLs();
+                    String jarUrl = null;
+                    String jndiUrl = null;
+                    for (int i=0; i<urls.length; i++) {
+                        if (jndiUrl == null
+                                && urls[i].toString().startsWith("jndi:") ) {
+                            jndiUrl = urls[i].toString() + "-";
+                        }
+                        if (jarUrl == null
+                                && urls[i].toString().startsWith("jar:jndi:")
+                                ) {
+                            jarUrl = urls[i].toString();
+                            jarUrl = jarUrl.substring(0,jarUrl.length() - 2);
+                            jarUrl = jarUrl.substring(0,
+                                     jarUrl.lastIndexOf('/')) + "/-";
+                        }
+                    }
+                    if (jarUrl != null) {
+                        permissions.add(
+                                new FilePermission(jarUrl,"read"));
+                        permissions.add(
+                                new FilePermission(jarUrl.substring(4),"read"));
+                    }
+                    if (jndiUrl != null)
+                        permissions.add(
+                                new FilePermission(jndiUrl,"read") );
+                }
+            } catch(Exception e) {
+                context.log("Security Init for context failed",e);
+            }
+        }
+        return new SecurityHolder(source, permissions);
+    }

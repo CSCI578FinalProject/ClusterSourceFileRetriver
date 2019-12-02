@@ -1,0 +1,131 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void sessionEvent(SessionEvent event) {
+        if (!Session.SESSION_DESTROYED_EVENT.equals(event.getType())) {
+            return;
+        }
+
+        Session session = event.getSession();
+        Manager manager = session.getManager();
+        if (manager == null) {
+            return;
+        }
+        Context context = manager.getContext();
+        Authenticator authenticator = context.getAuthenticator();
+        if (!(authenticator instanceof AuthenticatorBase)) {
+            return;
+        }
+        SingleSignOn sso = ((AuthenticatorBase) authenticator).sso;
+        if (sso == null) {
+            return;
+        }
+        sso.sessionDestroyed(ssoId, session);
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+    /**
+     * Process a session destroyed event by removing references to that session
+     * from the caches and - if the session destruction is the result of a
+     * logout - destroy the associated SSO session.
+     *
+     * @param ssoId   The ID of the SSO session which which the destroyed
+     *                session was associated
+     * @param session The session that has been destroyed
+     */
+    public void sessionDestroyed(String ssoId, Session session) {
+
+        if (!getState().isAvailable()) {
+            return;
+        }
+
+        // Was the session destroyed as the result of a timeout or context stop?
+        // If so, we'll just remove the expired session from the SSO. If the
+        // session was logged out, we'll log out of all session associated with
+        // the SSO.
+        if (((session.getMaxInactiveInterval() > 0)
+            && (session.getIdleTimeInternal() >= session.getMaxInactiveInterval() * 1000))
+            || (!session.getManager().getContext().getState().isAvailable())) {
+            if (containerLog.isDebugEnabled()) {
+                containerLog.debug(sm.getString("singleSignOn.debug.sessionTimeout",
+                        ssoId, session));
+            }
+            removeSession(ssoId, session);
+        } else {
+            // The session was logged out.
+            // Deregister this single session id, invalidating
+            // associated sessions
+            if (containerLog.isDebugEnabled()) {
+                containerLog.debug(sm.getString("singleSignOn.debug.sessionLogout",
+                        ssoId, session));
+            }
+            // First remove the session that we know has expired / been logged
+            // out since it has already been removed from its Manager and, if
+            // we don't remove it first, deregister() will log a warning that it
+            // can't be found
+            removeSession(ssoId, session);
+            // If the SSO session was only associated with one web app the call
+            // above will have removed the SSO session from the cache
+            if (cache.containsKey(ssoId)) {
+                deregister(ssoId);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the Manager within which this Session is valid.
+     */
+    public Manager getManager();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the Session on which this event occurred.
+     */
+    public Session getSession() {
+
+        return (this.session);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the event type of this event.
+     */
+    public String getType() {
+
+        return (this.type);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the idle time from last client access time without invalidation check
+     * @see #getIdleTime()
+     */
+    public long getIdleTimeInternal();
+-----CSCI578-----
+
+
+
+    @Override
+    public String toString() {
+
+        return ("SessionEvent['" + getSession() + "','" +
+                getType() + "']");
+
+    }

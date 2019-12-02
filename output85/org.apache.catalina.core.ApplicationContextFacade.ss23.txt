@@ -1,0 +1,300 @@
+5
+-----CSCI578-----
+
+
+
+    @Override
+    public void setSessionTrackingModes(Set<SessionTrackingMode> sessionTrackingModes) {
+
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            throw new IllegalStateException(
+                    sm.getString("applicationContext.setSessionTracking.ise",
+                            getContextPath()));
+        }
+
+        // Check that only supported tracking modes have been requested
+        for (SessionTrackingMode sessionTrackingMode : sessionTrackingModes) {
+            if (!supportedSessionTrackingModes.contains(sessionTrackingMode)) {
+                throw new IllegalArgumentException(sm.getString(
+                        "applicationContext.setSessionTracking.iae.invalid",
+                        sessionTrackingMode.toString(), getContextPath()));
+            }
+        }
+
+        // Check SSL has not be configured with anything else
+        if (sessionTrackingModes.contains(SessionTrackingMode.SSL)) {
+            if (sessionTrackingModes.size() > 1) {
+                throw new IllegalArgumentException(sm.getString(
+                        "applicationContext.setSessionTracking.iae.ssl",
+                        getContextPath()));
+            }
+        }
+
+        this.sessionTrackingModes = sessionTrackingModes;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setSessionTrackingModes(
+            Set<SessionTrackingMode> sessionTrackingModes) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            doPrivileged("setSessionTrackingModes",
+                    new Object[]{sessionTrackingModes});
+        } else {
+            context.setSessionTrackingModes(sessionTrackingModes);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getContextPath() {
+        return context.getPath();
+    }
+-----CSCI578-----
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public Set<String> getResourcePaths(String path) {
+        if (SecurityUtil.isPackageProtectionEnabled()){
+            return (Set<String>)doPrivileged("getResourcePaths",
+                    new Object[]{path});
+        } else {
+            return context.getResourcePaths(path);
+        }
+    }
+
+
+
+    /**
+     * @deprecated As of Java Servlet API 2.1, with no direct replacement.
+     */
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    @Deprecated
+    public Enumeration<Servlet> getServlets() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Enumeration<Servlet>) doPrivileged("getServlets", null);
+        } else {
+            return context.getServlets();
+        }
+    }
+
+
+
+    /**
+     * @deprecated As of Java Servlet API 2.1, with no direct replacement.
+     */
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    @Deprecated
+    public Enumeration<String> getServletNames() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Enumeration<String>) doPrivileged("getServletNames", null);
+        } else {
+            return context.getServletNames();
+        }
+   }
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public Enumeration<String> getInitParameterNames() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Enumeration<String>) doPrivileged(
+                    "getInitParameterNames", null);
+        } else {
+            return context.getInitParameterNames();
+        }
+    }
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public Enumeration<String> getAttributeNames() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Enumeration<String>) doPrivileged(
+                    "getAttributeNames", null);
+        } else {
+            return context.getAttributeNames();
+        }
+    }
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public <T extends Filter> T createFilter(Class<T> c)
+    throws ServletException {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                return (T) invokeMethod(context, "createFilter",
+                                              new Object[]{c});
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                if (t instanceof ServletException) {
+                    throw (ServletException) t;
+                }
+                return null;
+            }
+        } else {
+            return context.createFilter(c);
+        }
+    }
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public <T extends Servlet> T createServlet(Class<T> c)
+    throws ServletException {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                return (T) invokeMethod(context, "createServlet",
+                                              new Object[]{c});
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                if (t instanceof ServletException) {
+                    throw (ServletException) t;
+                }
+                return null;
+            }
+        } else {
+            return context.createServlet(c);
+        }
+    }
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public Set<SessionTrackingMode> getDefaultSessionTrackingModes() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Set<SessionTrackingMode>)
+                doPrivileged("getDefaultSessionTrackingModes", null);
+        } else {
+            return context.getDefaultSessionTrackingModes();
+        }
+    }
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public Set<SessionTrackingMode> getEffectiveSessionTrackingModes() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Set<SessionTrackingMode>)
+                doPrivileged("getEffectiveSessionTrackingModes", null);
+        } else {
+            return context.getEffectiveSessionTrackingModes();
+        }
+    }
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public <T extends EventListener> T createListener(Class<T> c)
+            throws ServletException {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                return (T) invokeMethod(context, "createListener",
+                                              new Object[]{c});
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                if (t instanceof ServletException) {
+                    throw (ServletException) t;
+                }
+                return null;
+            }
+        } else {
+            return context.createListener(c);
+        }
+    }
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public Map<String, ? extends FilterRegistration> getFilterRegistrations() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Map<String, ? extends FilterRegistration>) doPrivileged(
+                    "getFilterRegistrations", null);
+        } else {
+            return context.getFilterRegistrations();
+        }
+    }
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public Map<String, ? extends ServletRegistration> getServletRegistrations() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Map<String, ? extends ServletRegistration>) doPrivileged(
+                    "getServletRegistrations", null);
+        } else {
+            return context.getServletRegistrations();
+        }
+    }
+
+
+
+    /**
+     * Use reflection to invoke the requested method. Cache the method object
+     * to speed up the process
+     * @param methodName The method to call.
+     * @param params The arguments passed to the called method.
+     */
+    private Object doPrivileged(final String methodName, final Object[] params) {
+        try{
+            return invokeMethod(context, methodName, params);
+        }catch(Throwable t){
+            ExceptionUtils.handleThrowable(t);
+            throw new RuntimeException(t.getMessage(), t);
+        }
+    }
+
+
+    /**
+     * Use reflection to invoke the requested method. Cache the method object
+     * to speed up the process
+     * @param methodName The method to invoke.
+     * @param clazz The class where the method is.
+     * @param params The arguments passed to the called method.
+     */
+    private Object doPrivileged(final String methodName,
+                                final Class<?>[] clazz,
+                                Object[] params) {
+
+        try{
+            Method method = context.getClass().getMethod(methodName, clazz);
+            return executeMethod(method,context,params);
+        } catch (Exception ex){
+            try {
+                handleException(ex);
+            } catch (Throwable t){
+                ExceptionUtils.handleThrowable(t);
+                throw new RuntimeException(t.getMessage());
+            }
+            return null;
+        } finally {
+            params = null;
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getContextPath() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (String) doPrivileged("getContextPath", null);
+        } else {
+            return context.getContextPath();
+        }
+    }

@@ -1,0 +1,176 @@
+14
+-----CSCI578-----
+
+
+    /**
+     * Store the specified context element children.
+     *
+     * @param aWriter Current output writer
+     * @param indent Indentation level
+     * @param aContext Context to store
+     * @param parentDesc The element description
+     * @throws Exception Configuration storing error
+     */
+    @Override
+    public void storeChildren(PrintWriter aWriter, int indent, Object aContext,
+            StoreDescription parentDesc) throws Exception {
+        if (aContext instanceof StandardContext) {
+            StandardContext context = (StandardContext) aContext;
+            // Store nested <Listener> elements
+            LifecycleListener listeners[] = context.findLifecycleListeners();
+            ArrayList<LifecycleListener> listenersArray = new ArrayList<>();
+            for (LifecycleListener listener : listeners) {
+                if (!(listener instanceof ThreadLocalLeakPreventionListener)) {
+                    listenersArray.add(listener);
+                }
+            }
+            storeElementArray(aWriter, indent, listenersArray.toArray());
+
+            // Store nested <Valve> elements
+            Valve valves[] = context.getPipeline().getValves();
+            storeElementArray(aWriter, indent, valves);
+
+            // Store nested <Loader> elements
+            Loader loader = context.getLoader();
+            storeElement(aWriter, indent, loader);
+
+            // Store nested <Manager> elements
+            if (context.getCluster() == null || !context.getDistributable()) {
+                Manager manager = context.getManager();
+                storeElement(aWriter, indent, manager);
+            }
+
+            // Store nested <Realm> element
+            Realm realm = context.getRealm();
+            if (realm != null) {
+                Realm parentRealm = null;
+                // @TODO is this case possible?
+                if (context.getParent() != null) {
+                    parentRealm = context.getParent().getRealm();
+                }
+                if (realm != parentRealm) {
+                    storeElement(aWriter, indent, realm);
+                }
+            }
+            // Store nested resources
+            WebResourceRoot resources = context.getResources();
+            storeElement(aWriter, indent, resources);
+
+            // Store nested <WrapperListener> elements
+            String wLifecycles[] = context.findWrapperLifecycles();
+            getStoreAppender().printTagArray(aWriter, "WrapperListener",
+                    indent + 2, wLifecycles);
+            // Store nested <WrapperLifecycle> elements
+            String wListeners[] = context.findWrapperListeners();
+            getStoreAppender().printTagArray(aWriter, "WrapperLifecycle",
+                    indent + 2, wListeners);
+
+            // Store nested <Parameter> elements
+            ApplicationParameter[] appParams = context
+                    .findApplicationParameters();
+            storeElementArray(aWriter, indent, appParams);
+
+            // Store nested naming resources elements (EJB,Resource,...)
+            NamingResourcesImpl nresources = context.getNamingResources();
+            storeElement(aWriter, indent, nresources);
+
+            // Store nested watched resources <WatchedResource>
+            String[] wresources = context.findWatchedResources();
+            wresources = filterWatchedResources(context, wresources);
+            getStoreAppender().printTagArray(aWriter, "WatchedResource",
+                    indent + 2, wresources);
+
+            // Store nested <JarScanner> elements
+            JarScanner jarScanner = context.getJarScanner();
+            storeElement(aWriter, indent, jarScanner);
+
+            // Store nested <CookieProcessor> elements
+            CookieProcessor cookieProcessor = context.getCookieProcessor();
+            storeElement(aWriter, indent, cookieProcessor);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the distributable flag for this web application.
+     */
+    @Override
+    public boolean getDistributable() {
+
+        return (this.distributable);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public CookieProcessor getCookieProcessor() {
+        return cookieProcessor;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public Manager getManager() {
+        Lock readLock = managerLock.readLock();
+        readLock.lock();
+        try {
+            return manager;
+        } finally {
+            readLock.unlock();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of application parameters for this application.
+     */
+    @Override
+    public ApplicationParameter[] findApplicationParameters() {
+
+        synchronized (applicationParametersLock) {
+            return (applicationParameters);
+        }
+
+    }
+-----CSCI578-----
+
+
+    @Override
+    public JarScanner getJarScanner() {
+        if (jarScanner == null) {
+            jarScanner = new StandardJarScanner();
+        }
+        return jarScanner;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Authenticator getAuthenticator() {
+        Pipeline pipeline = getPipeline();
+        if (pipeline != null) {
+            Valve basic = pipeline.getBasic();
+            if (basic instanceof Authenticator)
+                return (Authenticator) basic;
+            for (Valve valve : pipeline.getValves()) {
+                if (valve instanceof Authenticator) {
+                    return (Authenticator) valve;
+                }
+            }
+        }
+        return null;
+    }

@@ -1,0 +1,167 @@
+9
+-----CSCI578-----
+
+
+    /**
+     * Confirm that a shutdown request was recieved form us.
+     */
+    public boolean isSameAddress(MsgContext ep);
+-----CSCI578-----
+
+
+    public int invoke(Msg msg, MsgContext ep ) 
+        throws IOException    {
+        int type=msg.getByte();
+        ThreadWithAttributes twa = null;
+        if (Thread.currentThread() instanceof ThreadWithAttributes) {
+            twa = (ThreadWithAttributes) Thread.currentThread();
+        }
+        Object control=ep.getControl();
+        MessageBytes tmpMB=(MessageBytes)ep.getNote( tmpBufNote );
+        if( tmpMB==null ) {
+            tmpMB= MessageBytes.newInstance();
+            ep.setNote( tmpBufNote, tmpMB);
+        }
+
+        if( log.isDebugEnabled() )
+            log.debug( "Handling " + type );
+        
+        switch( type ) {
+        case AjpConstants.JK_AJP13_FORWARD_REQUEST:
+            try {
+                if (twa != null) {
+                    twa.setCurrentStage(control, "JkDecode");
+                }
+                decodeRequest( msg, ep, tmpMB );
+                if (twa != null) {
+                    twa.setCurrentStage(control, "JkService");
+                    twa.setParam(control,
+                                 ((Request)ep.getRequest()).unparsedURI());
+                }
+            } catch( Exception ex ) {
+                /* If we are here it is because we have a bad header or something like that */
+                log.error( "Error decoding request ", ex );
+                msg.dump( "Incomming message");
+                Response res=ep.getRequest().getResponse();
+                if ( res==null ) {
+                    res=new Response();
+                    ep.getRequest().setResponse(res);
+                }
+                res.setMessage("Bad Request");
+                res.setStatus(400);
+                return ERROR;
+            }
+
+            if( requiredSecret != null ) {
+                String epSecret=(String)ep.getNote( secretNote );
+                if( epSecret==null || ! requiredSecret.equals( epSecret ) )
+                    return ERROR;
+            }
+            /* XXX it should be computed from request, by workerEnv */
+            if(log.isDebugEnabled() )
+                log.debug("Calling next " + next.getName() + " " +
+                  next.getClass().getName());
+
+            int err= next.invoke( msg, ep );
+            if (twa != null) {
+                twa.setCurrentStage(control, "JkDone");
+            }
+
+            if( log.isDebugEnabled() )
+                log.debug( "Invoke returned " + err );
+            return err;
+        case AjpConstants.JK_AJP13_SHUTDOWN:
+            String epSecret=null;
+            if( msg.getLen() > 3 ) {
+                // we have a secret
+                msg.getBytes( tmpMB );
+                epSecret=tmpMB.toString();
+            }
+            
+            if( requiredSecret != null &&
+                requiredSecret.equals( epSecret ) ) {
+                if( log.isDebugEnabled() )
+                    log.debug("Received wrong secret, no shutdown ");
+                return ERROR;
+            }
+
+            // XXX add isSameAddress check
+            JkChannel ch=ep.getSource();
+            if( !ch.isSameAddress(ep) ) {
+                log.error("Shutdown request not from 'same address' ");
+                return ERROR;
+            }
+
+            if( !shutdownEnabled ) {
+                log.warn("Ignoring shutdown request: shutdown not enabled");
+                return ERROR;
+            }
+            // forward to the default handler - it'll do the shutdown
+            checkRequest(ep);
+            next.invoke( msg, ep );
+
+            if(log.isInfoEnabled())
+                log.info("Exiting");
+            System.exit(0);
+            
+            return OK;
+
+            // We got a PING REQUEST, quickly respond with a PONG
+        case AjpConstants.JK_AJP13_CPING_REQUEST:
+            msg.reset();
+            msg.appendByte(AjpConstants.JK_AJP13_CPONG_REPLY);
+            ep.getSource().send( msg, ep );
+            ep.getSource().flush( msg, ep ); // Server needs to get it
+            return OK;
+
+        case HANDLE_THREAD_END:
+            return OK;
+
+        default:
+            if(log.isInfoEnabled())
+                log.info("Unknown message " + type);
+        }
+
+        return OK;
+    }
+-----CSCI578-----
+
+
+    public Object getControl() {
+        return control;
+    }
+-----CSCI578-----
+
+
+    public final void setCurrentStage(Object control, String currentStage) {
+        if( this.control != control ) return;
+        this.currentStage = currentStage;
+    }
+-----CSCI578-----
+
+
+    public final void setParam( Object control, Object param ) {
+        if( this.control != control ) return;
+        this.param=param;
+    }
+-----CSCI578-----
+
+
+    public abstract byte getByte();
+-----CSCI578-----
+
+
+
+    /**
+     * Set the status message.
+     */
+    public void setMessage(String message) {
+        this.message = message;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    public MessageBytes unparsedURI() {
+        return unparsedURIMB;
+    }

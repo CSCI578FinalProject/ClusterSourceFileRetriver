@@ -1,0 +1,67 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Method used by background thread to check the JSP dependencies
+     * registered with this class for JSP's.
+     */
+    public void checkCompile() {
+
+        if (lastCheck < 0) {
+            // Checking was disabled
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now > (lastCheck + (options.getCheckInterval() * 1000L))) {
+            lastCheck = now;
+        } else {
+            return;
+        }
+        
+        Object [] wrappers = jsps.values().toArray();
+        for (int i = 0; i < wrappers.length; i++ ) {
+            JspServletWrapper jsw = (JspServletWrapper)wrappers[i];
+            JspCompilationContext ctxt = jsw.getJspEngineContext();
+            // JspServletWrapper also synchronizes on this when
+            // it detects it has to do a reload
+            synchronized(jsw) {
+                try {
+                    ctxt.compile();
+                } catch (FileNotFoundException ex) {
+                    ctxt.incrementRemoved();
+                } catch (Throwable t) {
+                    jsw.getServletContext().log("Background compile failed",
+						t);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public void periodicEvent() {
+        rctxt.checkCompile();
+    }
+-----CSCI578-----
+
+
+    public ServletContext getServletContext() {
+        return ctxt.getServletContext();
+    }
+-----CSCI578-----
+
+
+    public ServletContext getServletContext() {
+        return context;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Background compile thread check interval in seconds
+     */
+    public int getCheckInterval();

@@ -1,0 +1,115 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the UserConfig listener with which we are associated.
+     *
+     * @param userConfig The new UserConfig listener
+     */
+    public void setUserConfig(UserConfig userConfig);
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return an absolute pathname to the home directory for the specified user.
+     *
+     * @param user User for which a home directory should be retrieved
+     */
+    public String getHome(String user);
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Deploy a web application for any user who has a web application present
+     * in a directory with a specified name within their home directory.
+     */
+    private void deploy() {
+
+        if (host.getLogger().isDebugEnabled())
+            host.getLogger().debug(sm.getString("userConfig.deploying"));
+
+        // Load the user database object for this host
+        UserDatabase database = null;
+        try {
+            Class clazz = Class.forName(userClass);
+            database = (UserDatabase) clazz.newInstance();
+            database.setUserConfig(this);
+        } catch (Exception e) {
+            host.getLogger().error(sm.getString("userConfig.database"), e);
+            return;
+        }
+
+        // Deploy the web application (if any) for each defined user
+        Enumeration users = database.getUsers();
+        while (users.hasMoreElements()) {
+            String user = (String) users.nextElement();
+            String home = database.getHome(user);
+            deploy(user, home);
+        }
+
+    }
+
+
+
+    /**
+     * Deploy a web application for the specified user if they have such an
+     * application in the defined directory within their home directory.
+     *
+     * @param user Username owning the application to be deployed
+     * @param home Home directory of this user
+     */
+    private void deploy(String user, String home) {
+
+        // Does this user have a web application to be deployed?
+        String contextPath = "/~" + user;
+        if (host.findChild(contextPath) != null)
+            return;
+        File app = new File(home, directoryName);
+        if (!app.exists() || !app.isDirectory())
+            return;
+        /*
+        File dd = new File(app, "/WEB-INF/web.xml");
+        if (!dd.exists() || !dd.isFile() || !dd.canRead())
+            return;
+        */
+        host.getLogger().info(sm.getString("userConfig.deploy", user));
+
+        // Deploy the web application for this user
+        try {
+            Class clazz = Class.forName(contextClass);
+            Context context =
+              (Context) clazz.newInstance();
+            context.setPath(contextPath);
+            context.setDocBase(app.toString());
+            if (context instanceof Lifecycle) {
+                clazz = Class.forName(configClass);
+                LifecycleListener listener =
+                  (LifecycleListener) clazz.newInstance();
+                ((Lifecycle) context).addLifecycleListener(listener);
+            }
+            host.addChild(context);
+        } catch (Exception e) {
+            host.getLogger().error(sm.getString("userConfig.error", user), e);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return an enumeration of the usernames defined on this server.
+     */
+    public Enumeration getUsers();
+-----CSCI578-----

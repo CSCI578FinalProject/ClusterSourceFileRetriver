@@ -1,0 +1,42 @@
+4
+-----CSCI578-----
+
+
+    public boolean isCoordinator() {
+        Member coord = getCoordinator();
+        return coord != null && getLocalMember(false).equals(coord);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void memberDisappeared(Member member) {
+        membership.removeMember(member);
+        super.memberDisappeared(member);
+        try {
+            fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_MBR_DEL,this,"Member remove("+member.getName()+")"));
+            if (started && (isCoordinator() || isHighest()))
+                startElection(true); //to do, if a member disappears, only the coordinator can start
+        } catch (ChannelException x) {
+            log.error(sm.getString("nonBlockingCoordinator.memberDisappeared.failed"),x);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Returns coordinator if one is available
+     * @return Member
+     */
+    public Member getCoordinator() {
+        return (view != null && view.hasMembers()) ? view.getMembers()[0] : null;
+    }
+-----CSCI578-----
+
+
+    public boolean isHighest() {
+        Member local = getLocalMember(false);
+        if ( membership.getMembers().length == 0 ) return true;
+        else return AbsoluteOrder.comp.compare(local,membership.getMembers()[0])<=0;
+    }

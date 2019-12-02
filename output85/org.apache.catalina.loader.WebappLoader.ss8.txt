@@ -1,0 +1,160 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Set the appropriate context attribute for our class path.  This
+     * is required only because Jasper depends on it.
+     */
+    private void setClassPath() {
+
+        // Validate our current state information
+        if (context == null)
+            return;
+        ServletContext servletContext = context.getServletContext();
+        if (servletContext == null)
+            return;
+
+        StringBuilder classpath = new StringBuilder();
+
+        // Assemble the class path information from our class loader chain
+        ClassLoader loader = getClassLoader();
+
+        if (delegate && loader != null) {
+            // Skip the webapp loader for now as delegation is enabled
+            loader = loader.getParent();
+        }
+
+        while (loader != null) {
+            if (!buildClassPath(classpath, loader)) {
+                break;
+            }
+            loader = loader.getParent();
+        }
+
+        if (delegate) {
+            // Delegation was enabled, go back and add the webapp paths
+            loader = getClassLoader();
+            if (loader != null) {
+                buildClassPath(classpath, loader);
+            }
+        }
+
+        this.classpath = classpath.toString();
+
+        // Store the assembled class path as a servlet context attribute
+        servletContext.setAttribute(Globals.CLASS_PATH_ATTR, this.classpath);
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+    /**
+     * Return the Java class loader to be used by this Container.
+     */
+    @Override
+    public ClassLoader getClassLoader() {
+        return classLoader;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Configure associated class loader permissions.
+     */
+    private void setPermissions() {
+
+        if (!Globals.IS_SECURITY_ENABLED)
+            return;
+        if (context == null)
+            return;
+
+        // Tell the class loader the root of the context
+        ServletContext servletContext = context.getServletContext();
+
+        // Assigning permissions for the work directory
+        File workDir =
+            (File) servletContext.getAttribute(ServletContext.TEMPDIR);
+        if (workDir != null) {
+            try {
+                String workDirPath = workDir.getCanonicalPath();
+                classLoader.addPermission
+                    (new FilePermission(workDirPath, "read,write"));
+                classLoader.addPermission
+                    (new FilePermission(workDirPath + File.separator + "-",
+                                        "read,write,delete"));
+            } catch (IOException e) {
+                // Ignore
+            }
+        }
+
+        for (URL url : context.getResources().getBaseUrls()) {
+           classLoader.addPermission(url);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * If there is a Java SecurityManager create a read permission for the
+     * target of the given URL as appropriate.
+     *
+     * @param url URL for a file or directory on local system
+     */
+    void addPermission(URL url) {
+        if (url == null) {
+            return;
+        }
+        if (securityManager != null) {
+            String protocol = url.getProtocol();
+            if ("file".equalsIgnoreCase(protocol)) {
+                URI uri;
+                File f;
+                String path;
+                try {
+                    uri = url.toURI();
+                    f = new File(uri);
+                    path = f.getCanonicalPath();
+                } catch (IOException | URISyntaxException e) {
+                    log.warn(sm.getString(
+                            "webappClassLoader.addPermisionNoCanonicalFile",
+                            url.toExternalForm()));
+                    return;
+                }
+                if (f.isFile()) {
+                    // Allow the file to be read
+                    addPermission(new FilePermission(path, "read"));
+                } else if (f.isDirectory()) {
+                    addPermission(new FilePermission(path, "read"));
+                    addPermission(new FilePermission(
+                            path + File.separator + "-", "read"));
+                } else {
+                    // File does not exist - ignore (shouldn't happen)
+                }
+            } else {
+                // Unsupported URL protocol
+                log.warn(sm.getString(
+                        "webappClassLoader.addPermisionNoProtocol",
+                        protocol, url.toExternalForm()));
+            }
+        }
+    }
+
+
+
+    /**
+     * If there is a Java SecurityManager create a Permission.
+     *
+     * @param permission The permission
+     */
+    void addPermission(Permission permission) {
+        if ((securityManager != null) && (permission != null)) {
+            permissionList.add(permission);
+        }
+    }
+-----CSCI578-----

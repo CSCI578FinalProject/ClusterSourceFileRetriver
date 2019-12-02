@@ -1,0 +1,110 @@
+9
+-----CSCI578-----
+
+
+    /**
+     * Servlet compilation. This compiles the generated sources into
+     * Servlets.
+     * @param smap The SMAP files for source debugging
+     * @throws FileNotFoundException Source files not found
+     * @throws JasperException Compilation error
+     * @throws Exception Some other error
+     */
+    protected abstract void generateClass(String[] smap)
+            throws FileNotFoundException, JasperException, Exception;
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Removed the java and class files for the tag prototype generated from the
+     * current compilation.
+     *
+     * @param classFileName
+     *            If non-null, remove only the class file with with this name.
+     */
+    public void removeProtoTypeFiles(String classFileName) {
+        Iterator<Compiler> iter = tempVector.iterator();
+        while (iter.hasNext()) {
+            Compiler c = iter.next();
+            if (classFileName == null) {
+                c.removeGeneratedClassFiles();
+            } else if (classFileName.equals(c.getCompilationContext()
+                    .getClassFileName())) {
+                c.removeGeneratedClassFiles();
+                tempVector.remove(c);
+                return;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the writer that is used to write the generated Servlet source.
+     */
+    public ServletWriter getWriter() {
+        return writer;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void close() {
+        writer.close();
+    }
+-----CSCI578-----
+
+
+    public void setWriter(ServletWriter writer) {
+        this.writer = writer;
+    }
+-----CSCI578-----
+
+
+    public String getClassFileName() {
+        if (classFileName == null) {
+            classFileName = getOutputDir() + getServletClassName() + ".class";
+        }
+        return classFileName;
+    }
+-----CSCI578-----
+
+
+    public void removeGeneratedClassFiles() {
+        try {
+            File classFile = new File(ctxt.getClassFileName());
+            if (log.isDebugEnabled())
+                log.debug("Deleting " + classFile);
+            if (classFile.exists()) {
+                if (!classFile.delete()) {
+                    log.warn(Localizer.getMessage(
+                            "jsp.warning.compiler.classfile.delete.fail",
+                            classFile.getAbsolutePath()));
+                }
+            }
+        } catch (Exception e) {
+            // Remove as much as possible, log possible exceptions
+            log.warn(Localizer.getMessage("jsp.warning.compiler.classfile.delete.fail.unknown"),
+                     e);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /** ---------- Input/Output  ---------- */
+
+    /**
+     * The output directory to generate code into.  The output directory
+     * is make up of the scratch directory, which is provide in Options,
+     * plus the directory derived from the package name.
+     * @return the output directory in which the generated sources are placed
+     */
+    public String getOutputDir() {
+        if (outputDir == null) {
+            createOutputDir();
+        }
+
+        return outputDir;
+    }

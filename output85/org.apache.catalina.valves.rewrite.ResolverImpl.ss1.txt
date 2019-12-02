@@ -1,0 +1,466 @@
+37
+-----CSCI578-----
+
+
+    private static final String emptyStringIfNull(String value) {
+        if (value == null) {
+            return "";
+        } else {
+            return value;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * The following are not implemented:
+     * - SERVER_ADMIN
+     * - API_VERSION
+     * - IS_SUBREQ
+     */
+    @Override
+    public String resolve(String key) {
+        if (key.equals("HTTP_USER_AGENT")) {
+            return request.getHeader("user-agent");
+        } else if (key.equals("HTTP_REFERER")) {
+            return request.getHeader("referer");
+        } else if (key.equals("HTTP_COOKIE")) {
+            return request.getHeader("cookie");
+        } else if (key.equals("HTTP_FORWARDED")) {
+            return request.getHeader("forwarded");
+        } else if (key.equals("HTTP_HOST")) {
+            String host = request.getHeader("host");
+            if (host != null) {
+                int index = host.indexOf(':');
+                if (index != -1) {
+                    host = host.substring(0, index);
+                }
+            }
+            return host;
+        } else if (key.equals("HTTP_PROXY_CONNECTION")) {
+            return request.getHeader("proxy-connection");
+        } else if (key.equals("HTTP_ACCEPT")) {
+            return request.getHeader("accept");
+        } else if (key.equals("REMOTE_ADDR")) {
+            return request.getRemoteAddr();
+        } else if (key.equals("REMOTE_HOST")) {
+            return request.getRemoteHost();
+        } else if (key.equals("REMOTE_PORT")) {
+            return String.valueOf(request.getRemotePort());
+        } else if (key.equals("REMOTE_USER")) {
+            return request.getRemoteUser();
+        } else if (key.equals("REMOTE_IDENT")) {
+            return request.getRemoteUser();
+        } else if (key.equals("REQUEST_METHOD")) {
+            return request.getMethod();
+        } else if (key.equals("SCRIPT_FILENAME")) {
+            return request.getServletContext().getRealPath(request.getServletPath());
+        } else if (key.equals("REQUEST_PATH")) {
+            return request.getRequestPathMB().toString();
+        } else if (key.equals("CONTEXT_PATH")) {
+            return request.getContextPath();
+        } else if (key.equals("SERVLET_PATH")) {
+            return emptyStringIfNull(request.getServletPath());
+        } else if (key.equals("PATH_INFO")) {
+            return emptyStringIfNull(request.getPathInfo());
+        } else if (key.equals("QUERY_STRING")) {
+            return emptyStringIfNull(request.getQueryString());
+        } else if (key.equals("AUTH_TYPE")) {
+            return request.getAuthType();
+        } else if (key.equals("DOCUMENT_ROOT")) {
+            return request.getServletContext().getRealPath("/");
+        } else if (key.equals("SERVER_NAME")) {
+            return request.getLocalName();
+        } else if (key.equals("SERVER_ADDR")) {
+            return request.getLocalAddr();
+        } else if (key.equals("SERVER_PORT")) {
+            return String.valueOf(request.getLocalPort());
+        } else if (key.equals("SERVER_PROTOCOL")) {
+            return request.getProtocol();
+        } else if (key.equals("SERVER_SOFTWARE")) {
+            return "tomcat";
+        } else if (key.equals("THE_REQUEST")) {
+            return request.getMethod() + " " + request.getRequestURI()
+            + " " + request.getProtocol();
+        } else if (key.equals("REQUEST_URI")) {
+            return request.getRequestURI();
+        } else if (key.equals("REQUEST_FILENAME")) {
+            return request.getPathTranslated();
+        } else if (key.equals("HTTPS")) {
+            return request.isSecure() ? "on" : "off";
+        } else if (key.equals("TIME_YEAR")) {
+            return String.valueOf(Calendar.getInstance().get(Calendar.YEAR));
+        } else if (key.equals("TIME_MON")) {
+            return String.valueOf(Calendar.getInstance().get(Calendar.MONTH));
+        } else if (key.equals("TIME_DAY")) {
+            return String.valueOf(Calendar.getInstance().get(Calendar.DAY_OF_MONTH));
+        } else if (key.equals("TIME_HOUR")) {
+            return String.valueOf(Calendar.getInstance().get(Calendar.HOUR_OF_DAY));
+        } else if (key.equals("TIME_MIN")) {
+            return String.valueOf(Calendar.getInstance().get(Calendar.MINUTE));
+        } else if (key.equals("TIME_SEC")) {
+            return String.valueOf(Calendar.getInstance().get(Calendar.SECOND));
+        } else if (key.equals("TIME_WDAY")) {
+            return String.valueOf(Calendar.getInstance().get(Calendar.DAY_OF_WEEK));
+        } else if (key.equals("TIME")) {
+            return FastHttpDateFormat.getCurrentDate();
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the HTTP request method used in this Request.
+     */
+    @Override
+    public String getMethod() {
+        return coyoteRequest.method().toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the request URI for this request.
+     */
+    @Override
+    public String getRequestURI() {
+        return coyoteRequest.requestURI().toString();
+    }
+-----CSCI578-----
+
+
+    // -------------------- Conversion and getters --------------------
+
+    /**
+     * Compute the string value.
+     * @return the string
+     */
+    @Override
+    public String toString() {
+        if( hasStrValue ) {
+            return strValue;
+        }
+
+        switch (type) {
+        case T_CHARS:
+            strValue=charC.toString();
+            hasStrValue=true;
+            return strValue;
+        case T_BYTES:
+            strValue=byteC.toString();
+            hasStrValue=true;
+            return strValue;
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the authentication type used for this Request.
+     */
+    @Override
+    public String getAuthType() {
+        return authType;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the value to be returned by <code>isSecure()</code>
+     * for this Request.
+     *
+     * @param secure The new isSecure value
+     */
+    public void setSecure(boolean secure) {
+        this.secure = secure;
+    }
+
+
+
+    /**
+     * @return <code>true</code> if this request was received on a secure connection.
+     */
+    @Override
+    public boolean isSecure() {
+        return secure;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public ServletContext getServletContext() {
+        return getContext().getServletContext();
+     }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the query string associated with this request.
+     */
+    @Override
+    public String getQueryString() {
+        return coyoteRequest.queryString().toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the first value of the specified header, if any; otherwise,
+     * return <code>null</code>
+     *
+     * @param name Name of the requested header
+     * @return the header value
+     */
+    @Override
+    public String getHeader(String name) {
+        return coyoteRequest.getHeader(name);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the remote IP address making this Request.
+     */
+    @Override
+    public String getRemoteAddr() {
+        if (remoteAddr == null) {
+            coyoteRequest.action
+                (ActionCode.REQ_HOST_ADDR_ATTRIBUTE, coyoteRequest);
+            remoteAddr = coyoteRequest.remoteAddr().toString();
+        }
+        return remoteAddr;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the portion of the request URI used to select the servlet
+     * that will process this request.
+     */
+    @Override
+    public String getServletPath() {
+        return (mappingData.wrapperPath.toString());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the path information associated with this Request.
+     */
+    @Override
+    public String getPathInfo() {
+        return mappingData.pathInfo.toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the protocol and version used to make this Request.
+     */
+    @Override
+    public String getProtocol() {
+        return coyoteRequest.protocol().toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the host name of the Internet Protocol (IP) interface on
+     * which the request was received.
+     */
+    @Override
+    public String getLocalName(){
+        if (localName == null) {
+            coyoteRequest.action
+                (ActionCode.REQ_LOCAL_NAME_ATTRIBUTE, coyoteRequest);
+            localName = coyoteRequest.localName().toString();
+        }
+        return localName;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the Internet Protocol (IP) address of the interface on
+     * which the request  was received.
+     */
+    @Override
+    public String getLocalAddr(){
+        if (localAddr == null) {
+            coyoteRequest.action
+                (ActionCode.REQ_LOCAL_ADDR_ATTRIBUTE, coyoteRequest);
+            localAddr = coyoteRequest.localAddr().toString();
+        }
+        return localAddr;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the Internet Protocol (IP) port number of the interface
+     * on which the request was received.
+     */
+    @Override
+    public int getLocalPort(){
+        if (localPort == -1){
+            coyoteRequest.action
+                (ActionCode.REQ_LOCALPORT_ATTRIBUTE, coyoteRequest);
+            localPort = coyoteRequest.getLocalPort();
+        }
+        return localPort;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the extra path information for this request, translated
+     * to a real path.
+     */
+    @Override
+    public String getPathTranslated() {
+
+        Context context = getContext();
+        if (context == null) {
+            return null;
+        }
+
+        if (getPathInfo() == null) {
+            return null;
+        }
+
+        return context.getServletContext().getRealPath(getPathInfo());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Principal who has been authenticated for this Request.  This
+     * value is also used to calculate the value to be returned by the
+     * <code>getRemoteUser()</code> method.
+     *
+     * @param principal The user Principal
+     */
+    public void setUserPrincipal(Principal principal) {
+
+        if (Globals.IS_SECURITY_ENABLED){
+            HttpSession session = getSession(false);
+            if ( (subject != null) &&
+                 (!subject.getPrincipals().contains(principal)) ){
+                subject.getPrincipals().add(principal);
+            } else if (session != null &&
+                        session.getAttribute(Globals.SUBJECT_ATTR) == null) {
+                subject = new Subject();
+                subject.getPrincipals().add(principal);
+            }
+            if (session != null){
+                session.setAttribute(Globals.SUBJECT_ATTR, subject);
+            }
+        }
+
+        this.userPrincipal = principal;
+    }
+
+
+
+    /**
+     * @return the name of the remote user that has been authenticated
+     * for this Request.
+     */
+    @Override
+    public String getRemoteUser() {
+
+        if (userPrincipal == null) {
+            return null;
+        }
+
+        return userPrincipal.getName();
+    }
+-----CSCI578-----
+
+
+    // -------------------- Conversion and getters --------------------
+
+    @Override
+    public String toString() {
+        if (null == buff) {
+            return null;
+        } else if (end-start == 0) {
+            return "";
+        }
+        return StringCache.toString(this);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public String resolveHttp(String key) {
+        return request.getHeader(key);
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- debug --------------------
+
+    @Override
+    public String toString() {
+        return "R( " + requestURI().toString() + ")";
+    }
+-----CSCI578-----
+
+
+    // -------------------- Information about the current request  -----------
+    // This is useful for long-running requests only
+
+    public String getMethod() {
+        return req.method().toString();
+    }
+-----CSCI578-----
+
+
+    public String getCurrentUri() {
+        return req.requestURI().toString();
+    }
+-----CSCI578-----
+
+
+    public String getCurrentQueryString() {
+        return req.queryString().toString();
+    }
+-----CSCI578-----
+
+
+    public String getProtocol() {
+        return req.protocol().toString();
+    }
+-----CSCI578-----
+
+
+    public String getVirtualHost() {
+        return req.serverName().toString();
+    }

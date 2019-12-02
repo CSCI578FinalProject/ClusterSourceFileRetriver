@@ -1,0 +1,92 @@
+3
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Extract the desired request property, and pass it (along with the
+     * specified request and response objects) to the protected
+     * <code>process()</code> method to perform the actual filtering.
+     * This method must be implemented by a concrete subclass.
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be created
+     * @param chain The filter chain
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    @Override
+    public abstract void doFilter(ServletRequest request,
+            ServletResponse response, FilterChain chain) throws IOException,
+            ServletException;
+
+
+
+    /**
+     * Perform the filtering that has been configured for this Filter, matching
+     * against the specified request property.
+     *
+     * @param property The request property on which to filter
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be processed
+     * @param chain The filter chain
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    protected void process(String property, ServletRequest request,
+            ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+
+        if (isAllowed(property)) {
+            chain.doFilter(request, response);
+        } else {
+            if (response instanceof HttpServletResponse) {
+                ((HttpServletResponse) response).sendError(denyStatus);
+            } else {
+                sendErrorWhenNotHttp(response);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    private void sendErrorWhenNotHttp(ServletResponse response)
+            throws IOException {
+        response.setContentType(PLAIN_TEXT_MIME_TYPE);
+        response.getWriter().write(sm.getString("http.403"));
+        response.getWriter().flush();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process the allow and deny rules for the provided property.
+     *
+     * @param property  The property to test against the allow and deny lists
+     * @return          <code>true</code> if this request should be allowed,
+     *                  <code>false</code> otherwise
+     */
+    private boolean isAllowed(String property) {
+        if (deny != null && deny.matcher(property).matches()) {
+            return false;
+        }
+
+        // Check the allow patterns, if any
+        if (allow != null && allow.matcher(property).matches()) {
+            return true;
+        }
+
+        // Allow if denies specified but not allows
+        if (deny != null && allow == null) {
+            return true;
+        }
+
+        // Deny this request
+        return false;
+    }

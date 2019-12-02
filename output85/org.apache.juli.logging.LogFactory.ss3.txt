@@ -1,0 +1,58 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    // only those 2 methods need to change to use a different direct logger.
+
+    /**
+     * <p>Construct (if necessary) and return a <code>Log</code> instance,
+     * using the factory's current set of configuration attributes.</p>
+     *
+     * <p><strong>NOTE</strong> - Depending upon the implementation of
+     * the <code>LogFactory</code> you are using, the <code>Log</code>
+     * instance you are returned may or may not be local to the current
+     * application, and may or may not be returned again on a subsequent
+     * call with the same name argument.</p>
+     *
+     * @param name Logical name of the <code>Log</code> instance to be
+     *  returned (the meaning of this name is only known to the underlying
+     *  logging implementation that is being wrapped)
+     *
+     * @return A log instance with the requested name
+     *
+     * @exception LogConfigurationException if a suitable <code>Log</code>
+     *  instance cannot be returned
+     */
+    public Log getInstance(String name) throws LogConfigurationException {
+        if (discoveredLogConstructor == null) {
+            return DirectJDKLog.getInstance(name);
+        }
+
+        try {
+            return discoveredLogConstructor.newInstance(name);
+        } catch (InstantiationException | IllegalAccessException | IllegalArgumentException |
+                InvocationTargetException e) {
+            throw new LogConfigurationException(e);
+        }
+    }
+
+
+
+    /**
+     * Convenience method to derive a name from the specified class and
+     * call <code>getInstance(String)</code> with it.
+     *
+     * @param clazz Class for which a suitable Log name will be derived
+     *
+     * @return A log instance with a name of clazz.getName()
+     *
+     * @exception LogConfigurationException if a suitable <code>Log</code>
+     *  instance cannot be returned
+     */
+    public Log getInstance(Class<?> clazz) throws LogConfigurationException {
+        return getInstance( clazz.getName());
+    }

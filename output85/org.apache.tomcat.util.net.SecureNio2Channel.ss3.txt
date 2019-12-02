@@ -1,0 +1,125 @@
+7
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Writes a sequence of bytes to this channel from the given buffer.
+     *
+     * @param src The buffer from which bytes are to be retrieved
+     * @return The number of bytes written, possibly zero
+     */
+    @Override
+    public Future<Integer> write(ByteBuffer src) {
+        return new FutureWrite(src);
+    }
+
+
+    @Override
+    public <A> void write(final ByteBuffer src, final long timeout, final TimeUnit unit,
+            final A attachment, final CompletionHandler<Integer, ? super A> handler) {
+        // Check state
+        if (closing || closed) {
+            handler.failed(new IOException(sm.getString("channel.nio.ssl.closing")), attachment);
+            return;
+        }
+        try {
+            // Prepare the output buffer
+            netOutBuffer.clear();
+            // Wrap the source data into the internal buffer
+            SSLEngineResult result = sslEngine.wrap(src, netOutBuffer);
+            final int written = result.bytesConsumed();
+            netOutBuffer.flip();
+            if (result.getStatus() == Status.OK) {
+                if (result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) {
+                    tasks();
+                }
+                // Write data to the channel
+                sc.write(netOutBuffer, timeout, unit, attachment,
+                        new CompletionHandler<Integer, A>() {
+                    @Override
+                    public void completed(Integer nBytes, A attach) {
+                        if (nBytes.intValue() < 0) {
+                            failed(new EOFException(), attach);
+                        } else if (netOutBuffer.hasRemaining()) {
+                            sc.write(netOutBuffer, timeout, unit, attachment, this);
+                        } else if (written == 0) {
+                            // Special case, start over to avoid code duplication
+                            write(src, timeout, unit, attachment, handler);
+                        } else {
+                            // Call the handler completed method with the
+                            // consumed bytes number
+                            handler.completed(Integer.valueOf(written), attach);
+                        }
+                    }
+                    @Override
+                    public void failed(Throwable exc, A attach) {
+                        handler.failed(exc, attach);
+                    }
+                });
+            } else {
+                throw new IOException(sm.getString("channel.nio.ssl.wrapFail", result.getStatus()));
+            }
+        } catch (Exception e) {
+            handler.failed(e, attachment);
+        }
+    }
+
+
+    @Override
+    public <A> void write(final ByteBuffer[] srcs, final int offset, final int length,
+            final long timeout, final TimeUnit unit, final A attachment,
+            final CompletionHandler<Long, ? super A> handler) {
+        if ((offset < 0) || (length < 0) || (offset > srcs.length - length)) {
+            throw new IndexOutOfBoundsException();
+        }
+        // Check state
+        if (closing || closed) {
+            handler.failed(new IOException(sm.getString("channel.nio.ssl.closing")), attachment);
+            return;
+        }
+        try {
+             // Prepare the output buffer
+            netOutBuffer.clear();
+            // Wrap the source data into the internal buffer
+            SSLEngineResult result = sslEngine.wrap(srcs, offset, length, netOutBuffer);
+            final int written = result.bytesConsumed();
+            netOutBuffer.flip();
+            if (result.getStatus() == Status.OK) {
+                if (result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) {
+                    tasks();
+                }
+                // Write data to the channel
+                sc.write(netOutBuffer, timeout, unit, attachment, new CompletionHandler<Integer, A>() {
+                    @Override
+                    public void completed(Integer nBytes, A attach) {
+                        if (nBytes.intValue() < 0) {
+                            failed(new EOFException(), attach);
+                        } else if (netOutBuffer.hasRemaining()) {
+                            sc.write(netOutBuffer, timeout, unit, attachment, this);
+                        } else if (written == 0) {
+                            // Special case, start over to avoid code duplication
+                            write(srcs, offset, length, timeout, unit, attachment, handler);
+                        } else {
+                            // Call the handler completed method with the
+                            // consumed bytes number
+                            handler.completed(Long.valueOf(written), attach);
+                        }
+                    }
+                    @Override
+                    public void failed(Throwable exc, A attach) {
+                        handler.failed(exc, attach);
+                    }
+                });
+            } else {
+                throw new IOException(sm.getString("channel.nio.ssl.wrapFail", result.getStatus()));
+            }
+        } catch (Exception e) {
+            handler.failed(e, attachment);
+        }
+   }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

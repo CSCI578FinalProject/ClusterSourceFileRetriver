@@ -1,0 +1,429 @@
+46
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private static JSSEKeyManager chooseKeyManager(KeyManager[] managers) throws Exception {
+        for (KeyManager manager : managers) {
+            if (manager instanceof JSSEKeyManager) {
+                return (JSSEKeyManager) manager;
+            }
+        }
+        throw new IllegalStateException(sm.getString("openssl.keyManagerMissing"));
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Parse the specified expression according to the OpenSSL syntax and
+     * returns a list of standard JSSE cipher names.
+     *
+     * @param expression the openssl expression to define a list of cipher.
+     * @return the corresponding list of ciphers.
+     */
+    public static List<String> parseExpression(String expression) {
+        return convertForJSSE(parse(expression));
+    }
+-----CSCI578-----
+
+
+    private static X509TrustManager chooseTrustManager(TrustManager[] managers) {
+        for (TrustManager m : managers) {
+            if (m instanceof X509TrustManager) {
+                return (X509TrustManager) m;
+            }
+        }
+        throw new IllegalStateException(sm.getString("openssl.trustManagerMissing"));
+    }
+-----CSCI578-----
+
+
+    /* Return OpenSSL version string (run time version) */
+    public static native String versionString();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public CertificateVerification getCertificateVerification() {
+        return certificateVerification;
+    }
+-----CSCI578-----
+
+
+
+    public boolean getHonorCipherOrder() {
+        return honorCipherOrder;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public boolean getInsecureRenegotiation() {
+        return insecureRenegotiation;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set OpenSSL Option.
+     * @param ctx Server or Client context to use.
+     * @param options  See SSL.SSL_OP_* for option flags.
+     */
+    public static native void setOptions(long ctx, int options);
+-----CSCI578-----
+
+
+    /**
+     * Clears OpenSSL Options.
+     * @param ctx Server or Client context to use.
+     * @param options  See SSL.SSL_OP_* for option flags.
+     */
+    public static native void clearOptions(long ctx, int options);
+-----CSCI578-----
+
+
+
+    public boolean getDisableCompression() {
+        return disableCompression;
+    }
+-----CSCI578-----
+
+
+
+    public boolean getDisableSessionTickets() {
+        return disableSessionTickets;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return An OpenSSL cipher string for the current configuration.
+     */
+    public String getCiphers() {
+        return ciphers;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Cipher Suite available for negotiation in SSL handshake.
+     * <br>
+     * This complex directive uses a colon-separated cipher-spec string consisting
+     * of OpenSSL cipher specifications to configure the Cipher Suite the client
+     * is permitted to negotiate in the SSL handshake phase. Notice that this
+     * directive can be used both in per-server and per-directory context.
+     * In per-server context it applies to the standard SSL handshake when a
+     * connection is established. In per-directory context it forces a SSL
+     * renegotiation with the reconfigured Cipher Suite after the HTTP request
+     * was read but before the HTTP response is sent.
+     * @param ctx Server or Client context to use.
+     * @param ciphers An OpenSSL cipher specification.
+     * @return <code>true</code> if the operation was successful
+     * @throws Exception An error occurred
+     */
+    public static native boolean setCipherSuite(long ctx, String ciphers)
+        throws Exception;
+-----CSCI578-----
+
+
+
+    public String getCertificateKeyPassword() {
+        return certificateKeyPassword;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set Certificate
+     * <br>
+     * Point setCertificateFile at a PEM encoded certificate.  If
+     * the certificate is encrypted, then you will be prompted for a
+     * pass phrase.  Note that a kill -HUP will prompt again. A test
+     * certificate can be generated with `make certificate' under
+     * built time. Keep in mind that if you've both a RSA and a DSA
+     * certificate you can configure both in parallel (to also allow
+     * the use of DSA ciphers, etc.)
+     * <br>
+     * If the key is not combined with the certificate, use key param
+     * to point at the key file.  Keep in mind that if
+     * you've both a RSA and a DSA private key you can configure
+     * both in parallel (to also allow the use of DSA ciphers, etc.)
+     * @param ctx Server or Client context to use.
+     * @param cert Certificate file.
+     * @param key Private Key file to use if not in cert.
+     * @param password Certificate password. If null and certificate
+     *                 is encrypted, password prompt will be displayed.
+     * @param idx Certificate index SSL_AIDX_RSA or SSL_AIDX_DSA.
+     * @return <code>true</code> if the operation was successful
+     * @throws Exception An error occurred
+     */
+    public static native boolean setCertificate(long ctx, String cert,
+                                                String key, String password,
+                                                int idx)
+        throws Exception;
+-----CSCI578-----
+
+
+
+    public String getCertificateChainFile() {
+        return certificateChainFile;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set File of PEM-encoded Server CA Certificates
+     * <br>
+     * This directive sets the optional all-in-one file where you can assemble the
+     * certificates of Certification Authorities (CA) which form the certificate
+     * chain of the server certificate. This starts with the issuing CA certificate
+     * of of the server certificate and can range up to the root CA certificate.
+     * Such a file is simply the concatenation of the various PEM-encoded CA
+     * Certificate files, usually in certificate chain order.
+     * <br>
+     * But be careful: Providing the certificate chain works only if you are using
+     * a single (either RSA or DSA) based server certificate. If you are using a
+     * coupled RSA+DSA certificate pair, this will work only if actually both
+     * certificates use the same certificate chain. Else the browsers will be
+     * confused in this situation.
+     * @param ctx Server or Client context to use.
+     * @param file File of PEM-encoded Server CA Certificates.
+     * @param skipfirst Skip first certificate if chain file is inside
+     *                  certificate file.
+     * @return <code>true</code> if the operation was successful
+     */
+    public static native boolean setCertificateChainFile(long ctx, String file,
+                                                         boolean skipfirst);
+-----CSCI578-----
+
+
+
+    public String getCaCertificateFile() {
+        return caCertificateFile;
+    }
+-----CSCI578-----
+
+
+
+    public String getCaCertificatePath() {
+        return caCertificatePath;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set File and Directory of concatenated PEM-encoded CA Certificates
+     * for Client Auth
+     * <br>
+     * This directive sets the all-in-one file where you can assemble the
+     * Certificates of Certification Authorities (CA) whose clients you deal with.
+     * These are used for Client Authentication. Such a file is simply the
+     * concatenation of the various PEM-encoded Certificate files, in order of
+     * preference. This can be used alternatively and/or additionally to
+     * path.
+     * <br>
+     * The files in this directory have to be PEM-encoded and are accessed through
+     * hash filenames. So usually you can't just place the Certificate files there:
+     * you also have to create symbolic links named hash-value.N. And you should
+     * always make sure this directory contains the appropriate symbolic links.
+     * Use the Makefile which comes with mod_ssl to accomplish this task.
+     * @param ctx Server or Client context to use.
+     * @param file File of concatenated PEM-encoded CA Certificates for
+     *             Client Auth.
+     * @param path Directory of PEM-encoded CA Certificates for Client Auth.
+     * @return <code>true</code> if the operation was successful
+     * @throws Exception An error occurred
+     */
+    public static native boolean setCACertificate(long ctx, String file,
+                                                  String path)
+        throws Exception;
+-----CSCI578-----
+
+
+
+    public String getCertificateRevocationListFile() {
+        return certificateRevocationListFile;
+    }
+-----CSCI578-----
+
+
+
+    public String getCertificateRevocationListPath() {
+        return certificateRevocationListPath;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set File of concatenated PEM-encoded CA CRLs or
+     * directory of PEM-encoded CA Certificates for Client Auth
+     * <br>
+     * This directive sets the all-in-one file where you can assemble the
+     * Certificate Revocation Lists (CRL) of Certification Authorities (CA)
+     * whose clients you deal with. These are used for Client Authentication.
+     * Such a file is simply the concatenation of the various PEM-encoded CRL
+     * files, in order of preference.
+     * <br>
+     * The files in this directory have to be PEM-encoded and are accessed through
+     * hash filenames. So usually you can't just place the Certificate files there:
+     * you also have to create symbolic links named hash-value.N. And you should
+     * always make sure this directory contains the appropriate symbolic links.
+     * Use the Makefile which comes with mod_ssl to accomplish this task.
+     * @param ctx Server or Client context to use.
+     * @param file File of concatenated PEM-encoded CA CRLs for Client Auth.
+     * @param path Directory of PEM-encoded CA Certificates for Client Auth.
+     * @return <code>true</code> if the operation was successful
+     * @throws Exception An error occurred
+     */
+    public static native boolean setCARevocation(long ctx, String file,
+                                                 String path)
+        throws Exception;
+-----CSCI578-----
+
+
+
+    public int getCertificateVerificationDepth() {
+        return certificateVerificationDepth;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set Type of Client Certificate verification and Maximum depth of CA Certificates
+     * in Client Certificate verification.
+     * <br>
+     * This directive sets the Certificate verification level for the Client
+     * Authentication. Notice that this directive can be used both in per-server
+     * and per-directory context. In per-server context it applies to the client
+     * authentication process used in the standard SSL handshake when a connection
+     * is established. In per-directory context it forces a SSL renegotiation with
+     * the reconfigured client verification level after the HTTP request was read
+     * but before the HTTP response is sent.
+     * <br>
+     * The following levels are available for level:
+     * <PRE>
+     * SSL_CVERIFY_NONE           - No client Certificate is required at all
+     * SSL_CVERIFY_OPTIONAL       - The client may present a valid Certificate
+     * SSL_CVERIFY_REQUIRE        - The client has to present a valid Certificate
+     * SSL_CVERIFY_OPTIONAL_NO_CA - The client may present a valid Certificate
+     *                              but it need not to be (successfully) verifiable
+     * </PRE>
+     * <br>
+     * The depth actually is the maximum number of intermediate certificate issuers,
+     * i.e. the number of CA certificates which are max allowed to be followed while
+     * verifying the client certificate. A depth of 0 means that self-signed client
+     * certificates are accepted only, the default depth of 1 means the client
+     * certificate can be self-signed or has to be signed by a CA which is directly
+     * known to the server (i.e. the CA's certificate is under
+     * <code>setCACertificatePath</code>), etc.
+     * @param ctx Server or Client context to use.
+     * @param level Type of Client Certificate verification.
+     * @param depth Maximum depth of CA Certificates in Client Certificate
+     *              verification.
+     */
+    public static native void setVerify(long ctx, int level, int depth);
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public void setOpenSslContext(Long openSslContext) {
+        this.openSslContext = openSslContext;
+    }
+-----CSCI578-----
+
+
+
+    public String getCertificateKeyAlias() {
+        return certificateKeyAlias;
+    }
+-----CSCI578-----
+
+
+
+    public int getSessionCacheSize() {
+        return sessionCacheSize;
+    }
+-----CSCI578-----
+
+
+
+    public int getSessionTimeout() {
+        return sessionTimeout;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public synchronized void destroy() {
+        // Guard against multiple destroyPools() calls triggered by construction exception and finalize() later
+        if (aprPoolDestroyed.compareAndSet(0, 1)) {
+            if (ctx != 0) {
+                SSLContext.free(ctx);
+            }
+            if (aprPool != 0) {
+                Pool.destroy(aprPool);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Free the resources used by the Context
+     * @param ctx Server or Client context to free.
+     * @return APR Status code.
+     */
+    public static native int free(long ctx);
+-----CSCI578-----
+
+
+    /**
+     * Set the size of the internal session cache.
+     * http://www.openssl.org/docs/ssl/SSL_CTX_sess_set_cache_size.html
+     * @param ctx Server or Client context to use.
+     * @param size The cache size
+     * @return the value set
+     */
+    public static native long setSessionCacheSize(long ctx, long size);
+-----CSCI578-----
+
+
+    /**
+     * Set the timeout for the internal session cache in seconds.
+     * http://www.openssl.org/docs/ssl/SSL_CTX_set_timeout.html
+     * @param ctx Server or Client context to use.
+     * @param timeoutSeconds Timeout value
+     * @return the value set
+     */
+    public static native long setSessionCacheTimeout(long ctx, long timeoutSeconds);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void setSessionTimeout(int seconds) {
+        if (seconds < 0) {
+            throw new IllegalArgumentException();
+        }
+        SSLContext.setSessionCacheTimeout(context, seconds);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setSessionCacheSize(int size) {
+        if (size < 0) {
+            throw new IllegalArgumentException();
+        }
+        SSLContext.setSessionCacheSize(context, size);
+    }
+-----CSCI578-----

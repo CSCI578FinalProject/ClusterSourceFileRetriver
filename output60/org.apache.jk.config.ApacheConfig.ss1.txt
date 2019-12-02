@@ -1,0 +1,36 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /** Forward all requests for a context to tomcat.
+	The default.
+     */
+    protected void generateStupidMappings(Context context,
+					   PrintWriter mod_jk )
+    {
+	String ctxPath  = context.getPath();
+	if(ctxPath == null)
+	    return;
+
+	String nPath=("".equals(ctxPath)) ? "/" : ctxPath;
+	
+        mod_jk.println();
+	mod_jk.println(indent + "JkMount " +  nPath + " " + jkWorker );
+	if( "".equals(ctxPath) ) {
+	    mod_jk.println(indent + "JkMount " +  nPath + "* " + jkWorker );
+            if ( context.getParent() instanceof Host ) {
+                mod_jk.println(indent + "DocumentRoot \"" +
+                            getApacheDocBase(context) + "\"");
+            } else {
+                mod_jk.println(indent +
+                        "# To avoid Apache serving root welcome files from htdocs, update DocumentRoot");
+                mod_jk.println(indent +
+                        "# to point to: \"" + getApacheDocBase(context) + "\"");
+            }
+
+	} else {
+	    mod_jk.println(indent + "JkMount " +  nPath + "/* " + jkWorker );
+	}
+    }

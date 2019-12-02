@@ -1,0 +1,68 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Change the session ID of the current session to a new randomly generated
+     * session ID.
+     * 
+     * @param session   The session to change the session ID for
+     */
+    @Override
+    public void changeSessionId(Session session) {
+        changeSessionId(session, true);
+    }
+
+
+    public void changeSessionId(Session session, boolean notify) {
+        // original sessionID
+        String orgSessionID = session.getId();
+        super.changeSessionId(session);
+        if (notify) {
+            // changed sessionID
+            String newSessionID = session.getId();
+            try {
+                // serialize sessionID
+                byte[] data = serializeSessionId(newSessionID);
+                // notify change sessionID
+                SessionMessage msg = new SessionMessageImpl(getName(),
+                        SessionMessage.EVT_CHANGE_SESSION_ID, data,
+                        orgSessionID, orgSessionID + "-"
+                                + System.currentTimeMillis());
+                msg.setTimestamp(System.currentTimeMillis());
+                counterSend_EVT_CHANGE_SESSION_ID++;
+                send(msg);
+            } catch (IOException e) {
+                log.error(sm.getString("deltaManager.unableSerializeSessionID",
+                        newSessionID), e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * serialize sessionID
+     * @throws IOException if an input/output error occurs
+     */
+    protected byte[] serializeSessionId(String sessionId) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(bos);
+        oos.writeUTF(sessionId);
+        oos.flush();
+        oos.close();
+        return bos.toByteArray();
+    }
+
+
+    /**
+     * Load sessionID
+     * @throws IOException if an input/output error occurs
+     */
+    protected String deserializeSessionId(byte[] data) throws IOException {
+        ReplicationStream ois = getReplicationStream(data);
+        String sessionId = ois.readUTF();
+        ois.close();
+        return sessionId;
+    }
+-----CSCI578-----

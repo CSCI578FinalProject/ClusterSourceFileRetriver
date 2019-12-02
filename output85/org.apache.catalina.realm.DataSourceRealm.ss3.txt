@@ -1,0 +1,147 @@
+5
+-----CSCI578-----
+
+
+
+    private boolean isRoleStoreDefined() {
+        return userRoleTable != null || roleNameCol != null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the roles associated with the given user name.
+     * @param username User name for which roles should be retrieved
+     * @return an array list of the role names
+     */
+    protected ArrayList<String> getRoles(String username) {
+
+        Connection dbConnection = null;
+
+        // Ensure that we have an open database connection
+        dbConnection = open();
+        if (dbConnection == null) {
+            return null;
+        }
+
+        try {
+            return getRoles(dbConnection, username);
+        } finally {
+            close(dbConnection);
+        }
+    }
+
+
+    /**
+     * Return the roles associated with the given user name
+     * @param dbConnection The database connection to be used
+     * @param username User name for which roles should be retrieved
+     * @return an array list of the role names
+     */
+    protected ArrayList<String> getRoles(Connection dbConnection,
+                                     String username) {
+
+        if (allRolesMode != AllRolesMode.STRICT_MODE && !isRoleStoreDefined()) {
+            // Using an authentication only configuration and no role store has
+            // been defined so don't spend cycles looking
+            return null;
+        }
+
+        ArrayList<String> list = null;
+
+        try (PreparedStatement stmt = roles(dbConnection, username);
+                ResultSet rs = stmt.executeQuery()) {
+            list = new ArrayList<>();
+
+            while (rs.next()) {
+                String role = rs.getString(1);
+                if (role != null) {
+                    list.add(role.trim());
+                }
+            }
+            return list;
+        } catch(SQLException e) {
+            containerLog.error(
+                sm.getString("dataSourceRealm.getRoles.exception", username), e);
+        }
+
+        return null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return a PreparedStatement configured to perform the SELECT required
+     * to retrieve user roles for the specified username.
+     *
+     * @param dbConnection The database connection to be used
+     * @param username User name for which roles should be retrieved
+     * @return the prepared statement
+     * @exception SQLException if a database error occurs
+     */
+    private PreparedStatement roles(Connection dbConnection, String username)
+        throws SQLException {
+
+        PreparedStatement roles =
+            dbConnection.prepareStatement(preparedRoles);
+
+        roles.setString(1, username);
+        return (roles);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Close the specified database connection.
+     *
+     * @param dbConnection The connection to be closed
+     */
+    protected void close(Connection dbConnection) {
+
+        // Do nothing if the database connection is already closed
+        if (dbConnection == null)
+            return;
+
+        // Commit if not auto committed
+        try {
+            if (!dbConnection.getAutoCommit()) {
+                dbConnection.commit();
+            }
+        } catch (SQLException e) {
+            containerLog.error("Exception committing connection before closing:", e);
+        }
+
+        // Close this database connection, and log any errors
+        try {
+            dbConnection.close();
+        } catch (SQLException e) {
+            containerLog.error(sm.getString("dataSourceRealm.close"), e); // Just log it here
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Principal associated with the given user name.
+     * @param username the user name
+     * @return the principal object
+     */
+    @Override
+    protected Principal getPrincipal(String username) {
+        Connection dbConnection = open();
+        if (dbConnection == null) {
+            return new GenericPrincipal(username, null, null);
+        }
+        try {
+            return (new GenericPrincipal(username,
+                    getPassword(dbConnection, username),
+                    getRoles(dbConnection, username)));
+        } finally {
+            close(dbConnection);
+        }
+
+    }

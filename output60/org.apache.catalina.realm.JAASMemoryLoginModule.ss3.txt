@@ -1,0 +1,170 @@
+7
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return the Principal associated with the specified username and
+     * credentials, if there is one; otherwise return <code>null</code>.
+     *
+     * @param username Username of the Principal to look up
+     * @param credentials Password or other credentials to use in
+     *  authenticating this username
+     */
+    @Override
+    public Principal authenticate(String username, String credentials) {
+
+        // No user or no credentials
+        // Can't possibly authenticate, don't bother the database then
+        if (username == null || credentials == null) {
+            return null;
+        }
+        
+        GenericPrincipal principal = principals.get(username);
+
+        boolean validated = false;
+        String dbCredentials = null;
+        if (principal != null) {
+            dbCredentials = principal.getPassword();
+        }
+        if (hasMessageDigest()) {
+            // Hex hashes should be compared case-insensitive
+            validated = (digest(credentials).equalsIgnoreCase(dbCredentials));
+        } else {
+            validated = (digest(credentials).equals(dbCredentials));
+        }
+    
+        if (validated) {
+            if (log.isDebugEnabled())
+                log.debug(sm.getString("memoryRealm.authenticateSuccess", username));
+            return (principal);
+        } else {
+            if (log.isDebugEnabled())
+                log.debug(sm.getString("memoryRealm.authenticateFailure", username));
+            return (null);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Phase 1 of authenticating a <code>Subject</code>.
+     *
+     * @return <code>true</code> if the authentication succeeded, or
+     *  <code>false</code> if this <code>LoginModule</code> should be
+     *  ignored
+     *
+     * @exception LoginException if the authentication fails
+     */
+    public boolean login() throws LoginException {
+
+        // Set up our CallbackHandler requests
+        if (callbackHandler == null)
+            throw new LoginException("No CallbackHandler specified");
+        Callback callbacks[] = new Callback[9];
+        callbacks[0] = new NameCallback("Username: ");
+        callbacks[1] = new PasswordCallback("Password: ", false);
+        callbacks[2] = new TextInputCallback("nonce");
+        callbacks[3] = new TextInputCallback("nc");
+        callbacks[4] = new TextInputCallback("cnonce");
+        callbacks[5] = new TextInputCallback("qop");
+        callbacks[6] = new TextInputCallback("realmName");
+        callbacks[7] = new TextInputCallback("md5a2");
+        callbacks[8] = new TextInputCallback("authMethod");
+
+        // Interact with the user to retrieve the username and password
+        String username = null;
+        String password = null;
+        String nonce = null;
+        String nc = null;
+        String cnonce = null;
+        String qop = null;
+        String realmName = null;
+        String md5a2 = null;
+        String authMethod = null;
+
+        try {
+            callbackHandler.handle(callbacks);
+            username = ((NameCallback) callbacks[0]).getName();
+            password =
+                new String(((PasswordCallback) callbacks[1]).getPassword());
+            nonce = ((TextInputCallback) callbacks[2]).getText();
+            nc = ((TextInputCallback) callbacks[3]).getText();
+            cnonce = ((TextInputCallback) callbacks[4]).getText();
+            qop = ((TextInputCallback) callbacks[5]).getText();
+            realmName = ((TextInputCallback) callbacks[6]).getText();
+            md5a2 = ((TextInputCallback) callbacks[7]).getText();
+            authMethod = ((TextInputCallback) callbacks[8]).getText();
+        } catch (IOException e) {
+            throw new LoginException(e.toString());
+        } catch (UnsupportedCallbackException e) {
+            throw new LoginException(e.toString());
+        }
+
+        // Validate the username and password we have received
+        if (authMethod == null) {
+            // BASIC or FORM
+            principal = super.authenticate(username, password);
+        } else if (authMethod.equals(org.apache.catalina.authenticator.Constants.DIGEST_METHOD)) {
+            principal = super.authenticate(username, password, nonce, nc,
+                    cnonce, qop, realmName, md5a2);
+        } else if (authMethod.equals(org.apache.catalina.authenticator.Constants.CERT_METHOD)) {
+            principal = super.getPrincipal(username);
+        } else {
+            throw new LoginException("Unknown authentication method");
+        }
+
+        log.debug("login " + username + " " + principal);
+
+        // Report results based on success or failure
+        if (principal != null) {
+            return (true);
+        } else {
+            throw new
+                FailedLoginException("Username or password is incorrect");
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Principal associated with the given user name.
+     */
+    protected Principal getPrincipal(String username) {
+
+        return (Principal) principals.get(username);
+
+    }
+-----CSCI578-----
+
+
+    public String getPassword() {
+        return (this.password);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the password associated with the given principal's user name.
+     */
+    protected String getPassword(String username) {
+
+        GenericPrincipal principal =
+            (GenericPrincipal) principals.get(username);
+        if (principal != null) {
+            return (principal.getPassword());
+        } else {
+            return (null);
+        }
+
+    }

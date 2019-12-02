@@ -1,0 +1,65 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Registers the pool with the platform MBean server.
+     * The registered name will be
+     * <code>jmxNameBase + jmxNamePrefix + i</code> where i is the least
+     * integer greater than or equal to 1 such that the name is not already
+     * registered. Swallows MBeanRegistrationException, NotCompliantMBeanException
+     * returning null.
+     *
+     * @param config Pool configuration
+     * @param jmxNameBase default base JMX name for this pool
+     * @param jmxNamePrefix name prefix
+     * @return registered ObjectName, null if registration fails
+     */
+    private ObjectName jmxRegister(BaseObjectPoolConfig config,
+            String jmxNameBase, String jmxNamePrefix) {
+        ObjectName objectName = null;
+        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+        int i = 1;
+        boolean registered = false;
+        String base = config.getJmxNameBase();
+        if (base == null) {
+            base = jmxNameBase;
+        }
+        while (!registered) {
+            try {
+                ObjectName objName;
+                // Skip the numeric suffix for the first pool in case there is
+                // only one so the names are cleaner.
+                if (i == 1) {
+                    objName = new ObjectName(base + jmxNamePrefix);
+                } else {
+                    objName = new ObjectName(base + jmxNamePrefix + i);
+                }
+                mbs.registerMBean(this, objName);
+                objectName = objName;
+                registered = true;
+            } catch (MalformedObjectNameException e) {
+                if (BaseObjectPoolConfig.DEFAULT_JMX_NAME_PREFIX.equals(
+                        jmxNamePrefix) && jmxNameBase.equals(base)) {
+                    // Shouldn't happen. Skip registration if it does.
+                    registered = true;
+                } else {
+                    // Must be an invalid name. Use the defaults instead.
+                    jmxNamePrefix =
+                            BaseObjectPoolConfig.DEFAULT_JMX_NAME_PREFIX;
+                    base = jmxNameBase;
+                }
+            } catch (InstanceAlreadyExistsException e) {
+                // Increment the index and try again
+                i++;
+            } catch (MBeanRegistrationException e) {
+                // Shouldn't happen. Skip registration if it does.
+                registered = true;
+            } catch (NotCompliantMBeanException e) {
+                // Shouldn't happen. Skip registration if it does.
+                registered = true;
+            }
+        }
+        return objectName;
+    }

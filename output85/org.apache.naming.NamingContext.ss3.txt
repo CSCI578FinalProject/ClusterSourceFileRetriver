@@ -1,0 +1,59 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Enumerates the names bound in the named context, along with the
+     * objects bound to them. The contents of any subcontexts are not
+     * included.
+     * <p>
+     * If a binding is added to or removed from this context, its effect on
+     * an enumeration previously returned is undefined.
+     *
+     * @param name the name of the context to list
+     * @return an enumeration of the bindings in this context.
+     * Each element of the enumeration is of type Binding.
+     * @exception NamingException if a naming exception is encountered
+     */
+    @Override
+    public NamingEnumeration<Binding> listBindings(Name name)
+        throws NamingException {
+        // Removing empty parts
+        while ((!name.isEmpty()) && (name.get(0).length() == 0))
+            name = name.getSuffix(1);
+        if (name.isEmpty()) {
+            return new NamingContextBindingsEnumeration(bindings.values().iterator(), this);
+        }
+
+        NamingEntry entry = bindings.get(name.get(0));
+
+        if (entry == null) {
+            throw new NameNotFoundException
+                (sm.getString("namingContext.nameNotBound", name, name.get(0)));
+        }
+
+        if (entry.type != NamingEntry.CONTEXT) {
+            throw new NamingException
+                (sm.getString("namingContext.contextExpected"));
+        }
+        return ((Context) entry.value).listBindings(name.getSuffix(1));
+    }
+
+
+
+    /**
+     * Enumerates the names bound in the named context, along with the
+     * objects bound to them.
+     *
+     * @param name the name of the context to list
+     * @return an enumeration of the bindings in this context.
+     * Each element of the enumeration is of type Binding.
+     * @exception NamingException if a naming exception is encountered
+     */
+    @Override
+    public NamingEnumeration<Binding> listBindings(String name)
+        throws NamingException {
+        return listBindings(new CompositeName(name));
+    }
+-----CSCI578-----

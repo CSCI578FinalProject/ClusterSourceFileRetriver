@@ -1,0 +1,417 @@
+22
+-----CSCI578-----
+
+
+    /**
+     * Compile the jsp file into equivalent servlet in .java file
+     *
+     * @return a smap for the current JSP page, if one is generated, null
+     *         otherwise
+     * @throws Exception Error generating Java source
+     */
+    protected String[] generateJava() throws Exception {
+
+        String[] smapStr = null;
+
+        long t1, t2, t3, t4;
+
+        t1 = t2 = t3 = t4 = 0;
+
+        if (log.isDebugEnabled()) {
+            t1 = System.currentTimeMillis();
+        }
+
+        // Setup page info area
+        pageInfo = new PageInfo(new BeanRepository(ctxt.getClassLoader(),
+                errDispatcher), ctxt.getJspFile(), ctxt.isTagFile());
+
+        JspConfig jspConfig = options.getJspConfig();
+        JspConfig.JspProperty jspProperty = jspConfig.findJspProperty(ctxt
+                .getJspFile());
+
+        /*
+         * If the current uri is matched by a pattern specified in a
+         * jsp-property-group in web.xml, initialize pageInfo with those
+         * properties.
+         */
+        if (jspProperty.isELIgnored() != null) {
+            pageInfo.setELIgnored(JspUtil.booleanValue(jspProperty
+                    .isELIgnored()));
+        }
+        if (jspProperty.isScriptingInvalid() != null) {
+            pageInfo.setScriptingInvalid(JspUtil.booleanValue(jspProperty
+                    .isScriptingInvalid()));
+        }
+        if (jspProperty.getIncludePrelude() != null) {
+            pageInfo.setIncludePrelude(jspProperty.getIncludePrelude());
+        }
+        if (jspProperty.getIncludeCoda() != null) {
+            pageInfo.setIncludeCoda(jspProperty.getIncludeCoda());
+        }
+        if (jspProperty.isDeferedSyntaxAllowedAsLiteral() != null) {
+            pageInfo.setDeferredSyntaxAllowedAsLiteral(JspUtil.booleanValue(jspProperty
+                    .isDeferedSyntaxAllowedAsLiteral()));
+        }
+        if (jspProperty.isTrimDirectiveWhitespaces() != null) {
+            pageInfo.setTrimDirectiveWhitespaces(JspUtil.booleanValue(jspProperty
+                    .isTrimDirectiveWhitespaces()));
+        }
+        // Default ContentType processing is deferred until after the page has
+        // been parsed
+        if (jspProperty.getBuffer() != null) {
+            pageInfo.setBufferValue(jspProperty.getBuffer(), null,
+                    errDispatcher);
+        }
+        if (jspProperty.isErrorOnUndeclaredNamespace() != null) {
+            pageInfo.setErrorOnUndeclaredNamespace(
+                    JspUtil.booleanValue(
+                            jspProperty.isErrorOnUndeclaredNamespace()));
+        }
+        if (ctxt.isTagFile()) {
+            try {
+                double libraryVersion = Double.parseDouble(ctxt.getTagInfo()
+                        .getTagLibrary().getRequiredVersion());
+                if (libraryVersion < 2.0) {
+                    pageInfo.setIsELIgnored("true", null, errDispatcher, true);
+                }
+                if (libraryVersion < 2.1) {
+                    pageInfo.setDeferredSyntaxAllowedAsLiteral("true", null,
+                            errDispatcher, true);
+                }
+            } catch (NumberFormatException ex) {
+                errDispatcher.jspError(ex);
+            }
+        }
+
+        ctxt.checkOutputDir();
+        String javaFileName = ctxt.getServletJavaFileName();
+
+        try {
+            /*
+             * The setting of isELIgnored changes the behaviour of the parser
+             * in subtle ways. To add to the 'fun', isELIgnored can be set in
+             * any file that forms part of the translation unit so setting it
+             * in a file included towards the end of the translation unit can
+             * change how the parser should have behaved when parsing content
+             * up to the point where isELIgnored was set. Arghh!
+             * Previous attempts to hack around this have only provided partial
+             * solutions. We now use two passes to parse the translation unit.
+             * The first just parses the directives and the second parses the
+             * whole translation unit once we know how isELIgnored has been set.
+             * TODO There are some possible optimisations of this process.
+             */
+            // Parse the file
+            ParserController parserCtl = new ParserController(ctxt, this);
+
+            // Pass 1 - the directives
+            Node.Nodes directives =
+                parserCtl.parseDirectives(ctxt.getJspFile());
+            Validator.validateDirectives(this, directives);
+
+            // Pass 2 - the whole translation unit
+            pageNodes = parserCtl.parse(ctxt.getJspFile());
+
+            // Leave this until now since it can only be set once - bug 49726
+            if (pageInfo.getContentType() == null &&
+                    jspProperty.getDefaultContentType() != null) {
+                pageInfo.setContentType(jspProperty.getDefaultContentType());
+            }
+
+            if (ctxt.isPrototypeMode()) {
+                // generate prototype .java file for the tag file
+                try (ServletWriter writer = setupContextWriter(javaFileName)) {
+                    Generator.generate(writer, this, pageNodes);
+                    return null;
+                }
+            }
+
+            // Validate and process attributes - don't re-validate the
+            // directives we validated in pass 1
+            Validator.validateExDirectives(this, pageNodes);
+
+            if (log.isDebugEnabled()) {
+                t2 = System.currentTimeMillis();
+            }
+
+            // Collect page info
+            Collector.collect(this, pageNodes);
+
+            // Compile (if necessary) and load the tag files referenced in
+            // this compilation unit.
+            tfp = new TagFileProcessor();
+            tfp.loadTagFiles(this, pageNodes);
+
+            if (log.isDebugEnabled()) {
+                t3 = System.currentTimeMillis();
+            }
+
+            // Determine which custom tag needs to declare which scripting vars
+            ScriptingVariabler.set(pageNodes, errDispatcher);
+
+            // Optimizations by Tag Plugins
+            TagPluginManager tagPluginManager = options.getTagPluginManager();
+            tagPluginManager.apply(pageNodes, errDispatcher, pageInfo);
+
+            // Optimization: concatenate contiguous template texts.
+            TextOptimizer.concatenate(this, pageNodes);
+
+            // Generate static function mapper codes.
+            ELFunctionMapper.map(pageNodes);
+
+            // generate servlet .java file
+            try (ServletWriter writer = setupContextWriter(javaFileName)) {
+                Generator.generate(writer, this, pageNodes);
+            }
+
+            // The writer is only used during the compile, dereference
+            // it in the JspCompilationContext when done to allow it
+            // to be GC'd and save memory.
+            ctxt.setWriter(null);
+
+            if (log.isDebugEnabled()) {
+                t4 = System.currentTimeMillis();
+                log.debug("Generated " + javaFileName + " total=" + (t4 - t1)
+                        + " generate=" + (t4 - t3) + " validate=" + (t2 - t1));
+            }
+
+        } catch (Exception e) {
+            // Remove the generated .java file
+            File file = new File(javaFileName);
+            if (file.exists()) {
+                if (!file.delete()) {
+                    log.warn(Localizer.getMessage(
+                            "jsp.warning.compiler.javafile.delete.fail",
+                            file.getAbsolutePath()));
+                }
+            }
+            throw e;
+        }
+
+        // JSR45 Support
+        if (!options.isSmapSuppressed()) {
+            smapStr = SmapUtil.generateSmap(ctxt, pageNodes);
+        }
+
+        // If any proto type .java and .class files was generated,
+        // the prototype .java may have been replaced by the current
+        // compilation (if the tag file is self referencing), but the
+        // .class file need to be removed, to make sure that javac would
+        // generate .class again from the new .java file just generated.
+        tfp.removeProtoTypeFiles(ctxt.getClassFileName());
+
+        return smapStr;
+    }
+-----CSCI578-----
+
+
+    public void setELIgnored(boolean s) {
+        isELIgnored = s;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Parses the directives of a JSP page or tag file. This is invoked by the
+     * compiler.
+     *
+     * @param inFileName The path to the JSP page or tag file to be parsed.
+     *
+     * @return The parsed directive nodes
+     *
+     * @throws JasperException If an error occurs during parsing
+     * @throws IOException If an I/O error occurs such as the file not being
+     *         found
+     */
+    public Node.Nodes parseDirectives(String inFileName) throws JasperException, IOException {
+        // If we're parsing a packaged tag file or a resource included by it
+        // (using an include directive), ctxt.getTagFileJar() returns the
+        // JAR file from which to read the tag file or included resource,
+        // respectively.
+        isTagFile = ctxt.isTagFile();
+        directiveOnly = true;
+        return doParse(inFileName, null, ctxt.getTagFileJar());
+    }
+-----CSCI578-----
+
+
+    private ServletWriter setupContextWriter(String javaFileName)
+            throws FileNotFoundException, JasperException {
+        ServletWriter writer;
+        // Setup the ServletWriter
+        String javaEncoding = ctxt.getOptions().getJavaEncoding();
+        OutputStreamWriter osw = null;
+
+        try {
+            osw = new OutputStreamWriter(
+                    new FileOutputStream(javaFileName), javaEncoding);
+        } catch (UnsupportedEncodingException ex) {
+            errDispatcher.jspError("jsp.error.needAlternateJavaEncoding",
+                    javaEncoding);
+        }
+
+        writer = new ServletWriter(new PrintWriter(osw));
+        ctxt.setWriter(writer);
+        return writer;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return a Tag Plugin Manager
+     */
+    public TagPluginManager getTagPluginManager();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setIncludePrelude(Collection<String> prelude) {
+        includePrelude = prelude;
+    }
+-----CSCI578-----
+
+
+    public void checkOutputDir() {
+        if (outputDir != null) {
+            if (!(new File(outputDir)).exists()) {
+                makeOutputDir();
+            }
+        } else {
+            createOutputDir();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return <code>true</code> if HTML mapped Servlets are supported.
+     */
+    public boolean getMappedFile();
+-----CSCI578-----
+
+
+    public void setScriptingInvalid(boolean s) {
+        scriptingInvalid = s;
+    }
+-----CSCI578-----
+
+
+    public TagInfo getTagInfo() {
+        return tagInfo;
+    }
+-----CSCI578-----
+
+
+    public void setErrorOnUndeclaredNamespace(
+            boolean errorOnUndeclaredNamespace) {
+        this.errorOnUndeclaredNamepsace = errorOnUndeclaredNamespace;
+    }
+-----CSCI578-----
+
+
+    public void setIncludeCoda(Collection<String> coda) {
+        includeCoda = coda;
+    }
+-----CSCI578-----
+
+
+    protected void createOutputDir() {
+        String path = null;
+        if (isTagFile()) {
+            String tagName = tagInfo.getTagClassName();
+            path = tagName.replace('.', File.separatorChar);
+            path = path.substring(0, path.lastIndexOf(File.separatorChar));
+        } else {
+            path = getServletPackageName().replace('.',File.separatorChar);
+        }
+
+        // Append servlet or tag handler path to scratch dir
+        try {
+            File base = options.getScratchDir();
+            baseUrl = base.toURI().toURL();
+            outputDir = base.getAbsolutePath() + File.separator + path +
+                    File.separator;
+            if (!makeOutputDir()) {
+                throw new IllegalStateException(Localizer.getMessage("jsp.error.outputfolder"));
+            }
+        } catch (MalformedURLException e) {
+            throw new IllegalStateException(Localizer.getMessage("jsp.error.outputfolder"), e);
+        }
+    }
+-----CSCI578-----
+
+
+    public boolean isTagFile() {
+        return isTagFile;
+    }
+-----CSCI578-----
+
+
+    protected boolean makeOutputDir() {
+        synchronized(outputDirLock) {
+            File outDirFile = new File(outputDir);
+            return (outDirFile.mkdirs() || outDirFile.isDirectory());
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Parses a JSP page or tag file. This is invoked by the compiler.
+     *
+     * @param inFileName The path to the JSP page or tag file to be parsed.
+     *
+     * @return The parsed nodes
+     *
+     * @throws JasperException If an error occurs during parsing
+     * @throws IOException If an I/O error occurs such as the file not being
+     *         found
+     */
+    public Node.Nodes parse(String inFileName) throws JasperException, IOException {
+        // If we're parsing a packaged tag file or a resource included by it
+        // (using an include directive), ctxt.getTagFileJar() returns the
+        // JAR file from which to read the tag file or included resource,
+        // respectively.
+        isTagFile = ctxt.isTagFile();
+        directiveOnly = false;
+        return doParse(inFileName, null, ctxt.getTagFileJar());
+    }
+
+
+
+    /**
+     * Processes an include directive with the given path.
+     *
+     * @param inFileName The path to the resource to be included.
+     * @param parent The parent node of the include directive.
+     * @param jar The JAR file from which to read the included resource,
+     * or null of the included resource is to be read from the filesystem
+     *
+     * @return The parsed nodes
+     *
+     * @throws JasperException If an error occurs during parsing
+     * @throws IOException If an I/O error occurs such as the file not being
+     *         found
+     */
+    public Node.Nodes parse(String inFileName, Node parent, Jar jar)
+            throws JasperException, IOException {
+        // For files that are statically included, isTagfile and directiveOnly
+        // remain unchanged.
+        return doParse(inFileName, parent, jar);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the JAR file in which the tag file for which this
+     * JspCompilationContext was created is packaged, or null if this
+     * JspCompilationContext does not correspond to a tag file, or if the
+     * corresponding tag file is not packaged in a JAR.
+     * @return a JAR file
+     */
+    public Jar getTagFileJar() {
+        return this.tagJar;
+    }

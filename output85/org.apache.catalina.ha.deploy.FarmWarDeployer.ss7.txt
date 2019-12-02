@@ -1,0 +1,91 @@
+6
+-----CSCI578-----
+
+
+    public File getWatchDirFile() {
+        if (watchDirFile != null) return watchDirFile;
+
+        File dir = getAbsolutePath(getWatchDir());
+        this.watchDirFile = dir;
+        return dir;
+    }
+-----CSCI578-----
+
+
+    /*--Logic---------------------------------------------------*/
+    @Override
+    public void start() throws Exception {
+        if (started)
+            return;
+        Container hcontainer = getCluster().getContainer();
+        if(!(hcontainer instanceof Host)) {
+            log.error(sm.getString("farmWarDeployer.hostOnly"));
+            return ;
+        }
+        host = (Host) hcontainer;
+
+        // Check to correct engine and host setup
+        Container econtainer = host.getParent();
+        if(!(econtainer instanceof Engine)) {
+            log.error(sm.getString("farmWarDeployer.hostParentEngine",
+                    host.getName()));
+            return ;
+        }
+        Engine engine = (Engine) econtainer;
+        String hostname = null;
+        hostname = host.getName();
+        try {
+            oname = new ObjectName(engine.getName() + ":type=Deployer,host="
+                    + hostname);
+        } catch (Exception e) {
+            log.error(sm.getString("farmWarDeployer.mbeanNameFail",
+                    engine.getName(), hostname),e);
+            return;
+        }
+        if (watchEnabled) {
+            watcher = new WarWatcher(this, getWatchDirFile());
+            if (log.isInfoEnabled()) {
+                log.info(sm.getString(
+                        "farmWarDeployer.watchDir", getWatchDir()));
+            }
+        }
+
+        configBase = host.getConfigBaseFile();
+
+        // Retrieve the MBean server
+        mBeanServer = Registry.getRegistry(null, null).getMBeanServer();
+
+        started = true;
+        count = 0;
+
+        getCluster().addClusterListener(this);
+
+        if (log.isInfoEnabled())
+            log.info(sm.getString("farmWarDeployer.started"));
+    }
+-----CSCI578-----
+
+
+    public void addClusterListener(ClusterListener listener);
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getWatchDir() {
+        return watchDir;
+    }
+-----CSCI578-----
+
+
+    private File getAbsolutePath(String path) {
+        File dir = new File(path);
+        if (!dir.isAbsolute()) {
+            dir = new File(getCluster().getContainer().getCatalinaBase(),
+                    dir.getPath());
+        }
+        try {
+            dir = dir.getCanonicalFile();
+        } catch (IOException e) {// ignore
+        }
+        return dir;
+    }

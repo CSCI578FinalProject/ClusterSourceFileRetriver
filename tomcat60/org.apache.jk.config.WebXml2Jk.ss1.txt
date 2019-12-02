@@ -1,0 +1,88 @@
+18
+
+
+    public static void main(String args[] ) {
+        try {
+            if( args.length == 1 &&
+                ( "-?".equals(args[0]) || "-h".equals( args[0])) ) {
+                System.out.println("Usage: ");
+                System.out.println("  WebXml2Jk [OPTIONS]");
+                System.out.println();
+                System.out.println("  -docBase DIR        The location of the webapp. Required");
+                System.out.println("  -group GROUP        Group, if you have multiple tomcats with diffrent content. " );
+                System.out.println("                      The default is 'lb', and should be used in most cases");
+                System.out.println("  -host HOSTNAME      Canonical hostname - for virtual hosts");
+                System.out.println("  -context /CPATH     Context path where the app will be mounted");
+                return;
+            }
+
+            WebXml2Jk w2jk=new WebXml2Jk();
+
+            /* do ant-style property setting */
+            IntrospectionUtils.processArgs( w2jk, args, new String[] {},
+                                            null, new Hashtable());
+            w2jk.execute();
+        } catch( Exception ex ) {
+            ex.printStackTrace();
+        }
+
+    }
+    
+    // -------------------- Main and ant wrapper --------------------
+    
+    public void execute() {
+        try {
+            if( docBase== null) {
+                log.error("No docbase - please specify the base directory of you web application ( -docBase PATH )");
+                return;
+            }
+            if( cpath== null) {
+                log.error("No context - please specify the mount ( -context PATH )");
+                return;
+            }
+            File docbF=new File(docBase);
+            File wXmlF=new File( docBase, "WEB-INF/web.xml");
+
+            Document wXmlN=readXml(wXmlF);
+            if( wXmlN == null ) return;
+
+            webN = wXmlN.getDocumentElement();
+            if( webN==null ) {
+                log.error("Can't find web-app");
+                return;
+            }
+
+            jkDir=new File( docbF, "WEB-INF/jk2" );
+            jkDir.mkdirs();
+            
+            MappingGenerator generator=new GeneratorJk2();
+            generator.setWebXmlReader( this );
+            generate( generator );
+
+            generator=new GeneratorJk1();
+            generator.setWebXmlReader( this );
+            generate( generator );
+
+            generator=new GeneratorApache2();
+            generator.setWebXmlReader( this );
+            generate( generator );
+
+        } catch( Exception ex ) {
+            ex.printStackTrace();
+        }
+    }
+
+    /** Get the first child's content ( i.e. it's included TEXT node )
+     */
+    public static String getChildContent( Node parent, String name ) {
+        Node first=parent.getFirstChild();
+        if( first==null ) return null;
+        for (Node node = first; node != null;
+             node = node.getNextSibling()) {
+            //System.out.println("getNode: " + name + " " + node.getNodeName());
+            if( name.equals( node.getNodeName() ) ) {
+                return getContent( node );
+            }
+        }
+        return null;
+    }

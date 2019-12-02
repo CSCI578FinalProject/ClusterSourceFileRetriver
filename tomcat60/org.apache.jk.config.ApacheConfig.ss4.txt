@@ -1,0 +1,86 @@
+3
+
+    private void generateWelcomeFiles(Context context, PrintWriter mod_jk ) {
+	String wf[]=context.findWelcomeFiles();
+	if( wf==null || wf.length == 0 )
+	    return;
+	mod_jk.print(indent + "    DirectoryIndex ");
+	for( int i=0; i<wf.length ; i++ ) {
+	    mod_jk.print( wf[i] + " " );
+	}
+	mod_jk.println();
+    }
+
+    /** Mappings for static content. XXX need to add welcome files,
+     *  mime mappings ( all will be handled by Mime and Static modules of
+     *  apache ).
+     */
+    private void generateStaticMappings(Context context, PrintWriter mod_jk ) {
+	String ctxPath  = context.getPath();
+
+	// Calculate the absolute path of the document base
+	String docBase = getApacheDocBase(context);
+
+        if( !"".equals(ctxPath) ) {
+            // Static files will be served by Apache
+            mod_jk.println(indent + "# Static files ");		    
+            mod_jk.println(indent + "Alias " + ctxPath + " \"" + docBase + "\"");
+            mod_jk.println();
+        } else {
+            if ( getHost(context) != null ) {
+                mod_jk.println(indent + "DocumentRoot \"" +
+                            getApacheDocBase(context) + "\"");
+            } else {
+                // For root context, ask user to update DocumentRoot setting.
+                // Using "Alias / " interferes with the Alias for other contexts.
+                mod_jk.println(indent +
+                        "# Be sure to update DocumentRoot");
+                mod_jk.println(indent +
+                        "# to point to: \"" + docBase + "\"");
+            }
+        }
+	mod_jk.println(indent + "<Directory \"" + docBase + "\">");
+	mod_jk.println(indent + "    Options Indexes FollowSymLinks");
+
+	generateWelcomeFiles(context, mod_jk);
+
+	// XXX XXX Here goes the Mime types and welcome files !!!!!!!!
+	mod_jk.println(indent + "</Directory>");
+	mod_jk.println();            
+	
+
+	// Deny serving any files from WEB-INF
+	mod_jk.println();            
+	mod_jk.println(indent +
+		       "# Deny direct access to WEB-INF and META-INF");
+	mod_jk.println(indent + "#");                        
+	mod_jk.println(indent + "<Location \"" + ctxPath + "/WEB-INF/*\">");
+	mod_jk.println(indent + "    AllowOverride None");
+	mod_jk.println(indent + "    deny from all");
+	mod_jk.println(indent + "</Location>");
+	// Deny serving any files from META-INF
+	mod_jk.println();            
+	mod_jk.println(indent + "<Location \"" + ctxPath + "/META-INF/*\">");
+	mod_jk.println(indent + "    AllowOverride None");
+	mod_jk.println(indent + "    deny from all");
+	mod_jk.println(indent + "</Location>");
+	if (File.separatorChar == '\\') {
+	    mod_jk.println(indent + "#");		    
+	    mod_jk.println(indent +
+			   "# Use Directory too. On Windows, Location doesn't"
+			   + " work unless case matches");
+	    mod_jk.println(indent + "#");                        
+	    mod_jk.println(indent +
+			   "<Directory \"" + docBase + "/WEB-INF/\">");
+	    mod_jk.println(indent + "    AllowOverride None");
+	    mod_jk.println(indent + "    deny from all");
+	    mod_jk.println(indent + "</Directory>");
+	    mod_jk.println();
+	    mod_jk.println(indent +
+			   "<Directory \"" + docBase + "/META-INF/\">");
+	    mod_jk.println(indent + "    AllowOverride None");
+	    mod_jk.println(indent + "    deny from all");
+	    mod_jk.println(indent + "</Directory>");
+	}
+	mod_jk.println();
+    }    

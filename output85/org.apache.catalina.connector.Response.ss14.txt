@@ -1,0 +1,96 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Set the content type for this Response.
+     *
+     * @param type The new content type
+     */
+    @Override
+    public void setContentType(String type) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        // Ignore any call from an included servlet
+        if (included) {
+            return;
+        }
+
+        if (type == null) {
+            getCoyoteResponse().setContentType(null);
+            return;
+        }
+
+        String[] m = MEDIA_TYPE_CACHE.parse(type);
+        if (m == null) {
+            // Invalid - Assume no charset and just pass through whatever
+            // the user provided.
+            getCoyoteResponse().setContentTypeNoCharset(type);
+            return;
+        }
+
+        getCoyoteResponse().setContentTypeNoCharset(m[0]);
+
+        if (m[1] != null) {
+            // Ignore charset if getWriter() has already been called
+            if (!usingWriter) {
+                getCoyoteResponse().setCharacterEncoding(m[1]);
+                isCharacterEncodingSet = true;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public void setContentTypeNoCharset(String type) {
+        this.contentType = type;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the content type.
+     *
+     * This method must preserve any response charset that may already have
+     * been set via a call to response.setContentType(), response.setLocale(),
+     * or response.setCharacterEncoding().
+     *
+     * @param type the content type
+     */
+    public void setContentType(String type) {
+
+        if (type == null) {
+            this.contentType = null;
+            return;
+        }
+
+        MediaType m = null;
+        try {
+             m = MediaType.parseMediaType(new StringReader(type));
+        } catch (IOException e) {
+            // Ignore - null test below handles this
+        }
+        if (m == null) {
+            // Invalid - Assume no charset and just pass through whatever
+            // the user provided.
+            this.contentType = type;
+            return;
+        }
+
+        this.contentType = m.toStringNoCharset();
+
+        String charsetValue = m.getCharset();
+
+        if (charsetValue != null) {
+            charsetValue = charsetValue.trim();
+            if (charsetValue.length() > 0) {
+                charsetSet = true;
+                this.characterEncoding = charsetValue;
+            }
+        }
+    }
+-----CSCI578-----

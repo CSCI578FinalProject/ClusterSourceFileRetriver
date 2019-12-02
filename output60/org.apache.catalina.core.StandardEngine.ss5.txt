@@ -1,0 +1,212 @@
+16
+-----CSCI578-----
+
+
+    /**
+     * Set the name of this Service.
+     *
+     * @param name The new service name
+     */
+    public void setName(String name);
+-----CSCI578-----
+
+    
+    public void init() throws Exception {
+        if( mbeans==null) execute();
+        if( registry==null ) registry=Registry.getRegistry();
+        
+        registry.invoke(mbeans, "init", false);
+    }
+-----CSCI578-----
+
+
+    
+    private void readEngineMbeans() {
+        try {
+            MbeansSource mbeansMB=new MbeansSource();
+            File mbeansF=new File( mbeansFile );
+            mbeansMB.setSource(mbeansF);
+            
+            Registry.getRegistry(null, null).registerComponent
+                (mbeansMB, domain + ":type=MbeansFile", null);
+            mbeansMB.load();
+            mbeansMB.init();
+            mbeansMB.setRegistry(Registry.getRegistry(null, null));
+            mbeans=mbeansMB.getMBeans();
+            
+        } catch( Throwable t ) {
+            log.error( "Error loading " + mbeansFile, t );
+        }
+        
+    }
+-----CSCI578-----
+
+    
+    public void load() throws Exception {
+        execute(); // backward compat
+    }
+-----CSCI578-----
+
+    
+    /** Return the list of mbeans created by this source.
+     *  It can be used to implement runtime services.
+     */
+    public List getMBeans() {
+        return mbeans;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Start this Engine component.
+     *
+     * @exception LifecycleException if a startup error occurs
+     */
+    public void start() throws LifecycleException {
+        if( started ) {
+            return;
+        }
+        if( !initialized ) {
+            init();
+        }
+
+        // Look for a realm - that may have been configured earlier. 
+        // If the realm is added after context - it'll set itself.
+        if( realm == null ) {
+            ObjectName realmName=null;
+            try {
+                realmName=new ObjectName( domain + ":type=Realm");
+                if( mserver.isRegistered(realmName ) ) {
+                    mserver.invoke(realmName, "init", 
+                            new Object[] {},
+                            new String[] {}
+                    );            
+                }
+            } catch( Throwable t ) {
+                log.debug("No realm for this engine " + realmName);
+            }
+        }
+            
+        // Log our server identification information
+        //System.out.println(ServerInfo.getServerInfo());
+        if(log.isInfoEnabled())
+            log.info( "Starting Servlet Engine: " + ServerInfo.getServerInfo());
+        if( mbeans != null ) {
+            try {
+                Registry.getRegistry(null, null)
+                    .invoke(mbeans, "start", false);
+            } catch (Exception e) {
+                log.error("Error in start() for " + mbeansFile, e);
+            }
+        }
+
+        // Standard container startup
+        super.start();
+
+    }
+-----CSCI578-----
+
+    
+    public void init() {
+        if( initialized ) return;
+        initialized=true;
+
+        if( oname==null ) {
+            // not registered in JMX yet - standalone mode
+            try {
+                if (domain==null) {
+                    domain=getName();
+                }
+                if(log.isDebugEnabled())
+                    log.debug( "Register " + domain );
+                oname=new ObjectName(domain + ":type=Engine");
+                controller=oname;
+                Registry.getRegistry(null, null)
+                    .registerComponent(this, oname, null);
+            } catch( Throwable t ) {
+                log.info("Error registering ", t );
+            }
+        }
+
+        if( mbeansFile == null ) {
+            String defaultMBeansFile=getBaseDir() + "/conf/tomcat5-mbeans.xml";
+            File f=new File( defaultMBeansFile );
+            if( f.exists() ) mbeansFile=f.getAbsolutePath();
+        }
+        if( mbeansFile != null ) {
+            readEngineMbeans();
+        }
+        if( mbeans != null ) {
+            try {
+                Registry.getRegistry(null, null).invoke(mbeans, "init", false);
+            } catch (Exception e) {
+                log.error("Error in init() for " + mbeansFile, e);
+            }
+        }
+        
+        // not needed since the following if statement does the same thing the right way
+        // remove later after checking
+        //if( service==null ) {
+        //    try {
+        //        ObjectName serviceName=getParentName();        
+        //        if( mserver.isRegistered( serviceName )) {
+        //            log.info("Registering with the service ");
+        //            try {
+        //                mserver.invoke( serviceName, "setContainer",
+        //                        new Object[] { this },
+        //                        new String[] { "org.apache.catalina.Container" } );
+        //            } catch( Exception ex ) {
+        //               ex.printStackTrace();
+        //            }
+        //        }
+        //    } catch( Exception ex ) {
+        //        log.error("Error registering with service ");
+        //    }
+        //}
+        
+        if( service==null ) {
+            // for consistency...: we are probably in embeded mode
+            try {
+                service=new StandardService();
+                service.setContainer( this );
+                service.initialize();
+                // Use same name for Service
+                service.setName(getName());
+            } catch( Throwable t ) {
+                log.error(t);
+            }
+        }
+        
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the <code>Container</code> that handles requests for all
+     * <code>Connectors</code> associated with this Service.
+     *
+     * @param container The new Container
+     */
+    public void setContainer(Container container);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return a String representation of this component.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("StandardEngine[");
+        sb.append(getName());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

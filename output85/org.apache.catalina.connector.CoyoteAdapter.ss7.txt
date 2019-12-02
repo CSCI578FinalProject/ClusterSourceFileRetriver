@@ -1,0 +1,1083 @@
+45
+-----CSCI578-----
+
+
+    /**
+     * @return the URI converter.
+     */
+    protected B2CConverter getURIConverter() {
+        return URIConverter;
+    }
+-----CSCI578-----
+
+
+
+     /**
+      * Set the URI encoding to be used for the URI.
+      *
+      * @param URIEncoding The new URI character encoding.
+      */
+     public void setURIEncoding(String URIEncoding) {
+         this.URIEncoding = URIEncoding;
+         if (URIEncoding == null) {
+             URIEncodingLower = null;
+         } else {
+             this.URIEncodingLower = URIEncoding.toLowerCase(Locale.ENGLISH);
+         }
+         setProperty("uRIEncoding", URIEncoding);
+     }
+-----CSCI578-----
+
+
+    /**
+     * Set the URI converter.
+     *
+     * @param URIConverter the new URI converter
+     */
+    protected void setURIConverter(B2CConverter URIConverter) {
+        this.URIConverter = URIConverter;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Character conversion of the URI.
+     *
+     * @param uri MessageBytes object containing the URI
+     * @param request The Servlet request obejct
+     * @throws IOException if a IO exception occurs sending an error to the client
+     */
+    protected void convertURI(MessageBytes uri, Request request) throws IOException {
+
+        ByteChunk bc = uri.getByteChunk();
+        int length = bc.getLength();
+        CharChunk cc = uri.getCharChunk();
+        cc.allocate(length, -1);
+
+        String enc = connector.getURIEncoding();
+        if (enc != null) {
+            B2CConverter conv = request.getURIConverter();
+            try {
+                if (conv == null) {
+                    conv = new B2CConverter(B2CConverter.getCharset(enc), true);
+                    request.setURIConverter(conv);
+                } else {
+                    conv.recycle();
+                }
+            } catch (IOException e) {
+                log.error(sm.getString("coyoteAdapter.invalidEncoding"));
+                connector.setURIEncoding(null);
+            }
+            if (conv != null) {
+                try {
+                    conv.convert(bc, cc, true);
+                    uri.setChars(cc.getBuffer(), cc.getStart(), cc.getLength());
+                    return;
+                } catch (IOException ioe) {
+                    // Should never happen as B2CConverter should replace
+                    // problematic characters
+                    request.getResponse().sendError(
+                            HttpServletResponse.SC_BAD_REQUEST);
+                }
+            }
+        }
+
+        // Default encoding: fast conversion for ISO-8859-1
+        byte[] bbuf = bc.getBuffer();
+        char[] cbuf = cc.getBuffer();
+        int start = bc.getStart();
+        for (int i = 0; i < length; i++) {
+            cbuf[i] = (char) (bbuf[i + start] & 0xff);
+        }
+        uri.setChars(cbuf, 0, length);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set a property on the protocol handler.
+     *
+     * @param name the property name
+     * @param value the property value
+     * @return <code>true</code> if the property was successfully set
+     */
+    public boolean setProperty(String name, String value) {
+        String repl = name;
+        if (replacements.get(name) != null) {
+            repl = replacements.get(name);
+        }
+        return IntrospectionUtils.setProperty(protocolHandler, repl, value);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set a property on the protocol handler.
+     *
+     * @param name the property name
+     * @param value the property value
+     */
+    public void setAttribute(String name, Object value) {
+        setProperty(name, String.valueOf(value));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the allowTrace flag, to disable or enable the TRACE HTTP method.
+     *
+     * @param allowTrace The new allowTrace flag
+     */
+    public void setAllowTrace(boolean allowTrace) {
+
+        this.allowTrace = allowTrace;
+        setProperty("allowTrace", String.valueOf(allowTrace));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the default timeout for async requests.
+     *
+     * @param asyncTimeout The new timeout in ms.
+     */
+    public void setAsyncTimeout(long asyncTimeout) {
+
+        this.asyncTimeout= asyncTimeout;
+        setProperty("asyncTimeout", String.valueOf(asyncTimeout));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the "enable DNS lookups" flag.
+     *
+     * @param enableLookups The new "enable DNS lookups" flag value
+     */
+    public void setEnableLookups(boolean enableLookups) {
+
+        this.enableLookups = enableLookups;
+        setProperty("enableLookups", String.valueOf(enableLookups));
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the maximum number of headers in a request that are allowed by the
+     * container. A value of less than 0 means no limit.
+     *
+     * @param maxHeaderCount The new setting
+     */
+    public void setMaxHeaderCount(int maxHeaderCount) {
+        setProperty("maxHeaderCount", String.valueOf(maxHeaderCount));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the maximum size of a POST which will be saved by the container
+     * during authentication.
+     *
+     * @param maxSavePostSize The new maximum size in bytes of a POST which will
+     * be saved by the container during authentication.
+     */
+    public void setMaxSavePostSize(int maxSavePostSize) {
+
+        this.maxSavePostSize = maxSavePostSize;
+        setProperty("maxSavePostSize", String.valueOf(maxSavePostSize));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the port number on which we listen for requests.
+     *
+     * @param port The new port number
+     */
+    public void setPort(int port) {
+
+        this.port = port;
+        setProperty("port", String.valueOf(port));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the proxy server name for this Connector.
+     *
+     * @param proxyName The new proxy server name
+     */
+    public void setProxyName(String proxyName) {
+
+        if(proxyName != null && proxyName.length() > 0) {
+            this.proxyName = proxyName;
+            setProperty("proxyName", proxyName);
+        } else {
+            this.proxyName = null;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the proxy server port for this Connector.
+     *
+     * @param proxyPort The new proxy server port
+     */
+    public void setProxyPort(int proxyPort) {
+
+        this.proxyPort = proxyPort;
+        setProperty("proxyPort", String.valueOf(proxyPort));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the redirect port number.
+     *
+     * @param redirectPort The redirect port number (non-SSL to SSL)
+     */
+    public void setRedirectPort(int redirectPort) {
+
+        this.redirectPort = redirectPort;
+        setProperty("redirectPort", String.valueOf(redirectPort));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the secure connection flag that will be assigned to requests
+     * received through this connector.
+     *
+     * @param secure The new secure connection flag
+     */
+    public void setSecure(boolean secure) {
+
+        this.secure = secure;
+        setProperty("secure", Boolean.toString(secure));
+    }
+-----CSCI578-----
+
+
+
+     /**
+      * Set if the entity body encoding should be used for the URI.
+      *
+      * @param useBodyEncodingForURI The new value for the flag.
+      */
+     public void setUseBodyEncodingForURI(boolean useBodyEncodingForURI) {
+
+         this.useBodyEncodingForURI = useBodyEncodingForURI;
+         setProperty
+             ("useBodyEncodingForURI", String.valueOf(useBodyEncodingForURI));
+
+     }
+-----CSCI578-----
+
+
+
+    /**
+     * Enables or disables the generation of an X-Powered-By header (with value
+     * Servlet/2.5) for all servlet-generated responses returned by this
+     * Connector.
+     *
+     * @param xpoweredBy true if generation of X-Powered-By response header is
+     * to be enabled, false otherwise
+     */
+    public void setXpoweredBy(boolean xpoweredBy) {
+        this.xpoweredBy = xpoweredBy;
+        setProperty("xpoweredBy", String.valueOf(xpoweredBy));
+    }
+-----CSCI578-----
+
+
+    /**
+     * Enable the use of IP-based virtual hosting.
+     *
+     * @param useIPVHosts <code>true</code> if Hosts are identified by IP,
+     *                    <code>false</code> if Hosts are identified by name.
+     */
+    public void setUseIPVHosts(boolean useIPVHosts) {
+        this.useIPVHosts = useIPVHosts;
+        setProperty("useIPVHosts", String.valueOf(useIPVHosts));
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create a new Connector
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param address The IP address on which to bind
+     * @param port TCP port number to listen on
+     * @param isAjp Create a AJP/1.3 Connector
+     * @param isSSL Create a secure Connector
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    private String createConnector(String parent, String address, int port, boolean isAjp, boolean isSSL)
+        throws Exception {
+        Connector retobj = new Connector();
+        if ((address!=null) && (address.length()>0)) {
+            retobj.setProperty("address", address);
+        }
+        // Set port number
+        retobj.setPort(port);
+        // Set the protocol
+        retobj.setProtocol(isAjp ? "AJP/1.3" : "HTTP/1.1");
+        // Set SSL
+        retobj.setSecure(isSSL);
+        retobj.setScheme(isSSL ? "https" : "http");
+        // Add the new instance to its parent component
+        // FIX ME - addConnector will fail
+        ObjectName pname = new ObjectName(parent);
+        Service service = getService(pname);
+        service.addConnector(retobj);
+
+        // Return the corresponding MBean name
+        ObjectName coname = retobj.getObjectName();
+
+        return (coname.toString());
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create a new HttpConnector
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param address The IP address on which to bind
+     * @param port TCP port number to listen on
+     * @return the object name of the created connector
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createHttpConnector(String parent, String address, int port)
+            throws Exception {
+        return createConnector(parent, address, port, false, false);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create a new HttpsConnector
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param address The IP address on which to bind
+     * @param port TCP port number to listen on
+     * @return the object name of the created connector
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createHttpsConnector(String parent, String address, int port)
+        throws Exception {
+        return createConnector(parent, address, port, false, true);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Add a new Connector to the set of defined Connectors, and associate it
+     * with this Service's Container.
+     *
+     * @param address The IP address on which to bind
+     * @param port TCP port number to listen on
+     * @param isAjp Create a AJP/1.3 Connector
+     * @param isSSL Create a secure Connector
+     *
+     * @throws MBeanException error creating the connector
+     */
+    public void addConnector(String address, int port, boolean isAjp, boolean isSSL) throws MBeanException {
+
+        Service service;
+        try {
+            service = (Service)getManagedResource();
+        } catch (InstanceNotFoundException e) {
+            throw new MBeanException(e);
+        } catch (RuntimeOperationsException e) {
+            throw new MBeanException(e);
+        } catch (InvalidTargetObjectTypeException e) {
+            throw new MBeanException(e);
+        }
+        String protocol = isAjp ? "AJP/1.3" : "HTTP/1.1";
+        Connector connector = new Connector(protocol);
+        if ((address!=null) && (address.length()>0)) {
+            connector.setProperty("address", address);
+        }
+        connector.setPort(port);
+        connector.setSecure(isSSL);
+        connector.setScheme(isSSL ? "https" : "http");
+
+        service.addConnector(connector);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the scheme that will be assigned to requests received through
+     * this connector.
+     *
+     * @param scheme The new scheme
+     */
+    public void setScheme(String scheme) {
+
+        this.scheme = scheme;
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Add a new Connector to the set of defined Connectors, and associate it
+     * with this Service's Container.
+     *
+     * @param connector The Connector to be added
+     */
+    public void addConnector(Connector connector);
+-----CSCI578-----
+
+
+
+    public ObjectName[] getConnectorNames() {
+        ObjectName results[] = new ObjectName[connectors.length];
+        for (int i=0; i<results.length; i++) {
+            results[i] = connectors[i].getObjectName();
+        }
+        return results;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create a new AjpConnector
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param address The IP address on which to bind
+     * @param port TCP port number to listen on
+     * @return the object name of the created connector
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createAjpConnector(String parent, String address, int port)
+        throws Exception {
+
+        return createConnector(parent, address, port, true, false);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Look for SSL session ID if required. Only look for SSL Session ID if it
+     * is the only tracking method enabled.
+     *
+     * @param request The Servlet request obejct
+     */
+    protected void parseSessionSslId(Request request) {
+        if (request.getRequestedSessionId() == null &&
+                SSL_ONLY.equals(request.getServletContext()
+                        .getEffectiveSessionTrackingModes()) &&
+                        request.connector.secure) {
+            request.setRequestedSessionId(
+                    request.getAttribute(SSLSupport.SESSION_ID_KEY).toString());
+            request.setRequestedSessionSSL(true);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set a flag indicating whether or not the requested session ID for this
+     * request came in through SSL.  This is normally called by the
+     * HTTP Connector, when it parses the request headers.
+     *
+     * @param flag The new flag
+     */
+    public void setRequestedSessionSSL(boolean flag) {
+
+        this.requestedSessionSSL = flag;
+
+    }
+-----CSCI578-----
+
+
+
+    private void doConnectorAuthenticationAuthorization(org.apache.coyote.Request req, Request request) {
+        // Set the remote principal
+        String username = req.getRemoteUser().toString();
+        if (username != null) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("coyoteAdapter.authenticate", username));
+            }
+            if (req.getRemoteUserNeedsAuthorization()) {
+                Authenticator authenticator = request.getContext().getAuthenticator();
+                if (authenticator == null) {
+                    // No security constraints configured for the application so
+                    // no need to authorize the user. Use the CoyotePrincipal to
+                    // provide the authenticated user.
+                    request.setUserPrincipal(new CoyotePrincipal(username));
+                } else if (!(authenticator instanceof AuthenticatorBase)) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("coyoteAdapter.authorize", username));
+                    }
+                    // Custom authenticator that may not trigger authorization.
+                    // Do the authorization here to make sure it is done.
+                    request.setUserPrincipal(
+                            request.getContext().getRealm().authenticate(username));
+                }
+                // If the Authenticator is an instance of AuthenticatorBase then
+                // it will check req.getRemoteUserNeedsAuthorization() and
+                // trigger authorization as necessary. It will also cache the
+                // result preventing excessive calls to the Realm.
+            } else {
+                // The connector isn't configured for authorization. Create a
+                // user without any roles using the supplied user name.
+                request.setUserPrincipal(new CoyotePrincipal(username));
+            }
+        }
+
+        // Set the authorization type
+        String authtype = req.getAuthType().toString();
+        if (authtype != null) {
+            request.setAuthType(authtype);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the authentication type used for this request, if any; otherwise
+     * set the type to <code>null</code>.  Typical values are "BASIC",
+     * "DIGEST", or "SSL".
+     *
+     * @param type The authentication type used
+     */
+    public void setAuthType(String type) {
+        this.authType = type;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Principal who has been authenticated for this Request.  This
+     * value is also used to calculate the value to be returned by the
+     * <code>getRemoteUser()</code> method.
+     *
+     * @param principal The user Principal
+     */
+    public void setUserPrincipal(Principal principal) {
+
+        if (Globals.IS_SECURITY_ENABLED){
+            HttpSession session = getSession(false);
+            if ( (subject != null) &&
+                 (!subject.getPrincipals().contains(principal)) ){
+                subject.getPrincipals().add(principal);
+            } else if (session != null &&
+                        session.getAttribute(Globals.SUBJECT_ATTR) == null) {
+                subject = new Subject();
+                subject.getPrincipals().add(principal);
+            }
+            if (session != null){
+                session.setAttribute(Globals.SUBJECT_ATTR, subject);
+            }
+        }
+
+        this.userPrincipal = principal;
+    }
+-----CSCI578-----
+
+
+    public boolean getRemoteUserNeedsAuthorization() {
+        return remoteUserNeedsAuthorization;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the first instance of any of the given bytes in the byte array
+     * between the specified start and end.
+     *
+     * @param bytes The byte array to search
+     * @param start The point to start searching from in the byte array
+     * @param end   The point to stop searching in the byte array
+     * @param b     The array of bytes to search for
+     * @return      The position of the first instance of the byte or -1 if the
+     *                  byte is not found.
+     */
+    public static int findBytes(byte bytes[], int start, int end, byte b[]) {
+        int blen = b.length;
+        int offset = start;
+        while (offset < end) {
+            for (int i = 0;  i < blen; i++) {
+                if (bytes[offset] == b[i]) {
+                    return offset;
+                }
+            }
+            offset++;
+        }
+        return -1;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    protected void addPathParameter(String name, String value) {
+        coyoteRequest.addPathParameter(name, value);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Extract the path parameters from the request. This assumes parameters are
+     * of the form /path;name=value;name2=value2/ etc. Currently only really
+     * interested in the session ID that will be in this form. Other parameters
+     * can safely be ignored.
+     *
+     * @param req The Coyote request object
+     * @param request The Servlet request object
+     */
+    protected void parsePathParameters(org.apache.coyote.Request req,
+            Request request) {
+
+        // Process in bytes (this is default format so this is normally a NO-OP
+        req.decodedURI().toBytes();
+
+        ByteChunk uriBC = req.decodedURI().getByteChunk();
+        int semicolon = uriBC.indexOf(';', 0);
+        // Performance optimisation. Return as soon as it is known there are no
+        // path parameters;
+        if (semicolon == -1) {
+            return;
+        }
+
+        // What encoding to use? Some platforms, eg z/os, use a default
+        // encoding that doesn't give the expected result so be explicit
+        String enc = connector.getURIEncodingLower();
+        if (enc == null) {
+            enc = "iso-8859-1";
+        }
+        Charset charset = null;
+        try {
+            charset = B2CConverter.getCharsetLower(enc);
+        } catch (UnsupportedEncodingException e1) {
+            log.warn(sm.getString("coyoteAdapter.parsePathParam",
+                    enc));
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("coyoteAdapter.debug", "uriBC",
+                    uriBC.toString()));
+            log.debug(sm.getString("coyoteAdapter.debug", "semicolon",
+                    String.valueOf(semicolon)));
+            log.debug(sm.getString("coyoteAdapter.debug", "enc", enc));
+        }
+
+        while (semicolon > -1) {
+            // Parse path param, and extract it from the decoded request URI
+            int start = uriBC.getStart();
+            int end = uriBC.getEnd();
+
+            int pathParamStart = semicolon + 1;
+            int pathParamEnd = ByteChunk.findBytes(uriBC.getBuffer(),
+                    start + pathParamStart, end,
+                    new byte[] {';', '/'});
+
+            String pv = null;
+
+            if (pathParamEnd >= 0) {
+                if (charset != null) {
+                    pv = new String(uriBC.getBuffer(), start + pathParamStart,
+                                pathParamEnd - pathParamStart, charset);
+                }
+                // Extract path param from decoded request URI
+                byte[] buf = uriBC.getBuffer();
+                for (int i = 0; i < end - start - pathParamEnd; i++) {
+                    buf[start + semicolon + i]
+                        = buf[start + i + pathParamEnd];
+                }
+                uriBC.setBytes(buf, start,
+                        end - start - pathParamEnd + semicolon);
+            } else {
+                if (charset != null) {
+                    pv = new String(uriBC.getBuffer(), start + pathParamStart,
+                                (end - start) - pathParamStart, charset);
+                }
+                uriBC.setEnd(start + semicolon);
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("coyoteAdapter.debug", "pathParamStart",
+                        String.valueOf(pathParamStart)));
+                log.debug(sm.getString("coyoteAdapter.debug", "pathParamEnd",
+                        String.valueOf(pathParamEnd)));
+                log.debug(sm.getString("coyoteAdapter.debug", "pv", pv));
+            }
+
+            if (pv != null) {
+                int equals = pv.indexOf('=');
+                if (equals > -1) {
+                    String name = pv.substring(0, equals);
+                    String value = pv.substring(equals + 1);
+                    request.addPathParameter(name, value);
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("coyoteAdapter.debug", "equals",
+                                String.valueOf(equals)));
+                        log.debug(sm.getString("coyoteAdapter.debug", "name",
+                                name));
+                        log.debug(sm.getString("coyoteAdapter.debug", "value",
+                                value));
+                    }
+                }
+            }
+
+            semicolon = uriBC.indexOf(';', semicolon);
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Copy an array of bytes to a different position. Used during
+     * normalization.
+     *
+     * @param b The bytes that should be copied
+     * @param dest Destination offset
+     * @param src Source offset
+     * @param len Length
+     */
+    protected static void copyBytes(byte[] b, int dest, int src, int len) {
+        for (int pos = 0; pos < len; pos++) {
+            b[pos + dest] = b[pos + src];
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * This method normalizes "\", "//", "/./" and "/../".
+     *
+     * @param uriMB URI to be normalized
+     *
+     * @return <code>false</code> if normalizing this URI would require going
+     *         above the root, or if the URI contains a null byte, otherwise
+     *         <code>true</code>
+     */
+    public static boolean normalize(MessageBytes uriMB) {
+
+        ByteChunk uriBC = uriMB.getByteChunk();
+        final byte[] b = uriBC.getBytes();
+        final int start = uriBC.getStart();
+        int end = uriBC.getEnd();
+
+        // An empty URL is not acceptable
+        if (start == end) {
+            return false;
+        }
+
+        // URL * is acceptable
+        if ((end - start == 1) && b[start] == (byte) '*') {
+            return true;
+        }
+
+        int pos = 0;
+        int index = 0;
+
+        // Replace '\' with '/'
+        // Check for null byte
+        for (pos = start; pos < end; pos++) {
+            if (b[pos] == (byte) '\\') {
+                if (ALLOW_BACKSLASH) {
+                    b[pos] = (byte) '/';
+                } else {
+                    return false;
+                }
+            }
+            if (b[pos] == (byte) 0) {
+                return false;
+            }
+        }
+
+        // The URL must start with '/'
+        if (b[start] != (byte) '/') {
+            return false;
+        }
+
+        // Replace "//" with "/"
+        for (pos = start; pos < (end - 1); pos++) {
+            if (b[pos] == (byte) '/') {
+                while ((pos + 1 < end) && (b[pos + 1] == (byte) '/')) {
+                    copyBytes(b, pos, pos + 1, end - pos - 1);
+                    end--;
+                }
+            }
+        }
+
+        // If the URI ends with "/." or "/..", then we append an extra "/"
+        // Note: It is possible to extend the URI by 1 without any side effect
+        // as the next character is a non-significant WS.
+        if (((end - start) >= 2) && (b[end - 1] == (byte) '.')) {
+            if ((b[end - 2] == (byte) '/')
+                || ((b[end - 2] == (byte) '.')
+                    && (b[end - 3] == (byte) '/'))) {
+                b[end] = (byte) '/';
+                end++;
+            }
+        }
+
+        uriBC.setEnd(end);
+
+        index = 0;
+
+        // Resolve occurrences of "/./" in the normalized path
+        while (true) {
+            index = uriBC.indexOf("/./", 0, 3, index);
+            if (index < 0) {
+                break;
+            }
+            copyBytes(b, start + index, start + index + 2,
+                      end - start - index - 2);
+            end = end - 2;
+            uriBC.setEnd(end);
+        }
+
+        index = 0;
+
+        // Resolve occurrences of "/../" in the normalized path
+        while (true) {
+            index = uriBC.indexOf("/../", 0, 4, index);
+            if (index < 0) {
+                break;
+            }
+            // Prevent from going outside our context
+            if (index == 0) {
+                return false;
+            }
+            int index2 = -1;
+            for (pos = start + index - 1; (pos >= 0) && (index2 < 0); pos --) {
+                if (b[pos] == (byte) '/') {
+                    index2 = pos;
+                }
+            }
+            copyBytes(b, start + index2, start + index + 3,
+                      end - start - index - 3);
+            end = end + index2 - index - 3;
+            uriBC.setEnd(end);
+            index = index2;
+        }
+
+        return true;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Character conversion of the a US-ASCII MessageBytes.
+     *
+     * @param mb The MessageBytes instance contaning the bytes that should be converted to chars
+     */
+    protected void convertMB(MessageBytes mb) {
+
+        // This is of course only meaningful for bytes
+        if (mb.getType() != MessageBytes.T_BYTES) {
+            return;
+        }
+
+        ByteChunk bc = mb.getByteChunk();
+        CharChunk cc = mb.getCharChunk();
+        int length = bc.getLength();
+        cc.allocate(length, -1);
+
+        // Default encoding: fast conversion
+        byte[] bbuf = bc.getBuffer();
+        char[] cbuf = cc.getBuffer();
+        int start = bc.getStart();
+        for (int i = 0; i < length; i++) {
+            cbuf[i] = (char) (bbuf[i + start] & 0xff);
+        }
+        mb.setChars(cbuf, 0, length);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Parse session id in URL.
+     *
+     * @param request The Servlet request obejct
+     */
+    protected void parseSessionCookiesId(Request request) {
+
+        // If session tracking via cookies has been disabled for the current
+        // context, don't go looking for a session ID in a cookie as a cookie
+        // from a parent context with a session ID may be present which would
+        // overwrite the valid session ID encoded in the URL
+        Context context = request.getMappingData().context;
+        if (context != null && !context.getServletContext()
+                .getEffectiveSessionTrackingModes().contains(
+                        SessionTrackingMode.COOKIE)) {
+            return;
+        }
+
+        // Parse session id from cookies
+        ServerCookies serverCookies = request.getServerCookies();
+        int count = serverCookies.getCookieCount();
+        if (count <= 0) {
+            return;
+        }
+
+        String sessionCookieName = SessionConfig.getSessionCookieName(context);
+
+        for (int i = 0; i < count; i++) {
+            ServerCookie scookie = serverCookies.getCookie(i);
+            if (scookie.getName().equals(sessionCookieName)) {
+                // Override anything requested in the URL
+                if (!request.isRequestedSessionIdFromCookie()) {
+                    // Accept only the first session id cookie
+                    convertMB(scookie.getValue());
+                    request.setRequestedSessionId
+                        (scookie.getValue().toString());
+                    request.setRequestedSessionCookie(true);
+                    request.setRequestedSessionURL(false);
+                    if (log.isDebugEnabled()) {
+                        log.debug(" Requested cookie session id is " +
+                            request.getRequestedSessionId());
+                    }
+                } else {
+                    if (!request.isRequestedSessionIdValid()) {
+                        // Replace the session id until one is valid
+                        convertMB(scookie.getValue());
+                        request.setRequestedSessionId
+                            (scookie.getValue().toString());
+                    }
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set a flag indicating whether or not the requested session ID for this
+     * request came in through a cookie.  This is normally called by the
+     * HTTP Connector, when it parses the request headers.
+     *
+     * @param flag The new flag
+     */
+    public void setRequestedSessionCookie(boolean flag) {
+
+        this.requestedSessionCookie = flag;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the server representation of the cookies associated with this
+     * request. Triggers parsing of the Cookie HTTP headers (but not conversion
+     * to Cookie objects) if the headers have not yet been parsed.
+     *
+     * @return the server cookies
+     */
+    public ServerCookies getServerCookies() {
+        parseCookies();
+        return coyoteRequest.getCookies();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if the session identifier included in this
+     * request identifies a valid session.
+     */
+    @Override
+    public boolean isRequestedSessionIdValid() {
+
+        if (requestedSessionId == null) {
+            return false;
+        }
+
+        Context context = getContext();
+        if (context == null) {
+            return false;
+        }
+
+        Manager manager = context.getManager();
+        if (manager == null) {
+            return false;
+        }
+
+        Session session = null;
+        try {
+            session = manager.findSession(requestedSessionId);
+        } catch (IOException e) {
+            // Can't find the session
+        }
+
+        if ((session == null) || !session.isValid()) {
+            // Check for parallel deployment contexts
+            if (getMappingData().contexts == null) {
+                return false;
+            } else {
+                for (int i = (getMappingData().contexts.length); i > 0; i--) {
+                    Context ctxt = getMappingData().contexts[i - 1];
+                    try {
+                        if (ctxt.getManager().findSession(requestedSessionId) !=
+                                null) {
+                            return true;
+                        }
+                    } catch (IOException e) {
+                        // Ignore
+                    }
+                }
+                return false;
+            }
+        }
+
+        return true;
+    }

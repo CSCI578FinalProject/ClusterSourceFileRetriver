@@ -1,0 +1,774 @@
+14
+-----CSCI578-----
+
+
+
+    /**
+     * Deregister any JDBC drivers registered by the webapp that the webapp
+     * forgot. This is made unnecessary complex because a) DriverManager
+     * checks the class loader of the calling class (it would be much easier
+     * if it checked the context class loader) b) using reflection would
+     * create a dependency on the DriverManager implementation which can,
+     * and has, changed.
+     *
+     * We can't just create an instance of JdbcLeakPrevention as it will be
+     * loaded by the common class loader (since it's .class file is in the
+     * $CATALINA_HOME/lib directory). This would fail DriverManager's check
+     * on the class loader of the calling class. So, we load the bytes via
+     * our parent class loader but define the class with this class loader
+     * so the JdbcLeakPrevention looks like a webapp class to the
+     * DriverManager.
+     *
+     * If only apps cleaned up after themselves...
+     */
+    private final void clearReferencesJdbc() {
+        InputStream is = getResourceAsStream(
+                "org/apache/catalina/loader/JdbcLeakPrevention.class");
+        // We know roughly how big the class will be (~ 1K) so allow 2k as a
+        // starting point
+        byte[] classBytes = new byte[2048];
+        int offset = 0;
+        try {
+            int read = is.read(classBytes, offset, classBytes.length-offset);
+            while (read > -1) {
+                offset += read;
+                if (offset == classBytes.length) {
+                    // Buffer full - double size
+                    byte[] tmp = new byte[classBytes.length * 2];
+                    System.arraycopy(classBytes, 0, tmp, 0, classBytes.length);
+                    classBytes = tmp;
+                }
+                read = is.read(classBytes, offset, classBytes.length-offset);
+            }
+            Class<?> lpClass =
+                defineClass("org.apache.catalina.loader.JdbcLeakPrevention",
+                    classBytes, 0, offset, this.getClass().getProtectionDomain());
+            Object obj = lpClass.newInstance();
+            @SuppressWarnings("unchecked")
+            List<String> driverNames = (List<String>) obj.getClass().getMethod(
+                    "clearJdbcDriverRegistrations").invoke(obj);
+            for (String name : driverNames) {
+                log.error(sm.getString("webappClassLoader.clearJbdc",
+                        contextName, name));
+            }
+        } catch (Exception e) {
+            // So many things to go wrong above...
+            log.warn(sm.getString(
+                    "webappClassLoader.jdbcRemoveFailed", contextName), e);
+        } finally {
+            if (is != null) {
+                try {
+                    is.close();
+                } catch (IOException ioe) {
+                    log.warn(sm.getString(
+                            "webappClassLoader.jdbcRemoveStreamError",
+                            contextName), ioe);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void nullInstance(Object instance) {
+        if (instance == null) {
+            return;
+        }
+        Field[] fields = instance.getClass().getDeclaredFields();
+        for (int i = 0; i < fields.length; i++) {
+            Field field = fields[i];
+            int mods = field.getModifiers();
+            if (field.getType().isPrimitive()
+                    || (field.getName().indexOf("$") != -1)) {
+                continue;
+            }
+            try {
+                field.setAccessible(true);
+                if (Modifier.isStatic(mods) && Modifier.isFinal(mods)) {
+                    // Doing something recursively is too risky
+                    continue;
+                }
+                Object value = field.get(instance);
+                if (null != value) {
+                    Class<? extends Object> valueClass = value.getClass();
+                    if (!loadedByThisOrChild(valueClass)) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Not setting field " + field.getName() +
+                                    " to null in object of class " +
+                                    instance.getClass().getName() +
+                                    " because the referenced object was of type " +
+                                    valueClass.getName() +
+                                    " which was not loaded by this WebappClassLoader.");
+                        }
+                    } else {
+                        field.set(instance, null);
+                        if (log.isDebugEnabled()) {
+                            log.debug("Set field " + field.getName()
+                                    + " to null in class " + instance.getClass().getName());
+                        }
+                    }
+                }
+            } catch (Throwable t) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Could not set field " + field.getName()
+                            + " to null in object instance of class "
+                            + instance.getClass().getName(), t);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    private final void clearReferencesStaticFinal() {
+
+        @SuppressWarnings("unchecked")
+        Collection<ResourceEntry> values =
+            ((HashMap<String,ResourceEntry>) resourceEntries.clone()).values();
+        Iterator<ResourceEntry> loadedClasses = values.iterator();
+        //
+        // walk through all loaded class to trigger initialization for
+        //    any uninitialized classes, otherwise initialization of
+        //    one class may call a previously cleared class.
+        while(loadedClasses.hasNext()) {
+            ResourceEntry entry = loadedClasses.next();
+            if (entry.loadedClass != null) {
+                Class<?> clazz = entry.loadedClass;
+                try {
+                    Field[] fields = clazz.getDeclaredFields();
+                    for (int i = 0; i < fields.length; i++) {
+                        if(Modifier.isStatic(fields[i].getModifiers())) {
+                            fields[i].get(null);
+                            break;
+                        }
+                    }
+                } catch(Throwable t) {
+                    // Ignore
+                }
+            }
+        }
+        loadedClasses = values.iterator();
+        while (loadedClasses.hasNext()) {
+            ResourceEntry entry = loadedClasses.next();
+            if (entry.loadedClass != null) {
+                Class<?> clazz = entry.loadedClass;
+                try {
+                    Field[] fields = clazz.getDeclaredFields();
+                    for (int i = 0; i < fields.length; i++) {
+                        Field field = fields[i];
+                        int mods = field.getModifiers();
+                        if (field.getType().isPrimitive()
+                                || (field.getName().indexOf("$") != -1)) {
+                            continue;
+                        }
+                        if (Modifier.isStatic(mods)) {
+                            try {
+                                field.setAccessible(true);
+                                if (Modifier.isFinal(mods)) {
+                                    if (!((field.getType().getName().startsWith("java."))
+                                            || (field.getType().getName().startsWith("javax.")))) {
+                                        nullInstance(field.get(null));
+                                    }
+                                } else {
+                                    field.set(null, null);
+                                    if (log.isDebugEnabled()) {
+                                        log.debug("Set field " + field.getName()
+                                                + " to null in class " + clazz.getName());
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Could not set field " + field.getName()
+                                            + " to null in class " + clazz.getName(), t);
+                                }
+                            }
+                        }
+                    }
+                } catch (Throwable t) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Could not clean fields for class " + clazz.getName(), t);
+                    }
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * Look at a threads stack trace to see if it is a request thread or not. It
+     * isn't perfect, but it should be good-enough for most cases.
+     */
+    private boolean isRequestThread(Thread thread) {
+
+        StackTraceElement[] elements = thread.getStackTrace();
+
+        if (elements == null || elements.length == 0) {
+            // Must have stopped already. Too late to ignore it. Assume not a
+            // request processing thread.
+            return false;
+        }
+
+        // Step through the methods in reverse order looking for calls to any
+        // CoyoteAdapter method. All request threads will have this unless
+        // Tomcat has been heavily modified - in which case there isn't much we
+        // can do.
+        for (int i = 0; i < elements.length; i++) {
+            StackTraceElement element = elements[elements.length - (i+1)];
+            if ("org.apache.catalina.connector.CoyoteAdapter".equals(
+                    element.getClassName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    private void clearReferencesStopTimerThread(Thread thread) {
+
+        // Need to get references to:
+        // in Sun/Oracle JDK:
+        // - newTasksMayBeScheduled field (in java.util.TimerThread)
+        // - queue field
+        // - queue.clear()
+        // in IBM JDK, Apache Harmony:
+        // - cancel() method (in java.util.Timer$TimerImpl)
+
+        try {
+
+            try {
+                Field newTasksMayBeScheduledField =
+                    thread.getClass().getDeclaredField("newTasksMayBeScheduled");
+                newTasksMayBeScheduledField.setAccessible(true);
+                Field queueField = thread.getClass().getDeclaredField("queue");
+                queueField.setAccessible(true);
+
+                Object queue = queueField.get(thread);
+
+                Method clearMethod = queue.getClass().getDeclaredMethod("clear");
+                clearMethod.setAccessible(true);
+
+                synchronized(queue) {
+                    newTasksMayBeScheduledField.setBoolean(thread, false);
+                    clearMethod.invoke(queue);
+                    queue.notify();  // In case queue was already empty.
+                }
+
+            }catch (NoSuchFieldException nfe){
+                Method cancelMethod = thread.getClass().getDeclaredMethod("cancel");
+                synchronized(thread) {
+                    cancelMethod.setAccessible(true);
+                    cancelMethod.invoke(thread);
+                }
+            }
+
+            log.error(sm.getString("webappClassLoader.warnTimerThread",
+                    contextName, thread.getName()));
+
+        } catch (IllegalAccessException e) {
+            log.warn(sm.getString(
+                    "webappClassLoader.stopTimerThreadFail",
+                    thread.getName(), contextName), e);
+        } catch (NoSuchMethodException e) {
+            log.warn(sm.getString(
+                    "webappClassLoader.stopTimerThreadFail",
+                    thread.getName(), contextName), e);
+        } catch (InvocationTargetException e) {
+            log.warn(sm.getString(
+                    "webappClassLoader.stopTimerThreadFail",
+                    thread.getName(), contextName), e);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @SuppressWarnings("deprecation")
+    private void clearReferencesThreads() {
+        Thread[] threads = getThreads();
+
+        // Iterate over the set of threads
+        for (Thread thread : threads) {
+            if (thread != null) {
+                ClassLoader ccl = thread.getContextClassLoader();
+                if (ccl == this) {
+                    // Don't warn about this thread
+                    if (thread == Thread.currentThread()) {
+                        continue;
+                    }
+
+                    // JVM controlled threads
+                    ThreadGroup tg = thread.getThreadGroup();
+                    if (tg != null &&
+                            JVM_THREAD_GROUP_NAMES.contains(tg.getName())) {
+
+                        // HttpClient keep-alive threads
+                        if (clearReferencesHttpClientKeepAliveThread &&
+                                thread.getName().equals("Keep-Alive-Timer")) {
+                            thread.setContextClassLoader(parent);
+                            log.debug(sm.getString(
+                                    "webappClassLoader.checkThreadsHttpClient"));
+                        }
+
+                        // Don't warn about remaining JVM controlled threads
+                        continue;
+                    }
+
+                    // Skip threads that have already died
+                    if (!thread.isAlive()) {
+                        continue;
+                    }
+
+                    // TimerThread can be stopped safely so treat separately
+                    // "java.util.TimerThread" in Sun/Oracle JDK
+                    // "java.util.Timer$TimerImpl" in Apache Harmony and in IBM JDK
+                    if (thread.getClass().getName().startsWith("java.util.Timer") &&
+                            clearReferencesStopTimerThreads) {
+                        clearReferencesStopTimerThread(thread);
+                        continue;
+                    }
+
+                    if (isRequestThread(thread)) {
+                        log.error(sm.getString("webappClassLoader.warnRequestThread",
+                                contextName, thread.getName()));
+                    } else {
+                        log.error(sm.getString("webappClassLoader.warnThread",
+                                contextName, thread.getName()));
+                    }
+
+                    // Don't try an stop the threads unless explicitly
+                    // configured to do so
+                    if (!clearReferencesStopThreads) {
+                        continue;
+                    }
+
+                    // If the thread has been started via an executor, try
+                    // shutting down the executor
+                    try {
+                        // Runnable wrapped by Thread
+                        // "target" in Sun/Oracle JDK
+                        // "runnable" in IBM JDK
+                        // "action" in Apache Harmony
+                        Object target = null;
+                        for (String fieldName : new String[] { "target",
+                                "runnable", "action" }) {
+                            try {
+                                Field targetField = thread.getClass()
+                                        .getDeclaredField(fieldName);
+                                targetField.setAccessible(true);
+                                target = targetField.get(thread);
+                                break;
+                            } catch (NoSuchFieldException nfe) {
+                                continue;
+                            }
+                        }
+
+                        // "java.util.concurrent" code is in public domain,
+                        // so all implementations are similar
+                        if (target != null &&
+                                target.getClass().getCanonicalName() != null
+                                && target.getClass().getCanonicalName().equals(
+                                "java.util.concurrent.ThreadPoolExecutor.Worker")) {
+                            Field executorField =
+                                target.getClass().getDeclaredField("this$0");
+                            executorField.setAccessible(true);
+                            Object executor = executorField.get(target);
+                            if (executor instanceof ThreadPoolExecutor) {
+                                ((ThreadPoolExecutor) executor).shutdownNow();
+                            }
+                        }
+                    } catch (SecurityException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), contextName), e);
+                    } catch (NoSuchFieldException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), contextName), e);
+                    } catch (IllegalArgumentException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), contextName), e);
+                    } catch (IllegalAccessException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), contextName), e);
+                    }
+
+                    // This method is deprecated and for good reason. This is
+                    // very risky code but is the only option at this point.
+                    // A *very* good reason for apps to do this clean-up
+                    // themselves.
+                    thread.stop();
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the context name for this class loader.
+     */
+    public String getContextName() {
+
+        return (this.contextName);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param o object to test, may be null
+     * @return <code>true</code> if o has been loaded by the current classloader
+     * or one of its descendants.
+     */
+    private boolean loadedByThisOrChild(Object o) {
+        if (o == null) {
+            return false;
+        }
+
+        Class<?> clazz;
+        if (o instanceof Class) {
+            clazz = (Class<?>) o;
+        } else {
+            clazz = o.getClass();
+        }
+
+        ClassLoader cl = clazz.getClassLoader();
+        while (cl != null) {
+            if (cl == this) {
+                return true;
+            }
+            cl = cl.getParent();
+        }
+
+        if (o instanceof Collection<?>) {
+            Iterator<?> iter = ((Collection<?>) o).iterator();
+            try {
+                while (iter.hasNext()) {
+                    Object entry = iter.next();
+                    if (loadedByThisOrChild(entry)) {
+                        return true;
+                    }
+                }
+            } catch (ConcurrentModificationException e) {
+                log.warn(sm.getString(
+                        "webappClassLoader", clazz.getName(), getContextName()),
+                        e);
+            }
+        }
+        return false;
+    }
+
+
+
+    /**
+     * Determine whether a class was loaded by this class loader or one of
+     * its child class loaders.
+     */
+    protected boolean loadedByThisOrChild(Class clazz)
+    {
+        boolean result = false;
+        for (ClassLoader classLoader = clazz.getClassLoader();
+                null != classLoader; classLoader = classLoader.getParent()) {
+            if (classLoader.equals(this)) {
+                result = true;
+                break;
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * This depends on the internals of the Sun JVM so it does everything by
+     * reflection.
+     */
+    private void clearReferencesRmiTargets() {
+        try {
+            // Need access to the ccl field of sun.rmi.transport.Target to find
+            // the leaks
+            Class<?> objectTargetClass =
+                Class.forName("sun.rmi.transport.Target");
+            Field cclField = objectTargetClass.getDeclaredField("ccl");
+            cclField.setAccessible(true);
+            // Need access to the stub field to report the leaks
+            Field stubField = objectTargetClass.getDeclaredField("stub");
+            stubField.setAccessible(true);
+
+            // Clear the objTable map
+            Class<?> objectTableClass =
+                Class.forName("sun.rmi.transport.ObjectTable");
+            Field objTableField = objectTableClass.getDeclaredField("objTable");
+            objTableField.setAccessible(true);
+            Object objTable = objTableField.get(null);
+            if (objTable == null) {
+                return;
+            }
+
+            // Iterate over the values in the table
+            if (objTable instanceof Map<?,?>) {
+                Iterator<?> iter = ((Map<?,?>) objTable).values().iterator();
+                while (iter.hasNext()) {
+                    Object obj = iter.next();
+                    Object cclObject = cclField.get(obj);
+                    if (this == cclObject) {
+                        iter.remove();
+                        Object stubObject = stubField.get(obj);
+                        log.error(sm.getString("webappClassLoader.clearRmi",
+                                stubObject.getClass().getName(), stubObject));
+                    }
+                }
+            }
+
+            // Clear the implTable map
+            Field implTableField = objectTableClass.getDeclaredField("implTable");
+            implTableField.setAccessible(true);
+            Object implTable = implTableField.get(null);
+            if (implTable == null) {
+                return;
+            }
+
+            // Iterate over the values in the table
+            if (implTable instanceof Map<?,?>) {
+                Iterator<?> iter = ((Map<?,?>) implTable).values().iterator();
+                while (iter.hasNext()) {
+                    Object obj = iter.next();
+                    Object cclObject = cclField.get(obj);
+                    if (this == cclObject) {
+                        iter.remove();
+                    }
+                }
+            }
+        } catch (ClassNotFoundException e) {
+            log.info(sm.getString("webappClassLoader.clearRmiInfo",
+                    contextName), e);
+        } catch (SecurityException e) {
+            log.warn(sm.getString("webappClassLoader.clearRmiFail",
+                    contextName), e);
+        } catch (NoSuchFieldException e) {
+            log.warn(sm.getString("webappClassLoader.clearRmiFail",
+                    contextName), e);
+        } catch (IllegalArgumentException e) {
+            log.warn(sm.getString("webappClassLoader.clearRmiFail",
+                    contextName), e);
+        } catch (IllegalAccessException e) {
+            log.warn(sm.getString("webappClassLoader.clearRmiFail",
+                    contextName), e);
+        } catch (Exception e) {
+            JreCompat jreCompat = JreCompat.getInstance();
+            if (jreCompat.isInstanceOfInaccessibleObjectException(e)) {
+                // Must be running on Java 9 without the necessary command line
+                // options.
+                log.warn(sm.getString("webappClassLoader.addExports"));
+            } else {
+                // Re-throw all other exceptions
+                // Have to wrap this below Java 7
+                throw new RuntimeException(e);
+            }
+        }
+    }
+-----CSCI578-----
+
+    
+    
+    public static JreCompat getInstance() {
+        return instance;
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * Clears the given thread local map object. Also pass in the field that
+     * points to the internal table to save re-calculating it on every
+     * call to this method.
+     */
+    private void checkThreadLocalMapForLeaks(Object map,Field internalTableField)
+            throws NoSuchMethodException, IllegalAccessException,
+            NoSuchFieldException, InvocationTargetException {
+        if (map != null) {
+            Method mapRemove =
+                map.getClass().getDeclaredMethod("remove",
+                        ThreadLocal.class);
+            mapRemove.setAccessible(true);
+            Object[] table = (Object[]) internalTableField.get(map);
+            int staleEntriesCount = 0;
+            if (table != null) {
+                for (int j =0; j < table.length; j++) {
+                    Object obj = table[j];
+                    if (obj != null) {
+                        boolean keyLoadedByWebapp = false;
+                        boolean valueLoadedByWebapp = false;
+                        // Check the key
+                        Object key = ((Reference<?>) obj).get();
+                        if (this.equals(key) || loadedByThisOrChild(key)) {
+                            keyLoadedByWebapp = true;
+                        }
+                        // Check the value
+                        Field valueField =
+                                obj.getClass().getDeclaredField("value");
+                        valueField.setAccessible(true);
+                        Object value = valueField.get(obj);
+                        if (this.equals(value) || loadedByThisOrChild(value)) {
+                            valueLoadedByWebapp = true;
+                        }
+                        if (keyLoadedByWebapp || valueLoadedByWebapp) {
+                            Object[] args = new Object[5];
+                            args[0] = contextName;
+                            if (key != null) {
+                                args[1] = getPrettyClassName(key.getClass());
+                                try {
+                                    args[2] = key.toString();
+                                } catch (Exception e) {
+                                    log.error(sm.getString(
+                                            "webappClassLoader.clearThreadLocal.badKey",
+                                            args[1]), e);
+                                    args[2] = sm.getString(
+                                            "webappClassLoader.clearThreadLocal.unknown");
+                                }
+                            }
+                            if (value != null) {
+                                args[3] = getPrettyClassName(value.getClass());
+                                try {
+                                    args[4] = value.toString();
+                                } catch (Exception e) {
+                                    log.error(sm.getString(
+                                            "webappClassLoader.clearThreadLocal.badValue",
+                                            args[3]), e);
+                                    args[4] = sm.getString(
+                                    "webappClassLoader.clearThreadLocal.unknown");
+                                }
+                            }
+                            if (valueLoadedByWebapp) {
+                                log.error(sm.getString(
+                                        "webappClassLoader.clearThreadLocal",
+                                        args));
+                                if (clearReferencesThreadLocals) {
+                                    log.info(sm.getString(
+                                            "webappClassLoader.clearThreadLocalClear"));
+                                }
+                            } else if (value == null) {
+                                if (log.isDebugEnabled()) {
+                                    log.debug(sm.getString(
+                                            "webappClassLoader.clearThreadLocalDebug",
+                                            args));
+                                    if (clearReferencesThreadLocals) {
+                                        log.debug(sm.getString(
+                                                "webappClassLoader.clearThreadLocalDebugClear"));
+                                    }
+                                }
+                            } else {
+                                if (log.isDebugEnabled()) {
+                                    log.debug(sm.getString(
+                                            "webappClassLoader.clearThreadLocalNone",
+                                            args));
+                                }
+                            }
+                            if (clearReferencesThreadLocals) {
+                                if (key == null) {
+                                  staleEntriesCount++;
+                                } else {
+                                  mapRemove.invoke(map, key);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (staleEntriesCount > 0) {
+                Method mapRemoveStale =
+                    map.getClass().getDeclaredMethod("expungeStaleEntries");
+                mapRemoveStale.setAccessible(true);
+                mapRemoveStale.invoke(map);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    private void clearReferencesThreadLocals() {
+        Thread[] threads = getThreads();
+
+        try {
+            // Make the fields in the Thread class that store ThreadLocals
+            // accessible
+            Field threadLocalsField =
+                Thread.class.getDeclaredField("threadLocals");
+            threadLocalsField.setAccessible(true);
+            Field inheritableThreadLocalsField =
+                Thread.class.getDeclaredField("inheritableThreadLocals");
+            inheritableThreadLocalsField.setAccessible(true);
+            // Make the underlying array of ThreadLoad.ThreadLocalMap.Entry objects
+            // accessible
+            Class<?> tlmClass =
+                Class.forName("java.lang.ThreadLocal$ThreadLocalMap");
+            Field tableField = tlmClass.getDeclaredField("table");
+            tableField.setAccessible(true);
+            Method expungeStaleEntriesMethod = tlmClass.getDeclaredMethod("expungeStaleEntries");
+            expungeStaleEntriesMethod.setAccessible(true);
+
+            for (int i = 0; i < threads.length; i++) {
+                Object threadLocalMap;
+                if (threads[i] != null) {
+
+                    // Clear the first map
+                    threadLocalMap = threadLocalsField.get(threads[i]);
+                    if (null != threadLocalMap){
+                        expungeStaleEntriesMethod.invoke(threadLocalMap);
+                        checkThreadLocalMapForLeaks(threadLocalMap, tableField);
+                    }
+
+                    // Clear the second map
+                    threadLocalMap =
+                        inheritableThreadLocalsField.get(threads[i]);
+                    if (null != threadLocalMap){
+                        expungeStaleEntriesMethod.invoke(threadLocalMap);
+                        checkThreadLocalMapForLeaks(threadLocalMap, tableField);
+                    }
+                }
+            }
+        } catch (SecurityException e) {
+            log.warn(sm.getString("webappClassLoader.clearThreadLocalFail",
+                    contextName), e);
+        } catch (NoSuchFieldException e) {
+            log.warn(sm.getString("webappClassLoader.clearThreadLocalFail",
+                    contextName), e);
+        } catch (ClassNotFoundException e) {
+            log.warn(sm.getString("webappClassLoader.clearThreadLocalFail",
+                    contextName), e);
+        } catch (IllegalArgumentException e) {
+            log.warn(sm.getString("webappClassLoader.clearThreadLocalFail",
+                    contextName), e);
+        } catch (IllegalAccessException e) {
+            log.warn(sm.getString("webappClassLoader.clearThreadLocalFail",
+                    contextName), e);
+        } catch (NoSuchMethodException e) {
+            log.warn(sm.getString("webappClassLoader.clearThreadLocalFail",
+                    contextName), e);
+        } catch (InvocationTargetException e) {
+            log.warn(sm.getString("webappClassLoader.clearThreadLocalFail",
+                    contextName), e);
+        }
+    }
+-----CSCI578-----
+
+
+    private String getPrettyClassName(Class clazz) {
+       String name = clazz.getCanonicalName();
+       if(name==null){
+           name = clazz.getName();
+       }
+       return name;
+    }

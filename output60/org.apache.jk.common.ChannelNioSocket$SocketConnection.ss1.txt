@@ -1,0 +1,538 @@
+24
+-----CSCI578-----
+
+
+
+    // XXX This should become handleNotification
+    public int invoke( Msg msg, MsgContext ep ) throws IOException {
+        int type=ep.getType();
+
+        switch( type ) {
+        case JkHandler.HANDLE_RECEIVE_PACKET:
+            if( log.isDebugEnabled()) log.debug("RECEIVE_PACKET ?? ");
+            return receive( msg, ep );
+        case JkHandler.HANDLE_SEND_PACKET:
+            return send( msg, ep );
+        case JkHandler.HANDLE_FLUSH:
+            return flush( msg, ep );
+        }
+
+        if( log.isTraceEnabled() )
+            log.trace("Call next " + type + " " + next);
+
+        // Send notification
+        if( nSupport!=null ) {
+            Notification notif=(Notification)ep.getNote(notifNote);
+            if( notif==null ) {
+                notif=new Notification("channelNioSocket.message", ep, requestCount );
+                ep.setNote( notifNote, notif);
+            }
+            nSupport.sendNotification(notif);
+        }
+
+        if( next != null ) {
+            return next.invoke( msg, ep );
+        } else {
+            log.info("No next ");
+        }
+
+        return OK;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Read N bytes from the InputStream, and ensure we got them all
+     * Under heavy load we could experience many fragmented packets
+     * just read Unix Network Programming to recall that a call to
+     * read didn't ensure you got all the data you want
+     *
+     * from read() Linux manual
+     *
+     * On success, the number of bytes read is returned (zero indicates end
+     * of file),and the file position is advanced by this number.
+     * It is not an error if this number is smaller than the number of bytes
+     * requested; this may happen for example because fewer bytes
+     * are actually available right now (maybe because we were close to
+     * end-of-file, or because we are reading from a pipe, or  from  a
+     * terminal),  or  because  read()  was interrupted by a signal.
+     * On error, -1 is returned, and errno is set appropriately. In this
+     * case it is left unspecified whether the file position (if any) changes.
+     *
+     **/
+    public int read( MsgContext ep, byte[] b, int offset, int len)
+        throws IOException
+    {
+        InputStream is=(InputStream)ep.getNote( isNote );
+        int pos = 0;
+        int got;
+
+        while(pos < len) {
+            try {
+                got = is.read(b, pos + offset, len - pos);
+            } catch(ClosedChannelException sex) {
+                if(pos > 0) {
+                    log.info("Error reading data after "+pos+"bytes",sex);
+                } else {
+                    log.debug("Error reading data", sex);
+                }
+                got = -1;
+            }
+            if (log.isTraceEnabled()) {
+                log.trace("read() " + b + " " + (b==null ? 0: b.length) + " " +
+                          offset + " " + len + " = " + got );
+            }
+
+            // connection just closed by remote. 
+            if (got <= 0) {
+                // This happens periodically, as apache restarts
+                // periodically.
+                // It should be more gracefull ! - another feature for Ajp14
+                // log.warn( "server has closed the current connection (-1)" );
+                return -3;
+            }
+
+            pos += got;
+        }
+        return pos;
+    }
+-----CSCI578-----
+
+
+    public int send( Msg msg, MsgContext ep)
+        throws IOException    {
+        msg.end(); // Write the packet header
+        byte buf[]=msg.getBuffer();
+        int len=msg.getLen();
+        
+        if(log.isTraceEnabled() )
+            log.trace("send() " + len + " " + buf[4] );
+
+        OutputStream os=(OutputStream)ep.getNote( osNote );
+        os.write( buf, 0, len );
+        return len;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /* Turning this to true will reduce the latency with about 20%.
+       But it requires changes in tomcat to make sure client-requested
+       flush() is honored ( on my test, I got 367->433 RPS and
+       52->35ms average time with a simple servlet )
+    */
+    
+    ThreadPool tp=ThreadPool.createThreadPool(true);
+
+
+    public int flush( Msg msg, MsgContext ep)
+        throws IOException    {
+        OutputStream os=(OutputStream)ep.getNote( osNote );
+        os.flush();
+        return 0;
+    }
+-----CSCI578-----
+
+
+    public int receive( Msg msg, MsgContext ep )
+        throws IOException    {
+        if (log.isTraceEnabled()) {
+            log.trace("receive() ");
+        }
+
+        byte buf[]=msg.getBuffer();
+        int hlen=msg.getHeaderLength();
+        
+        // XXX If the length in the packet header doesn't agree with the
+        // actual number of bytes read, it should probably return an error
+        // value.  Also, callers of this method never use the length
+        // returned -- should probably return true/false instead.
+
+        int rd = this.read(ep, buf, 0, hlen );
+        
+        if(rd < 0) {
+            // Most likely normal apache restart.
+            // log.warn("Wrong message " + rd );
+            return rd;
+        }
+
+        msg.processHeader();
+
+        /* After processing the header we know the body
+           length
+        */
+        int blen=msg.getLen();
+        
+        // XXX check if enough space - it's assert()-ed !!!
+        
+        int total_read = 0;
+        
+        total_read = this.read(ep, buf, hlen, blen);
+        
+        if ((total_read <= 0) && (blen > 0)) {
+            log.warn("can't read body, waited #" + blen);
+            return  -1;
+        }
+        
+        if (total_read != blen) {
+             log.warn( "incomplete read, waited #" + blen +
+                        " got only " + total_read);
+            return -2;
+        }
+        
+        return total_read;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * <p> Is trace logging currently enabled? </p>
+     *
+     * <p> Call this method to prevent having to perform expensive operations
+     * (for example, <code>String</code> concatenation)
+     * when the log level is more than trace. </p>
+     */
+    public boolean isTraceEnabled();
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Logging Methods
+
+
+    /**
+     * <p> Log a message with trace log level. </p>
+     *
+     * @param message log this message
+     */
+    public void trace(Object message);
+
+
+
+    /**
+     * <p> Log an error with trace log level. </p>
+     *
+     * @param message log this message
+     * @param t log this cause
+     */
+    public void trace(Object message, Throwable t);
+-----CSCI578-----
+
+
+    /**
+     * compile filter string to regular expressions
+     * @see Pattern#compile(java.lang.String)
+     * @param filter
+     *            The filter to set.
+     */
+    public void setFilter(String filter) {
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("ReplicationValve.filter.loading", filter));
+        this.filter = filter;
+        StringTokenizer t = new StringTokenizer(filter, ";");
+        this.reqFilters = new Pattern[t.countTokens()];
+        int i = 0;
+        while (t.hasMoreTokens()) {
+            String s = t.nextToken();
+            if (log.isTraceEnabled())
+                log.trace(sm.getString("ReplicationValve.filter.token", s));
+            try {
+                reqFilters[i++] = Pattern.compile(s);
+            } catch (Exception x) {
+                log.error(sm.getString("ReplicationValve.filter.token.failure",
+                        s), x);
+            }
+        }
+    }
+-----CSCI578-----
+
+    
+    public void messageReceived(ChannelMessage msg) {
+        if ( Logs.MESSAGES.isTraceEnabled() ) {
+            Logs.MESSAGES.trace("ChannelCoordinator - Received msg:" + new UniqueId(msg.getUniqueId()) + " at " +new java.sql.Timestamp(System.currentTimeMillis())+ " from "+msg.getAddress().getName());
+        }
+        super.messageReceived(msg);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Context that would be used to process the specified
+     * host-relative request URI, if any; otherwise return <code>null</code>.
+     *
+     * @param uri Request URI to be mapped
+     */
+    public Context map(String uri) {
+
+        if (log.isDebugEnabled())
+            log.debug("Mapping request URI '" + uri + "'");
+        if (uri == null)
+            return (null);
+
+        // Match on the longest possible context path prefix
+        if (log.isTraceEnabled())
+            log.trace("  Trying the longest context path prefix");
+        Context context = null;
+        String mapuri = uri;
+        while (true) {
+            context = (Context) findChild(mapuri);
+            if (context != null)
+                break;
+            int slash = mapuri.lastIndexOf('/');
+            if (slash < 0)
+                break;
+            mapuri = mapuri.substring(0, slash);
+        }
+
+        // If no Context matches, select the default Context
+        if (context == null) {
+            if (log.isTraceEnabled())
+                log.trace("  Trying the default context");
+            context = (Context) findChild("");
+        }
+
+        // Complain if no Context has been selected
+        if (context == null) {
+            log.error(sm.getString("standardHost.mappingError", uri));
+            return (null);
+        }
+
+        // Return the mapped Context (if any)
+        if (log.isDebugEnabled())
+            log.debug(" Mapped to context '" + context.getPath() + "'");
+        return (context);
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Allocate an initialized instance of this Servlet that is ready to have
+     * its <code>service()</code> method called.  If the servlet class does
+     * not implement <code>SingleThreadModel</code>, the (only) initialized
+     * instance may be returned immediately.  If the servlet class implements
+     * <code>SingleThreadModel</code>, the Wrapper implementation must ensure
+     * that this instance is not allocated again until it is deallocated by a
+     * call to <code>deallocate()</code>.
+     *
+     * @exception ServletException if the servlet init() method threw
+     *  an exception
+     * @exception ServletException if a loading error occurs
+     */
+    public Servlet allocate() throws ServletException {
+
+        // If we are currently unloading this servlet, throw an exception
+        if (unloading)
+            throw new ServletException
+              (sm.getString("standardWrapper.unloading", getName()));
+
+        boolean newInstance = false;
+        
+        // If not SingleThreadedModel, return the same instance every time
+        if (!singleThreadModel) {
+
+            // Load and initialize our instance if necessary
+            if (instance == null) {
+                synchronized (this) {
+                    if (instance == null) {
+                        try {
+                            if (log.isDebugEnabled())
+                                log.debug("Allocating non-STM instance");
+
+                            instance = loadServlet();
+                            // For non-STM, increment here to prevent a race
+                            // condition with unload. Bug 43683, test case #3
+                            if (!singleThreadModel) {
+                                newInstance = true;
+                                countAllocated.incrementAndGet();
+                            }
+                        } catch (ServletException e) {
+                            throw e;
+                        } catch (Throwable e) {
+                            throw new ServletException
+                                (sm.getString("standardWrapper.allocate"), e);
+                        }
+                    }
+                }
+            }
+
+            if (!singleThreadModel) {
+                if (log.isTraceEnabled())
+                    log.trace("  Returning non-STM instance");
+                // For new instances, count will have been incremented at the
+                // time of creation
+                if (!newInstance) {
+                    countAllocated.incrementAndGet();
+                }
+                return (instance);
+            }
+        }
+
+        synchronized (instancePool) {
+
+            while (countAllocated.get() >= nInstances) {
+                // Allocate a new instance if possible, or else wait
+                if (nInstances < maxInstances) {
+                    try {
+                        instancePool.push(loadServlet());
+                        nInstances++;
+                    } catch (ServletException e) {
+                        throw e;
+                    } catch (Throwable e) {
+                        throw new ServletException
+                            (sm.getString("standardWrapper.allocate"), e);
+                    }
+                } else {
+                    try {
+                        instancePool.wait();
+                    } catch (InterruptedException e) {
+                        ;
+                    }
+                }
+            }
+            if (log.isTraceEnabled())
+                log.trace("  Returning allocated STM instance");
+            countAllocated.incrementAndGet();
+            return (Servlet) instancePool.pop();
+
+        }
+
+    }
+
+
+
+    /**
+     * Return this previously allocated servlet to the pool of available
+     * instances.  If this servlet class does not implement SingleThreadModel,
+     * no action is actually required.
+     *
+     * @param servlet The servlet to be returned
+     *
+     * @exception ServletException if a deallocation error occurs
+     */
+    public void deallocate(Servlet servlet) throws ServletException {
+
+        // If not SingleThreadModel, no action is required
+        if (!singleThreadModel) {
+            countAllocated.decrementAndGet();
+            return;
+        }
+
+        // Unlock and free this instance
+        synchronized (instancePool) {
+            countAllocated.decrementAndGet();
+            instancePool.push(servlet);
+            instancePool.notify();
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Pass config info
+     */
+    public void setAttribute(String name, Object value) {
+        if (log.isTraceEnabled()) {
+            log.trace(sm.getString("ajpprotocol.setattribute", name, value));
+        }
+        attributes.put(name, value);
+    }
+-----CSCI578-----
+
+
+    public Object getAttribute(String key) {
+        if (log.isTraceEnabled()) {
+            log.trace(sm.getString("ajpprotocol.getattribute", key));
+        }
+        return attributes.get(key);
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Pass config info
+     */
+    public void setAttribute(String name, Object value) {
+        if (log.isTraceEnabled()) {
+            log.trace(sm.getString("ajpprotocol.setattribute", name, value));
+        }
+        attributes.put(name, value);
+    }
+-----CSCI578-----
+
+
+    public Object getAttribute(String key) {
+        if (log.isTraceEnabled()) {
+            log.trace(sm.getString("ajpprotocol.getattribute", key));
+        }
+        return attributes.get(key);
+    }
+-----CSCI578-----
+
+
+    /** Pass config info
+     */
+    public void setAttribute( String name, Object value ) {
+        if( log.isTraceEnabled())
+            log.trace(sm.getString("http11protocol.setattribute", name, value));
+
+        attributes.put(name, value);
+    }
+-----CSCI578-----
+
+
+    public Object getAttribute( String key ) {
+        if( log.isTraceEnabled())
+            log.trace(sm.getString("http11protocol.getattribute", key));
+        return attributes.get(key);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process the end of this element.
+     */
+    public void end(String namespace, String name) throws Exception {
+        
+        // check if object was created 
+        // this only happens if an exception was thrown and we're ignoring them
+        if (	
+                ignoreCreateExceptions &&
+                exceptionIgnoredStack != null &&
+                !(exceptionIgnoredStack.empty())) {
+                
+            if (((Boolean) exceptionIgnoredStack.pop()).booleanValue()) {
+                // creation exception was ignored
+                // nothing was put onto the stack
+                if (digester.log.isTraceEnabled()) {
+                    digester.log.trace("[FactoryCreateRule] No creation so no push so no pop");
+                }
+                return;
+            }
+        } 
+
+        Object top = digester.pop();
+        if (digester.log.isDebugEnabled()) {
+            digester.log.debug("[FactoryCreateRule]{" + digester.match +
+                    "} Pop " + top.getClass().getName());
+        }
+
+    }
+-----CSCI578-----

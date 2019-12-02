@@ -1,0 +1,91 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Begin processing requests via this Connector.
+     *
+     * @exception LifecycleException if a fatal startup error occurs
+     */
+    public void start() throws LifecycleException {
+        if( !initialized )
+            initialize();
+
+        // Validate and update our current state
+        if (started ) {
+            if(log.isInfoEnabled())
+                log.info(sm.getString("coyoteConnector.alreadyStarted"));
+            return;
+        }
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+        started = true;
+
+        // We can't register earlier - the JMX registration of this happens
+        // in Server.start callback
+        if ( this.oname != null ) {
+            // We are registred - register the adapter as well.
+            try {
+                Registry.getRegistry(null, null).registerComponent
+                    (protocolHandler, createObjectName(this.domain,"ProtocolHandler"), null);
+            } catch (Exception ex) {
+                log.error(sm.getString
+                          ("coyoteConnector.protocolRegistrationFailed"), ex);
+            }
+        } else {
+            if(log.isInfoEnabled())
+                log.info(sm.getString
+                     ("coyoteConnector.cannotRegisterProtocol"));
+        }
+
+        // Validate settings before starting
+        if (getPort() < 0) {
+            throw new LifecycleException(sm.getString(
+                    "coyoteConnector.invalidPort", String.valueOf(getPort())));
+        }
+
+        try {
+            protocolHandler.start();
+        } catch (Exception e) {
+            String errPrefix = "";
+            if(this.service != null) {
+                errPrefix += "service.getName(): \"" + this.service.getName() + "\"; ";
+            }
+
+            throw new LifecycleException
+                (errPrefix + " " + sm.getString
+                 ("coyoteConnector.protocolHandlerStartFailed", e));
+        }
+
+        if( this.domain != null ) {
+            mapperListener.setDomain( domain );
+            //mapperListener.setEngine( service.getContainer().getName() );
+            mapperListener.init();
+            try {
+                ObjectName mapperOname = createObjectName(this.domain,"Mapper");
+                if (log.isDebugEnabled())
+                    log.debug(sm.getString(
+                            "coyoteConnector.MapperRegistration", mapperOname));
+                Registry.getRegistry(null, null).registerComponent
+                    (mapper, mapperOname, "Mapper");
+            } catch (Exception ex) {
+                log.error(sm.getString
+                        ("coyoteConnector.protocolRegistrationFailed"), ex);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public void setDomain(String domain) {
+        this.domain = domain;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Start the protocol.
+     */
+    public void start()
+        throws Exception;

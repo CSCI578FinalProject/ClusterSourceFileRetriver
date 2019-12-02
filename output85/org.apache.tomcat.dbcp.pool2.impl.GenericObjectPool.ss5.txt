@@ -1,0 +1,115 @@
+8
+-----CSCI578-----
+
+
+    /**
+     * Marks the pooled object as abandoned.
+     */
+    void markAbandoned();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Recover abandoned objects which have been checked out but
+     * not used since longer than the removeAbandonedTimeout.
+     *
+     * @param ac The configuration to use to identify abandoned objects
+     */
+    private void removeAbandoned(AbandonedConfig ac) {
+        // Generate a list of abandoned objects to remove
+        final long now = System.currentTimeMillis();
+        final long timeout =
+                now - (ac.getRemoveAbandonedTimeout() * 1000L);
+        ArrayList<PooledObject<T>> remove = new ArrayList<>();
+        Iterator<PooledObject<T>> it = allObjects.values().iterator();
+        while (it.hasNext()) {
+            PooledObject<T> pooledObject = it.next();
+            synchronized (pooledObject) {
+                if (pooledObject.getState() == PooledObjectState.ALLOCATED &&
+                        pooledObject.getLastUsedTime() <= timeout) {
+                    pooledObject.markAbandoned();
+                    remove.add(pooledObject);
+                }
+            }
+        }
+
+        // Now remove the abandoned objects
+        Iterator<PooledObject<T>> itr = remove.iterator();
+        while (itr.hasNext()) {
+            PooledObject<T> pooledObject = itr.next();
+            if (ac.getLogAbandoned()) {
+                pooledObject.printStackTrace(ac.getLogWriter());
+            }
+            try {
+                invalidateObject(pooledObject.getObject());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Prints the stack trace of the code that borrowed this pooled object and
+     * the stack trace of the last code to use this object (if available) to
+     * the supplied writer.
+     *
+     * @param   writer  The destination for the debug output
+     */
+    void printStackTrace(PrintWriter writer);
+-----CSCI578-----
+
+
+    /**
+     * Returns the state of this object.
+     * @return state
+     */
+    PooledObjectState getState();
+-----CSCI578-----
+
+
+    /**
+     * Manually invalidates a connection, effectively requesting the pool to try
+     * to close it, remove it from the pool and reclaim pool capacity.
+     * @param connection The connection to close
+     * @throws IllegalStateException
+     *             if invalidating the connection failed.
+     * @since 2.1
+     */
+    public void invalidateConnection(Connection connection) throws IllegalStateException {
+        if (connection == null) {
+            return;
+        }
+        if (connectionPool == null) {
+            throw new IllegalStateException("Cannot invalidate connection: ConnectionPool is null.");
+        }
+
+        final PoolableConnection poolableConnection;
+        try {
+            poolableConnection = connection.unwrap(PoolableConnection.class);
+            if (poolableConnection == null) {
+                throw new IllegalStateException(
+                        "Cannot invalidate connection: Connection is not a poolable connection.");
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Cannot invalidate connection: Unwrapping poolable connection failed.", e);
+        }
+
+        try {
+            connectionPool.invalidateObject(poolableConnection);
+        } catch (Exception e) {
+            throw new IllegalStateException("Invalidating connection threw unexpected exception", e);
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String getLastBorrowTrace() {
+        StringWriter sw = new StringWriter();
+        pooledObject.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }

@@ -1,0 +1,56 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Detect possible the JVMRoute change at cluster backup node..
+     * 
+     * @param request
+     *            tomcat request being processed
+     * @param response
+     *            tomcat response being processed
+     * @exception IOException
+     *                if an input/output error has occurred
+     * @exception ServletException
+     *                if a servlet error has occurred
+     */
+    public void invoke(Request request, Response response) throws IOException,
+            ServletException {
+
+         if (getEnabled() 
+             && request.getContext() != null
+             && request.getContext().getDistributable() ) {
+             // valve cluster can access manager - other cluster handle turnover 
+             // at host level - hopefully!
+             Manager manager = request.getContext().getManager();
+
+             if (manager != null && (
+                     (manager instanceof ClusterManager
+                       && getCluster() != null
+                       && getCluster().getManager(((ClusterManager)manager).getName()) != null)
+                     ||
+                     (manager instanceof PersistentManager)))
+                 handlePossibleTurnover(request, response);
+        }
+        // Pass this request on to the next valve in our pipeline
+        getNext().invoke(request, response);
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the enabled.
+     */
+    public boolean getEnabled() {
+        return enabled;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the cluster.
+     */
+    public CatalinaCluster getCluster() {
+        return cluster;
+    }
+-----CSCI578-----

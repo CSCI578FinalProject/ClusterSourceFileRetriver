@@ -1,0 +1,346 @@
+17
+-----CSCI578-----
+
+
+    @Override
+    protected synchronized void startInternal() throws LifecycleException {
+
+        super.startInternal();
+
+        InputStream is = null;
+
+        // Process configuration file for this valve
+        if (getContainer() instanceof Context) {
+            context = true;
+            is = ((Context) getContainer()).getServletContext()
+                .getResourceAsStream("/WEB-INF/" + resourcePath);
+            if (container.getLogger().isDebugEnabled()) {
+                if (is == null) {
+                    container.getLogger().debug("No configuration resource found: /WEB-INF/" + resourcePath);
+                } else {
+                    container.getLogger().debug("Read configuration from: /WEB-INF/" + resourcePath);
+                }
+            }
+        } else if (getContainer() instanceof Host) {
+            String resourceName = getHostConfigPath(resourcePath);
+            File file = new File(getConfigBase(), resourceName);
+            try {
+                if (!file.exists()) {
+                    // Use getResource and getResourceAsStream
+                    is = getClass().getClassLoader()
+                        .getResourceAsStream(resourceName);
+                    if (is != null && container.getLogger().isDebugEnabled()) {
+                        container.getLogger().debug("Read configuration from CL at " + resourceName);
+                    }
+                } else {
+                    if (container.getLogger().isDebugEnabled()) {
+                        container.getLogger().debug("Read configuration from " + file.getAbsolutePath());
+                    }
+                    is = new FileInputStream(file);
+                }
+                if ((is == null) && (container.getLogger().isDebugEnabled())) {
+                    container.getLogger().debug("No configuration resource found: " + resourceName +
+                            " in " + getConfigBase() + " or in the classloader");
+                }
+            } catch (Exception e) {
+                container.getLogger().error("Error opening configuration", e);
+            }
+        }
+
+        if (is == null) {
+            // Will use management operations to configure the valve dynamically
+            return;
+        }
+
+        try (InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8);
+                BufferedReader reader = new BufferedReader(isr)) {
+            parse(reader);
+        } catch (IOException ioe) {
+            container.getLogger().error("Error closing configuration", ioe);
+        } finally {
+            try {
+                is.close();
+            } catch (IOException e) {
+                container.getLogger().error("Error closing configuration", e);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Find the configuration path where the rewrite configuration file
+     * will be stored.
+     * @param resourceName The rewrite configuration file name
+     * @return the full rewrite configuration path
+     */
+    protected String getHostConfigPath(String resourceName) {
+        StringBuffer result = new StringBuffer();
+        Container container = getContainer();
+        Container host = null;
+        Container engine = null;
+        while (container != null) {
+            if (container instanceof Host)
+                host = container;
+            if (container instanceof Engine)
+                engine = container;
+            container = container.getParent();
+        }
+        if (engine != null) {
+            result.append(engine.getName()).append('/');
+        }
+        if (host != null) {
+            result.append(host.getName()).append('/');
+        }
+        result.append(resourceName);
+        return result.toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return config base.
+     */
+    protected File getConfigBase() {
+        File configBase =
+            new File(System.getProperty("catalina.base"), "conf");
+        if (!configBase.exists()) {
+            return null;
+        } else {
+            return configBase;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return a name string (suitable for use by humans) that describes this
+     * Container.  Within the set of child containers belonging to a particular
+     * parent, Container names must be unique.
+     *
+     * @return The human readable name of this container.
+     */
+    public String getName();
+-----CSCI578-----
+
+
+
+    /**
+     * Get the parent container.
+     *
+     * @return Return the Container for which this Container is a child, if
+     *         there is one. If there is no defined parent, return
+     *         <code>null</code>.
+     */
+    public Container getParent();
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+    /**
+     * Obtain the log to which events for this container should be logged.
+     *
+     * @return The Logger with which this Container is associated.  If there is
+     *         no associated Logger, return the Logger associated with the
+     *         parent Container (if any); otherwise return <code>null</code>.
+     */
+    public Log getLogger();
+-----CSCI578-----
+
+
+    /**
+     * Return the name of the cluster that this Server is currently configured
+     * to operate within.
+     *
+     * @return The name of the cluster associated with this server
+     */
+    @Override
+    public String getClusterName() {
+        if(clusterName == null && container != null)
+            return container.getName() ;
+        return clusterName;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a String rendering of this object.
+     */
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder(this.getClass().getName());
+        sb.append('[');
+        if (container == null) {
+            sb.append("Container is null");
+        } else {
+            sb.append(container.getName());
+        }
+        sb.append(']');
+        return sb.toString();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getMBeanKeyProperties() {
+        Container c = this;
+        StringBuilder keyProperties = new StringBuilder();
+        int containerCount = 0;
+
+        // Work up container hierarchy, add a component to the name for
+        // each container
+        while (!(c instanceof Engine)) {
+            if (c instanceof Wrapper) {
+                keyProperties.insert(0, ",servlet=");
+                keyProperties.insert(9, c.getName());
+            } else if (c instanceof Context) {
+                keyProperties.insert(0, ",context=");
+                ContextName cn = new ContextName(c.getName(), false);
+                keyProperties.insert(9,cn.getDisplayName());
+            } else if (c instanceof Host) {
+                keyProperties.insert(0, ",host=");
+                keyProperties.insert(6, c.getName());
+            } else if (c == null) {
+                // May happen in unit testing and/or some embedding scenarios
+                keyProperties.append(",container");
+                keyProperties.append(containerCount++);
+                keyProperties.append("=null");
+                break;
+            } else {
+                // Should never happen...
+                keyProperties.append(",container");
+                keyProperties.append(containerCount++);
+                keyProperties.append('=');
+                keyProperties.append(c.getName());
+            }
+            c = c.getParent();
+        }
+        return keyProperties.toString();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getServiceName() {
+        if (resources != null) {
+            Container host = resources.getContext().getParent();
+            if (host != null) {
+                Container engine = host.getParent();
+                if (engine != null) {
+                    return engine.getName();
+                }
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getMBeanKeyProperties() {
+        Container c = this;
+        StringBuilder keyProperties = new StringBuilder();
+        int containerCount = 0;
+
+        // Work up container hierarchy, add a component to the name for
+        // each container
+        while (!(c instanceof Engine)) {
+            if (c instanceof Context) {
+                keyProperties.append(",context=");
+                ContextName cn = new ContextName(c.getName(), false);
+                keyProperties.append(cn.getDisplayName());
+            } else if (c instanceof Host) {
+                keyProperties.append(",host=");
+                keyProperties.append(c.getName());
+            } else if (c == null) {
+                // May happen in unit testing and/or some embedding scenarios
+                keyProperties.append(",container");
+                keyProperties.append(containerCount++);
+                keyProperties.append("=null");
+                break;
+            } else {
+                // Should never happen...
+                keyProperties.append(",container");
+                keyProperties.append(containerCount++);
+                keyProperties.append('=');
+                keyProperties.append(c.getName());
+            }
+            c = c.getParent();
+        }
+        return keyProperties.toString();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected String getObjectNameKeyProperties() {
+
+        StringBuilder keyProperties =
+            new StringBuilder("j2eeType=WebModule,name=//");
+
+        String hostname = getParent().getName();
+        if (hostname == null) {
+            keyProperties.append("DEFAULT");
+        } else {
+            keyProperties.append(hostname);
+        }
+
+        String contextName = getName();
+        if (!contextName.startsWith("/")) {
+            keyProperties.append('/');
+        }
+        keyProperties.append(contextName);
+
+        keyProperties.append(",J2EEApplication=none,J2EEServer=none");
+
+        return keyProperties.toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a String rendering of this object.
+     */
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder(this.getClass().getName());
+        sb.append('[');
+        if (container == null) {
+            sb.append("Container is null");
+        } else {
+            sb.append(container.getName());
+        }
+        sb.append(']');
+        return sb.toString();
+    }
+-----CSCI578-----
+
+    @Override
+    public Container getParent() { return parent; }
+-----CSCI578-----
+
+
+
+    @Override
+    protected String getDomainInternal() {
+        Container p = getParent();
+        if (p == null) {
+            return null;
+        } else {
+            return p.getDomain();
+        }
+    }

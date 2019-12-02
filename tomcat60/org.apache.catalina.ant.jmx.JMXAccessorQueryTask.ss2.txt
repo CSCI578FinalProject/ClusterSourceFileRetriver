@@ -1,0 +1,51 @@
+2
+
+    /**
+     * @param jmxServerConnection
+     * @param resultproperty
+     * @param pname
+     * @param oname
+     */
+    protected void bindAttributes(MBeanServerConnection jmxServerConnection, String resultproperty, String pname, ObjectName oname) {
+        if (jmxServerConnection != null  && resultproperty != null 
+            && pname != null && oname != null ) {
+            try {
+                MBeanInfo minfo = jmxServerConnection.getMBeanInfo(oname);
+                String code = minfo.getClassName();
+                if ("org.apache.tomcat.util.modeler.BaseModelMBean".equals(code)) {
+                    code = (String) jmxServerConnection.getAttribute(oname,
+                            "modelerType");
+                }
+                MBeanAttributeInfo attrs[] = minfo.getAttributes();
+                Object value = null;
+
+                for (int i = 0; i < attrs.length; i++) {
+                    if (!attrs[i].isReadable())
+                        continue;
+                    String attName = attrs[i].getName();
+                    if (attName.indexOf("=") >= 0 || attName.indexOf(":") >= 0
+                            || attName.indexOf(" ") >= 0) {
+                        continue;
+                    }
+
+                    try {
+                        value = jmxServerConnection
+                                .getAttribute(oname, attName);
+                    } catch (Throwable t) {
+                        if (isEcho())
+                            handleErrorOutput("Error getting attribute "
+                                    + oname + " " + pname + attName + " "
+                                    + t.toString());
+                        continue;
+                    }
+                    if (value == null)
+                        continue;
+                    if ("modelerType".equals(attName))
+                        continue;
+                    createProperty(pname + attName, value);
+                }
+            } catch (Exception e) {
+                // Ignore
+            }
+        }
+    }

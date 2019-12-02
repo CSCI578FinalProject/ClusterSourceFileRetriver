@@ -1,0 +1,73 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the sendAllSessionsWaitTime in msec
+     */
+    public int getSendAllSessionsWaitTime() {
+        return sendAllSessionsWaitTime;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * 
+     * @return Returns the sendAllSessions.
+     */
+    public boolean isSendAllSessions() {
+        return sendAllSessions;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * @return Returns the sendAllSessionsSize.
+     */
+    public int getSendAllSessionsSize() {
+        return sendAllSessionsSize;
+    }
+-----CSCI578-----
+
+
+    /**
+     * handle receive that other node want all sessions ( restart )
+     * a) send all sessions with one message
+     * b) send session at blocks
+     * After sending send state is complete transfered
+     * @param msg
+     * @param sender
+     * @throws IOException
+     */
+    protected void handleGET_ALL_SESSIONS(SessionMessage msg, Member sender) throws IOException {
+        counterReceive_EVT_GET_ALL_SESSIONS++;
+        //get a list of all the session from this manager
+        if (log.isDebugEnabled()) log.debug(sm.getString("deltaManager.receiveMessage.unloadingBegin", getName()));
+        // Write the number of active sessions, followed by the details
+        // get all sessions and serialize without sync
+        Session[] currentSessions = findSessions();
+        long findSessionTimestamp = System.currentTimeMillis() ;
+        if (isSendAllSessions()) {
+            sendSessions(sender, currentSessions, findSessionTimestamp);
+        } else {
+            // send session at blocks
+            for (int i = 0; i < currentSessions.length; i += getSendAllSessionsSize()) {
+                int len = i + getSendAllSessionsSize() > currentSessions.length ? currentSessions.length - i : getSendAllSessionsSize();
+                Session[] sendSessions = new Session[len];
+                System.arraycopy(currentSessions, i, sendSessions, 0, len);
+                sendSessions(sender, sendSessions,findSessionTimestamp);
+                if (getSendAllSessionsWaitTime() > 0) {
+                    try {
+                        Thread.sleep(getSendAllSessionsWaitTime());
+                    } catch (Exception sleep) {
+                    }
+                }//end if
+            }//for
+        }//end if
+        
+        SessionMessage newmsg = new SessionMessageImpl(name,SessionMessage.EVT_ALL_SESSION_TRANSFERCOMPLETE, null,"SESSION-STATE-TRANSFERED", "SESSION-STATE-TRANSFERED"+ getName());
+        newmsg.setTimestamp(findSessionTimestamp);
+        if (log.isDebugEnabled()) log.debug(sm.getString("deltaManager.createMessage.allSessionTransfered",getName()));
+        counterSend_EVT_ALL_SESSION_TRANSFERCOMPLETE++;
+        cluster.send(newmsg, sender);
+    }

@@ -1,0 +1,27 @@
+2
+-----CSCI578-----
+
+
+    public void start(int svc) throws ChannelException {
+        //start the thread
+        if (!run ) {
+            synchronized (this) {
+                if ( !run && ((svc & Channel.SND_TX_SEQ)==Channel.SND_TX_SEQ) ) {//only start with the sender
+                    startQueue();
+                }//end if
+            }//sync
+        }//end if
+        super.start(svc);
+    }
+-----CSCI578-----
+
+    
+    public void startQueue() {
+        msgDispatchThread = new Thread(this);
+        msgDispatchThread.setName("MessageDispatchInterceptor.MessageDispatchThread");
+        msgDispatchThread.setDaemon(true);
+        msgDispatchThread.setPriority(Thread.MAX_PRIORITY);
+        queue.setEnabled(true);
+        run = true;
+        msgDispatchThread.start();
+    }

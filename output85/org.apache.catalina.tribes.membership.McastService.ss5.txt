@@ -1,0 +1,246 @@
+15
+-----CSCI578-----
+
+
+    /**
+     * Sets the properties for the membership service.
+     * @param properties
+     * <br>All are required<br>
+     * 1. mcastPort - the port to listen to<BR>
+     * 2. mcastAddress - the mcast group address<BR>
+     * 4. bindAddress - the bind address if any - only one that can be null<BR>
+     * 5. memberDropTime - the time a member is gone before it is considered gone.<BR>
+     * 6. mcastFrequency - the frequency of sending messages<BR>
+     * 7. tcpListenPort - the port this member listens to<BR>
+     * 8. tcpListenHost - the bind address of this member<BR>
+     * @exception java.lang.IllegalArgumentException if a property is missing.
+     */
+    @Override
+    public void setProperties(Properties properties) {
+        hasProperty(properties,"mcastPort");
+        hasProperty(properties,"mcastAddress");
+        hasProperty(properties,"memberDropTime");
+        hasProperty(properties,"mcastFrequency");
+        hasProperty(properties,"tcpListenPort");
+        hasProperty(properties,"tcpListenHost");
+        this.properties = properties;
+    }
+-----CSCI578-----
+
+
+    public void setRecoverySleepTime(long recoverySleepTime) {
+        this.recoverySleepTime = recoverySleepTime;
+    }
+-----CSCI578-----
+
+
+    public void setRecoveryCounter(int recoveryCounter) {
+        this.recoveryCounter = recoveryCounter;
+    }
+-----CSCI578-----
+
+
+    public byte[] getDomain() {
+        return domain;
+    }
+
+
+    @Override
+    public void setDomain(byte[] domain) {
+        this.domain = domain;
+        if ( localMember != null ) {
+            localMember.setDomain(domain);
+            try {
+                if (impl != null) impl.send(false);
+            }catch ( Exception x ) {
+                log.error(sm.getString("McastService.domain"), x);
+            }
+        }
+    }
+
+
+    public void setDomain(String domain) {
+        if ( domain == null ) return;
+        if ( domain.startsWith("{") ) setDomain(Arrays.fromString(domain));
+        else setDomain(Arrays.convert(domain));
+    }
+
+
+    /**
+     * Simple test program
+     * @param args Command-line arguments
+     * @throws Exception If an error occurs
+     */
+    public static void main(String args[]) throws Exception {
+        McastService service = new McastService();
+        java.util.Properties p = new java.util.Properties();
+        p.setProperty("mcastPort","5555");
+        p.setProperty("mcastAddress","224.10.10.10");
+        p.setProperty("mcastClusterDomain","catalina");
+        p.setProperty("bindAddress","localhost");
+        p.setProperty("memberDropTime","3000");
+        p.setProperty("mcastFrequency","500");
+        p.setProperty("tcpListenPort","4000");
+        p.setProperty("tcpListenHost","127.0.0.1");
+        p.setProperty("tcpSecurePort","4100");
+        p.setProperty("udpListenPort","4200");
+        service.setProperties(p);
+        service.start();
+        Thread.sleep(60*1000*60);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Start broadcasting and listening to membership pings
+     * @throws java.lang.Exception if a IO error occurs
+     */
+    @Override
+    public void start() throws java.lang.Exception {
+        start(MembershipService.MBR_RX);
+        start(MembershipService.MBR_TX);
+    }
+
+
+    @Override
+    public void start(int level) throws java.lang.Exception {
+        hasProperty(properties,"mcastPort");
+        hasProperty(properties,"mcastAddress");
+        hasProperty(properties,"memberDropTime");
+        hasProperty(properties,"mcastFrequency");
+        hasProperty(properties,"tcpListenPort");
+        hasProperty(properties,"tcpListenHost");
+        hasProperty(properties,"tcpSecurePort");
+        hasProperty(properties,"udpListenPort");
+
+
+        if ( impl != null ) {
+            impl.start(level);
+            return;
+        }
+        String host = getProperties().getProperty("tcpListenHost");
+        int port = Integer.parseInt(getProperties().getProperty("tcpListenPort"));
+        int securePort = Integer.parseInt(getProperties().getProperty("tcpSecurePort"));
+        int udpPort = Integer.parseInt(getProperties().getProperty("udpListenPort"));
+
+        if ( localMember == null ) {
+            localMember = new MemberImpl(host, port, 100);
+            localMember.setUniqueId(UUIDGenerator.randomUUID(true));
+        } else {
+            localMember.setHostname(host);
+            localMember.setPort(port);
+            localMember.setMemberAliveTime(100);
+        }
+        localMember.setSecurePort(securePort);
+        localMember.setUdpPort(udpPort);
+        if ( this.payload != null ) localMember.setPayload(payload);
+        if ( this.domain != null ) localMember.setDomain(domain);
+        localMember.setServiceStartTime(System.currentTimeMillis());
+        java.net.InetAddress bind = null;
+        if ( properties.getProperty("mcastBindAddress")!= null ) {
+            bind = java.net.InetAddress.getByName(properties.getProperty("mcastBindAddress"));
+        }
+        int ttl = -1;
+        int soTimeout = -1;
+        if ( properties.getProperty("mcastTTL") != null ) {
+            try {
+                ttl = Integer.parseInt(properties.getProperty("mcastTTL"));
+            } catch ( Exception x ) {
+                log.error(sm.getString("McastService.parseTTL",
+                        properties.getProperty("mcastTTL")), x);
+            }
+        }
+        if ( properties.getProperty("mcastSoTimeout") != null ) {
+            try {
+                soTimeout = Integer.parseInt(properties.getProperty("mcastSoTimeout"));
+            } catch ( Exception x ) {
+                log.error(sm.getString("McastService.parseSoTimeout",
+                        properties.getProperty("mcastSoTimeout")), x);
+            }
+        }
+
+        impl = new McastServiceImpl(localMember,Long.parseLong(properties.getProperty("mcastFrequency")),
+                                    Long.parseLong(properties.getProperty("memberDropTime")),
+                                    Integer.parseInt(properties.getProperty("mcastPort")),
+                                    bind,
+                                    java.net.InetAddress.getByName(properties.getProperty("mcastAddress")),
+                                    ttl,
+                                    soTimeout,
+                                    this,
+                                    this,
+                                    Boolean.parseBoolean(properties.getProperty("localLoopbackDisabled","false")));
+        String value = properties.getProperty("recoveryEnabled","true");
+        boolean recEnabled = Boolean.parseBoolean(value);
+        impl.setRecoveryEnabled(recEnabled);
+        int recCnt = Integer.parseInt(properties.getProperty("recoveryCounter","10"));
+        impl.setRecoveryCounter(recCnt);
+        long recSlpTime = Long.parseLong(properties.getProperty("recoverySleepTime","5000"));
+        impl.setRecoverySleepTime(recSlpTime);
+
+
+        impl.start(level);
+
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Check if a required property is available.
+     * @param properties The set of properties
+     * @param name The property to check for
+     */
+    protected void hasProperty(Properties properties, String name){
+        if ( properties.getProperty(name)==null) throw new IllegalArgumentException(sm.getString("mcastService.missing.property", name));
+    }
+-----CSCI578-----
+
+
+    public void setRecoveryEnabled(boolean recoveryEnabled) {
+        this.recoveryEnabled = recoveryEnabled;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setHostname(String host) throws IOException {
+        hostname = host;
+        synchronized (this) {
+            this.host = java.net.InetAddress.getByName(host).getAddress();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public synchronized void setPayload(byte[] payload) {
+        // longs to avoid any possibility of overflow
+        long oldPayloadLength = 0;
+        if (this.payload != null) {
+            oldPayloadLength = this.payload.length;
+        }
+        long newPayloadLength = 0;
+        if (payload != null) {
+            newPayloadLength = payload.length;
+        }
+        if (newPayloadLength > oldPayloadLength) {
+            // It is possible that the max packet size will be exceeded
+            if ((newPayloadLength - oldPayloadLength + getData(false, false).length) >
+                    McastServiceImpl.MAX_PACKET_SIZE) {
+                throw new IllegalArgumentException(sm.getString("memberImpl.large.payload"));
+            }
+        }
+        this.payload = payload != null ? payload : new byte[0];
+        getData(true, true);
+    }
+-----CSCI578-----
+
+
+    public synchronized void setDomain(byte[] domain) {
+        this.domain = domain!=null?domain:new byte[0];
+        getData(true,true);
+    }
+-----CSCI578-----

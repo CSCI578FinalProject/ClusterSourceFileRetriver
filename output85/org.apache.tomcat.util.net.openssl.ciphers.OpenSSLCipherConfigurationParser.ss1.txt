@@ -1,0 +1,55 @@
+4
+-----CSCI578-----
+
+
+    static LinkedHashSet<Cipher> strengthSort(final LinkedHashSet<Cipher> ciphers) {
+        /*
+         * This routine sorts the ciphers with descending strength. The sorting
+         * must keep the pre-sorted sequence, so we apply the normal sorting
+         * routine as '+' movement to the end of the list.
+         */
+        Set<Integer> keySizes = new HashSet<>();
+        for (Cipher cipher : ciphers) {
+            keySizes.add(Integer.valueOf(cipher.getStrength_bits()));
+        }
+        List<Integer> strength_bits = new ArrayList<>(keySizes);
+        Collections.sort(strength_bits);
+        Collections.reverse(strength_bits);
+        final LinkedHashSet<Cipher> result = new LinkedHashSet<>(ciphers);
+        for (int strength : strength_bits) {
+            moveToEnd(result, filterByStrengthBits(ciphers, strength));
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    static Set<Cipher> filterByStrengthBits(Set<Cipher> ciphers, int strength_bits) {
+        Set<Cipher> result = new LinkedHashSet<>(ciphers.size());
+        for (Cipher cipher : ciphers) {
+            if (cipher.getStrength_bits() == strength_bits) {
+                result.add(cipher);
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    public int getStrength_bits() {
+        return strength_bits;
+    }
+-----CSCI578-----
+
+
+    static void moveToEnd(final LinkedHashSet<Cipher> ciphers, final String alias) {
+        moveToEnd(ciphers, aliases.get(alias));
+    }
+
+
+    static void moveToEnd(final LinkedHashSet<Cipher> ciphers, final Collection<Cipher> toBeMovedCiphers) {
+        List<Cipher> movedCiphers = new ArrayList<>(toBeMovedCiphers);
+        movedCiphers.retainAll(ciphers);
+        ciphers.removeAll(movedCiphers);
+        ciphers.addAll(movedCiphers);
+    }

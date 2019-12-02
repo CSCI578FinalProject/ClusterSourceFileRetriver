@@ -1,0 +1,138 @@
+10
+-----CSCI578-----
+
+
+    @Override
+    public void scan(JarURLConnection jarConn, String webappPath, boolean isWebapp)
+            throws IOException {
+
+        URL url = jarConn.getURL();
+        URL resourceURL = jarConn.getJarFileURL();
+        Jar jar = null;
+        InputStream is = null;
+        WebXml fragment = new WebXml();
+        fragment.setWebappJar(isWebapp);
+        fragment.setDelegate(delegate);
+
+        try {
+            // Only web application JARs are checked for web-fragment.xml
+            // files.
+            // web-fragment.xml files don't need to be parsed if they are never
+            // going to be used.
+            if (isWebapp && parseRequired) {
+                jar = JarFactory.newInstance(url);
+                is = jar.getInputStream(FRAGMENT_LOCATION);
+            }
+
+            if (is == null) {
+                // If there is no web.xml, normal JAR no impact on
+                // distributable
+                fragment.setDistributable(true);
+            } else {
+                InputSource source = new InputSource(
+                        "jar:" + resourceURL.toString() + "!/" + FRAGMENT_LOCATION);
+                source.setByteStream(is);
+                if (!webXmlParser.parseWebXml(source, fragment, true)) {
+                    ok = false;
+                }
+            }
+        } finally {
+            if (jar != null) {
+                jar.close();
+            }
+            fragment.setURL(url);
+            if (fragment.getName() == null) {
+                fragment.setName(fragment.getURL().toString());
+            }
+            fragment.setJarName(extractJarFileName(url));
+            fragments.put(fragment.getName(), fragment);
+        }
+    }
+
+
+    @Override
+    public void scan(File file, String webappPath, boolean isWebapp) throws IOException {
+
+        // Fragments unpacked in WEB-INF/classes are not handled
+        if ("/WEB-INF/classes".equals(webappPath)) {
+            return;
+        }
+
+        WebXml fragment = new WebXml();
+        fragment.setWebappJar(isWebapp);
+        fragment.setDelegate(delegate);
+
+        File fragmentFile = new File(file, FRAGMENT_LOCATION);
+        try {
+            if (fragmentFile.isFile()) {
+                try (InputStream stream = new FileInputStream(fragmentFile)) {
+                    InputSource source =
+                        new InputSource(fragmentFile.toURI().toURL().toString());
+                    source.setByteStream(stream);
+                    if (!webXmlParser.parseWebXml(source, fragment, true)) {
+                        ok = false;
+                    }
+                }
+            } else {
+                // If there is no web.xml, normal folder no impact on
+                // distributable
+                fragment.setDistributable(true);
+            }
+        } finally {
+            fragment.setURL(file.toURI().toURL());
+            if (fragment.getName() == null) {
+                fragment.setName(fragment.getURL().toString());
+            }
+            fragment.setJarName(file.getName());
+            fragments.put(fragment.getName(), fragment);
+        }
+    }
+-----CSCI578-----
+
+    public void setJarName(String jarName) { this.jarName = jarName; }
+-----CSCI578-----
+
+    public void setURL(URL url) { this.uRL = url; }
+-----CSCI578-----
+
+    public void setWebappJar(boolean webappJar) { this.webappJar = webappJar; }
+-----CSCI578-----
+
+
+    private String extractJarFileName(URL input) {
+        String url = input.toString();
+        if (url.endsWith("!/")) {
+            // Remove it
+            url = url.substring(0, url.length() - 2);
+        }
+
+        // File name will now be whatever is after the final /
+        return url.substring(url.lastIndexOf('/') + 1);
+    }
+-----CSCI578-----
+
+    public void setDelegate(boolean delegate) { this.delegate = delegate; }
+-----CSCI578-----
+
+    public void setDistributable(boolean distributable) {
+        this.distributable = distributable;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Close any resources associated with this JAR.
+     */
+    @Override
+    void close();
+-----CSCI578-----
+-----CSCI578-----
+
+    public void setName(String name) {
+        if (ORDER_OTHERS.equalsIgnoreCase(name)) {
+            // This is unusual. This name will be ignored. Log the fact.
+            log.warn(sm.getString("webXml.reservedName", name));
+        } else {
+            this.name = name;
+        }
+    }

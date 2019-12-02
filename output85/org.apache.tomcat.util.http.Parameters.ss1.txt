@@ -1,0 +1,869 @@
+36
+-----CSCI578-----
+
+
+
+    /**
+     * Returns the length of the original buffer.
+     * Note that the length in bytes may be different from the length
+     * in chars.
+     * @return the length
+     */
+    public int getLength() {
+        if(type==T_BYTES) {
+            return byteC.getLength();
+        }
+        if(type==T_CHARS) {
+            return charC.getLength();
+        }
+        if(type==T_STR) {
+            return strValue.length();
+        }
+        toString();
+        if( strValue==null ) {
+            return 0;
+        }
+        return strValue.length();
+    }
+-----CSCI578-----
+
+
+    private void urlDecode(ByteChunk bc)
+        throws IOException {
+        if( urlDec==null ) {
+            urlDec=new UDecoder();
+        }
+        urlDec.convert(bc, true);
+    }
+-----CSCI578-----
+
+
+
+    public void processParameters( byte bytes[], int start, int len ) {
+        processParameters(bytes, start, len, getCharset(encoding));
+    }
+
+
+    private void processParameters(byte bytes[], int start, int len,
+                                  Charset charset) {
+
+        if(log.isDebugEnabled()) {
+            log.debug(sm.getString("parameters.bytes",
+                    new String(bytes, start, len, DEFAULT_CHARSET)));
+        }
+
+        int decodeFailCount = 0;
+
+        int pos = start;
+        int end = start + len;
+
+        while(pos < end) {
+            int nameStart = pos;
+            int nameEnd = -1;
+            int valueStart = -1;
+            int valueEnd = -1;
+
+            boolean parsingName = true;
+            boolean decodeName = false;
+            boolean decodeValue = false;
+            boolean parameterComplete = false;
+
+            do {
+                switch(bytes[pos]) {
+                    case '=':
+                        if (parsingName) {
+                            // Name finished. Value starts from next character
+                            nameEnd = pos;
+                            parsingName = false;
+                            valueStart = ++pos;
+                        } else {
+                            // Equals character in value
+                            pos++;
+                        }
+                        break;
+                    case '&':
+                        if (parsingName) {
+                            // Name finished. No value.
+                            nameEnd = pos;
+                        } else {
+                            // Value finished
+                            valueEnd  = pos;
+                        }
+                        parameterComplete = true;
+                        pos++;
+                        break;
+                    case '%':
+                    case '+':
+                        // Decoding required
+                        if (parsingName) {
+                            decodeName = true;
+                        } else {
+                            decodeValue = true;
+                        }
+                        pos ++;
+                        break;
+                    default:
+                        pos ++;
+                        break;
+                }
+            } while (!parameterComplete && pos < end);
+
+            if (pos == end) {
+                if (nameEnd == -1) {
+                    nameEnd = pos;
+                } else if (valueStart > -1 && valueEnd == -1){
+                    valueEnd = pos;
+                }
+            }
+
+            if (log.isDebugEnabled() && valueStart == -1) {
+                log.debug(sm.getString("parameters.noequal",
+                        Integer.valueOf(nameStart), Integer.valueOf(nameEnd),
+                        new String(bytes, nameStart, nameEnd-nameStart,
+                                DEFAULT_CHARSET)));
+            }
+
+            if (nameEnd <= nameStart ) {
+                if (valueStart == -1) {
+                    // &&
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("parameters.emptyChunk"));
+                    }
+                    // Do not flag as error
+                    continue;
+                }
+                // &=foo&
+                UserDataHelper.Mode logMode = userDataLog.getNextMode();
+                if (logMode != null) {
+                    String extract;
+                    if (valueEnd > nameStart) {
+                        extract = new String(bytes, nameStart, valueEnd
+                                - nameStart, DEFAULT_CHARSET);
+                    } else {
+                        extract = "";
+                    }
+                    String message = sm.getString("parameters.invalidChunk",
+                            Integer.valueOf(nameStart),
+                            Integer.valueOf(valueEnd), extract);
+                    switch (logMode) {
+                        case INFO_THEN_DEBUG:
+                            message += sm.getString("parameters.fallToDebug");
+                            //$FALL-THROUGH$
+                        case INFO:
+                            log.info(message);
+                            break;
+                        case DEBUG:
+                            log.debug(message);
+                    }
+                }
+                setParseFailedReason(FailReason.NO_NAME);
+                continue;
+                // invalid chunk - it's better to ignore
+            }
+
+            tmpName.setBytes(bytes, nameStart, nameEnd - nameStart);
+            if (valueStart >= 0) {
+                tmpValue.setBytes(bytes, valueStart, valueEnd - valueStart);
+            } else {
+                tmpValue.setBytes(bytes, 0, 0);
+            }
+
+            // Take copies as if anything goes wrong originals will be
+            // corrupted. This means original values can be logged.
+            // For performance - only done for debug
+            if (log.isDebugEnabled()) {
+                try {
+                    origName.append(bytes, nameStart, nameEnd - nameStart);
+                    if (valueStart >= 0) {
+                        origValue.append(bytes, valueStart, valueEnd - valueStart);
+                    } else {
+                        origValue.append(bytes, 0, 0);
+                    }
+                } catch (IOException ioe) {
+                    // Should never happen...
+                    log.error(sm.getString("parameters.copyFail"), ioe);
+                }
+            }
+
+            try {
+                String name;
+                String value;
+
+                if (decodeName) {
+                    urlDecode(tmpName);
+                }
+                tmpName.setCharset(charset);
+                name = tmpName.toString();
+
+                if (valueStart >= 0) {
+                    if (decodeValue) {
+                        urlDecode(tmpValue);
+                    }
+                    tmpValue.setCharset(charset);
+                    value = tmpValue.toString();
+                } else {
+                    value = "";
+                }
+
+                try {
+                    addParameter(name, value);
+                } catch (IllegalStateException ise) {
+                    // Hitting limit stops processing further params but does
+                    // not cause request to fail.
+                    UserDataHelper.Mode logMode = maxParamCountLog.getNextMode();
+                    if (logMode != null) {
+                        String message = ise.getMessage();
+                        switch (logMode) {
+                            case INFO_THEN_DEBUG:
+                                message += sm.getString(
+                                        "parameters.maxCountFail.fallToDebug");
+                                //$FALL-THROUGH$
+                            case INFO:
+                                log.info(message);
+                                break;
+                            case DEBUG:
+                                log.debug(message);
+                        }
+                    }
+                    break;
+                }
+            } catch (IOException e) {
+                setParseFailedReason(FailReason.URL_DECODING);
+                decodeFailCount++;
+                if (decodeFailCount == 1 || log.isDebugEnabled()) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("parameters.decodeFail.debug",
+                                origName.toString(), origValue.toString()), e);
+                    } else if (log.isInfoEnabled()) {
+                        UserDataHelper.Mode logMode = userDataLog.getNextMode();
+                        if (logMode != null) {
+                            String message = sm.getString(
+                                    "parameters.decodeFail.info",
+                                    tmpName.toString(), tmpValue.toString());
+                            switch (logMode) {
+                                case INFO_THEN_DEBUG:
+                                    message += sm.getString("parameters.fallToDebug");
+                                    //$FALL-THROUGH$
+                                case INFO:
+                                    log.info(message);
+                                    break;
+                                case DEBUG:
+                                    log.debug(message);
+                            }
+                        }
+                    }
+                }
+            }
+
+            tmpName.recycle();
+            tmpValue.recycle();
+            // Only recycle copies if we used them
+            if (log.isDebugEnabled()) {
+                origName.recycle();
+                origValue.recycle();
+            }
+        }
+
+        if (decodeFailCount > 1 && !log.isDebugEnabled()) {
+            UserDataHelper.Mode logMode = userDataLog.getNextMode();
+            if (logMode != null) {
+                String message = sm.getString(
+                        "parameters.multipleDecodingFail",
+                        Integer.valueOf(decodeFailCount));
+                switch (logMode) {
+                    case INFO_THEN_DEBUG:
+                        message += sm.getString("parameters.fallToDebug");
+                        //$FALL-THROUGH$
+                    case INFO:
+                        log.info(message);
+                        break;
+                    case DEBUG:
+                        log.debug(message);
+                }
+            }
+        }
+    }
+
+
+    public void processParameters( MessageBytes data, String encoding ) {
+        if( data==null || data.isNull() || data.getLength() <= 0 ) {
+            return;
+        }
+
+        if( data.getType() != MessageBytes.T_BYTES ) {
+            data.toBytes();
+        }
+        ByteChunk bc=data.getByteChunk();
+        processParameters( bc.getBytes(), bc.getOffset(),
+                           bc.getLength(), getCharset(encoding));
+    }
+-----CSCI578-----
+
+
+    private Charset getCharset(String encoding) {
+        if (encoding == null) {
+            return DEFAULT_CHARSET;
+        }
+        try {
+            return B2CConverter.getCharset(encoding);
+        } catch (UnsupportedEncodingException e) {
+            return DEFAULT_CHARSET;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the length of the bytes.
+     */
+    public int getLength() {
+        return end-start;
+    }
+-----CSCI578-----
+
+
+    // -------------------- Adding data to the buffer --------------------
+    public void append( byte b )
+        throws IOException
+    {
+        makeSpace( 1 );
+
+        // couldn't make space
+        if( limit >0 && end >= limit ) {
+            flushBuffer();
+        }
+        buff[end++]=b;
+    }
+
+
+    public void append( ByteChunk src )
+        throws IOException
+    {
+        append( src.getBytes(), src.getStart(), src.getLength());
+    }
+
+
+    /**
+     * Add data to the buffer.
+     * @param src Bytes array
+     * @param off Offset
+     * @param len Length
+     * @throws IOException Writing overflow data to the output channel failed
+     */
+    public void append(byte src[], int off, int len) throws IOException {
+        // will grow, up to limit
+        makeSpace( len );
+
+        // if we don't have limit: makeSpace can grow as it wants
+        if( limit < 0 ) {
+            // assert: makeSpace made enough space
+            System.arraycopy( src, off, buff, end, len );
+            end+=len;
+            return;
+        }
+
+        // Optimize on a common case.
+        // If the buffer is empty and the source is going to fill up all the
+        // space in buffer, may as well write it directly to the output,
+        // and avoid an extra copy
+        if ( len == limit && end == start && out != null ) {
+            out.realWriteBytes( src, off, len );
+            return;
+        }
+        // if we have limit and we're below
+        if( len <= limit - end ) {
+            // makeSpace will grow the buffer to the limit,
+            // so we have space
+            System.arraycopy( src, off, buff, end, len );
+            end+=len;
+            return;
+        }
+
+        // need more space than we can afford, need to flush
+        // buffer
+
+        // the buffer is already at ( or bigger than ) limit
+
+        // We chunk the data into slices fitting in the buffer limit, although
+        // if the data is written directly if it doesn't fit
+
+        int avail=limit-end;
+        System.arraycopy(src, off, buff, end, avail);
+        end += avail;
+
+        flushBuffer();
+
+        int remain = len - avail;
+
+        while (remain > (limit - end)) {
+            out.realWriteBytes( src, (off + len) - remain, limit - end );
+            remain = remain - (limit - end);
+        }
+
+        System.arraycopy(src, (off + len) - remain, buff, end, remain);
+        end += remain;
+
+    }
+
+
+
+    /**
+     * Send the buffer to the sink. Called by append() when the limit is
+     * reached. You can also call it explicitly to force the data to be written.
+     *
+     * @throws IOException Writing overflow data to the output channel failed
+     */
+    public void flushBuffer()
+        throws IOException
+    {
+        //assert out!=null
+        if( out==null ) {
+            throw new IOException( "Buffer overflow, no sink " + limit + " " +
+                                   buff.length  );
+        }
+        out.realWriteBytes( buff, start, end-start );
+        end=start;
+    }
+-----CSCI578-----
+
+
+    // -------------------- Conversion and getters --------------------
+
+    @Override
+    public String toString() {
+        if (null == buff) {
+            return null;
+        } else if (end-start == 0) {
+            return "";
+        }
+        return StringCache.toString(this);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the message bytes to the specified subarray of bytes.
+     *
+     * @param b the ascii bytes
+     * @param off the start offset of the bytes
+     * @param len the length of the bytes
+     */
+    public void setBytes(byte[] b, int off, int len) {
+        buff = b;
+        start = off;
+        end = start+ len;
+        isSet=true;
+        hasHashCode = false;
+    }
+-----CSCI578-----
+
+
+    public static Charset getCharset(String enc)
+            throws UnsupportedEncodingException {
+
+        // Encoding names should all be ASCII
+        String lowerCaseEnc = enc.toLowerCase(Locale.ENGLISH);
+
+        return getCharsetLower(lowerCaseEnc);
+    }
+
+
+
+    public Charset getCharset() {
+        return decoder.charset();
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the message bytes.
+     */
+    public byte[] getBytes() {
+        return getBuffer();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Resets the message buff to an uninitialized state.
+     */
+    public void recycle() {
+        charset=null;
+        start=0;
+        end=0;
+        isSet=false;
+        hasHashCode = false;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Send the buffer to the sink. Called by append() when the limit is
+     * reached. You can also call it explicitly to force the data to be written.
+     *
+     * @throws IOException Writing overflow data to the output channel failed
+     */
+    public void flushBuffer()
+        throws IOException
+    {
+        //assert out!=null
+        if( out==null ) {
+            throw new IOException( "Buffer overflow, no sink " + limit + " " +
+                                   buff.length  );
+        }
+        out.realWriteBytes( buff, start, end-start );
+        end=start;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Make space for len bytes. If len is small, allocate a reserve space too.
+     * Never grow bigger than limit.
+     * @param count The size
+     */
+    public void makeSpace(int count) {
+        byte[] tmp = null;
+
+        int newSize;
+        int desiredSize=end + count;
+
+        // Can't grow above the limit
+        if( limit > 0 &&
+            desiredSize > limit) {
+            desiredSize=limit;
+        }
+
+        if( buff==null ) {
+            if( desiredSize < 256 )
+             {
+                desiredSize=256; // take a minimum
+            }
+            buff=new byte[desiredSize];
+        }
+
+        // limit < buf.length ( the buffer is already big )
+        // or we already have space XXX
+        if( desiredSize <= buff.length ) {
+            return;
+        }
+        // grow in larger chunks
+        if( desiredSize < 2 * buff.length ) {
+            newSize= buff.length * 2;
+            if( limit >0 &&
+                newSize > limit ) {
+                newSize=limit;
+            }
+            tmp=new byte[newSize];
+        } else {
+            newSize= buff.length * 2 + count ;
+            if( limit > 0 &&
+                newSize > limit ) {
+                newSize=limit;
+            }
+            tmp=new byte[newSize];
+        }
+
+        System.arraycopy(buff, start, tmp, 0, end-start);
+        buff = tmp;
+        tmp = null;
+        end=end-start;
+        start=0;
+    }
+-----CSCI578-----
+
+
+
+    public void setParseFailedReason(FailReason failReason) {
+        if (this.parseFailedReason == null) {
+            this.parseFailedReason = failReason;
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void addParameter( String key, String value )
+            throws IllegalStateException {
+
+        if( key==null ) {
+            return;
+        }
+
+        parameterCount ++;
+        if (limit > -1 && parameterCount > limit) {
+            // Processing this parameter will push us over the limit. ISE is
+            // what Request.parseParts() uses for requests that are too big
+            setParseFailedReason(FailReason.TOO_MANY_PARAMETERS);
+            throw new IllegalStateException(sm.getString(
+                    "parameters.maxCountFail", Integer.valueOf(limit)));
+        }
+
+        ArrayList<String> values = paramHashValues.get(key);
+        if (values == null) {
+            values = new ArrayList<>(1);
+            paramHashValues.put(key, values);
+        }
+        values.add(value);
+    }
+-----CSCI578-----
+
+
+    public void setCharset(Charset charset) {
+        this.charset = charset;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------------- InputBuffer Methods
+
+
+    /**
+     * Reads the request body and buffers it.
+     */
+    @Override
+    public void setRequest(Request request) {
+        // save off the Request body
+        try {
+            while (buffer.doRead(tempRead) >= 0) {
+                buffered.append(tempRead);
+                tempRead.recycle();
+            }
+        } catch(IOException ioe) {
+            // No need for i18n - this isn't going to get logged anywhere
+            throw new IllegalStateException(
+                    "Request body too large for buffer");
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Fills the given ByteChunk with the buffered request body.
+     */
+    @Override
+    public int doRead(ByteChunk chunk) throws IOException {
+        if (hasRead || buffered.getLength() <= 0) {
+            return -1;
+        }
+
+        chunk.setBytes(buffered.getBytes(), buffered.getStart(),
+                buffered.getLength());
+        hasRead = true;
+        return chunk.getLength();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void recycle() {
+        if (buffered != null) {
+            if (buffered.getBuffer().length > 65536) {
+                buffered = null;
+            } else {
+                buffered.recycle();
+            }
+        }
+        tempRead.recycle();
+        hasRead = false;
+        buffer = null;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public int available() {
+        return buffered.getLength();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isFinished() {
+        return hasRead || buffered.getLength() <= 0;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    // --------------------------------------------------- OutputBuffer Methods
+
+    @Override
+    public int doWrite(ByteChunk chunk)
+        throws IOException {
+
+        int result = chunk.getLength();
+
+        if (result <= 0) {
+            return 0;
+        }
+
+        // Calculate chunk header
+        int pos = 7;
+        int current = result;
+        while (current > 0) {
+            int digit = current % 16;
+            current = current / 16;
+            chunkLength[pos--] = HexUtils.getHex(digit);
+        }
+        chunkHeader.setBytes(chunkLength, pos + 1, 9 - pos);
+        buffer.doWrite(chunkHeader);
+
+        buffer.doWrite(chunk);
+
+        chunkHeader.setBytes(chunkLength, 8, 2);
+        buffer.doWrite(chunkHeader);
+
+        return result;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------- OutputBuffer Methods
+
+    @Override
+    public int doWrite(ByteChunk chunk) throws IOException {
+        if (compressionStream == null) {
+            compressionStream = new GZIPOutputStream(fakeOutputStream, true);
+        }
+        compressionStream.write(chunk.getBytes(), chunk.getStart(),
+                                chunk.getLength());
+        return chunk.getLength();
+    }
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------------- InputBuffer Methods
+
+    @Override
+    public int doRead(ByteChunk chunk) throws IOException {
+
+        int result = -1;
+
+        if (contentLength >= 0) {
+            if (remaining > 0) {
+                int nRead = buffer.doRead(chunk);
+                if (nRead > remaining) {
+                    // The chunk is longer than the number of bytes remaining
+                    // in the body; changing the chunk length to the number
+                    // of bytes remaining
+                    chunk.setBytes(chunk.getBytes(), chunk.getStart(),
+                                   (int) remaining);
+                    result = (int) remaining;
+                } else {
+                    result = nRead;
+                }
+                if (nRead > 0) {
+                    remaining = remaining - nRead;
+                }
+            } else {
+                // No more bytes left to be read : return -1 and clear the
+                // buffer
+                chunk.recycle();
+                result = -1;
+            }
+        }
+
+        return result;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Make the filter ready to process the next request.
+     */
+    @Override
+    public void recycle() {
+        contentLength = -1;
+        remaining = 0;
+        endChunk.recycle();
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------- OutputBuffer Methods
+
+    @Override
+    public int doWrite(ByteChunk chunk) throws IOException {
+
+        int result = -1;
+
+        if (contentLength >= 0) {
+            if (remaining > 0) {
+                result = chunk.getLength();
+                if (result > remaining) {
+                    // The chunk is longer than the number of bytes remaining
+                    // in the body; changing the chunk length to the number
+                    // of bytes remaining
+                    chunk.setBytes(chunk.getBytes(), chunk.getStart(),
+                                   (int) remaining);
+                    result = (int) remaining;
+                    remaining = 0;
+                } else {
+                    remaining = remaining - result;
+                }
+                buffer.doWrite(chunk);
+            } else {
+                // No more bytes left to be written : return -1 and clear the
+                // buffer
+                chunk.recycle();
+                result = -1;
+            }
+        } else {
+            // If no content length was set, just write the bytes
+            buffer.doWrite(chunk);
+            result = chunk.getLength();
+        }
+
+        return result;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the content length on the request.
+     */
+    @Override
+    public void setRequest(org.apache.coyote.Request request) {
+        request.setContentLength(input.getLength());
+    }
+-----CSCI578-----
+
+
+    /**
+     * Amount of bytes still available in a buffer.
+     */
+    @Override
+    public int available() {
+        return input.getLength();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------- OutputBuffer Methods
+
+    @Override
+    public int doWrite(ByteChunk chunk) throws IOException {
+        return chunk.getLength();
+    }

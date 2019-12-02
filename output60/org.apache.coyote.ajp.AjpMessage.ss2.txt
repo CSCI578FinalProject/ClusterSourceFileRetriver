@@ -1,0 +1,192 @@
+6
+-----CSCI578-----
+
+
+    
+    /**
+     * Write a String out at the current write position.  Strings are
+     * encoded with the length in two bytes first, then the string, and
+     * then a terminating \0 (which is <B>not</B> included in the
+     * encoded length).  The terminator is for the convenience of the C
+     * code, where it saves a round of copying.  A null string is
+     * encoded as a string with length 0.  
+     */
+    public void appendString(String str) {
+        if (str == null) {
+            log.error(sm.getString("ajpmessage.null"), 
+                    new NullPointerException());
+            appendInt(0);
+            appendByte(0);
+            return;
+        }
+        int len = str.length();
+        appendInt(len);
+        for (int i = 0; i < len; i++) {
+            char c = str.charAt (i);
+            // Note:  This is clearly incorrect for many strings,
+            // but is the only consistent approach within the current
+            // servlet framework.  It must suffice until servlet output
+            // streams properly encode their output.
+            if (((c <= 31) && (c != 9)) || c == 127 || c > 255) {
+                c = ' ';
+            }
+            appendByte(c);
+        }
+        appendByte(0);
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Write a MessageBytes out at the current write position.
+     * A null MessageBytes is encoded as a string with length 0.  
+     */
+    public void appendBytes(MessageBytes mb) {
+        if (mb == null) {
+            log.error(sm.getString("ajpmessage.null"), 
+                    new NullPointerException());
+            appendInt(0);
+            appendByte(0);
+            return;
+        }
+        if (mb.getType() == MessageBytes.T_BYTES) {
+            ByteChunk bc = mb.getByteChunk();
+            appendByteChunk(bc);
+        } else if (mb.getType() == MessageBytes.T_CHARS) {
+            CharChunk cc = mb.getCharChunk();
+            appendCharChunk(cc);
+        } else {
+            appendString(mb.toString());
+        }
+    }
+
+
+    
+    /** 
+     * Copy a chunk of bytes into the packet, starting at the current
+     * write position.  The chunk of bytes is encoded with the length
+     * in two bytes first, then the data itself, and finally a
+     * terminating \0 (which is <B>not</B> included in the encoded
+     * length).
+     *
+     * @param b The array from which to copy bytes.
+     * @param off The offset into the array at which to start copying
+     * @param numBytes The number of bytes to copy.  
+     */
+    public void appendBytes(byte[] b, int off, int numBytes) {
+        if (pos + numBytes + 3 > buf.length) {
+            log.error(sm.getString("ajpmessage.overflow", "" + numBytes, "" + pos),
+                    new ArrayIndexOutOfBoundsException());
+            if (log.isDebugEnabled()) {
+                dump("Overflow/coBytes");
+            }
+            return;
+        }
+        appendInt(numBytes);
+        System.arraycopy(b, off, buf, pos, numBytes);
+        pos += numBytes;
+        appendByte(0);
+    }
+
+    
+    
+    /**
+     * Copy a chunk of bytes from the packet into an array and advance
+     * the read position past the chunk.  See appendBytes() for details
+     * on the encoding.
+     *
+     * @return The number of bytes copied.
+     * 
+     * @deprecated
+     */
+    @Deprecated
+    public int getBytes(byte[] dest) {
+        int length = getInt();
+        if (pos + length > buf.length) {
+            log.error(sm.getString("ajpmessage.read", "" + length));
+            return 0;
+        }
+	
+        if ((length == 0xFFFF) || (length == -1)) {
+            return 0;
+        }
+        validatePos(pos + length + 1);
+
+        System.arraycopy(buf, pos, dest, 0, length);
+        pos += length;
+        pos++; // Skip terminating \0
+        return length;
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Write a CharChunk out at the current write position.
+     * A null CharChunk is encoded as a string with length 0.  
+     */
+    public void appendCharChunk(CharChunk cc) {
+        if (cc == null) {
+            log.error(sm.getString("ajpmessage.null"), 
+                    new NullPointerException());
+            appendInt(0);
+            appendByte(0);
+            return;
+        }
+        int start = cc.getStart();
+        int end = cc.getEnd();
+        appendInt(end - start);
+        char[] cbuf = cc.getBuffer();
+        for (int i = start; i < end; i++) {
+            char c = cbuf[i];
+            // Note:  This is clearly incorrect for many strings,
+            // but is the only consistent approach within the current
+            // servlet framework.  It must suffice until servlet output
+            // streams properly encode their output.
+            if (((c <= 31) && (c != 9)) || c == 127 || c > 255) {
+                c = ' ';
+            }
+            appendByte(c);
+        }
+        appendByte(0);
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Write a ByteChunk out at the current write position.
+     * A null ByteChunk is encoded as a string with length 0.  
+     */
+    public void appendByteChunk(ByteChunk bc) {
+        if (bc == null) {
+            log.error(sm.getString("ajpmessage.null"), 
+                    new NullPointerException());
+            appendInt(0);
+            appendByte(0);
+            return;
+        }
+        appendBytes(bc.getBytes(), bc.getStart(), bc.getLength());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Append a byte (1 byte) to the message.
+     */
+    public void appendByte(int val) {
+        buf[pos++] = (byte) val;
+    }
+-----CSCI578-----
+
+    
+
+    /**
+     * Add a short integer (2 bytes) to the message.
+     */
+    public void appendInt(int val) {
+        buf[pos++] = (byte) ((val >>> 8) & 0xFF);
+        buf[pos++] = (byte) (val & 0xFF);
+    }

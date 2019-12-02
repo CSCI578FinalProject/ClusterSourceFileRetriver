@@ -1,0 +1,70 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified request attribute if it exists.
+     *
+     * @param name Name of the request attribute to remove
+     */
+    @Override
+    public void removeAttribute(String name) {
+        // Remove the specified attribute
+        // Pass special attributes to the native layer
+        if (name.startsWith("org.apache.tomcat.")) {
+            coyoteRequest.getAttributes().remove(name);
+        }
+
+        boolean found = attributes.containsKey(name);
+        if (found) {
+            Object value = attributes.get(name);
+            attributes.remove(name);
+
+            // Notify interested application event listeners
+            notifyAttributeRemoved(name, value);
+        } else {
+            return;
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Notify interested listeners that attribute has been removed.
+     *
+     * @param name Attribute name
+     * @param value Attribute value
+     */
+    private void notifyAttributeRemoved(String name, Object value) {
+        Context context = getContext();
+        Object listeners[] = context.getApplicationEventListeners();
+        if ((listeners == null) || (listeners.length == 0)) {
+            return;
+        }
+        ServletRequestAttributeEvent event =
+          new ServletRequestAttributeEvent(context.getServletContext(),
+                                           getRequest(), name, value);
+        for (int i = 0; i < listeners.length; i++) {
+            if (!(listeners[i] instanceof ServletRequestAttributeListener)) {
+                continue;
+            }
+            ServletRequestAttributeListener listener =
+                (ServletRequestAttributeListener) listeners[i];
+            try {
+                listener.attributeRemoved(event);
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                // Error valve will pick this exception up and display it to user
+                attributes.put(RequestDispatcher.ERROR_EXCEPTION, t);
+                context.getLogger().error(sm.getString("coyoteRequest.attributeEvent"), t);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public HashMap<String,Object> getAttributes() {
+        return attributes;
+    }

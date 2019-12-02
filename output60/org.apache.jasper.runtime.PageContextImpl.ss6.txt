@@ -1,0 +1,53 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Enumeration<String> getAttributeNamesInScope(final int scope) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Enumeration) AccessController
+                    .doPrivileged(new PrivilegedAction() {
+                        public Object run() {
+                            return doGetAttributeNamesInScope(scope);
+                        }
+                    });
+        } else {
+            return doGetAttributeNamesInScope(scope);
+        }
+    }
+-----CSCI578-----
+
+
+    private Enumeration doGetAttributeNamesInScope(int scope) {
+        switch (scope) {
+        case PAGE_SCOPE:
+            return new Enumerator(attributes.keySet().iterator());
+
+        case REQUEST_SCOPE:
+            return request.getAttributeNames();
+
+        case SESSION_SCOPE:
+            if (session == null) {
+                throw new IllegalStateException(Localizer
+                        .getMessage("jsp.error.page.noSession"));
+            }
+            return session.getAttributeNames();
+
+        case APPLICATION_SCOPE:
+            return context.getAttributeNames();
+
+        default:
+            throw new IllegalArgumentException("Invalid scope");
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+	public Enumeration<String> getAttributeNamesInScope(int scope) {
+		if (scope == PAGE_SCOPE) {
+			return new Enumerator(pageAttributes.keySet().iterator());
+		}
+
+		return invokingJspCtxt.getAttributeNamesInScope(scope);
+	}

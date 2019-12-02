@@ -1,0 +1,58 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void waitForMembers(int level) {
+        long memberwait = sendFrequency*2;
+        if(log.isInfoEnabled())
+            log.info("Sleeping for "+memberwait+" milliseconds to establish cluster membership, start level:"+level);
+        try {Thread.sleep(memberwait);}catch (InterruptedException ignore){}
+        if(log.isInfoEnabled())
+            log.info("Done sleeping, membership established, start level:"+level);
+    }
+-----CSCI578-----
+
+    
+    
+
+    /**
+     * Start the service
+     * @param level 1 starts the receiver, level 2 starts the sender
+     * @throws IOException if the service fails to start
+     * @throws IllegalStateException if the service is already started
+     */
+    public synchronized void start(int level) throws IOException {
+        boolean valid = false;
+        if ( (level & Channel.MBR_RX_SEQ)==Channel.MBR_RX_SEQ ) {
+            if ( receiver != null ) throw new IllegalStateException("McastService.receive already running.");
+            if ( sender == null ) socket.joinGroup(address);
+            doRunReceiver = true;
+            receiver = new ReceiverThread();
+            receiver.setDaemon(true);
+            receiver.start();
+            valid = true;
+        } 
+        if ( (level & Channel.MBR_TX_SEQ)==Channel.MBR_TX_SEQ ) {
+            if ( sender != null ) throw new IllegalStateException("McastService.send already running.");
+            if ( receiver == null ) socket.joinGroup(address);
+            //make sure at least one packet gets out there
+            send(false);
+            doRunSender = true;
+            serviceStartTime = System.currentTimeMillis();
+            sender = new SenderThread(sendFrequency);
+            sender.setDaemon(true);
+            sender.start();
+            //we have started the receiver, but not yet waited for membership to establish
+            valid = true;
+        } 
+        if (!valid) {
+            throw new IllegalArgumentException("Invalid start level. Only acceptable levels are Channel.MBR_RX_SEQ and Channel.MBR_TX_SEQ");
+        }
+        //pause, once or twice
+        waitForMembers(level);
+        startLevel = (startLevel | level);
+    }
+-----CSCI578-----
+-----CSCI578-----

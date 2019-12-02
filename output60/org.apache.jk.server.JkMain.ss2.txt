@@ -1,0 +1,329 @@
+13
+-----CSCI578-----
+
+
+    private void guessHome() {
+        String home= wEnv.getJkHome();
+        if( home != null )
+            return;
+        home=IntrospectionUtils.guessInstall( "jk2.home","jk2.home",
+                                              "tomcat-jk2.jar", CNAME );
+        if( home != null ) {
+            log.info("Guessed home " + home );
+            wEnv.setJkHome( home );
+        }
+    }
+-----CSCI578-----
+
+    
+    // -------------------- Initialization --------------------
+    
+    public void init() throws IOException
+    {
+        long t1=System.currentTimeMillis();
+        if(null != out) {
+            PrintStream outS=new PrintStream(new FileOutputStream(out));
+            System.setOut(outS);
+        }
+        if(null != err) {
+            PrintStream errS=new PrintStream(new FileOutputStream(err));
+            System.setErr(errS);
+        }
+
+        String home=getWorkerEnv().getJkHome();
+        if( home==null ) {
+            // XXX use IntrospectionUtil to find myself
+            this.guessHome();
+        }
+        home=getWorkerEnv().getJkHome();
+        if( home==null ) {
+            log.info( "Can't find home, jk2.properties not loaded");
+        }
+        if(log.isDebugEnabled())
+            log.debug("Starting Jk2, base dir= " + home  );
+        loadPropertiesFile();
+
+        String initHTTPS = (String)props.get("class.initHTTPS");
+        if("true".equalsIgnoreCase(initHTTPS)) {
+            initHTTPSUrls();
+        }
+
+        long t2=System.currentTimeMillis();
+        initTime=t2-t1;
+    }
+-----CSCI578-----
+
+    private void initHTTPSUrls() {
+        try {
+            // 11657: if only ajp is used, https: redirects need to work ( at least for 1.3+)
+            String value = System.getProperty("java.protocol.handler.pkgs");
+            if (value == null) {
+                value = DEFAULT_HTTPS;
+            } else if (value.indexOf(DEFAULT_HTTPS) >= 0  ) {
+                return; // already set
+            } else {
+                value += "|" + DEFAULT_HTTPS;
+            }
+            System.setProperty("java.protocol.handler.pkgs", value);
+        } catch(Exception ex ) {
+            log.info("Error adding SSL Protocol Handler",ex);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * <p> Log a message with info log level. </p>
+     *
+     * @param message log this message
+     */
+    public void info(Object message);
+
+
+
+    /**
+     * <p> Log an error with info log level. </p>
+     *
+     * @param message log this message
+     * @param t log this cause
+     */
+    public void info(Object message, Throwable t);
+-----CSCI578-----
+
+
+    public static String guessInstall(String installSysProp,
+            String homeSysProp, String jarName) {
+        return guessInstall(installSysProp, homeSysProp, jarName, null);
+    }
+
+
+    /**
+     * Guess a product install/home by analyzing the class path. It works for
+     * product using the pattern: lib/executable.jar or if executable.jar is
+     * included in classpath by a shell script. ( java -jar also works )
+     * 
+     * Insures both "install" and "home" System properties are set. If either or
+     * both System properties are unset, "install" and "home" will be set to the
+     * same value. This value will be the other System property that is set, or
+     * the guessed value if neither is set.
+     */
+    public static String guessInstall(String installSysProp,
+            String homeSysProp, String jarName, String classFile) {
+        String install = null;
+        String home = null;
+
+        if (installSysProp != null)
+            install = System.getProperty(installSysProp);
+
+        if (homeSysProp != null)
+            home = System.getProperty(homeSysProp);
+
+        if (install != null) {
+            if (home == null)
+                System.getProperties().put(homeSysProp, install);
+            return install;
+        }
+
+        // Find the directory where jarName.jar is located
+
+        String cpath = System.getProperty("java.class.path");
+        String pathSep = System.getProperty("path.separator");
+        StringTokenizer st = new StringTokenizer(cpath, pathSep);
+        while (st.hasMoreTokens()) {
+            String path = st.nextToken();
+            //	    log( "path " + path );
+            if (path.endsWith(jarName)) {
+                home = path.substring(0, path.length() - jarName.length());
+                try {
+                    if ("".equals(home)) {
+                        home = new File("./").getCanonicalPath();
+                    } else if (home.endsWith(File.separator)) {
+                        home = home.substring(0, home.length() - 1);
+                    }
+                    File f = new File(home);
+                    String parentDir = f.getParent();
+                    if (parentDir == null)
+                        parentDir = home; // unix style
+                    File f1 = new File(parentDir);
+                    install = f1.getCanonicalPath();
+                    if (installSysProp != null)
+                        System.getProperties().put(installSysProp, install);
+                    if (home == null && homeSysProp != null)
+                        System.getProperties().put(homeSysProp, install);
+                    return install;
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+            } else {
+                String fname = path + (path.endsWith("/") ? "" : "/")
+                        + classFile;
+                if (new File(fname).exists()) {
+                    try {
+                        File f = new File(path);
+                        String parentDir = f.getParent();
+                        if (parentDir == null)
+                            parentDir = path; // unix style
+                        File f1 = new File(parentDir);
+                        install = f1.getCanonicalPath();
+                        if (installSysProp != null)
+                            System.getProperties().put(installSysProp, install);
+                        if (home == null && homeSysProp != null)
+                            System.getProperties().put(homeSysProp, install);
+                        return install;
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                    }
+                }
+            }
+        }
+
+        // if install directory can't be found, use home as the default
+        if (home != null) {
+            System.getProperties().put(installSysProp, home);
+            return home;
+        }
+
+        return null;
+    }
+-----CSCI578-----
+
+
+    public String getJkHome() {
+        return home;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * recursive bind to find the next available port
+     * @param socket ServerSocket
+     * @param portstart int
+     * @param retries int
+     * @return int
+     * @throws IOException
+     */
+    protected int bind(ServerSocket socket, int portstart, int retries) throws IOException {
+        InetSocketAddress addr = null;
+        while ( retries > 0 ) {
+            try {
+                addr = new InetSocketAddress(getBind(), portstart);
+                socket.bind(addr);
+                setPort(portstart);
+                log.info("Receiver Server Socket bound to:"+addr);
+                return 0;
+            }catch ( IOException x) {
+                retries--;
+                if ( retries <= 0 ) {
+                    log.info("Unable to bind server socket to:"+addr+" throwing error.");
+                    throw x;
+                }
+                portstart++;
+                try {Thread.sleep(25);}catch( InterruptedException ti){Thread.currentThread().interrupted();}
+                retries = bind(socket,portstart,retries);
+            }
+        }
+        return retries;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Context Methods
+
+
+    /**
+     * Add a new Listener class name to the set of Listeners
+     * configured for this application.
+     *
+     * @param listener Java class name of a listener class
+     */
+    public void addApplicationListener(String listener) {
+
+        synchronized (applicationListenersLock) {
+            String results[] =new String[applicationListeners.length + 1];
+            for (int i = 0; i < applicationListeners.length; i++) {
+                if (listener.equals(applicationListeners[i])) {
+                    log.info(sm.getString(
+                            "standardContext.duplicateListener",listener));
+                    return;
+                }
+                results[i] = applicationListeners[i];
+            }
+            results[applicationListeners.length] = listener;
+            applicationListeners = results;
+        }
+        fireContainerEvent("addApplicationListener", listener);
+
+        // FIXME - add instance if already started?
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets whether to use the context or default ClassLoader.
+     * True means use context ClassLoader.
+     *
+     * @param useContext True means use context ClassLoader
+     */
+    public void setUseContextClassLoader(boolean useContext) {
+      useContextClassLoader = useContext;
+      log.info("Setting useContextClassLoader = " + useContext);
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------- Public Methods
+
+
+    /**
+     * Log a message to our associated logger.
+     *
+     * @param message The message to be logged
+     * @deprecated Call getLogger() and use it's logging methods
+     */
+    public void log(String message) {
+
+        log.info(message);
+
+    }
+
+
+
+    /**
+     * Log a message and exception to our associated logger.
+     *
+     * @param message The message to be logged
+     * @deprecated Call getLogger() and use it's logging methods
+     */
+    public void log(String message, Throwable exception) {
+
+        log.error(message, exception);
+
+    }
+-----CSCI578-----
+
+
+    /** @deprecated */
+    void log( String s ) {
+	log.info(s);
+	//loghelper.flush();
+    }
+-----CSCI578-----
+
+
+    public void setPort(int port) {
+        this.port = port;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @deprecated use setPort
+     * @param tcpListenPort int
+     */
+    public void setTcpListenPort(int tcpListenPort) {
+        setPort(tcpListenPort);
+    }

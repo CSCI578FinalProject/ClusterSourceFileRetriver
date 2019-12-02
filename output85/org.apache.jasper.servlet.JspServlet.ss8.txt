@@ -1,0 +1,638 @@
+27
+-----CSCI578-----
+
+
+    /**
+     * Adds an object to the start of the list and returns the entry created for
+     * said object. The entry can later be reused for moving the entry.
+     *
+     * @param object the object to prepend to the start of the list.
+     * @return an entry for use when the object should be moved.
+     * */
+    public synchronized Entry push(final T object) {
+        Entry entry = new Entry(object);
+        if (size >= maxSize) {
+            entry.setReplaced(pop());
+        }
+        if (first == null) {
+            first = last = entry;
+        } else {
+            first.setPrevious(entry);
+            entry.setNext(first);
+            first = entry;
+        }
+        size++;
+
+        return entry;
+    }
+
+
+    /**
+     * Removes the first element of the list and returns its content.
+     *
+     * @return the content of the first element of the list.
+     **/
+    public synchronized T unpush() {
+        T content = null;
+        if (first != null) {
+            Entry element = first;
+            first = first.getNext();
+            content = element.getContent();
+            if (first == null) {
+                last =null;
+            } else {
+                first.setPrevious(null);
+            }
+            size--;
+            element.invalidate();
+        }
+        return content;
+    }
+
+
+    /**
+     * Moves the element in front.
+     *
+     * Could also be implemented as remove() and
+     * push(), but explicitely coding might be a bit faster.
+     *
+     * @param element the entry to move in front.
+     * */
+    public synchronized void moveFirst(final Entry element) {
+        if (element.getValid() &&
+            element.getPrevious() != null) {
+            Entry prev = element.getPrevious();
+            Entry next = element.getNext();
+            prev.setNext(next);
+            if (next != null) {
+                next.setPrevious(prev);
+            } else {
+                last = prev;
+            }
+            first.setPrevious(element);
+            element.setNext(first);
+            element.setPrevious(null);
+            first = element;
+        }
+    }
+-----CSCI578-----
+
+
+    public void service(HttpServletRequest request,
+                        HttpServletResponse response,
+                        boolean precompile)
+            throws ServletException, IOException, FileNotFoundException {
+
+        Servlet servlet;
+
+        try {
+
+            if (ctxt.isRemoved()) {
+                throw new FileNotFoundException(jspUri);
+            }
+
+            if ((available > 0L) && (available < Long.MAX_VALUE)) {
+                if (available > System.currentTimeMillis()) {
+                    response.setDateHeader("Retry-After", available);
+                    response.sendError
+                        (HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+                         Localizer.getMessage("jsp.error.unavailable"));
+                    return;
+                }
+
+                // Wait period has expired. Reset.
+                available = 0;
+            }
+
+            /*
+             * (1) Compile
+             */
+            if (options.getDevelopment() || firstTime ) {
+                synchronized (this) {
+                    firstTime = false;
+
+                    // The following sets reload to true, if necessary
+                    ctxt.compile();
+                }
+            } else {
+                if (compileException != null) {
+                    // Throw cached compilation exception
+                    throw compileException;
+                }
+            }
+
+            /*
+             * (2) (Re)load servlet class file
+             */
+            servlet = getServlet();
+
+            // If a page is to be precompiled only, return.
+            if (precompile) {
+                return;
+            }
+
+        } catch (ServletException ex) {
+            if (options.getDevelopment()) {
+                throw handleJspException(ex);
+            }
+            throw ex;
+        } catch (FileNotFoundException fnfe) {
+            // File has been removed. Let caller handle this.
+            throw fnfe;
+        } catch (IOException ex) {
+            if (options.getDevelopment()) {
+                throw handleJspException(ex);
+            }
+            throw ex;
+        } catch (IllegalStateException ex) {
+            if (options.getDevelopment()) {
+                throw handleJspException(ex);
+            }
+            throw ex;
+        } catch (Exception ex) {
+            if (options.getDevelopment()) {
+                throw handleJspException(ex);
+            }
+            throw new JasperException(ex);
+        }
+
+        try {
+            /*
+             * (3) Handle limitation of number of loaded Jsps
+             */
+            if (unloadAllowed) {
+                synchronized(this) {
+                    if (unloadByCount) {
+                        if (unloadHandle == null) {
+                            unloadHandle = ctxt.getRuntimeContext().push(this);
+                        } else if (lastUsageTime < ctxt.getRuntimeContext().getLastJspQueueUpdate()) {
+                            ctxt.getRuntimeContext().makeYoungest(unloadHandle);
+                            lastUsageTime = System.currentTimeMillis();
+                        }
+                    } else {
+                        if (lastUsageTime < ctxt.getRuntimeContext().getLastJspQueueUpdate()) {
+                            lastUsageTime = System.currentTimeMillis();
+                        }
+                    }
+                }
+            }
+
+            /*
+             * (4) Service request
+             */
+            if (servlet instanceof SingleThreadModel) {
+               // sync on the wrapper so that the freshness
+               // of the page is determined right before servicing
+               synchronized (this) {
+                   servlet.service(request, response);
+                }
+            } else {
+                servlet.service(request, response);
+            }
+        } catch (UnavailableException ex) {
+            String includeRequestUri = (String)
+                request.getAttribute(RequestDispatcher.INCLUDE_REQUEST_URI);
+            if (includeRequestUri != null) {
+                // This file was included. Throw an exception as
+                // a response.sendError() will be ignored by the
+                // servlet engine.
+                throw ex;
+            }
+
+            int unavailableSeconds = ex.getUnavailableSeconds();
+            if (unavailableSeconds <= 0) {
+                unavailableSeconds = 60;        // Arbitrary default
+            }
+            available = System.currentTimeMillis() +
+                (unavailableSeconds * 1000L);
+            response.sendError
+                (HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+                 ex.getMessage());
+        } catch (ServletException ex) {
+            if(options.getDevelopment()) {
+                throw handleJspException(ex);
+            }
+            throw ex;
+        } catch (IOException ex) {
+            if (options.getDevelopment()) {
+                throw new IOException(handleJspException(ex).getMessage(), ex);
+            }
+            throw ex;
+        } catch (IllegalStateException ex) {
+            if(options.getDevelopment()) {
+                throw handleJspException(ex);
+            }
+            throw ex;
+        } catch (Exception ex) {
+            if(options.getDevelopment()) {
+                throw handleJspException(ex);
+            }
+            throw new JasperException(ex);
+        }
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * <p>
+     * Retrieves the parsed nodes of the JSP page, if they are available. May
+     * return null. Used in development mode for generating detailed error
+     * messages. http://bz.apache.org/bugzilla/show_bug.cgi?id=37062.
+     * </p>
+     * @return the page nodes
+     */
+    public Node.Nodes getPageNodes() {
+        return this.pageNodes;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Moves the element in front.
+     *
+     * Could also be implemented as remove() and
+     * push(), but explicitely coding might be a bit faster.
+     *
+     * @param element the entry to move in front.
+     * */
+    public synchronized void moveFirst(final Entry element) {
+        if (element.getValid() &&
+            element.getPrevious() != null) {
+            Entry prev = element.getPrevious();
+            Entry next = element.getNext();
+            prev.setNext(next);
+            if (next != null) {
+                next.setPrevious(prev);
+            } else {
+                last = prev;
+            }
+            first.setPrevious(element);
+            element.setNext(first);
+            element.setPrevious(null);
+            first = element;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Last time the update background task has run
+     */
+    public long getLastJspQueueUpdate() {
+        return lastJspQueueUpdate;
+    }
+-----CSCI578-----
+
+
+    // -------------------------------------------------------- Private Methods
+
+    private void serviceJspFile(HttpServletRequest request,
+                                HttpServletResponse response, String jspUri,
+                                boolean precompile)
+        throws ServletException, IOException {
+
+        JspServletWrapper wrapper = rctxt.getWrapper(jspUri);
+        if (wrapper == null) {
+            synchronized(this) {
+                wrapper = rctxt.getWrapper(jspUri);
+                if (wrapper == null) {
+                    // Check if the requested JSP page exists, to avoid
+                    // creating unnecessary directories and files.
+                    if (null == context.getResource(jspUri)) {
+                        handleMissingResource(request, response, jspUri);
+                        return;
+                    }
+                    wrapper = new JspServletWrapper(config, options, jspUri,
+                                                    rctxt);
+                    rctxt.addWrapper(jspUri,wrapper);
+                }
+            }
+        }
+
+        try {
+            wrapper.service(request, response, precompile);
+        } catch (FileNotFoundException fnfe) {
+            handleMissingResource(request, response, jspUri);
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * <p>Attempts to construct a JasperException that contains helpful information
+     * about what went wrong. Uses the JSP compiler system to translate the line
+     * number in the generated servlet that originated the exception to a line
+     * number in the JSP.  Then constructs an exception containing that
+     * information, and a snippet of the JSP to help debugging.
+     * Please see http://bz.apache.org/bugzilla/show_bug.cgi?id=37062 and
+     * http://www.tfenne.com/jasper/ for more details.
+     *</p>
+     *
+     * @param ex the exception that was the cause of the problem.
+     * @return a JasperException with more detailed information
+     */
+    protected JasperException handleJspException(Exception ex) {
+        try {
+            Throwable realException = ex;
+            if (ex instanceof ServletException) {
+                realException = ((ServletException) ex).getRootCause();
+            }
+
+            // First identify the stack frame in the trace that represents the JSP
+            StackTraceElement[] frames = realException.getStackTrace();
+            StackTraceElement jspFrame = null;
+
+            for (int i=0; i<frames.length; ++i) {
+                if ( frames[i].getClassName().equals(this.getServlet().getClass().getName()) ) {
+                    jspFrame = frames[i];
+                    break;
+                }
+            }
+
+
+            if (jspFrame == null ||
+                    this.ctxt.getCompiler().getPageNodes() == null) {
+                // If we couldn't find a frame in the stack trace corresponding
+                // to the generated servlet class or we don't have a copy of the
+                // parsed JSP to hand, we can't really add anything
+                return new JasperException(ex);
+            }
+
+            int javaLineNumber = jspFrame.getLineNumber();
+            JavacErrorDetail detail = ErrorDispatcher.createJavacError(
+                    jspFrame.getMethodName(),
+                    this.ctxt.getCompiler().getPageNodes(),
+                    null,
+                    javaLineNumber,
+                    ctxt);
+
+            // If the line number is less than one we couldn't find out
+            // where in the JSP things went wrong
+            int jspLineNumber = detail.getJspBeginLineNumber();
+            if (jspLineNumber < 1) {
+                throw new JasperException(ex);
+            }
+
+            if (options.getDisplaySourceFragment()) {
+                return new JasperException(Localizer.getMessage
+                        ("jsp.exception", detail.getJspFileName(),
+                                "" + jspLineNumber) + System.lineSeparator() +
+                                System.lineSeparator() + detail.getJspExtract() +
+                                System.lineSeparator() + System.lineSeparator() +
+                                "Stacktrace:", ex);
+
+            }
+
+            return new JasperException(Localizer.getMessage
+                    ("jsp.exception", detail.getJspFileName(),
+                            "" + jspLineNumber), ex);
+        } catch (Exception je) {
+            // If anything goes wrong, just revert to the original behaviour
+            if (ex instanceof JasperException) {
+                return (JasperException) ex;
+            }
+            return new JasperException(ex);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Adds an object to the end of the list and returns the entry created for
+     * said object. The entry can later be reused for moving the entry.
+     *
+     * @param object the object to append to the end of the list.
+     * @return an entry for use when the object should be moved.
+     * */
+    public synchronized Entry unpop(final T object) {
+        Entry entry = new Entry(object);
+        if (size >= maxSize) {
+            entry.setReplaced(unpush());
+        }
+        if (first == null) {
+            first = last = entry;
+        } else {
+            last.setNext(entry);
+            entry.setPrevious(last);
+            last = entry;
+        }
+        size++;
+
+        return entry;
+    }
+
+
+    /**
+     * Removes the last element of the list and returns its content.
+     *
+     * @return the content of the last element of the list.
+     **/
+    public synchronized T pop() {
+        T content = null;
+        if (last != null) {
+            Entry element = last;
+            last = last.getPrevious();
+            content = element.getContent();
+            if (last == null) {
+                first = null;
+            } else {
+                last.setNext(null);
+            }
+            size--;
+            element.invalidate();
+        }
+        return content;
+    }
+
+
+    /**
+     * Moves the element to the back.
+     *
+     * Could also be implemented as remove() and
+     * unpop(), but explicitly coding might be a bit faster.
+     *
+     * @param element the entry to move to the back.
+     * */
+    public synchronized void moveLast(final Entry element) {
+        if (element.getValid() &&
+            element.getNext() != null) {
+            Entry next = element.getNext();
+            Entry prev = element.getPrevious();
+            next.setPrevious(prev);
+            if (prev != null) {
+                prev.setNext(next);
+            } else {
+                first = next;
+            }
+            last.setNext(element);
+            element.setPrevious(last);
+            element.setNext(null);
+            last = element;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Push unloadHandle for JspServletWrapper to front of the queue.
+     *
+     * @param unloadHandle the unloadHandle for the jsp.
+     * */
+    public void makeYoungest(FastRemovalDequeue<JspServletWrapper>.Entry unloadHandle) {
+        if (log.isTraceEnabled()) {
+            JspServletWrapper jsw = unloadHandle.getContent();
+            log.trace(Localizer.getMessage("jsp.message.jsp_queue_update",
+                                           jsw.getJspUri(), context.getContextPath()));
+        }
+        jspQueue.moveFirst(unloadHandle);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Push a newly compiled JspServletWrapper into the queue at first
+     * execution of jsp. Destroy any JSP that has been replaced in the queue.
+     *
+     * @param jsw Servlet wrapper for jsp.
+     * @return an unloadHandle that can be pushed to front of queue at later execution times.
+     * */
+    public FastRemovalDequeue<JspServletWrapper>.Entry push(JspServletWrapper jsw) {
+        if (log.isTraceEnabled()) {
+            log.trace(Localizer.getMessage("jsp.message.jsp_added",
+                                           jsw.getJspUri(), context.getContextPath()));
+        }
+        FastRemovalDequeue<JspServletWrapper>.Entry entry = jspQueue.push(jsw);
+        JspServletWrapper replaced = entry.getReplaced();
+        if (replaced != null) {
+            if (log.isDebugEnabled()) {
+                log.debug(Localizer.getMessage("jsp.message.jsp_removed_excess",
+                                               replaced.getJspUri(), context.getContextPath()));
+            }
+            unloadJspServletWrapper(replaced);
+            entry.clearReplaced();
+        }
+        return entry;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return <code>true</code> to include a source fragment in exception
+     *  messages.
+     */
+    public boolean getDisplaySourceFragment();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean isRemoved() {
+        return removed;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Main development flag, which enables detailed error reports with
+     *  sources, as well automatic recompilation of JSPs and tag files.
+     *  This setting should usually be <code>false</code> when running
+     *  in production.
+     * @return <code>true</code> if Jasper is in development mode
+     */
+    public boolean getDevelopment();
+-----CSCI578-----
+
+
+    /**
+     * Gets the start line number (in the JSP file) of the JSP element
+     * responsible for the compilation error.
+     *
+     * @return Start line number of the JSP element responsible for the
+     * compilation error
+     */
+    public int getJspBeginLineNumber() {
+        return this.jspBeginLineNum;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets the name of the JSP file from which the Java source file was
+     * generated.
+     *
+     * @return JSP file from which the Java source file was generated.
+     */
+    public String getJspFileName() {
+        return this.jspFileName;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets the extract of the JSP that corresponds to this message.
+     *
+     * @return Extract of JSP where error occurred
+     */
+    public String getJspExtract() {
+        return this.jspExtract;
+    }
+-----CSCI578-----
+
+
+    public String getJspUri() {
+        return jspUri;
+    }
+-----CSCI578-----
+
+
+    private void unloadJspServletWrapper(JspServletWrapper jsw) {
+        removeWrapper(jsw.getJspUri());
+        synchronized(jsw) {
+            jsw.destroy();
+        }
+        jspUnloadCount.incrementAndGet();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public JspRuntimeContext getRuntimeContext() {
+        return rctxt;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get an already existing JspServletWrapper.
+     *
+     * @param jspUri JSP URI
+     * @return JspServletWrapper for JSP
+     */
+    public JspServletWrapper getWrapper(String jspUri) {
+        return jsps.get(jspUri);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ------------------------------------------------------ Public Methods
+
+    /**
+     * Add a new JspServletWrapper.
+     *
+     * @param jspUri JSP URI
+     * @param jsw Servlet wrapper for JSP
+     */
+    public void addWrapper(String jspUri, JspServletWrapper jsw) {
+        jsps.put(jspUri, jsw);
+    }
+-----CSCI578-----
+
+
+    public Compiler getCompiler() {
+        return jspCompiler;
+    }

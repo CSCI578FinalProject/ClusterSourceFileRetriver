@@ -1,0 +1,291 @@
+23
+
+    
+    /**
+     * Create an <code>ObjectName</code> for this
+     * <code>Service</code> object.
+     *
+     * @param domain Domain in which this name is to be created
+     * @param environment The ContextEnvironment to be named
+     *
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    public static ObjectName createObjectName(String domain,
+                                              ContextEnvironment environment)
+        throws MalformedObjectNameException {
+
+        ObjectName name = null;
+        Object container = 
+                environment.getNamingResources().getContainer();
+        if (container instanceof Server) {
+            name = new ObjectName(domain + ":type=Environment" + 
+                        ",resourcetype=Global,name=" + environment.getName());
+        } else if (container instanceof Context) {        
+            String path = ((Context)container).getPath();
+            if (path.length() < 1)
+                path = "/";
+            Host host = (Host) ((Context)container).getParent();
+            Engine engine = (Engine) host.getParent();
+            Service service = engine.getService();
+            name = new ObjectName(domain + ":type=Environment" + 
+                        ",resourcetype=Context,path=" + path + 
+                        ",host=" + host.getName() +
+                        ",name=" + environment.getName());
+        }        
+        return (name);
+
+    }
+    
+    
+    /**
+     * Create an <code>ObjectName</code> for this
+     * <code>ContextResource</code> object.
+     *
+     * @param domain Domain in which this name is to be created
+     * @param resource The ContextResource to be named
+     *
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    public static ObjectName createObjectName(String domain,
+                                              ContextResource resource)
+        throws MalformedObjectNameException {
+
+        ObjectName name = null;
+        String quotedResourceName = ObjectName.quote(resource.getName());
+        Object container = 
+                resource.getNamingResources().getContainer();
+        if (container instanceof Server) {        
+            name = new ObjectName(domain + ":type=Resource" +
+                        ",resourcetype=Global,class=" + resource.getType() + 
+                        ",name=" + quotedResourceName);
+        } else if (container instanceof Context) {                    
+            String path = ((Context)container).getPath();
+            if (path.length() < 1)
+                path = "/";
+            Host host = (Host) ((Context)container).getParent();
+            Engine engine = (Engine) host.getParent();
+            Service service = engine.getService();
+            name = new ObjectName(domain + ":type=Resource" +
+                        ",resourcetype=Context,path=" + path + 
+                        ",host=" + host.getName() +
+                        ",class=" + resource.getType() +
+                        ",name=" + quotedResourceName);
+        }
+        
+        return (name);
+
+    }
+  
+    
+     /**
+     * Create an <code>ObjectName</code> for this
+     * <code>ContextResourceLink</code> object.
+     *
+     * @param domain Domain in which this name is to be created
+     * @param resourceLink The ContextResourceLink to be named
+     *
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    public static ObjectName createObjectName(String domain,
+                                              ContextResourceLink resourceLink)
+        throws MalformedObjectNameException {
+
+        ObjectName name = null;
+        String quotedResourceLinkName
+                = ObjectName.quote(resourceLink.getName());        
+        Object container = 
+                resourceLink.getNamingResources().getContainer();
+        if (container instanceof Server) {        
+            name = new ObjectName(domain + ":type=ResourceLink" +
+                        ",resourcetype=Global" + 
+                        ",name=" + quotedResourceLinkName);
+        } else if (container instanceof Context) {                    
+            String path = ((Context)container).getPath();
+            if (path.length() < 1)
+                path = "/";
+            Host host = (Host) ((Context)container).getParent();
+            Engine engine = (Engine) host.getParent();
+            Service service = engine.getService();
+            name = new ObjectName(domain + ":type=ResourceLink" +
+                        ",resourcetype=Context,path=" + path + 
+                        ",host=" + host.getName() +
+                        ",name=" + quotedResourceLinkName);
+        }
+        
+        return (name);
+
+    }
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Get the container with which the naming resources are associated.
+     */
+    public Object getContainer() {
+        return container;
+    }
+
+    public static String PATH_SEPARATOR = System.getProperty("path.separator");
+
+    /**
+     * Adds classpath entries from a vector of URL's to the "tc_path_add" System
+     * property. This System property lists the classpath entries common to web
+     * applications. This System property is currently used by Jasper when its
+     * JSP servlet compiles the Java file for a JSP.
+     */
+    public static String classPathAdd(URL urls[], String cp) {
+        if (urls == null)
+            return cp;
+
+        for (int i = 0; i < urls.length; i++) {
+            if (cp != null)
+                cp += PATH_SEPARATOR + urls[i].getFile();
+            else
+                cp = urls[i].getFile();
+        }
+        return cp;
+    }
+
+    public static Object getProperty(Object o, String name) {
+        String getter = "get" + capitalize(name);
+        String isGetter = "is" + capitalize(name);
+
+        try {
+            Method methods[] = findMethods(o.getClass());
+            Method getPropertyMethod = null;
+
+            // First, the ideal case - a getFoo() method
+            for (int i = 0; i < methods.length; i++) {
+                Class paramT[] = methods[i].getParameterTypes();
+                if (getter.equals(methods[i].getName()) && paramT.length == 0) {
+                    return methods[i].invoke(o, (Object[]) null);
+                }
+                if (isGetter.equals(methods[i].getName()) && paramT.length == 0) {
+                    return methods[i].invoke(o, (Object[]) null);
+                }
+
+                if ("getProperty".equals(methods[i].getName())) {
+                    getPropertyMethod = methods[i];
+                }
+            }
+
+            // Ok, no setXXX found, try a getProperty("name")
+            if (getPropertyMethod != null) {
+                Object params[] = new Object[1];
+                params[0] = name;
+                return getPropertyMethod.invoke(o, params);
+            }
+
+        } catch (IllegalArgumentException ex2) {
+            log.warn("IAE " + o + " " + name, ex2);
+        } catch (SecurityException ex1) {
+            if (dbg > 0)
+                d("SecurityException for " + o.getClass() + " " + name + ")");
+            if (dbg > 1)
+                ex1.printStackTrace();
+        } catch (IllegalAccessException iae) {
+            if (dbg > 0)
+                d("IllegalAccessException for " + o.getClass() + " " + name
+                        + ")");
+            if (dbg > 1)
+                iae.printStackTrace();
+        } catch (InvocationTargetException ie) {
+            if (dbg > 0)
+                d("InvocationTargetException for " + o.getClass() + " " + name
+                        + ")");
+            if (dbg > 1)
+                ie.printStackTrace();
+        }
+        return null;
+    }
+
+    public String getName() {
+        return (this.name);
+    }
+
+    public NamingResources getNamingResources() {
+        return (this.resources);
+    }
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+    /**
+     * Obtain and return the value of a specific attribute of this MBean.
+     *
+     * @param name Name of the requested attribute
+     *
+     * @exception AttributeNotFoundException if this attribute is not
+     *  supported by this MBean
+     * @exception MBeanException if the initializer of an object
+     *  throws an exception
+     * @exception ReflectionException if a Java reflection exception
+     *  occurs when invoking the getter
+     */
+    public Object getAttribute(String name) throws AttributeNotFoundException,
+            MBeanException, ReflectionException {
+
+        Object attribute = null;
+        // Validate the input parameters
+        if (name == null)
+            throw new RuntimeOperationsException(new IllegalArgumentException(
+                    "Attribute name is null"), "Attribute name is null");
+
+        Object result = null;
+        try {
+            Connector connector = (Connector) getManagedResource();
+            result = IntrospectionUtils.getProperty(connector, name);
+        } catch (InstanceNotFoundException e) {
+            throw new MBeanException(e);
+        } catch (InvalidTargetObjectTypeException e) {
+            throw new MBeanException(e);
+        }
+
+        return result;
+
+    }
+
+
+    /**
+     * Create a new Web Application Loader.
+     *
+     * @param parent MBean Name of the associated parent component
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createWebappLoader(String parent)
+        throws Exception {
+
+        // Create a new WebappLoader instance
+        WebappLoader loader = new WebappLoader();
+
+        // Add the new instance to its parent component
+        ObjectName pname = new ObjectName(parent);
+        ContainerBase containerBase = getParentContainerFromParent(pname);
+        if (containerBase != null) {
+            containerBase.setLoader(loader);
+        } 
+        // FIXME add Loader.getObjectName
+        //ObjectName oname = loader.getObjectName();
+        ObjectName oname = 
+            MBeanUtils.createObjectName(pname.getDomain(), loader);
+        return (oname.toString());
+        
+    }
+
+
+    /**
+     * Remove the specified {@link User} from this user database.
+     *
+     * @param user The user to be removed
+     */
+    public void removeUser(User user) {
+
+        synchronized (users) {
+            users.remove(user.getUsername());
+        }
+
+    }

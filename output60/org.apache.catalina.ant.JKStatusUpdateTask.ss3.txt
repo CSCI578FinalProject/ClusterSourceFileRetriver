@@ -1,0 +1,77 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Create JkStatus link
+     * <ul>
+     * <li><b>load balance example:
+     * </b>http://localhost/status?cmd=update&mime=txt&w=lb&lf=false&ls=true</li>
+     * <li><b>worker example:
+     * </b>http://localhost/status?cmd=update&mime=txt&w=node1&l=lb&wf=1&wd=false&ws=false
+     * </li>
+     * </ul>
+     * 
+     * @return create jkstatus link
+     */
+    private StringBuffer createLink() {
+        // Building URL
+        StringBuffer sb = new StringBuffer();
+        try {
+            sb.append("?cmd=update&mime=txt");
+            sb.append("&w=");
+            sb.append(URLEncoder.encode(worker, getCharset()));
+
+            if (isLBMode) {
+                //http://localhost/status?cmd=update&mime=txt&w=lb&lf=false&ls=true
+                if ((lbRetries != null)) { // > 0
+                    sb.append("&lr=");
+                    sb.append(lbRetries);
+                }
+                if ((lbRecovertime != null)) { // > 59
+                    sb.append("&lt=");
+                    sb.append(lbRecovertime);
+                }
+                if ((lbStickySession != null)) {
+                    sb.append("&ls=");
+                    sb.append(lbStickySession);
+                }
+                if ((lbForceSession != null)) {
+                    sb.append("&lf=");
+                    sb.append(lbForceSession);
+                }
+            } else {
+                //http://localhost/status?cmd=update&mime=txt&w=node1&l=lb&wf=1&wd=false&ws=false
+                if ((workerLb != null)) { // must be configured
+                    sb.append("&l=");
+                    sb.append(URLEncoder.encode(workerLb, getCharset()));
+                }
+                if ((workerLoadFactor != null)) { // >= 1
+                    sb.append("&wf=");
+                    sb.append(workerLoadFactor);
+                }
+                if ((workerDisabled != null)) {
+                    sb.append("&wd=");
+                    sb.append(workerDisabled);
+                }
+                if ((workerStopped != null)) {
+                    sb.append("&ws=");
+                    sb.append(workerStopped);
+                }
+                if ((workerRedirect != null)) { // other worker conrecte lb's
+                    sb.append("&wr=");
+                }
+                if ((workerClusterDomain != null)) {
+                    sb.append("&wc=");
+                    sb.append(URLEncoder.encode(workerClusterDomain,
+                            getCharset()));
+                }
+            }
+
+        } catch (UnsupportedEncodingException e) {
+            throw new BuildException("Invalid 'charset' attribute: "
+                    + getCharset());
+        }
+        return sb;
+    }
+-----CSCI578-----

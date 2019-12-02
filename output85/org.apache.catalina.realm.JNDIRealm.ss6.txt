@@ -1,0 +1,197 @@
+5
+-----CSCI578-----
+
+
+
+    public boolean isUseDelegatedCredential() {
+        return useDelegatedCredential;
+    }
+-----CSCI578-----
+
+
+    private void restoreEnvironmentParameter(DirContext context,
+            String parameterName, Hashtable<?, ?> preservedEnvironment) {
+        try {
+            context.removeFromEnvironment(parameterName);
+            if (preservedEnvironment != null && preservedEnvironment.containsKey(parameterName)) {
+                context.addToEnvironment(parameterName,
+                        preservedEnvironment.get(parameterName));
+            }
+        } catch (NamingException e) {
+            // Ignore
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get the principal associated with the specified certificate.
+     * @param username The user name
+     * @return the Principal associated with the given certificate.
+     */
+    @Override
+    protected Principal getPrincipal(String username) {
+        return getPrincipal(username, null);
+    }
+
+
+    @Override
+    protected Principal getPrincipal(String username,
+            GSSCredential gssCredential) {
+
+        DirContext context = null;
+        Principal principal = null;
+
+        try {
+
+            // Ensure that we have a directory context available
+            context = open();
+
+            // Occasionally the directory context will timeout.  Try one more
+            // time before giving up.
+            try {
+
+                // Authenticate the specified username if possible
+                principal = getPrincipal(context, username, gssCredential);
+
+            } catch (CommunicationException | ServiceUnavailableException e) {
+
+                // log the exception so we know it's there.
+                containerLog.info(sm.getString("jndiRealm.exception.retry"), e);
+
+                // close the connection so we know it will be reopened.
+                if (context != null)
+                    close(context);
+
+                // open a new directory context.
+                context = open();
+
+                // Try the authentication again.
+                principal = getPrincipal(context, username, gssCredential);
+
+            }
+
+
+            // Release this context
+            release(context);
+
+            // Return the authenticated Principal (if any)
+            return principal;
+
+        } catch (NamingException e) {
+
+            // Log the problem for posterity
+            containerLog.error(sm.getString("jndiRealm.exception"), e);
+
+            // Close the connection so that it gets reopened next time
+            if (context != null)
+                close(context);
+
+            // Return "not authenticated" for this request
+            return null;
+
+        }
+
+
+    }
+
+
+
+    /**
+     * Get the principal associated with the specified certificate.
+     * @param context The directory context
+     * @param username The user name
+     * @param gssCredential The credentials
+     * @return the Principal associated with the given certificate.
+     * @exception NamingException if a directory server error occurs
+     */
+    protected synchronized Principal getPrincipal(DirContext context,
+            String username, GSSCredential gssCredential)
+        throws NamingException {
+
+        User user = null;
+        List<String> roles = null;
+        Hashtable<?, ?> preservedEnvironment = null;
+
+        try {
+            if (gssCredential != null && isUseDelegatedCredential()) {
+                // Preserve the current context environment parameters
+                preservedEnvironment = context.getEnvironment();
+                // Set up context
+                context.addToEnvironment(
+                        Context.SECURITY_AUTHENTICATION, "GSSAPI");
+                context.addToEnvironment(
+                        "javax.security.sasl.server.authentication", "true");
+                context.addToEnvironment(
+                        "javax.security.sasl.qop", spnegoDelegationQop);
+                // Note: Subject already set in SPNEGO authenticator so no need
+                //       for Subject.doAs() here
+            }
+            user = getUser(context, username);
+            if (user != null) {
+                roles = getRoles(context, user);
+            }
+        } finally {
+            restoreEnvironmentParameter(context,
+                    Context.SECURITY_AUTHENTICATION, preservedEnvironment);
+            restoreEnvironmentParameter(context,
+                    "javax.security.sasl.server.authentication", preservedEnvironment);
+            restoreEnvironmentParameter(context, "javax.security.sasl.qop",
+                    preservedEnvironment);
+        }
+
+        if (user != null) {
+            return new GenericPrincipal(user.getUserName(), user.getPassword(),
+                    roles, null, null, gssCredential);
+        }
+
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Close any open connection to the directory server for this Realm.
+     *
+     * @param context The directory context to be closed
+     */
+    protected void close(DirContext context) {
+
+        // Do nothing if there is no opened connection
+        if (context == null)
+            return;
+
+        // Close tls startResponse if used
+        if (tls != null) {
+            try {
+                tls.close();
+            } catch (IOException e) {
+                containerLog.error(sm.getString("jndiRealm.tlsClose"), e);
+            }
+        }
+        // Close our opened connection
+        try {
+            if (containerLog.isDebugEnabled())
+                containerLog.debug("Closing directory context");
+            context.close();
+        } catch (NamingException e) {
+            containerLog.error(sm.getString("jndiRealm.close"), e);
+        }
+        this.context = null;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Release our use of this connection so that it can be recycled.
+     *
+     * @param context The directory context to release
+     */
+    protected void release(DirContext context) {
+
+        // NO-OP since we are not pooling anything
+
+    }

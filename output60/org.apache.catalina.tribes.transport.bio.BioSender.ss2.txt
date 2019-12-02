@@ -1,0 +1,80 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Push messages with only one socket at a time
+     * Wait for ack is needed and make auto retry when write message is failed.
+     * After sending error close and reopen socket again.
+     * 
+     * After successful sending update statistics
+     * 
+     * WARNING: Subclasses must be very careful that only one thread call this pushMessage at once!!!
+     * 
+     * @see #closeSocket()
+     * @see #openSocket()
+     * 
+     * @param data
+     *            data to send
+     * @since 5.5.10
+     */
+    
+    protected void pushMessage(byte[] data, boolean reconnect, boolean waitForAck) throws IOException {
+        keepalive();
+        if ( reconnect ) closeSocket();
+        if (!isConnected()) openSocket();
+        soOut.write(data);
+        soOut.flush();
+        if (waitForAck) waitForAck();
+        SenderState.getSenderState(getDestination()).setReady();
+
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Wait for Acknowledgement from other server
+     * FIXME Please, not wait only for three characters, better control that the wait ack message is correct.
+     * @throws java.io.IOException
+     * @throws java.net.SocketTimeoutException
+     */
+    protected void waitForAck() throws java.io.IOException {
+        try {
+            boolean ackReceived = false;
+            boolean failAckReceived = false;
+            ackbuf.clear();
+            int bytesRead = 0;
+            int i = soIn.read();
+            while ((i != -1) && (bytesRead < Constants.ACK_COMMAND.length)) {
+                bytesRead++;
+                byte d = (byte)i;
+                ackbuf.append(d);
+                if (ackbuf.doesPackageExist() ) {
+                    byte[] ackcmd = ackbuf.extractDataPackage(true).getBytes();
+                    ackReceived = Arrays.equals(ackcmd,org.apache.catalina.tribes.transport.Constants.ACK_DATA);
+                    failAckReceived = Arrays.equals(ackcmd,org.apache.catalina.tribes.transport.Constants.FAIL_ACK_DATA);
+                    ackReceived = ackReceived || failAckReceived;
+                    break;
+                }
+                i = soIn.read();
+            }
+            if (!ackReceived) {
+                if (i == -1) throw new IOException(sm.getString("IDataSender.ack.eof",getAddress(), new Integer(socket.getLocalPort())));
+                else throw new IOException(sm.getString("IDataSender.ack.wrong",getAddress(), new Integer(socket.getLocalPort())));
+            } else if ( failAckReceived && getThrowOnFailedAck()) {
+                throw new RemoteProcessException("Received a failed ack:org.apache.catalina.tribes.transport.Constants.FAIL_ACK_DATA");
+            }
+        } catch (IOException x) {
+            String errmsg = sm.getString("IDataSender.ack.missing", getAddress(),new Integer(socket.getLocalPort()), new Long(getTimeout()));
+            if ( SenderState.getSenderState(getDestination()).isReady() ) {
+                SenderState.getSenderState(getDestination()).setSuspect();
+                if ( log.isWarnEnabled() ) log.warn(errmsg, x);
+            } else {
+                if ( log.isDebugEnabled() )log.debug(errmsg, x);
+            }
+            throw x;
+        } finally {
+            ackbuf.clear();
+        }
+    }

@@ -1,0 +1,25 @@
+2
+-----CSCI578-----
+
+
+
+    @Override
+    public ByteBuffer startRequestBodyFrame(int streamId, int payloadSize) throws Http2Exception {
+        Stream stream = getStream(streamId, true);
+        stream.checkState(FrameType.DATA);
+        return stream.getInputByteBuffer();
+    }
+-----CSCI578-----
+
+
+
+    private Stream getStream(int streamId, boolean unknownIsError) throws ConnectionException {
+        Integer key = Integer.valueOf(streamId);
+        Stream result = streams.get(key);
+        if (result == null && unknownIsError) {
+            // Stream has been closed and removed from the map
+            throw new ConnectionException(sm.getString("upgradeHandler.stream.closed", key),
+                    Http2Error.PROTOCOL_ERROR);
+        }
+        return result;
+    }

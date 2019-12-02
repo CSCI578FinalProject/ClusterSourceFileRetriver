@@ -1,0 +1,306 @@
+32
+    
+    private void cpBytes( byte b[], int off, int numBytes ) {
+        if( pos + numBytes >= buf.length ) {
+            log.error("Buffer overflow: buffer.len=" + buf.length + " pos=" +
+                      pos + " data=" + numBytes );
+            dump("Overflow/coBytes");
+            log.error( "Overflow ", new Throwable());
+            return;
+        }
+        System.arraycopy( b, off, buf, pos, numBytes);
+        pos += numBytes;
+        // buf[pos + numBytes] = 0; // Terminating \0
+    }
+
+    public void appendByteChunk(ByteChunk bc) throws IOException {
+        if(bc==null) {
+            log.error("appendByteChunk() null");
+            appendInt( 0);
+            appendByte(0);
+            return;
+        }
+
+        byte[] bytes = bc.getBytes();
+        int start=bc.getStart();
+        int length = bc.getLength();
+        appendInt( length );
+        cpBytes(bytes, start, length);
+        appendByte(0);
+    }
+
+    /**
+     * Write a CharChunk out at the current write position.
+     * A null CharChunk is encoded as a string with length 0.
+     */
+    private void appendCharChunk(CharChunk cc) {
+        if (cc == null) {
+            log.error("appendCharChunk() null");
+            appendInt(0);
+            appendByte(0);
+            return;
+        }
+        int start = cc.getStart();
+        int end = cc.getEnd();
+        appendInt(end - start);
+        char[] cbuf = cc.getBuffer();
+        for (int i = start; i < end; i++) {
+            char c = cbuf[i];
+            // Note:  This is clearly incorrect for many strings,
+            // but is the only consistent approach within the current
+            // servlet framework.  It must suffice until servlet output
+            // streams properly encode their output.
+            if (((c <= 31) && (c != 9)) || c == 127 || c > 255) {
+                c = ' ';
+            }
+            appendByte((byte)c);
+        }
+        appendByte(0);
+    }
+
+    /**
+     * Write a String out at the current write position.  Strings are
+     * encoded with the length in two bytes first, then the string, and
+     * then a terminating \0 (which is <B>not</B> included in the
+     * encoded length).  The terminator is for the convenience of the C
+     * code, where it saves a round of copying.  A null string is
+     * encoded as a string with length 0.
+     */
+    private void appendString(String str) {
+        if (str == null) {
+            log.error("appendString() null");
+            appendInt(0);
+            appendByte(0);
+            return;
+        }
+        int len = str.length();
+        appendInt(len);
+        for (int i = 0; i < len; i++) {
+            char c = str.charAt (i);
+            // Note:  This is clearly incorrect for many strings,
+            // but is the only consistent approach within the current
+            // servlet framework.  It must suffice until servlet output
+            // streams properly encode their output.
+            if (((c <= 31) && (c != 9)) || c == 127 || c > 255) {
+                c = ' ';
+            }
+            appendByte((byte)c);
+        }
+        appendByte(0);
+    }
+
+    /**
+     * Write a String out at the current write position.  Strings are
+     * encoded with the length in two bytes first, then the string, and
+     * then a terminating \0 (which is <B>not</B> included in the
+     * encoded length).  The terminator is for the convenience of the C
+     * code, where it saves a round of copying.  A null string is
+     * encoded as a string with length 0.  
+     */
+    public void appendBytes(MessageBytes mb) throws IOException {
+        if(mb==null || mb.isNull() ) {
+            appendInt( 0);
+            appendByte(0);
+            return;
+        }
+        if (mb.getType() == MessageBytes.T_BYTES) {
+            ByteChunk bc = mb.getByteChunk();
+            appendByteChunk(bc);
+        } else if (mb.getType() == MessageBytes.T_CHARS) {
+            CharChunk cc = mb.getCharChunk();
+            appendCharChunk(cc);
+        } else {
+            appendString(mb.toString());
+        }
+    }
+
+    /** 
+     * Copy a chunk of bytes into the packet, starting at the current
+     * write position.  The chunk of bytes is encoded with the length
+     * in two bytes first, then the data itself, and finally a
+     * terminating \0 (which is <B>not</B> included in the encoded
+     * length).
+     *
+     * @param b The array from which to copy bytes.
+     * @param off The offset into the array at which to start copying
+     * @param numBytes The number of bytes to copy.  
+     */
+    public void appendBytes( byte b[], int off, int numBytes ) {
+        appendInt( numBytes );
+        cpBytes( b, off, numBytes );
+        appendByte(0);
+    }
+
+ 
+    /**
+     * Stop broadcasting and listening to membership pings
+     */
+    public void stop(int svc) {
+        try  {
+            if ( impl != null && impl.stop(svc) ) impl = null;
+        } catch ( Exception x)  {
+            log.error("Unable to stop the mcast service, level:"+svc+".",x);
+        }
+    }
+
+    public void setPayload(byte[] payload) {
+        this.payload = payload;
+        if ( localMember != null ) {
+            localMember.setPayload(payload);
+            localMember.getData(true,true);
+            try {
+                if (impl != null) impl.send(false);
+            }catch ( Exception x ) {
+                log.error("Unable to send payload update.",x);
+            }
+        }
+    }
+    
+    public void setDomain(byte[] domain) {
+        this.domain = domain;
+        if ( localMember != null ) {
+            localMember.setDomain(domain);
+            localMember.getData(true,true);
+            try {
+                if (impl != null) impl.send(false);
+            }catch ( Exception x ) {
+                log.error("Unable to send domain update.",x);
+            }
+        }
+    }
+
+    public void setDomain(String domain) {
+        if ( domain == null ) return;
+        if ( domain.startsWith("{") ) setDomain(Arrays.fromString(domain));
+        else setDomain(Arrays.convert(domain));
+    }
+
+    /**
+     * Simple test program
+     * @param args Command-line arguments
+     * @throws Exception If an error occurs
+     */
+    public static void main(String args[]) throws Exception {
+		if(log.isInfoEnabled())
+            log.info("Usage McastService hostname tcpport");
+        McastService service = new McastService();
+        java.util.Properties p = new java.util.Properties();
+        p.setProperty("mcastPort","5555");
+        p.setProperty("mcastAddress","224.10.10.10");
+        p.setProperty("mcastClusterDomain","catalina");
+        p.setProperty("bindAddress","localhost");
+        p.setProperty("memberDropTime","3000");
+        p.setProperty("mcastFrequency","500");
+        p.setProperty("tcpListenPort","4000");
+        p.setProperty("tcpListenHost","127.0.0.1");
+        service.setProperties(p);
+        service.start();
+        Thread.sleep(60*1000*60);
+    }
+}
+
+    @Override
+    protected String getName() {
+        // This method should never be called
+        // Stack trace will show where this was called from
+        UnsupportedOperationException uoe =
+            new UnsupportedOperationException(
+                    sm.getString("combinedRealm.getName"));
+        log.error(sm.getString("combinedRealm.unexpectedMethod"), uoe);
+        throw uoe;
+    }
+
+    @Override
+    protected String getPassword(String username) {
+        // This method should never be called
+        // Stack trace will show where this was called from
+        UnsupportedOperationException uoe =
+            new UnsupportedOperationException(
+                    sm.getString("combinedRealm.getPassword"));
+        log.error(sm.getString("combinedRealm.unexpectedMethod"), uoe);
+        throw uoe;
+    }
+
+    @Override
+    protected Principal getPrincipal(String username) {
+        // This method should never be called
+        // Stack trace will show where this was called from
+        UnsupportedOperationException uoe =
+            new UnsupportedOperationException(
+                    sm.getString("combinedRealm.getPrincipal"));
+        log.error(sm.getString("combinedRealm.unexpectedMethod"), uoe);
+        throw uoe;
+    }
+
+
+    /**
+     * Rename the existing log file to something else. Then open the
+     * old log file name up once again. Intended to be called by a JMX
+     * agent.
+     *
+     *
+     * @param newFileName The file name to move the log file entry to
+     * @return true if a file was rotated with no error
+     */
+    public synchronized boolean rotate(String newFileName) {
+
+        if (currentLogFile != null) {
+            File holder = currentLogFile;
+            close();
+            try {
+                holder.renameTo(new File(newFileName));
+            } catch (Throwable e) {
+                log.error(sm.getString("accessLogValve.rotateFail"), e);
+            }
+
+            /* Make sure date is correct */
+            dateStamp = fileDateFormatter.format(
+                    new Date(System.currentTimeMillis()));
+
+            open();
+            return true;
+        } else {
+            return false;
+        }
+
+    }
+
+    public void setNativeAttribute(String name, String val) throws IOException {
+        if( apr==null ) return;
+
+        if( nativeJkHandlerP == 0 ) {
+            log.error( "Unitialized component " + name+ " " + val );
+            return;
+        }
+
+        long xEnv=apr.getJkEnv();
+
+        apr.jkSetAttribute( xEnv, nativeJkHandlerP, name, val );
+
+        apr.releaseJkEnv( xEnv );
+    }
+
+    boolean started=false;
+    
+    /** Start the protocol
+     */
+    public void init() {
+        if( started ) return;
+
+        started=true;
+        
+        if( wEnv==null ) {
+            // we are probably not registered - not very good.
+            wEnv=getJkMain().getWorkerEnv();
+            wEnv.addHandler("container", this );
+        }
+
+        try {
+            // jkMain.setJkHome() XXX;
+            
+            getJkMain().init();
+
+        } catch( Exception ex ) {
+            log.error("Error during init",ex);
+        }
+    }

@@ -1,0 +1,199 @@
+10
+-----CSCI578-----
+
+
+
+    public void reset()
+        throws IOException {
+        ib.reset();
+    }
+-----CSCI578-----
+
+
+
+    public void reset()
+        throws IOException {
+
+        if (closed)
+            throw new IOException(sm.getString("inputBuffer.streamClosed"));
+
+        if (state == CHAR_STATE) {
+            if (markPos < 0) {
+                cb.recycle();
+                markPos = -1;
+                throw new IOException();
+            } else {
+                cb.setOffset(markPos);
+            }
+        } else {
+            bb.recycle();
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void mark(int readAheadLimit)
+        throws IOException {
+        ib.mark(readAheadLimit);
+    }
+-----CSCI578-----
+
+
+
+    public void mark(int readAheadLimit)
+        throws IOException {
+
+        if (closed)
+            throw new IOException(sm.getString("inputBuffer.streamClosed"));
+
+        if (cb.getLength() <= 0) {
+            cb.setOffset(0);
+            cb.setEnd(0);
+        } else {
+            if ((cb.getBuffer().length > (2 * size)) 
+                && (cb.getLength()) < (cb.getStart())) {
+                System.arraycopy(cb.getBuffer(), cb.getStart(), 
+                                 cb.getBuffer(), 0, cb.getLength());
+                cb.setEnd(cb.getLength());
+                cb.setOffset(0);
+            }
+        }
+        cb.setLimit(cb.getStart() + readAheadLimit + size);
+        markPos = cb.getStart();
+    }
+-----CSCI578-----
+
+
+
+    public long skip(long n)
+        throws IOException {
+
+
+        if (closed)
+            throw new IOException(sm.getString("inputBuffer.streamClosed"));
+
+        if (n < 0) {
+            throw new IllegalArgumentException();
+        }
+
+        long nRead = 0;
+        while (nRead < n) {
+            if (cb.getLength() >= n) {
+                cb.setOffset(cb.getStart() + (int) n);
+                nRead = n;
+            } else {
+                nRead += cb.getLength();
+                cb.setOffset(cb.getEnd());
+                int toRead = 0;
+                if (cb.getChars().length < (n - nRead)) {
+                    toRead = cb.getChars().length;
+                } else {
+                    toRead = (int) (n - nRead);
+                }
+                int nb = realReadChars(cb.getChars(), 0, toRead);
+                if (nb < 0)
+                    break;
+            }
+        }
+
+        return nRead;
+
+    }
+-----CSCI578-----
+
+
+
+    public int realReadChars(char cbuf[], int off, int len)
+        throws IOException {
+
+        if (!gotEnc)
+            setConverter();
+
+        if (bb.getLength() <= 0) {
+            int nRead = realReadBytes(bb.getBytes(), 0, bb.getBytes().length);
+            if (nRead < 0) {
+                return -1;
+            }
+        }
+
+        if (markPos == -1) {
+            cb.setOffset(0);
+            cb.setEnd(0);
+        }
+        int limit = bb.getLength()+cb.getStart();
+        if ( cb.getLimit() < limit )
+            cb.setLimit(limit);
+        state = CHAR_STATE;
+        conv.convert(bb, cb, bb.getLength());
+        bb.setOffset(bb.getEnd());
+
+        return cb.getLength();
+
+    }
+-----CSCI578-----
+
+
+
+    public long skip(long n)
+        throws IOException {
+        return ib.skip(n);
+    }
+-----CSCI578-----
+
+    
+    public int getLimit() {
+        return limit;
+    }
+-----CSCI578-----
+
+
+    public void setOffset(int off) {
+        if (end < off ) end=off;
+        start=off;
+    }
+-----CSCI578-----
+
+
+    /** Set the buffer to the representation of an int
+     */
+    public void setInt(int i) {
+        byteC.allocate(16, 32);
+        int current = i;
+        byte[] buf = byteC.getBuffer();
+        int start = 0;
+        int end = 0;
+        if (i == 0) {
+            buf[end++] = (byte) '0';
+        }
+        if (i < 0) {
+            current = -i;
+            buf[end++] = (byte) '-';
+        }
+        while (current > 0) {
+            int digit = current % 10;
+            current = current / 10;
+            buf[end++] = HexUtils.HEX[digit];
+        }
+        byteC.setOffset(0);
+        byteC.setEnd(end);
+        // Inverting buffer
+        end--;
+        if (i < 0) {
+            start++;
+        }
+        while (end > start) {
+            byte temp = buf[start];
+            buf[start] = buf[end];
+            buf[end] = temp;
+            start++;
+            end--;
+        }
+        intValue=i;
+        hasStrValue=false;
+        hasHashCode=false;
+        hasIntValue=true;
+        hasLongValue=false;
+        hasDateValue=false;
+        type=T_BYTES;
+    }

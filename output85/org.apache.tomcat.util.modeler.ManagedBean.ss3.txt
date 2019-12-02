@@ -1,0 +1,120 @@
+6
+-----CSCI578-----
+
+
+
+    /**
+     * Create and return a <code>ModelMBeanInfo</code> object that
+     * describes this entire managed bean.
+     * @return the MBean info
+     */
+    MBeanInfo getMBeanInfo() {
+
+        // Return our cached information (if any)
+        mBeanInfoLock.readLock().lock();
+        try {
+            if (info != null) {
+                return info;
+            }
+        } finally {
+            mBeanInfoLock.readLock().unlock();
+        }
+
+        mBeanInfoLock.writeLock().lock();
+        try {
+            if (info == null) {
+                // Create subordinate information descriptors as required
+                AttributeInfo attrs[] = getAttributes();
+                MBeanAttributeInfo attributes[] =
+                    new MBeanAttributeInfo[attrs.length];
+                for (int i = 0; i < attrs.length; i++)
+                    attributes[i] = attrs[i].createAttributeInfo();
+
+                OperationInfo opers[] = getOperations();
+                MBeanOperationInfo operations[] =
+                    new MBeanOperationInfo[opers.length];
+                for (int i = 0; i < opers.length; i++)
+                    operations[i] = opers[i].createOperationInfo();
+
+
+                NotificationInfo notifs[] = getNotifications();
+                MBeanNotificationInfo notifications[] =
+                    new MBeanNotificationInfo[notifs.length];
+                for (int i = 0; i < notifs.length; i++)
+                    notifications[i] = notifs[i].createNotificationInfo();
+
+
+                // Construct and return a new ModelMBeanInfo object
+                info = new MBeanInfo(getClassName(),
+                                     getDescription(),
+                                     attributes,
+                                     new MBeanConstructorInfo[] {},
+                                     operations,
+                                     notifications);
+            }
+
+            return info;
+        } finally {
+            mBeanInfoLock.writeLock().unlock();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the human-readable description of this MBean.
+     */
+    public String getDescription() {
+        return this.description;
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * @return the collection of attributes for this MBean.
+     */
+    public AttributeInfo[] getAttributes() {
+        AttributeInfo result[] = new AttributeInfo[attributes.size()];
+        attributes.values().toArray(result);
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the collection of notifications for this MBean.
+     */
+    public NotificationInfo[] getNotifications() {
+        return this.notifications;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the collection of operations for this MBean.
+     */
+    public OperationInfo[] getOperations() {
+        OperationInfo[] result = new OperationInfo[operations.size()];
+        operations.values().toArray(result);
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * The fully qualified name of the Java class of the MBean
+     * described by this descriptor.  If not specified, the standard JMX
+     * class (<code>javax.management.modelmbean.RequiredModeLMBean</code>)
+     * will be utilized.
+     * @return the class name
+     */
+    public String getClassName() {
+        return this.className;
+    }

@@ -1,0 +1,79 @@
+11
+
+    /**
+     * Determine if we must drop the connection because of the HTTP status
+     * code.  Use the same list of codes as Apache/httpd.
+     */
+    protected boolean statusDropsConnection(int status) {
+        return status == 400 /* SC_BAD_REQUEST */ ||
+               status == 408 /* SC_REQUEST_TIMEOUT */ ||
+               status == 411 /* SC_LENGTH_REQUIRED */ ||
+               status == 413 /* SC_REQUEST_ENTITY_TOO_LARGE */ ||
+               status == 414 /* SC_REQUEST_URI_TOO_LARGE */ ||
+               status == 500 /* SC_INTERNAL_SERVER_ERROR */ ||
+               status == 503 /* SC_SERVICE_UNAVAILABLE */ ||
+               status == 501 /* SC_NOT_IMPLEMENTED */;
+    }
+
+
+    /**
+     * Get filters.
+     */
+    public InputFilter[] getFilters() {
+
+        return filterLibrary;
+
+    }
+
+
+    /**
+     * Add an input filter to the filter library.
+     */
+    public void addActiveFilter(InputFilter filter) {
+
+        if (lastActiveFilter == -1) {
+            filter.setBuffer(inputStreamInputBuffer);
+        } else {
+            for (int i = 0; i <= lastActiveFilter; i++) {
+                if (activeFilters[i] == filter)
+                    return;
+            }
+            filter.setBuffer(activeFilters[lastActiveFilter]);
+        }
+
+        activeFilters[++lastActiveFilter] = filter;
+
+        filter.setRequest(request);
+
+    }
+
+
+    /**
+     * Set the SSL information for this HTTP connection.
+     */
+    public void setSSLSupport(SSLSupport sslSupport) {
+        this.sslSupport = sslSupport;
+    }
+
+
+    /**
+     * Set the swallow input flag.
+     */
+    public void setSwallowInput(boolean swallowInput) {
+        this.swallowInput = swallowInput;
+    }
+
+
+    /**
+     * End the current request. It is acceptable to write extra bytes using
+     * buffer.doWrite during the execution of this method.
+     */
+    public long end()
+        throws IOException {
+        if (compressionStream == null) {
+            compressionStream = new FlushableGZIPOutputStream(fakeOutputStream);
+        }
+        compressionStream.finish();
+        compressionStream.close();
+        return ((OutputFilter) buffer).end();
+    }

@@ -1,0 +1,159 @@
+5
+-----CSCI578-----
+
+
+
+    /*
+     * Scan a URL for JARs with the optional extensions to look at all files
+     * and all directories.
+     */
+    private void process(JarScanType scanType, JarScannerCallback callback,
+            URL url, String webappPath, boolean isWebapp) throws IOException {
+
+        if (log.isTraceEnabled()) {
+            log.trace(sm.getString("jarScan.jarUrlStart", url));
+        }
+
+        URLConnection conn = url.openConnection();
+        if (conn instanceof JarURLConnection) {
+            callback.scan((JarURLConnection) conn, webappPath, isWebapp);
+        } else {
+            String urlStr = url.toString();
+            if (urlStr.startsWith("file:") || urlStr.startsWith("http:") || urlStr.startsWith("https:")) {
+                if (urlStr.endsWith(Constants.JAR_EXT)) {
+                    URL jarURL = UriUtil.buildJarUrl(urlStr);
+                    callback.scan((JarURLConnection) jarURL.openConnection(),
+                            webappPath, isWebapp);
+                } else {
+                    File f;
+                    try {
+                        f = new File(url.toURI());
+                        if (f.isFile() && isScanAllFiles()) {
+                            // Treat this file as a JAR
+                            URL jarURL = UriUtil.buildJarUrl(f);
+                            callback.scan(
+                                    (JarURLConnection) jarURL.openConnection(),
+                                    webappPath, isWebapp);
+                        } else if (f.isDirectory()) {
+                            if (scanType == JarScanType.PLUGGABILITY) {
+                                callback.scan(f, webappPath, isWebapp);
+                            } else {
+                                File metainf = new File(f.getAbsoluteFile() +
+                                        File.separator + "META-INF");
+                                if (metainf.isDirectory()) {
+                                    callback.scan(f, webappPath, isWebapp);
+                                }
+                            }
+                        }
+                    } catch (Throwable t) {
+                        ExceptionUtils.handleThrowable(t);
+                        // Wrap the exception and re-throw
+                        IOException ioe = new IOException();
+                        ioe.initCause(t);
+                        throw ioe;
+                    }
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * A JAR was found (probably packaged in a WAR) and may be accessed for
+     * further processing via the provided URL connection.
+     *
+     * @param urlConn    The connection to the identified JAR
+     * @param webappPath The path, if any, to the JAR within the web application
+     * @param isWebapp   Indicates if the JAR was found within a web
+     *                       application. If <code>false</code> the JAR should
+     *                       be treated as being provided by the container
+     *
+     * @throws IOException if an I/O error occurs while scanning the JAR
+     */
+    public void scan(JarURLConnection urlConn, String webappPath, boolean isWebapp)
+            throws IOException;
+
+
+    /**
+     * A JAR was found (probably in an unpacked WAR or possibly elsewhere on the
+     * class path) and may be accessed for further processing via the provided
+     * file.
+     *
+     * @param file       The file for the identified JAR.
+     * @param webappPath The path, if any, to the file within the web
+     *                       application
+     * @param isWebapp   Indicates if the JAR was found within a web
+     *                       application. If <code>false</code> the JAR should
+     *                       be treated as being provided by the container
+     *
+     * @throws IOException if an I/O error occurs while scanning the JAR
+     */
+    public void scan(File file, String webappPath, boolean isWebapp) throws IOException;
+-----CSCI578-----
+
+    public boolean isScanAllFiles() {
+        return scanAllFiles;
+    }
+-----CSCI578-----
+
+
+
+    public static URL buildJarUrl(File jarFile) throws MalformedURLException {
+        return buildJarUrl(jarFile, null);
+    }
+
+
+
+    public static URL buildJarUrl(File jarFile, String entryPath) throws MalformedURLException {
+        return buildJarUrl(jarFile.toURI().toString(), entryPath);
+    }
+
+
+
+    public static URL buildJarUrl(String fileUrlString) throws MalformedURLException {
+        return buildJarUrl(fileUrlString, null);
+    }
+
+
+
+    public static URL buildJarUrl(String fileUrlString, String entryPath) throws MalformedURLException {
+        String safeString = makeSafeForJarUrl(fileUrlString);
+        StringBuilder sb = new StringBuilder();
+        sb.append("jar:");
+        sb.append(safeString);
+        sb.append("!/");
+        if (entryPath != null) {
+            sb.append(makeSafeForJarUrl(entryPath));
+        }
+        return new URL(sb.toString());
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * When testing on markt's desktop each iteration was taking ~1420ns when
+     * using String.replaceAll().
+     *
+     * Switching the implementation to use pre-compiled patterns and
+     * Pattern.matcher(input).replaceAll(replacement) reduced this by ~10%.
+     *
+     * Note: Given the very small absolute time of a single iteration, even for
+     *       a web application with 1000 JARs this is only going to add ~3ms.
+     *       It is therefore unlikely that further optimisation will be
+     *       necessary.
+     */
+    /*
+     * Pulled out into a separate method in case we need to handle other unusual
+     * sequences in the future.
+     */
+    private static String makeSafeForJarUrl(String input) {
+        // Since "!/" has a special meaning in a JAR URL, make sure that the
+        // sequence is properly escaped if present.
+        String tmp = PATTERN_EXCLAMATION_MARK.matcher(input).replaceAll("%21/");
+        // Tomcat's custom jar:war: URL handling treats */ and ^/ as special
+        tmp = PATTERN_CARET.matcher(tmp).replaceAll("%5e/");
+        return PATTERN_ASTERISK.matcher(tmp).replaceAll("%2a/");
+    }

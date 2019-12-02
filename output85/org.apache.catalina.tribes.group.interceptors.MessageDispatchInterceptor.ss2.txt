@@ -1,0 +1,32 @@
+3
+-----CSCI578-----
+
+
+
+    public void startQueue() {
+        if (run) {
+            return;
+        }
+        executor = ExecutorFactory.newThreadPool(maxSpareThreads, maxThreads, keepAliveTime,
+                TimeUnit.MILLISECONDS,
+                new TcclThreadFactory("MessageDispatchInterceptor.MessageDispatchThread"));
+        run = true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void start(int svc) throws ChannelException {
+        //start the thread
+        if (!run ) {
+            synchronized (this) {
+                // only start with the sender
+                if ( !run && ((svc & Channel.SND_TX_SEQ)==Channel.SND_TX_SEQ) ) {
+                    startQueue();
+                }
+            }
+        }
+        super.start(svc);
+    }

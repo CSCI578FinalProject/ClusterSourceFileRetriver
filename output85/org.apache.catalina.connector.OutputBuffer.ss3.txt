@@ -1,0 +1,115 @@
+2
+-----CSCI578-----
+
+
+
+    public void write(byte b[], int off, int len) throws IOException {
+
+        if (suspended) {
+            return;
+        }
+
+        writeBytes(b, off, len);
+
+    }
+
+
+    @Override
+    public void write(int c)
+        throws IOException {
+
+        if (suspended) {
+            return;
+        }
+
+        cb.append((char) c);
+        charsWritten++;
+
+    }
+
+
+
+    @Override
+    public void write(char c[])
+        throws IOException {
+
+        if (suspended) {
+            return;
+        }
+
+        write(c, 0, c.length);
+
+    }
+
+
+
+    @Override
+    public void write(char c[], int off, int len)
+        throws IOException {
+
+        if (suspended) {
+            return;
+        }
+
+        cb.append(c, off, len);
+        charsWritten += len;
+
+    }
+
+
+
+    /**
+     * Append a string to the buffer
+     */
+    @Override
+    public void write(String s, int off, int len)
+        throws IOException {
+
+        if (suspended) {
+            return;
+        }
+
+        if (s == null) {
+            throw new NullPointerException(sm.getString("outputBuffer.writeNull"));
+        }
+        cb.append(s, off, len);
+        charsWritten += len;
+    }
+
+
+
+    @Override
+    public void write(String s)
+        throws IOException {
+
+        if (suspended) {
+            return;
+        }
+
+        if (s == null) {
+            s = "null";
+        }
+        cb.append(s);
+        charsWritten += s.length();
+    }
+-----CSCI578-----
+
+
+
+    private void writeBytes(byte b[], int off, int len)
+        throws IOException {
+
+        if (closed) {
+            return;
+        }
+
+        bb.append(b, off, len);
+        bytesWritten += len;
+
+        // if called from within flush(), then immediately flush
+        // remaining bytes
+        if (doFlush) {
+            bb.flushBuffer();
+        }
+
+    }

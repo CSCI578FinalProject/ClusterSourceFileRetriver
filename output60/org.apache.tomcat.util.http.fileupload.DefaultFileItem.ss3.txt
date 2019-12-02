@@ -1,0 +1,141 @@
+4
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------- FileItem methods
+
+
+    /**
+     * Provides a hint as to whether or not the file contents will be read
+     * from memory.
+     *
+     * @return <code>true</code> if the file contents will be read
+     *         from memory; <code>false</code> otherwise.
+     */
+    public boolean isInMemory()
+    {
+        return (dfos.isInMemory());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * A convenience method to write an uploaded item to disk. The client code
+     * is not concerned with whether or not the item is stored in memory, or on
+     * disk in a temporary location. They just want to write the uploaded item
+     * to a file.
+     * <p>
+     * This implementation first attempts to rename the uploaded item to the
+     * specified destination file, if the item was originally written to disk.
+     * Otherwise, the data will be copied to the specified file.
+     * <p>
+     * This method is only guaranteed to work <em>once</em>, the first time it
+     * is invoked for a particular item. This is because, in the event that the
+     * method renames a temporary file, that file will no longer be available
+     * to copy or rename again at a later time.
+     *
+     * @param file The <code>File</code> into which the uploaded item should
+     *             be stored.
+     *
+     * @exception Exception if an error occurs.
+     */
+    public void write(File file) throws Exception
+    {
+        if (isInMemory())
+        {
+            FileOutputStream fout = null;
+            try
+            {
+                fout = new FileOutputStream(file);
+                fout.write(get());
+            }
+            finally
+            {
+                if (fout != null)
+                {
+                    fout.close();
+                }
+            }
+        }
+        else
+        {
+            File outputFile = getStoreLocation();
+            if (outputFile != null)
+            {
+                /*
+                 * The uploaded file is being stored on disk
+                 * in a temporary location so move it to the
+                 * desired file.
+                 */
+                if (!outputFile.renameTo(file))
+                {
+                    BufferedInputStream in = null;
+                    BufferedOutputStream out = null;
+                    try
+                    {
+                        in = new BufferedInputStream(
+                            new FileInputStream(outputFile));
+                        out = new BufferedOutputStream(
+                                new FileOutputStream(file));
+                        byte[] bytes = new byte[2048];
+                        int s = 0;
+                        while ((s = in.read(bytes)) != -1)
+                        {
+                            out.write(bytes, 0, s);
+                        }
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            in.close();
+                        }
+                        catch (IOException e)
+                        {
+                            // ignore
+                        }
+                        try
+                        {
+                            out.close();
+                        }
+                        catch (IOException e)
+                        {
+                            // ignore
+                        }
+                    }
+                }
+            }
+            else
+            {
+                /*
+                 * For whatever reason we cannot write the
+                 * file to disk.
+                 */
+                throw new FileUploadException(
+                    "Cannot write uploaded file to disk!");
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Deletes the underlying storage for a file item, including deleting any
+     * associated temporary disk file. Although this storage will be deleted
+     * automatically when the <code>FileItem</code> instance is garbage
+     * collected, this method can be used to ensure that this is done at an
+     * earlier time, thus preserving system resources.
+     */
+    public void delete()
+    {
+        cachedContent = null;
+        File outputFile = getStoreLocation();
+        if (outputFile != null && outputFile.exists())
+        {
+            outputFile.delete();
+        }
+    }

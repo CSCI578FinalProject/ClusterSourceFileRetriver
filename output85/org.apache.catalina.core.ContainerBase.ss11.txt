@@ -1,0 +1,70 @@
+2
+-----CSCI578-----
+
+
+    private void addChildInternal(Container child) {
+
+        if( log.isDebugEnabled() )
+            log.debug("Add child " + child + " " + this);
+        synchronized(children) {
+            if (children.get(child.getName()) != null)
+                throw new IllegalArgumentException("addChild:  Child name '" +
+                                                   child.getName() +
+                                                   "' is not unique");
+            child.setParent(this);  // May throw IAE
+            children.put(child.getName(), child);
+        }
+
+        // Start child
+        // Don't do this inside sync block - start can be a slow process and
+        // locking the children object can cause problems elsewhere
+        try {
+            if ((getState().isAvailable() ||
+                    LifecycleState.STARTING_PREP.equals(getState())) &&
+                    startChildren) {
+                child.start();
+            }
+        } catch (LifecycleException e) {
+            log.error("ContainerBase.addChild: start: ", e);
+            throw new IllegalStateException("ContainerBase.addChild: start: " + e);
+        } finally {
+            fireContainerEvent(ADD_CHILD_EVENT, child);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the parent Container to which this Container is being added as a
+     * child.  This Container may refuse to become attached to the specified
+     * Container by throwing an exception.
+     *
+     * @param container Container to which this Container is being added
+     *  as a child
+     *
+     * @exception IllegalArgumentException if this Container refuses to become
+     *  attached to the specified Container
+     */
+    public void setParent(Container container);
+
+
+
+    /**
+     * Add a new child Container to those associated with this Container,
+     * if supported.  Prior to adding this Container to the set of children,
+     * the child's <code>setParent()</code> method must be called, with this
+     * Container as an argument.  This method may thrown an
+     * <code>IllegalArgumentException</code> if this Container chooses not
+     * to be attached to the specified Container, in which case it is not added
+     *
+     * @param child New child Container to be added
+     *
+     * @exception IllegalArgumentException if this exception is thrown by
+     *  the <code>setParent()</code> method of the child Container
+     * @exception IllegalArgumentException if the new child does not have
+     *  a name unique from that of existing children of this Container
+     * @exception IllegalStateException if this Container does not support
+     *  child Containers
+     */
+    public void addChild(Container child);

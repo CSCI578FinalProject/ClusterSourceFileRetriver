@@ -1,0 +1,96 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Add a new Context to an existing Host.
+     *
+     * @param hostName Virtual host name this context belongs to
+     * @param host Host object
+     * @param path Context path
+     * @param version Context version
+     * @param context Context object
+     * @param welcomeResources Welcome files defined for this context
+     * @param resources Static resources of the context
+     * @param wrappers Information on wrapper mappings
+     */
+    public void addContextVersion(String hostName, Host host, String path,
+            String version, Context context, String[] welcomeResources,
+            WebResourceRoot resources, Collection<WrapperMappingInfo> wrappers) {
+
+        MappedHost mappedHost  = exactFind(hosts, hostName);
+        if (mappedHost == null) {
+            addHost(hostName, new String[0], host);
+            mappedHost = exactFind(hosts, hostName);
+            if (mappedHost == null) {
+                log.error("No host found: " + hostName);
+                return;
+            }
+        }
+        if (mappedHost.isAlias()) {
+            log.error("No host found: " + hostName);
+            return;
+        }
+        int slashCount = slashCount(path);
+        synchronized (mappedHost) {
+            ContextVersion newContextVersion = new ContextVersion(version,
+                    path, slashCount, context, resources, welcomeResources);
+            if (wrappers != null) {
+                addWrappers(newContextVersion, wrappers);
+            }
+
+            ContextList contextList = mappedHost.contextList;
+            MappedContext mappedContext = exactFind(contextList.contexts, path);
+            if (mappedContext == null) {
+                mappedContext = new MappedContext(path, newContextVersion);
+                ContextList newContextList = contextList.addContext(
+                        mappedContext, slashCount);
+                if (newContextList != null) {
+                    updateContextList(mappedHost, newContextList);
+                    contextObjectToContextVersionMap.put(context, newContextVersion);
+                }
+            } else {
+                ContextVersion[] contextVersions = mappedContext.versions;
+                ContextVersion[] newContextVersions = new ContextVersion[contextVersions.length + 1];
+                if (insertMap(contextVersions, newContextVersions,
+                        newContextVersion)) {
+                    mappedContext.versions = newContextVersions;
+                    contextObjectToContextVersionMap.put(context, newContextVersion);
+                } else {
+                    // Re-registration after Context.reload()
+                    // Replace ContextVersion with the new one
+                    int pos = find(contextVersions, version);
+                    if (pos >= 0 && contextVersions[pos].name.equals(version)) {
+                        contextVersions[pos] = newContextVersion;
+                        contextObjectToContextVersionMap.put(context, newContextVersion);
+                    }
+                }
+            }
+        }
+
+    }
+
+
+
+    /**
+     * Mark a context as being reloaded. Reversion of this state is performed
+     * by calling <code>addContextVersion(...)</code> when context starts up.
+     *
+     * @param ctxt      The actual context
+     * @param hostName  Virtual host name this context belongs to
+     * @param contextPath Context path
+     * @param version   Context version
+     */
+    public void pauseContextVersion(Context ctxt, String hostName,
+            String contextPath, String version) {
+
+        ContextVersion contextVersion = findContextVersion(hostName,
+                contextPath, version, true);
+        if (contextVersion == null || !ctxt.equals(contextVersion.object)) {
+            return;
+        }
+        contextVersion.markPaused();
+    }
+-----CSCI578-----

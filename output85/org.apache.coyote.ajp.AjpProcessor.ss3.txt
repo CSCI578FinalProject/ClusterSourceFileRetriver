@@ -1,0 +1,99 @@
+3
+-----CSCI578-----
+
+
+    public void getBodyBytes(MessageBytes mb) {
+        doGetBytes(mb, false);
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+    // Methods used by SocketInputBuffer
+    /**
+     * Read an AJP body message. Used to read both the 'special' packet in ajp13
+     * and to receive the data after we send a GET_BODY packet.
+     *
+     * @param block If there is no data available to read when this method is
+     *              called, should this call block until data becomes available?
+     *
+     * @return <code>true</code> if at least one body byte was read, otherwise
+     *         <code>false</code>
+     */
+    private boolean receive(boolean block) throws IOException {
+
+        bodyMessage.reset();
+
+        if (!readMessage(bodyMessage, block)) {
+            return false;
+        }
+
+        waitingForBodyMessage = false;
+
+        // No data received.
+        if (bodyMessage.getLen() == 0) {
+            // just the header
+            return false;
+        }
+        int blen = bodyMessage.peekInt();
+        if (blen == 0) {
+            return false;
+        }
+
+        bodyMessage.getBodyBytes(bodyBytes);
+        empty = false;
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get more request body data from the web server and store it in the
+     * internal buffer.
+     * @param block <code>true</code> if this is blocking IO
+     * @return <code>true</code> if there is more data,
+     *  <code>false</code> if not.
+     * @throws IOException An IO error occurred
+     */
+    protected boolean refillReadBuffer(boolean block) throws IOException {
+        // When using replay (e.g. after FORM auth) all the data to read has
+        // been buffered so there is no opportunity to refill the buffer.
+        if (replay) {
+            endOfStream = true; // we've read everything there is
+        }
+        if (endOfStream) {
+            return false;
+        }
+
+        if (first) {
+            first = false;
+            long contentLength = request.getContentLengthLong();
+            // - When content length > 0, AJP sends the first body message
+            //   automatically.
+            // - When content length == 0, AJP does not send a body message.
+            // - When content length is unknown, AJP does not send the first
+            //   body message automatically.
+            if (contentLength > 0) {
+                waitingForBodyMessage = true;
+            } else if (contentLength == 0) {
+                endOfStream = true;
+                return false;
+            }
+        }
+
+        // Request more data immediately
+        if (!waitingForBodyMessage) {
+            socketWrapper.write(true, getBodyMessageArray, 0, getBodyMessageArray.length);
+            socketWrapper.flush(true);
+            waitingForBodyMessage = true;
+        }
+
+        boolean moreData = receive(block);
+        if (!moreData && !waitingForBodyMessage) {
+            endOfStream = true;
+        }
+        return moreData;
+    }

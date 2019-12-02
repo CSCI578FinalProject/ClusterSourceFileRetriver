@@ -1,0 +1,25 @@
+2
+-----CSCI578-----
+
+
+
+    @Override
+    public void headersEnd(int streamId) throws ConnectionException {
+        setMaxProcessedStream(streamId);
+        Stream stream = getStream(streamId, connectionState.get().isNewStreamAllowed());
+        if (stream != null) {
+            // Process this stream on a container thread
+            StreamProcessor streamProcessor = new StreamProcessor(stream, adapter, socketWrapper);
+            streamProcessor.setSslSupport(sslSupport);
+            socketWrapper.getEndpoint().getExecutor().execute(streamProcessor);
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void setMaxProcessedStream(int streamId) {
+        if (maxProcessedStreamId < streamId) {
+            maxProcessedStreamId = streamId;
+        }
+    }

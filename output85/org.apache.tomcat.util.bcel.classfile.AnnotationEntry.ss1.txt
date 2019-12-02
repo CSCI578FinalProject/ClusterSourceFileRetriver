@@ -1,0 +1,53 @@
+9
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public static ElementValue readElementValue(DataInput input, ConstantPool cpool) throws IOException
+    {
+        byte type = input.readByte();
+        switch (type)
+        {
+            case PRIMITIVE_BYTE:
+            case PRIMITIVE_CHAR:
+            case PRIMITIVE_DOUBLE:
+            case PRIMITIVE_FLOAT:
+            case PRIMITIVE_INT:
+            case PRIMITIVE_LONG:
+            case PRIMITIVE_SHORT:
+            case PRIMITIVE_BOOLEAN:
+            case STRING:
+                return new SimpleElementValue(type, input.readUnsignedShort(), cpool);
+
+            case ENUM_CONSTANT:
+                input.readUnsignedShort();    // Unused type_index
+                return new EnumElementValue(ENUM_CONSTANT, input.readUnsignedShort(), cpool);
+
+            case CLASS:
+                return new ClassElementValue(CLASS, input.readUnsignedShort(), cpool);
+
+            case ANNOTATION:
+                // TODO isRuntimeVisible
+                return new AnnotationElementValue(ANNOTATION, new AnnotationEntry(input, cpool), cpool);
+
+            case ARRAY:
+                int numArrayVals = input.readUnsignedShort();
+                ElementValue[] evalues = new ElementValue[numArrayVals];
+                for (int j = 0; j < numArrayVals; j++)
+                {
+                    evalues[j] = ElementValue.readElementValue(input, cpool);
+                }
+                return new ArrayElementValue(ARRAY, evalues, cpool);
+
+            default:
+                throw new ClassFormatException(
+                        "Unexpected element value kind in annotation: " + type);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,758 @@
+27
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+    /**
+     * Map the specified URI.
+     * @throws IOException
+     */
+    private final void internalMap(CharChunk host, CharChunk uri,
+            String version, MappingData mappingData) throws IOException {
+
+        if (mappingData.host != null) {
+            // The legacy code (dating down at least to Tomcat 4.1) just
+            // skipped all mapping work in this case. That behaviour has a risk
+            // of returning an inconsistent result.
+            // I do not see a valid use case for it.
+            throw new AssertionError();
+        }
+
+        uri.setLimit(-1);
+
+        // Virtual host mapping
+        MappedHost[] hosts = this.hosts;
+        MappedHost mappedHost = exactFindIgnoreCase(hosts, host);
+        if (mappedHost == null) {
+            if (defaultHostName == null) {
+                return;
+            }
+            mappedHost = exactFind(hosts, defaultHostName);
+            if (mappedHost == null) {
+                return;
+            }
+        }
+        mappingData.host = mappedHost.object;
+
+        // Context mapping
+        ContextList contextList = mappedHost.contextList;
+        MappedContext[] contexts = contextList.contexts;
+        int pos = find(contexts, uri);
+        if (pos == -1) {
+            return;
+        }
+
+        int lastSlash = -1;
+        int uriEnd = uri.getEnd();
+        int length = -1;
+        boolean found = false;
+        MappedContext context = null;
+        while (pos >= 0) {
+            context = contexts[pos];
+            if (uri.startsWith(context.name)) {
+                length = context.name.length();
+                if (uri.getLength() == length) {
+                    found = true;
+                    break;
+                } else if (uri.startsWithIgnoreCase("/", length)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (lastSlash == -1) {
+                lastSlash = nthSlash(uri, contextList.nesting + 1);
+            } else {
+                lastSlash = lastSlash(uri);
+            }
+            uri.setEnd(lastSlash);
+            pos = find(contexts, uri);
+        }
+        uri.setEnd(uriEnd);
+
+        if (!found) {
+            if (contexts[0].name.equals("")) {
+                context = contexts[0];
+            } else {
+                context = null;
+            }
+        }
+        if (context == null) {
+            return;
+        }
+
+        mappingData.contextPath.setString(context.name);
+
+        ContextVersion contextVersion = null;
+        ContextVersion[] contextVersions = context.versions;
+        final int versionCount = contextVersions.length;
+        if (versionCount > 1) {
+            Context[] contextObjects = new Context[contextVersions.length];
+            for (int i = 0; i < contextObjects.length; i++) {
+                contextObjects[i] = contextVersions[i].object;
+            }
+            mappingData.contexts = contextObjects;
+            if (version != null) {
+                contextVersion = exactFind(contextVersions, version);
+            }
+        }
+        if (contextVersion == null) {
+            // Return the latest version
+            // The versions array is known to contain at least one element
+            contextVersion = contextVersions[versionCount - 1];
+        }
+        mappingData.context = contextVersion.object;
+        mappingData.contextSlashCount = contextVersion.slashCount;
+
+        // Wrapper mapping
+        if (!contextVersion.isPaused()) {
+            internalMapWrapper(contextVersion, uri, mappingData);
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Find the position of the nth slash, in the given char chunk.
+     */
+    private static final int nthSlash(CharChunk name, int n) {
+
+        char[] c = name.getBuffer();
+        int end = name.getEnd();
+        int start = name.getStart();
+        int pos = start;
+        int count = 0;
+
+        while (pos < end) {
+            if ((c[pos++] == '/') && ((++count) == n)) {
+                pos--;
+                break;
+            }
+        }
+
+        return (pos);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Wrapper mapping.
+     * @throws IOException if the buffers are too small to hold the results of
+     *                     the mapping.
+     */
+    private final void internalMapWrapper(ContextVersion contextVersion,
+                                          CharChunk path,
+                                          MappingData mappingData) throws IOException {
+
+        int pathOffset = path.getOffset();
+        int pathEnd = path.getEnd();
+        boolean noServletPath = false;
+
+        int length = contextVersion.path.length();
+        if (length == (pathEnd - pathOffset)) {
+            noServletPath = true;
+        }
+        int servletPath = pathOffset + length;
+        path.setOffset(servletPath);
+
+        // Rule 1 -- Exact Match
+        MappedWrapper[] exactWrappers = contextVersion.exactWrappers;
+        internalMapExactWrapper(exactWrappers, path, mappingData);
+
+        // Rule 2 -- Prefix Match
+        boolean checkJspWelcomeFiles = false;
+        MappedWrapper[] wildcardWrappers = contextVersion.wildcardWrappers;
+        if (mappingData.wrapper == null) {
+            internalMapWildcardWrapper(wildcardWrappers, contextVersion.nesting,
+                                       path, mappingData);
+            if (mappingData.wrapper != null && mappingData.jspWildCard) {
+                char[] buf = path.getBuffer();
+                if (buf[pathEnd - 1] == '/') {
+                    /*
+                     * Path ending in '/' was mapped to JSP servlet based on
+                     * wildcard match (e.g., as specified in url-pattern of a
+                     * jsp-property-group.
+                     * Force the context's welcome files, which are interpreted
+                     * as JSP files (since they match the url-pattern), to be
+                     * considered. See Bugzilla 27664.
+                     */
+                    mappingData.wrapper = null;
+                    checkJspWelcomeFiles = true;
+                } else {
+                    // See Bugzilla 27704
+                    mappingData.wrapperPath.setChars(buf, path.getStart(),
+                                                     path.getLength());
+                    mappingData.pathInfo.recycle();
+                }
+            }
+        }
+
+        if(mappingData.wrapper == null && noServletPath &&
+                mappingData.context.getMapperContextRootRedirectEnabled()) {
+            // The path is empty, redirect to "/"
+            path.append('/');
+            pathEnd = path.getEnd();
+            mappingData.redirectPath.setChars
+                (path.getBuffer(), pathOffset, pathEnd - pathOffset);
+            path.setEnd(pathEnd - 1);
+            return;
+        }
+
+        // Rule 3 -- Extension Match
+        MappedWrapper[] extensionWrappers = contextVersion.extensionWrappers;
+        if (mappingData.wrapper == null && !checkJspWelcomeFiles) {
+            internalMapExtensionWrapper(extensionWrappers, path, mappingData,
+                    true);
+        }
+
+        // Rule 4 -- Welcome resources processing for servlets
+        if (mappingData.wrapper == null) {
+            boolean checkWelcomeFiles = checkJspWelcomeFiles;
+            if (!checkWelcomeFiles) {
+                char[] buf = path.getBuffer();
+                checkWelcomeFiles = (buf[pathEnd - 1] == '/');
+            }
+            if (checkWelcomeFiles) {
+                for (int i = 0; (i < contextVersion.welcomeResources.length)
+                         && (mappingData.wrapper == null); i++) {
+                    path.setOffset(pathOffset);
+                    path.setEnd(pathEnd);
+                    path.append(contextVersion.welcomeResources[i], 0,
+                            contextVersion.welcomeResources[i].length());
+                    path.setOffset(servletPath);
+
+                    // Rule 4a -- Welcome resources processing for exact macth
+                    internalMapExactWrapper(exactWrappers, path, mappingData);
+
+                    // Rule 4b -- Welcome resources processing for prefix match
+                    if (mappingData.wrapper == null) {
+                        internalMapWildcardWrapper
+                            (wildcardWrappers, contextVersion.nesting,
+                             path, mappingData);
+                    }
+
+                    // Rule 4c -- Welcome resources processing
+                    //            for physical folder
+                    if (mappingData.wrapper == null
+                        && contextVersion.resources != null) {
+                        String pathStr = path.toString();
+                        WebResource file =
+                                contextVersion.resources.getResource(pathStr);
+                        if (file != null && file.isFile()) {
+                            internalMapExtensionWrapper(extensionWrappers, path,
+                                                        mappingData, true);
+                            if (mappingData.wrapper == null
+                                && contextVersion.defaultWrapper != null) {
+                                mappingData.wrapper =
+                                    contextVersion.defaultWrapper.object;
+                                mappingData.requestPath.setChars
+                                    (path.getBuffer(), path.getStart(),
+                                     path.getLength());
+                                mappingData.wrapperPath.setChars
+                                    (path.getBuffer(), path.getStart(),
+                                     path.getLength());
+                                mappingData.requestPath.setString(pathStr);
+                                mappingData.wrapperPath.setString(pathStr);
+                            }
+                        }
+                    }
+                }
+
+                path.setOffset(servletPath);
+                path.setEnd(pathEnd);
+            }
+
+        }
+
+        /* welcome file processing - take 2
+         * Now that we have looked for welcome files with a physical
+         * backing, now look for an extension mapping listed
+         * but may not have a physical backing to it. This is for
+         * the case of index.jsf, index.do, etc.
+         * A watered down version of rule 4
+         */
+        if (mappingData.wrapper == null) {
+            boolean checkWelcomeFiles = checkJspWelcomeFiles;
+            if (!checkWelcomeFiles) {
+                char[] buf = path.getBuffer();
+                checkWelcomeFiles = (buf[pathEnd - 1] == '/');
+            }
+            if (checkWelcomeFiles) {
+                for (int i = 0; (i < contextVersion.welcomeResources.length)
+                         && (mappingData.wrapper == null); i++) {
+                    path.setOffset(pathOffset);
+                    path.setEnd(pathEnd);
+                    path.append(contextVersion.welcomeResources[i], 0,
+                                contextVersion.welcomeResources[i].length());
+                    path.setOffset(servletPath);
+                    internalMapExtensionWrapper(extensionWrappers, path,
+                                                mappingData, false);
+                }
+
+                path.setOffset(servletPath);
+                path.setEnd(pathEnd);
+            }
+        }
+
+
+        // Rule 7 -- Default servlet
+        if (mappingData.wrapper == null && !checkJspWelcomeFiles) {
+            if (contextVersion.defaultWrapper != null) {
+                mappingData.wrapper = contextVersion.defaultWrapper.object;
+                mappingData.requestPath.setChars
+                    (path.getBuffer(), path.getStart(), path.getLength());
+                mappingData.wrapperPath.setChars
+                    (path.getBuffer(), path.getStart(), path.getLength());
+            }
+            // Redirection to a folder
+            char[] buf = path.getBuffer();
+            if (contextVersion.resources != null && buf[pathEnd -1 ] != '/') {
+                String pathStr = path.toString();
+                WebResource file;
+                // Handle context root
+                if (pathStr.length() == 0) {
+                    file = contextVersion.resources.getResource("/");
+                } else {
+                    file = contextVersion.resources.getResource(pathStr);
+                }
+                if (file != null && file.isDirectory() &&
+                        mappingData.context.getMapperDirectoryRedirectEnabled()) {
+                    // Note: this mutates the path: do not do any processing
+                    // after this (since we set the redirectPath, there
+                    // shouldn't be any)
+                    path.setOffset(pathOffset);
+                    path.append('/');
+                    mappingData.redirectPath.setChars
+                        (path.getBuffer(), path.getStart(), path.getLength());
+                } else {
+                    mappingData.requestPath.setString(pathStr);
+                    mappingData.wrapperPath.setString(pathStr);
+                }
+            }
+        }
+
+        path.setOffset(pathOffset);
+        path.setEnd(pathEnd);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Find the position of the last slash in the given char chunk.
+     */
+    private static final int lastSlash(CharChunk name) {
+
+        char[] c = name.getBuffer();
+        int end = name.getEnd();
+        int start = name.getStart();
+        int pos = end;
+
+        while (pos > start) {
+            if (c[--pos] == '/') {
+                break;
+            }
+        }
+
+        return (pos);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return <code>true</code> if the message bytes starts with the specified string.
+     * @param s The string
+     */
+    public boolean startsWith(String s) {
+        char[] c = buff;
+        int len = s.length();
+        if (c == null || len > end-start) {
+            return false;
+        }
+        int off = start;
+        for (int i = 0; i < len; i++) {
+            if (c[off++] != s.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Extension mappings.
+     *
+     * @param wrappers          Set of wrappers to check for matches
+     * @param path              Path to map
+     * @param mappingData       Mapping data for result
+     * @param resourceExpected  Is this mapping expecting to find a resource
+     */
+    private final void internalMapExtensionWrapper(MappedWrapper[] wrappers,
+            CharChunk path, MappingData mappingData, boolean resourceExpected) {
+        char[] buf = path.getBuffer();
+        int pathEnd = path.getEnd();
+        int servletPath = path.getOffset();
+        int slash = -1;
+        for (int i = pathEnd - 1; i >= servletPath; i--) {
+            if (buf[i] == '/') {
+                slash = i;
+                break;
+            }
+        }
+        if (slash >= 0) {
+            int period = -1;
+            for (int i = pathEnd - 1; i > slash; i--) {
+                if (buf[i] == '.') {
+                    period = i;
+                    break;
+                }
+            }
+            if (period >= 0) {
+                path.setOffset(period + 1);
+                path.setEnd(pathEnd);
+                MappedWrapper wrapper = exactFind(wrappers, path);
+                if (wrapper != null
+                        && (resourceExpected || !wrapper.resourceOnly)) {
+                    mappingData.wrapperPath.setChars(buf, servletPath, pathEnd
+                            - servletPath);
+                    mappingData.requestPath.setChars(buf, servletPath, pathEnd
+                            - servletPath);
+                    mappingData.wrapper = wrapper.object;
+                }
+                path.setOffset(servletPath);
+                path.setEnd(pathEnd);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Set the content to be a string
+     * @param s The string
+     */
+    public void setString( String s ) {
+        strValue=s;
+        hasHashCode=false;
+        hasLongValue=false;
+        if (s == null) {
+            hasStrValue=false;
+            type=T_NULL;
+        } else {
+            hasStrValue=true;
+            type=T_STR;
+        }
+    }
+-----CSCI578-----
+
+
+    public char[] getBuffer()
+    {
+        return buff;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the start offset of the chars.
+     * For output this is the end of the buffer.
+     */
+    public int getStart() {
+        return start;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the content to be a char[]
+     *
+     * @param c the chars
+     * @param off the start offset of the chars
+     * @param len the length of the chars
+     */
+    public void setChars( char[] c, int off, int len ) {
+        charC.setChars( c, off, len );
+        type=T_CHARS;
+        hasStrValue=false;
+        hasHashCode=false;
+        hasLongValue=false;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the length of the bytes.
+     */
+    public int getLength() {
+        return end-start;
+    }
+-----CSCI578-----
+
+
+
+    public int getEnd() {
+        return end;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Maximum amount of data in this buffer.
+     * If -1 or not set, the buffer will grow indefinitely.
+     * Can be smaller than the current buffer size ( which will not shrink ).
+     * When the limit is reached, the buffer will be flushed ( if out is set )
+     * or throw exception.
+     * @param limit The new limit
+     */
+    public void setLimit(int limit) {
+        this.limit=limit;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param off The offset
+     */
+    public void setOffset(int off) {
+        start=off;
+    }
+-----CSCI578-----
+
+
+    public void setEnd( int i ) {
+        end=i;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Find a map element given its name in a sorted array of map elements.
+     * This will return the index for the closest inferior or equal item in the
+     * given array.
+     * @see #exactFind(MapElement[], String)
+     */
+    private static final <T> int find(MapElement<T>[] map, String name) {
+
+        int a = 0;
+        int b = map.length - 1;
+
+        // Special cases: -1 and 0
+        if (b == -1) {
+            return -1;
+        }
+
+        if (name.compareTo(map[0].name) < 0) {
+            return -1;
+        }
+        if (b == 0) {
+            return 0;
+        }
+
+        int i = 0;
+        while (true) {
+            i = (b + a) / 2;
+            int result = name.compareTo(map[i].name);
+            if (result > 0) {
+                a = i;
+            } else if (result == 0) {
+                return i;
+            } else {
+                b = i;
+            }
+            if ((b - a) == 1) {
+                int result2 = name.compareTo(map[b].name);
+                if (result2 < 0) {
+                    return a;
+                } else {
+                    return b;
+                }
+            }
+        }
+
+    }
+
+
+
+    /**
+     * Find a map element given its name in a sorted array of map elements. This
+     * will return the element that you were searching for. Otherwise it will
+     * return <code>null</code>.
+     * @see #find(MapElement[], String)
+     */
+    private static final <T, E extends MapElement<T>> E exactFind(E[] map,
+            String name) {
+        int pos = find(map, name);
+        if (pos >= 0) {
+            E result = map[pos];
+            if (name.equals(result.name)) {
+                return result;
+            }
+        }
+        return null;
+    }
+
+
+    /**
+     * Find a map element given its name in a sorted array of map elements. This
+     * will return the element that you were searching for. Otherwise it will
+     * return <code>null</code>.
+     */
+    private static final <T, E extends MapElement<T>> E exactFind(E[] map,
+            CharChunk name) {
+        int pos = find(map, name);
+        if (pos >= 0) {
+            E result = map[pos];
+            if (name.equals(result.name)) {
+                return result;
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return <code>true</code> if the message bytes starts with the specified string.
+     * @param s The string
+     * @param pos The position at which the comparison will be made
+     */
+    public boolean startsWithIgnoreCase(String s, int pos) {
+        char[] c = buff;
+        int len = s.length();
+        if (c == null || len+pos > end-start) {
+            return false;
+        }
+        int off = start+pos;
+        for (int i = 0; i < len; i++) {
+            if (Ascii.toLower( c[off++] ) != Ascii.toLower( s.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+    public int getOffset() {
+        return start;
+    }
+-----CSCI578-----
+
+
+    // -------------------- equals --------------------
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof CharChunk) {
+            return equals((CharChunk) obj);
+        }
+        return false;
+    }
+
+
+    /**
+     * Compares the message bytes to the specified String object.
+     * @param s the String to compare
+     * @return <code>true</code> if the comparison succeeded, <code>false</code> otherwise
+     */
+    public boolean equals(String s) {
+        char[] c = buff;
+        int len = end-start;
+        if (c == null || len != s.length()) {
+            return false;
+        }
+        int off = start;
+        for (int i = 0; i < len; i++) {
+            if (c[off++] != s.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
+    public boolean equals(CharChunk cc) {
+        return equals( cc.getChars(), cc.getOffset(), cc.getLength());
+    }
+
+
+    public boolean equals(char b2[], int off2, int len2) {
+        char b1[]=buff;
+        if( b1==null && b2==null ) {
+            return true;
+        }
+
+        if (b1== null || b2==null || end-start != len2) {
+            return false;
+        }
+        int off1 = start;
+        int len=end-start;
+        while ( len-- > 0) {
+            if (b1[off1++] != b2[off2++]) {
+                return false;
+            }
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------- Chars Handling Methods
+
+
+    /**
+     * Since the converter will use append, it is possible to get chars to
+     * be removed from the buffer for "writing". Since the chars have already
+     * been read before, they are ignored. If a mark was set, then the
+     * mark is lost.
+     */
+    @Override
+    public void realWriteChars(char c[], int off, int len) throws IOException {
+        markPos = -1;
+        cb.setOffset(0);
+        cb.setEnd(0);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the path information for this Request.  This will normally be called
+     * when the associated Context is mapping the Request to a particular
+     * Wrapper.
+     *
+     * @param path The path information
+     */
+    public void setPathInfo(String path) {
+        mappingData.pathInfo.setString(path);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public CharSequence subSequence(int start, int end) {
+        try {
+            CharChunk result = (CharChunk) this.clone();
+            result.setOffset(this.start + start);
+            result.setEnd(this.start + end);
+            return result;
+        } catch (CloneNotSupportedException e) {
+            // Cannot happen
+            return null;
+        }
+    }

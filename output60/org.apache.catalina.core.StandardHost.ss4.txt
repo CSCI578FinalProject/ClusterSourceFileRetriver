@@ -1,0 +1,36 @@
+2
+-----CSCI578-----
+
+    
+    
+    /**
+     * Attempt to identify the contexts that have a class loader memory leak.
+     * This is usually triggered on context reload. Note: This method attempts
+     * to force a full garbage collection. This should be used with extreme
+     * caution on a production system.
+     */
+    public String[] findReloadedContextMemoryLeaks() {
+        
+        System.gc();
+        
+        List<String> result = new ArrayList<String>();
+        
+        for (Map.Entry<ClassLoader, String> entry :
+                childClassLoaders.entrySet()) {
+            ClassLoader cl = entry.getKey();
+            if (cl instanceof WebappClassLoader) {
+                if (!((WebappClassLoader) cl).isStarted()) {
+                    result.add(entry.getValue());
+                }
+            }
+        }
+        
+        return result.toArray(new String[result.size()]);
+    }
+-----CSCI578-----
+
+
+
+    public boolean isStarted() {
+        return started;
+    }

@@ -1,0 +1,51 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Return the document root for this Context.  This can be an absolute
+     * pathname, a relative pathname, or a URL.
+     */
+    public String getDocBase() {
+
+        return (this.docBase);
+
+    }
+-----CSCI578-----
+
+
+
+
+    /**
+     * Get base path.
+     */
+    protected String getBasePath() {
+        if (getDocBase() == null) {
+            return null;
+        }
+
+        String docBase = null;
+        Container container = this;
+        while (container != null) {
+            if (container instanceof Host)
+                break;
+            container = container.getParent();
+        }
+        File file = new File(getDocBase());
+        if (!file.isAbsolute()) {
+            if (container == null) {
+                docBase = (new File(engineBase(), getDocBase())).getPath();
+            } else {
+                // Use the "appBase" property of this container
+                String appBase = ((Host) container).getAppBase();
+                file = new File(appBase);
+                if (!file.isAbsolute())
+                    file = new File(engineBase(), appBase);
+                docBase = (new File(file, getDocBase())).getPath();
+            }
+        } else {
+            docBase = file.getPath();
+        }
+        return docBase;
+    }

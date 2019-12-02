@@ -1,0 +1,125 @@
+4
+-----CSCI578-----
+
+
+
+    @Override
+    public String generateHeader(javax.servlet.http.Cookie cookie) {
+
+        StringBuilder header = new StringBuilder();
+        // TODO: Name validation takes place in Cookie and cannot be configured
+        //       per Context. Moving it to here would allow per Context config
+        //       but delay validation until the header is generated. However,
+        //       the spec requires an IllegalArgumentException on Cookie
+        //       generation.
+        header.append(cookie.getName());
+        header.append('=');
+        String value = cookie.getValue();
+        if (value != null && value.length() > 0) {
+            validateCookieValue(value);
+            header.append(value);
+        }
+
+        // RFC 6265 prefers Max-Age to Expires so use Max-Age
+        int maxAge = cookie.getMaxAge();
+        if (maxAge > -1) {
+            // Negative Max-Age is equivalent to no Max-Age
+            header.append(";Max-Age=");
+            header.append(maxAge);
+        }
+
+        String domain = cookie.getDomain();
+        if (domain != null && domain.length() > 0) {
+            validateDomain(domain);
+            header.append(";domain=");
+            header.append(domain);
+        }
+
+        String path = cookie.getPath();
+        if (path != null && path.length() > 0) {
+            validatePath(path);
+            header.append(";path=");
+            header.append(path);
+        }
+
+        if (cookie.getSecure()) {
+            header.append(";Secure");
+        }
+
+        if (cookie.isHttpOnly()) {
+            header.append(";HttpOnly");
+        }
+
+        return header.toString();
+    }
+-----CSCI578-----
+
+
+
+    private void validateDomain(String domain) {
+        int i = 0;
+        int prev = -1;
+        int cur = -1;
+        char[] chars = domain.toCharArray();
+        while (i < chars.length) {
+            prev = cur;
+            cur = chars[i];
+            if (!domainValid.get(cur)) {
+                throw new IllegalArgumentException(sm.getString(
+                        "rfc6265CookieProcessor.invalidDomain", domain));
+            }
+            // labels must start with a letter or number
+            if ((prev == '.' || prev == -1) && (cur == '.' || cur == '-')) {
+                throw new IllegalArgumentException(sm.getString(
+                        "rfc6265CookieProcessor.invalidDomain", domain));
+            }
+            // labels must end with a letter or number
+            if (prev == '-' && cur == '.') {
+                throw new IllegalArgumentException(sm.getString(
+                        "rfc6265CookieProcessor.invalidDomain", domain));
+            }
+            i++;
+        }
+        // domain must end with a label
+        if (cur == '.' || cur == '-') {
+            throw new IllegalArgumentException(sm.getString(
+                    "rfc6265CookieProcessor.invalidDomain", domain));
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void validatePath(String path) {
+        char[] chars = path.toCharArray();
+
+        for (int i = 0; i < chars.length; i++) {
+            char ch = chars[i];
+            if (ch < 0x20 || ch > 0x7E || ch == ';') {
+                throw new IllegalArgumentException(sm.getString(
+                        "rfc6265CookieProcessor.invalidPath", path));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void validateCookieValue(String value) {
+        int start = 0;
+        int end = value.length();
+
+        if (end > 1 && value.charAt(0) == '"' && value.charAt(end - 1) == '"') {
+            start = 1;
+            end--;
+        }
+
+        char[] chars = value.toCharArray();
+        for (int i = start; i < end; i++) {
+            char c = chars[i];
+            if (c < 0x21 || c == 0x22 || c == 0x2c || c == 0x3b || c == 0x5c || c == 0x7f) {
+                throw new IllegalArgumentException(sm.getString(
+                        "rfc6265CookieProcessor.invalidCharInValue", Integer.toString(c)));
+            }
+        }
+    }

@@ -1,0 +1,149 @@
+9
+-----CSCI578-----
+
+
+
+    protected Class<?> loadClassMaybePrivileged(final String className,
+            final ClassLoader classLoader) throws ClassNotFoundException {
+        Class<?> clazz;
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                clazz = AccessController.doPrivileged(new PrivilegedExceptionAction<Class<?>>() {
+
+                    @Override
+                    public Class<?> run() throws Exception {
+                        return loadClass(className, classLoader);
+                    }
+                });
+            } catch (PrivilegedActionException e) {
+                Throwable t = e.getCause();
+                if (t instanceof ClassNotFoundException) {
+                    throw (ClassNotFoundException) t;
+                }
+                throw new RuntimeException(t);
+            }
+        } else {
+            clazz = loadClass(className, classLoader);
+        }
+        checkAccess(clazz);
+        return clazz;
+    }
+-----CSCI578-----
+
+
+    private void checkAccess(Class<?> clazz) {
+        if (privileged) {
+            return;
+        }
+        if (ContainerServlet.class.isAssignableFrom(clazz)) {
+            throw new SecurityException(sm.getString(
+                    "defaultInstanceManager.restrictedContainerServlet", clazz));
+        }
+        while (clazz != null) {
+            if (restrictedClasses.contains(clazz.getName())) {
+                throw new SecurityException(sm.getString(
+                        "defaultInstanceManager.restrictedClass", clazz));
+            }
+            clazz = clazz.getSuperclass();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected Class<?> loadClass(String className, ClassLoader classLoader)
+            throws ClassNotFoundException {
+        if (className.startsWith("org.apache.catalina")) {
+            return containerClassLoader.loadClass(className);
+        }
+        try {
+            Class<?> clazz = containerClassLoader.loadClass(className);
+            if (ContainerServlet.class.isAssignableFrom(clazz)) {
+                return clazz;
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+        }
+        return classLoader.loadClass(className);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private static Field getField(final Class<?> clazz,
+            final AnnotationCacheEntry entry) {
+        Field result = null;
+        if (Globals.IS_SECURITY_ENABLED) {
+            result = AccessController.doPrivileged(
+                    new PrivilegedAction<Field>() {
+                        @Override
+                        public Field run() {
+                            Field result = null;
+                            try {
+                                result = clazz.getDeclaredField(
+                                        entry.getAccessibleObjectName());
+                            } catch (NoSuchFieldException e) {
+                                // Should never happen. On that basis don't log
+                                // it.
+                            }
+                            return result;
+                        }
+            });
+        } else {
+            try {
+                result = clazz.getDeclaredField(
+                        entry.getAccessibleObjectName());
+            } catch (NoSuchFieldException e) {
+                // Should never happen. On that basis don't log it.
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Determines if a method is a valid lifecycle callback method.
+     *
+     * @param method
+     *            The method to test
+     *
+     * @return <code>true</code> if the method is a valid lifecycle callback
+     *         method, else <code>false</code>
+     */
+    public static boolean isValidLifecycleCallback(Method method) {
+        if (method.getParameterTypes().length != 0
+                || Modifier.isStatic(method.getModifiers())
+                || method.getExceptionTypes().length > 0
+                || !method.getReturnType().getName().equals("void")) {
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+    private static Method findLifecycleCallback(Method currentMethod,
+            String methodNameFromXml, Method method,
+            Class<? extends Annotation> annotation) {
+        Method result = currentMethod;
+        if (methodNameFromXml != null) {
+            if (method.getName().equals(methodNameFromXml)) {
+                if (!Introspection.isValidLifecycleCallback(method)) {
+                    throw new IllegalArgumentException(
+                            "Invalid " + annotation.getName() + " annotation");
+                }
+                result = method;
+            }
+        } else {
+            if (method.isAnnotationPresent(annotation)) {
+                if (currentMethod != null || !Introspection.isValidLifecycleCallback(method)) {
+                    throw new IllegalArgumentException(
+                            "Invalid " + annotation.getName() + " annotation");
+                }
+                result = method;
+            }
+        }
+        return result;
+    }

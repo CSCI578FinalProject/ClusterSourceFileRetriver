@@ -1,0 +1,71 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified header to the specified value.
+     *
+     * @param name Name of the header to set
+     * @param value Value to be set
+     */
+    public void setHeader(String name, String value) {
+
+        if (name == null || name.length() == 0 || value == null) {
+            return;
+        }
+
+        if (isCommitted())
+            return;
+
+        // Ignore any call from an included servlet
+        if (included)
+            return;
+
+        coyoteResponse.setHeader(name, value);
+
+    }
+-----CSCI578-----
+
+
+
+    public void setHeader(String name, String value) {
+        char cc=name.charAt(0);
+        if( cc=='C' || cc=='c' ) {
+            if( checkSpecialHeader(name, value) )
+            return;
+        }
+        headers.setValue(name).setString( value);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set internal fields for special header names.
+     * Called from set/addHeader.
+     * Return true if the header is special, no need to set the header.
+     */
+    private boolean checkSpecialHeader( String name, String value) {
+        // XXX Eliminate redundant fields !!!
+        // ( both header and in special fields )
+        if( name.equalsIgnoreCase( "Content-Type" ) ) {
+            setContentType( value );
+            return true;
+        }
+        if( name.equalsIgnoreCase( "Content-Length" ) ) {
+            try {
+                long cL=Long.parseLong( value );
+                setContentLength( cL );
+                return true;
+            } catch( NumberFormatException ex ) {
+                // Do nothing - the spec doesn't have any "throws"
+                // and the user might know what he's doing
+                return false;
+            }
+        }
+        if( name.equalsIgnoreCase( "Content-Language" ) ) {
+            // XXX XXX Need to construct Locale or something else
+        }
+        return false;
+    }

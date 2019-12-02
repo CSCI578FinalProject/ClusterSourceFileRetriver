@@ -1,0 +1,135 @@
+15
+-----CSCI578-----
+
+
+    public void setGlobalProcessor(RequestGroupInfo global) {
+        if( global != null) {
+            this.global=global;
+            global.addRequestProcessor( this );
+        } else {
+            if (this.global != null) {
+                this.global.removeRequestProcessor( this );
+                this.global = null;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public synchronized void addRequestProcessor( RequestInfo rp ) {
+        processors.add( rp );
+    }
+-----CSCI578-----
+
+
+    public synchronized void removeRequestProcessor( RequestInfo rp ) {
+        if( rp != null ) {
+            if( deadMaxTime < rp.getMaxTime() )
+                deadMaxTime = rp.getMaxTime();
+            deadProcessingTime += rp.getProcessingTime();
+            deadRequestCount += rp.getRequestCount();
+            deadErrorCount += rp.getErrorCount();
+            deadBytesReceived += rp.getBytesReceived();
+            deadBytesSent += rp.getBytesSent();
+
+            processors.remove( rp );
+        }
+    }
+-----CSCI578-----
+
+
+    public long getMaxTime() {
+        return maxTime;
+    }
+-----CSCI578-----
+
+
+    public long getProcessingTime() {
+        return processingTime;
+    }
+-----CSCI578-----
+
+
+    public int getRequestCount() {
+        return requestCount;
+    }
+-----CSCI578-----
+
+
+    public int getErrorCount() {
+        return errorCount;
+    }
+-----CSCI578-----
+
+
+    public long getBytesReceived() {
+        return bytesReceived;
+    }
+-----CSCI578-----
+
+
+    public long getBytesSent() {
+        return bytesSent;
+    }
+-----CSCI578-----
+
+
+    public synchronized long getMaxTime() {
+        long maxTime = deadMaxTime;
+        for (RequestInfo rp : processors) {
+            if (maxTime < rp.getMaxTime()) {
+                maxTime=rp.getMaxTime();
+            }
+        }
+        return maxTime;
+    }
+-----CSCI578-----
+
+
+    public synchronized long getProcessingTime() {
+        long time = deadProcessingTime;
+        for (RequestInfo rp : processors) {
+            time += rp.getProcessingTime();
+        }
+        return time;
+    }
+-----CSCI578-----
+
+
+    public synchronized int getRequestCount() {
+        int requestCount = deadRequestCount;
+        for (RequestInfo rp : processors) {
+            requestCount += rp.getRequestCount();
+        }
+        return requestCount;
+    }
+-----CSCI578-----
+
+
+    public synchronized int getErrorCount() {
+        int requestCount = deadErrorCount;
+        for (RequestInfo rp : processors) {
+            requestCount += rp.getErrorCount();
+        }
+        return requestCount;
+    }
+-----CSCI578-----
+
+
+    public synchronized long getBytesReceived() {
+        long bytes = deadBytesReceived;
+        for (RequestInfo rp : processors) {
+            bytes += rp.getBytesReceived();
+        }
+        return bytes;
+    }
+-----CSCI578-----
+
+
+    public synchronized long getBytesSent() {
+        long bytes=deadBytesSent;
+        for (RequestInfo rp : processors) {
+            bytes += rp.getBytesSent();
+        }
+        return bytes;
+    }

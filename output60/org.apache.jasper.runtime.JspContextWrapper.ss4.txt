@@ -1,0 +1,99 @@
+4
+-----CSCI578-----
+
+
+	public void setAttribute(String name, Object value) {
+
+		if (name == null) {
+			throw new NullPointerException(Localizer
+					.getMessage("jsp.error.attribute.null_name"));
+		}
+
+		if (value != null) {
+			pageAttributes.put(name, value);
+		} else {
+			removeAttribute(name, PAGE_SCOPE);
+		}
+	}
+
+
+	public void setAttribute(String name, Object value, int scope) {
+
+		if (name == null) {
+			throw new NullPointerException(Localizer
+					.getMessage("jsp.error.attribute.null_name"));
+		}
+
+		if (scope == PAGE_SCOPE) {
+			if (value != null) {
+				pageAttributes.put(name, value);
+			} else {
+				removeAttribute(name, PAGE_SCOPE);
+			}
+		} else {
+			invokingJspCtxt.setAttribute(name, value, scope);
+		}
+	}
+-----CSCI578-----
+
+
+	public void removeAttribute(String name) {
+
+		if (name == null) {
+			throw new NullPointerException(Localizer
+					.getMessage("jsp.error.attribute.null_name"));
+		}
+
+		pageAttributes.remove(name);
+		invokingJspCtxt.removeAttribute(name, REQUEST_SCOPE);
+		if (getSession() != null) {
+			invokingJspCtxt.removeAttribute(name, SESSION_SCOPE);
+		}
+		invokingJspCtxt.removeAttribute(name, APPLICATION_SCOPE);
+	}
+
+
+	public void removeAttribute(String name, int scope) {
+
+		if (name == null) {
+			throw new NullPointerException(Localizer
+					.getMessage("jsp.error.attribute.null_name"));
+		}
+
+		if (scope == PAGE_SCOPE) {
+			pageAttributes.remove(name);
+		} else {
+			invokingJspCtxt.removeAttribute(name, scope);
+		}
+	}
+-----CSCI578-----
+
+
+	public HttpSession getSession() {
+		return invokingJspCtxt.getSession();
+	}
+-----CSCI578-----
+
+
+	public Object findAttribute(String name) {
+
+		if (name == null) {
+			throw new NullPointerException(Localizer
+					.getMessage("jsp.error.attribute.null_name"));
+		}
+
+		Object o = pageAttributes.get(name);
+		if (o == null) {
+			o = invokingJspCtxt.getAttribute(name, REQUEST_SCOPE);
+			if (o == null) {
+				if (getSession() != null) {
+					o = invokingJspCtxt.getAttribute(name, SESSION_SCOPE);
+				}
+				if (o == null) {
+					o = invokingJspCtxt.getAttribute(name, APPLICATION_SCOPE);
+				}
+			}
+		}
+
+		return o;
+	}

@@ -1,0 +1,54 @@
+1
+-----CSCI578-----
+) // JASPIC API uses raw types
+    @Override
+    public ServerAuthContext getAuthContext(String authContextID, Subject serviceSubject,
+            Map properties) throws AuthException {
+        ServerAuthContext serverAuthContext = this.serverAuthContext;
+        if (serverAuthContext == null) {
+            synchronized (this) {
+                if (this.serverAuthContext == null) {
+                    Map<String,String> mergedProperties = new HashMap<>();
+                    if (this.properties != null) {
+                        mergedProperties.putAll(this.properties);
+                    }
+                    if (properties == null) {
+                        throw new AuthException(sm.getString("simpleServerAuthConfig.noModules"));
+                    } else {
+                        mergedProperties.putAll(properties);
+                    }
+
+                    List<ServerAuthModule> modules = new ArrayList<>();
+                    int moduleIndex = 1;
+                    String key = SERVER_AUTH_MODULE_KEY_PREFIX + moduleIndex;
+                    String moduleClassName = (String) properties.get(key);
+                    while (moduleClassName != null) {
+                        try {
+                            Class<?> clazz = Class.forName(moduleClassName);
+                            ServerAuthModule module = (ServerAuthModule) clazz.newInstance();
+                            module.initialize(null, null, handler, mergedProperties);
+                            modules.add(module);
+                        } catch (ClassNotFoundException | InstantiationException | IllegalAccessException e) {
+                            AuthException ae = new AuthException();
+                            ae.initCause(e);
+                            throw ae;
+                        }
+
+                        // Look for the next module
+                        moduleIndex++;
+                        key = SERVER_AUTH_MODULE_KEY_PREFIX + moduleIndex;
+                        moduleClassName = (String) properties.get(key);
+                    }
+
+                    if (modules.size() == 0) {
+                        throw new AuthException(sm.getString("simpleServerAuthConfig.noModules"));
+                    }
+
+                    this.serverAuthContext = createServerAuthContext(modules);
+                }
+                serverAuthContext = this.serverAuthContext;
+            }
+        }
+
+        return serverAuthContext;
+    }

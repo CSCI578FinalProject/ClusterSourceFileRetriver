@@ -1,0 +1,42 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+    // __end convertMethod
+
+    // __begin introspectMethod
+    public static void introspect(Object bean, ServletRequest request)
+                                  throws JasperException
+    {
+        Enumeration<String> e = request.getParameterNames();
+        while ( e.hasMoreElements() ) {
+            String name  = e.nextElement();
+            String value = request.getParameter(name);
+            introspecthelper(bean, name, value, request, name, true);
+        }
+    }
+-----CSCI578-----
+
+    // __end introspectMethod
+
+    // __begin introspecthelperMethod
+    public static void introspecthelper(Object bean, String prop,
+                                        String value, ServletRequest request,
+                                        String param, boolean ignoreMethodNF)
+                                        throws JasperException
+    {
+        if( Constants.IS_SECURITY_ENABLED ) {
+            try {
+                PrivilegedIntrospectHelper dp =
+                    new PrivilegedIntrospectHelper(
+                        bean,prop,value,request,param,ignoreMethodNF);
+                AccessController.doPrivileged(dp);
+            } catch( PrivilegedActionException pe) {
+                Exception e = pe.getException();
+                throw (JasperException)e;
+            }
+        } else {
+            internalIntrospecthelper(
+                bean,prop,value,request,param,ignoreMethodNF);
+        }
+    }

@@ -1,0 +1,46 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Starts the channel.
+     * @param svc int - what service to start
+     * @throws ChannelException Start error
+     * @see org.apache.catalina.tribes.Channel#start(int)
+     */
+    @Override
+    public synchronized void start(int svc) throws ChannelException {
+        setupDefaultStack();
+        if (optionCheck) checkOptionFlags();
+        super.start(svc);
+        if ( hbthread == null && heartbeat ) {
+            hbthread = new HeartbeatThread(this,heartbeatSleeptime);
+            hbthread.start();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Sets up the default implementation interceptor stack
+     * if no interceptors have been added
+     * @throws ChannelException Cluster error
+     */
+    protected synchronized void setupDefaultStack() throws ChannelException {
+        if (getFirstInterceptor() != null &&
+                ((getFirstInterceptor().getNext() instanceof ChannelCoordinator))) {
+            addInterceptor(new MessageDispatchInterceptor());
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the first interceptor of the stack. Useful for traversal.
+     * @return ChannelInterceptor
+     */
+    public ChannelInterceptor getFirstInterceptor() {
+        if (interceptors != null) return interceptors;
+        else return coordinator;
+    }

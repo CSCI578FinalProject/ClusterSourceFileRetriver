@@ -1,0 +1,45 @@
+4
+-----CSCI578-----
+
+
+    private URL getWebappConfigFileFromJar(File docBase, String contextName) {
+        URL result = null;
+        try (JarFile jar = new JarFile(docBase)) {
+            JarEntry entry = jar.getJarEntry(Constants.ApplicationContextXml);
+            if (entry != null) {
+                result = UriUtil.buildJarUrl(docBase, Constants.ApplicationContextXml);
+            }
+        } catch (IOException e) {
+            Logger.getLogger(getLoggerName(getHost(), contextName)).log(Level.WARNING,
+                    "Unable to determine web application context.xml " + docBase, e);
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    protected URL getWebappConfigFile(String path, String contextName) {
+        File docBase = new File(path);
+        if (docBase.isDirectory()) {
+            return getWebappConfigFileFromDirectory(docBase, contextName);
+        } else {
+            return getWebappConfigFileFromJar(docBase, contextName);
+        }
+    }
+-----CSCI578-----
+
+
+    private URL getWebappConfigFileFromDirectory(File docBase, String contextName) {
+        URL result = null;
+        File webAppContextXml = new File(docBase, Constants.ApplicationContextXml);
+        if (webAppContextXml.exists()) {
+            try {
+                result = webAppContextXml.toURI().toURL();
+            } catch (MalformedURLException e) {
+                Logger.getLogger(getLoggerName(getHost(), contextName)).log(Level.WARNING,
+                        "Unable to determine web application context.xml " + docBase, e);
+            }
+        }
+        return result;
+    }
+-----CSCI578-----

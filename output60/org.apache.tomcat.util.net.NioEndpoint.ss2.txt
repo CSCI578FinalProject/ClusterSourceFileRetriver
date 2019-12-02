@@ -1,0 +1,48 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+    /**
+     * Process given socket.
+     */
+    protected boolean processSocket(NioChannel socket) {
+        return processSocket(socket,null);
+    }
+
+
+
+    /**
+     * Process given socket for an event.
+     */
+    protected boolean processSocket(NioChannel socket, SocketStatus status) {
+        return processSocket(socket,status,true);
+    }
+
+
+    protected boolean processSocket(NioChannel socket, SocketStatus status, boolean dispatch) {
+        try {
+            KeyAttachment attachment = (KeyAttachment)socket.getAttachment(false);
+            if (attachment == null) {
+                return false;
+            }
+            attachment.setCometNotify(false); //will get reset upon next reg
+            if (executor == null) {
+                getWorkerThread().assign(socket, status);
+            } else {
+                SocketProcessor sc = processorCache.poll();
+                if ( sc == null ) sc = new SocketProcessor(socket,status);
+                else sc.reset(socket,status);
+                if ( dispatch ) executor.execute(sc);
+                else sc.run();
+            }
+        } catch (Throwable t) {
+            // This means we got an OOM or similar creating a thread, or that
+            // the pool and its queue are full
+            log.error(sm.getString("endpoint.process.fail"), t);
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,81 @@
+13
+
+    public static Class forName(String name) throws ClassNotFoundException {
+        if (null == name || "".equals(name)) {
+            return null;
+        }
+        Class c = forNamePrimitive(name);
+        if (c == null) {
+            if (name.endsWith("[]")) {
+                String nc = name.substring(0, name.length() - 2);
+                c = Class.forName(nc, true, Thread.currentThread().getContextClassLoader());
+                c = Array.newInstance(c, 0).getClass();
+            } else {
+                c = Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+            }
+        }
+        return c;
+    }
+
+    protected static Class forNamePrimitive(String name) {
+        if (name.length() <= 8) {
+            int p = Arrays.binarySearch(PRIMITIVE_NAMES, name);
+            if (p >= 0) {
+                return PRIMITIVES[p];
+            }
+        }
+        return null;
+    }
+
+    protected static Class forNamePrimitive(String name) {
+        if (name.length() <= 8) {
+            int p = Arrays.binarySearch(PRIMITIVE_NAMES, name);
+            if (p >= 0) {
+                return PRIMITIVES[p];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Converts an array of Class names to Class types
+     */
+    public static Class[] toTypeArray(String[] s) throws ClassNotFoundException {
+        if (s == null)
+            return null;
+        Class[] c = new Class[s.length];
+        for (int i = 0; i < s.length; i++) {
+            c[i] = forName(s[i]);
+        }
+        return c;
+    }
+
+    public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+        this.expr = in.readUTF();
+        String type = in.readUTF();
+        if (!"".equals(type)) {
+            this.expectedType = ReflectionUtil.forName(type);
+        }
+        this.paramTypes = ReflectionUtil.toTypeArray(((String[]) in
+                .readObject()));
+    }
+
+    /**
+     * Converts an array of Class types to Class names
+     */
+    public static String[] toTypeNameArray(Class[] c) {
+        if (c == null)
+            return null;
+        String[] s = new String[c.length];
+        for (int i = 0; i < c.length; i++) {
+            s[i] = c[i].getName();
+        }
+        return s;
+    }
+
+    public void writeExternal(ObjectOutput out) throws IOException {
+        out.writeUTF(this.expr);
+        out.writeUTF((this.expectedType != null) ? this.expectedType.getName()
+                : "");
+        out.writeObject(ReflectionUtil.toTypeNameArray(this.paramTypes));
+    }

@@ -1,0 +1,28 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Open the specified database connection.
+     *
+     * @return Connection to the database
+     */
+    protected Connection open() {
+
+        try {
+            Context context = null;
+            if (localDataSource) {
+                context = ContextBindings.getClassLoader();
+                context = (Context) context.lookup("comp/env");
+            } else {
+                context = getServer().getGlobalNamingContext();
+            }
+            DataSource dataSource = (DataSource)context.lookup(dataSourceName);
+        return dataSource.getConnection();
+        } catch (Exception e) {
+            // Log the problem for posterity
+            containerLog.error(sm.getString("dataSourceRealm.exception"), e);
+        }
+        return null;
+    }

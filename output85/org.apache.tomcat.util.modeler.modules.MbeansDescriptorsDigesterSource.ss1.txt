@@ -1,0 +1,247 @@
+16
+-----CSCI578-----
+
+
+    @Override
+    public List<ObjectName> loadDescriptors( Registry registry, String type,
+            Object source) throws Exception {
+        setRegistry(registry);
+        setSource(source);
+        execute();
+        return mbeans;
+    }
+-----CSCI578-----
+
+
+    public void execute() throws Exception {
+        if (registry == null) {
+            registry = Registry.getRegistry(null, null);
+        }
+
+        InputStream stream = (InputStream) source;
+
+        ArrayList<ManagedBean> loadedMbeans = new ArrayList<>();
+        synchronized(dLock) {
+            if (digester == null) {
+                digester = createDigester();
+            }
+
+            // Process the input file to configure our registry
+            try {
+                // Push our registry object onto the stack
+                digester.push(loadedMbeans);
+                digester.parse(stream);
+            } catch (Exception e) {
+                log.error("Error digesting Registry data", e);
+                throw e;
+            } finally {
+                digester.reset();
+            }
+
+        }
+        Iterator<ManagedBean> iter = loadedMbeans.iterator();
+        while (iter.hasNext()) {
+            registry.addManagedBean(iter.next());
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setRegistry(Registry reg) {
+        this.registry=reg;
+    }
+-----CSCI578-----
+
+
+
+    public void setSource( Object source ) {
+        this.source=source;
+    }
+-----CSCI578-----
+
+
+    private static Digester createDigester() {
+
+        Digester digester = new Digester();
+        digester.setNamespaceAware(false);
+        digester.setValidating(false);
+        URL url = Registry.getRegistry(null, null).getClass().getResource
+            ("/org/apache/tomcat/util/modeler/mbeans-descriptors.dtd");
+        digester.register
+            ("-//Apache Software Foundation//DTD Model MBeans Configuration File",
+                url.toString());
+
+        // Configure the parsing rules
+        digester.addObjectCreate
+            ("mbeans-descriptors/mbean",
+            "org.apache.tomcat.util.modeler.ManagedBean");
+        digester.addSetProperties
+            ("mbeans-descriptors/mbean");
+        digester.addSetNext
+            ("mbeans-descriptors/mbean",
+                "add",
+            "java.lang.Object");
+
+        digester.addObjectCreate
+            ("mbeans-descriptors/mbean/attribute",
+            "org.apache.tomcat.util.modeler.AttributeInfo");
+        digester.addSetProperties
+            ("mbeans-descriptors/mbean/attribute");
+        digester.addSetNext
+            ("mbeans-descriptors/mbean/attribute",
+                "addAttribute",
+            "org.apache.tomcat.util.modeler.AttributeInfo");
+
+        digester.addObjectCreate
+            ("mbeans-descriptors/mbean/notification",
+            "org.apache.tomcat.util.modeler.NotificationInfo");
+        digester.addSetProperties
+            ("mbeans-descriptors/mbean/notification");
+        digester.addSetNext
+            ("mbeans-descriptors/mbean/notification",
+                "addNotification",
+            "org.apache.tomcat.util.modeler.NotificationInfo");
+
+        digester.addObjectCreate
+            ("mbeans-descriptors/mbean/notification/descriptor/field",
+            "org.apache.tomcat.util.modeler.FieldInfo");
+        digester.addSetProperties
+            ("mbeans-descriptors/mbean/notification/descriptor/field");
+        digester.addSetNext
+            ("mbeans-descriptors/mbean/notification/descriptor/field",
+                "addField",
+            "org.apache.tomcat.util.modeler.FieldInfo");
+
+        digester.addCallMethod
+            ("mbeans-descriptors/mbean/notification/notification-type",
+                "addNotifType", 0);
+
+        digester.addObjectCreate
+            ("mbeans-descriptors/mbean/operation",
+            "org.apache.tomcat.util.modeler.OperationInfo");
+        digester.addSetProperties
+            ("mbeans-descriptors/mbean/operation");
+        digester.addSetNext
+            ("mbeans-descriptors/mbean/operation",
+                "addOperation",
+            "org.apache.tomcat.util.modeler.OperationInfo");
+
+        digester.addObjectCreate
+            ("mbeans-descriptors/mbean/operation/descriptor/field",
+            "org.apache.tomcat.util.modeler.FieldInfo");
+        digester.addSetProperties
+            ("mbeans-descriptors/mbean/operation/descriptor/field");
+        digester.addSetNext
+            ("mbeans-descriptors/mbean/operation/descriptor/field",
+                "addField",
+            "org.apache.tomcat.util.modeler.FieldInfo");
+
+        digester.addObjectCreate
+            ("mbeans-descriptors/mbean/operation/parameter",
+            "org.apache.tomcat.util.modeler.ParameterInfo");
+        digester.addSetProperties
+            ("mbeans-descriptors/mbean/operation/parameter");
+        digester.addSetNext
+            ("mbeans-descriptors/mbean/operation/parameter",
+                "addParameter",
+            "org.apache.tomcat.util.modeler.ParameterInfo");
+
+        return digester;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a "set next" rule for the specified parameters.
+     *
+     * @param pattern Element matching pattern
+     * @param methodName Method name to call on the parent element
+     * @param paramType Java class name of the expected parameter type
+     *  (if you wish to use a primitive type, specify the corresponding
+     *  Java wrapper class instead, such as <code>java.lang.Boolean</code>
+     *  for a <code>boolean</code> parameter)
+     * @see SetNextRule
+     */
+    public void addSetNext(String pattern, String methodName,
+                           String paramType) {
+
+        addRule(pattern,
+                new SetNextRule(methodName, paramType));
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the validating parser flag.  This must be called before
+     * <code>parse()</code> is called the first time.
+     *
+     * @param validating The new validating parser flag.
+     */
+    public void setValidating(boolean validating) {
+
+        this.validating = validating;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the "namespace aware" flag for parsers we create.
+     *
+     * @param namespaceAware The new "namespace aware" flag
+     */
+    public void setNamespaceAware(boolean namespaceAware) {
+
+        this.namespaceAware = namespaceAware;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Push a new object onto the top of the object stack.
+     *
+     * @param object The new object
+     */
+    public void push(Object object) {
+
+        if (stack.size() == 0) {
+            root = object;
+        }
+        stack.push(object);
+
+    }
+-----CSCI578-----
+
+
+
+    public void reset() {
+        root = null;
+        setErrorHandler(null);
+        clear();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the error handler for this Digester.
+     *
+     * @param errorHandler The new error handler
+     */
+    public void setErrorHandler(ErrorHandler errorHandler) {
+
+        this.errorHandler = errorHandler;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

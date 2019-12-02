@@ -1,0 +1,738 @@
+30
+-----CSCI578-----
+
+
+    /**
+     * Set the authenticated Principal that is associated with this Session.
+     * This provides an <code>Authenticator</code> with a means to cache a
+     * previously authenticated Principal, and avoid potentially expensive
+     * <code>Realm.authenticate()</code> calls on every request.
+     *
+     * @param principal
+     *            The new Principal, or <code>null</code> if none
+     */
+    @Override
+    public void setPrincipal(Principal principal) {
+        setPrincipal(principal, true);
+    }
+
+
+    public void setPrincipal(Principal principal, boolean addDeltaRequest) {
+        lock();
+        try {
+            super.setPrincipal(principal);
+            if (addDeltaRequest && (deltaRequest != null))
+                deltaRequest.setPrincipal(principal);
+        } finally {
+            unlock();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected void addAction(int type,
+                             int action,
+                             String name,
+                             Object value) {
+        AttributeInfo info = null;
+        if ( this.actionPool.size() > 0 ) {
+            try {
+                info = actionPool.removeFirst();
+            }catch ( Exception x ) {
+                log.error(sm.getString("deltaRequest.removeUnable"),x);
+                info = new AttributeInfo(type, action, name, value);
+            }
+            info.init(type,action,name,value);
+        } else {
+            info = new AttributeInfo(type, action, name, value);
+        }
+        //if we have already done something to this attribute, make sure
+        //we don't send multiple actions across the wire
+        if ( !recordAllActions) {
+            try {
+                actions.remove(info);
+            } catch (java.util.NoSuchElementException x) {
+                //do nothing, we wanted to remove it anyway
+            }
+        }
+        //add the action
+        actions.addLast(info);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the authenticated Principal that is associated with this Session.
+     * This provides an <code>Authenticator</code> with a means to cache a
+     * previously authenticated Principal, and avoid potentially expensive
+     * <code>Realm.authenticate()</code> calls on every request.
+     *
+     * @param principal The new Principal, or <code>null</code> if none
+     */
+    @Override
+    public void setPrincipal(Principal principal) {
+
+        Principal oldPrincipal = this.principal;
+        this.principal = principal;
+        support.firePropertyChange("principal", oldPrincipal, this.principal);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a session event listener to this component.
+     */
+    @Override
+    public void addSessionListener(SessionListener listener) {
+
+        listeners.add(listener);
+
+    }
+-----CSCI578-----
+
+
+    public void addSessionListener(SessionListener listener) {
+        addAction(TYPE_LISTENER, ACTION_SET, NAME_LISTENER ,listener);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void addSessionListener(SessionListener listener) {
+        addSessionListener(listener, true);
+    }
+
+
+    public void addSessionListener(SessionListener listener, boolean addDeltaRequest) {
+        lock();
+        try {
+            super.addSessionListener(listener);
+            if (addDeltaRequest && deltaRequest != null && listener instanceof ReplicatedSessionListener) {
+                deltaRequest.addSessionListener(listener);
+            }
+        } finally {
+            unlock();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Bind an object to this session, using the specified name. If an object of
+     * the same name is already bound to this session, the object is replaced.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueBound()</code> on the object.
+     *
+     * @param name
+     *            Name to which the object is bound, cannot be null
+     * @param value
+     *            Object to be bound, cannot be null
+     *
+     * @exception IllegalArgumentException
+     *                if an attempt is made to add a non-serializable object in
+     *                an environment marked distributable.
+     * @exception IllegalStateException
+     *                if this method is called on an invalidated session
+     */
+    @Override
+    public void setAttribute(String name, Object value) {
+        setAttribute(name, value, true, true);
+    }
+
+
+    public void setAttribute(String name, Object value, boolean notify,boolean addDeltaRequest) {
+
+        // Name cannot be null
+        if (name == null) throw new IllegalArgumentException(sm.getString("standardSession.setAttribute.namenull"));
+
+        // Null value is the same as removeAttribute()
+        if (value == null) {
+            removeAttribute(name);
+            return;
+        }
+
+        lock();
+        try {
+            super.setAttribute(name,value, notify);
+            if (addDeltaRequest && deltaRequest != null && !exclude(name, value)) {
+                deltaRequest.setAttribute(name, value);
+            }
+        } finally {
+            unlock();
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void setAttribute(String name, Object value) {
+        int action = (value==null)?ACTION_REMOVE:ACTION_SET;
+        addAction(TYPE_ATTRIBUTE,action,name,value);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Bind an object to this session, using the specified name.  If an object
+     * of the same name is already bound to this session, the object is
+     * replaced.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueBound()</code> on the object.
+     *
+     * @param name Name to which the object is bound, cannot be null
+     * @param value Object to be bound, cannot be null
+     *
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     *
+     * @deprecated As of Version 2.2, this method is replaced by
+     *  <code>setAttribute()</code>
+     */
+    @Override
+    @Deprecated
+    public void putValue(String name, Object value) {
+
+        setAttribute(name, value);
+
+    }
+
+
+
+    /**
+     * Bind an object to this session, using the specified name.  If an object
+     * of the same name is already bound to this session, the object is
+     * replaced.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueBound()</code> on the object.
+     *
+     * @param name Name to which the object is bound, cannot be null
+     * @param value Object to be bound, cannot be null
+     *
+     * @exception IllegalArgumentException if an attempt is made to add a
+     *  non-serializable object in an environment marked distributable.
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     */
+    @Override
+    public void setAttribute(String name, Object value) {
+        setAttribute(name,value,true);
+    }
+
+    /**
+     * Bind an object to this session, using the specified name.  If an object
+     * of the same name is already bound to this session, the object is
+     * replaced.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueBound()</code> on the object.
+     *
+     * @param name Name to which the object is bound, cannot be null
+     * @param value Object to be bound, cannot be null
+     * @param notify whether to notify session listeners
+     * @exception IllegalArgumentException if an attempt is made to add a
+     *  non-serializable object in an environment marked distributable.
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     */
+
+    public void setAttribute(String name, Object value, boolean notify) {
+
+        // Name cannot be null
+        if (name == null)
+            throw new IllegalArgumentException
+                (sm.getString("standardSession.setAttribute.namenull"));
+
+        // Null value is the same as removeAttribute()
+        if (value == null) {
+            removeAttribute(name);
+            return;
+        }
+
+        // Validate our current state
+        if (!isValidInternal()) {
+            throw new IllegalStateException(sm.getString(
+                    "standardSession.setAttribute.ise", getIdInternal()));
+        }
+        if ((manager != null) && manager.getContext().getDistributable() &&
+                !isAttributeDistributable(name, value) && !exclude(name, value)) {
+            throw new IllegalArgumentException(sm.getString(
+                    "standardSession.setAttribute.iae", name));
+        }
+        // Construct an event with the new value
+        HttpSessionBindingEvent event = null;
+
+        // Call the valueBound() method if necessary
+        if (notify && value instanceof HttpSessionBindingListener) {
+            // Don't call any notification if replacing with the same value
+            Object oldValue = attributes.get(name);
+            if (value != oldValue) {
+                event = new HttpSessionBindingEvent(getSession(), name, value);
+                try {
+                    ((HttpSessionBindingListener) value).valueBound(event);
+                } catch (Throwable t){
+                    manager.getContext().getLogger().error
+                    (sm.getString("standardSession.bindingEvent"), t);
+                }
+            }
+        }
+
+        // Replace or add this attribute
+        Object unbound = attributes.put(name, value);
+
+        // Call the valueUnbound() method if necessary
+        if (notify && (unbound != null) && (unbound != value) &&
+            (unbound instanceof HttpSessionBindingListener)) {
+            try {
+                ((HttpSessionBindingListener) unbound).valueUnbound
+                    (new HttpSessionBindingEvent(getSession(), name));
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                manager.getContext().getLogger().error
+                    (sm.getString("standardSession.bindingEvent"), t);
+            }
+        }
+
+        if ( !notify ) return;
+
+        // Notify interested application event listeners
+        Context context = manager.getContext();
+        Object listeners[] = context.getApplicationEventListeners();
+        if (listeners == null)
+            return;
+        for (int i = 0; i < listeners.length; i++) {
+            if (!(listeners[i] instanceof HttpSessionAttributeListener))
+                continue;
+            HttpSessionAttributeListener listener =
+                (HttpSessionAttributeListener) listeners[i];
+            try {
+                if (unbound != null) {
+                    context.fireContainerEvent("beforeSessionAttributeReplaced",
+                            listener);
+                    if (event == null) {
+                        event = new HttpSessionBindingEvent
+                            (getSession(), name, unbound);
+                    }
+                    listener.attributeReplaced(event);
+                    context.fireContainerEvent("afterSessionAttributeReplaced",
+                            listener);
+                } else {
+                    context.fireContainerEvent("beforeSessionAttributeAdded",
+                            listener);
+                    if (event == null) {
+                        event = new HttpSessionBindingEvent
+                            (getSession(), name, value);
+                    }
+                    listener.attributeAdded(event);
+                    context.fireContainerEvent("afterSessionAttributeAdded",
+                            listener);
+                }
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                try {
+                    if (unbound != null) {
+                        context.fireContainerEvent(
+                                "afterSessionAttributeReplaced", listener);
+                    } else {
+                        context.fireContainerEvent("afterSessionAttributeAdded",
+                                listener);
+                    }
+                } catch (Exception e) {
+                    // Ignore
+                }
+                manager.getContext().getLogger().error
+                    (sm.getString("standardSession.attributeEvent"), t);
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Get the distributable flag for this web application.
+     *
+     * @return The value of the distributable flag for this web application.
+     */
+    public boolean getDistributable();
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain the registered application event listeners.
+     *
+     * @return An array containing the application event listener instances for
+     *         this web application in the order they were specified in the web
+     *         application deployment descriptor
+     */
+    public Object[] getApplicationEventListeners();
+-----CSCI578-----
+
+
+
+    // ------------------------------------------ HttpSession Protected Methods
+
+
+    /**
+     * @return the <code>isValid</code> flag for this session without any expiration
+     * check.
+     */
+    protected boolean isValidInternal() {
+        return this.isValid;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the object bound with the specified name from this session.  If
+     * the session does not have an object bound with this name, this method
+     * does nothing.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueUnbound()</code> on the object.
+     *
+     * @param name Name of the object to remove from this session.
+     *
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     */
+    @Override
+    public void removeAttribute(String name) {
+
+        removeAttribute(name, true);
+
+    }
+
+
+
+    /**
+     * Remove the object bound with the specified name from this session.  If
+     * the session does not have an object bound with this name, this method
+     * does nothing.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueUnbound()</code> on the object.
+     *
+     * @param name Name of the object to remove from this session.
+     * @param notify Should we notify interested listeners that this
+     *  attribute is being removed?
+     *
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     */
+    public void removeAttribute(String name, boolean notify) {
+
+        // Validate our current state
+        if (!isValidInternal())
+            throw new IllegalStateException
+                (sm.getString("standardSession.removeAttribute.ise"));
+
+        removeAttributeInternal(name, notify);
+
+    }
+
+
+
+    /**
+     * Remove the object bound with the specified name from this session.  If
+     * the session does not have an object bound with this name, this method
+     * does nothing.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueUnbound()</code> on the object.
+     *
+     * @param name Name of the object to remove from this session.
+     *
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     *
+     * @deprecated As of Version 2.2, this method is replaced by
+     *  <code>removeAttribute()</code>
+     */
+    @Override
+    @Deprecated
+    public void removeValue(String name) {
+
+        removeAttribute(name);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Bind an object to this session, using the specified name.  If an object
+     * of the same name is already bound to this session, the object is
+     * replaced.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueBound()</code> on the object.
+     *
+     * @param name Name to which the object is bound, cannot be null
+     * @param value Object to be bound, cannot be null
+     *
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     *
+     * @deprecated As of Version 2.2, this method is replaced by
+     *  <code>setAttribute()</code>
+     */
+    @Override
+    @Deprecated
+    public void putValue(String name, Object value) {
+
+        setAttribute(name, value);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the object bound with the specified name from this session.  If
+     * the session does not have an object bound with this name, this method
+     * does nothing.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueUnbound()</code> on the object.
+     *
+     * @param name Name of the object to remove from this session.
+     *
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     *
+     * @deprecated As of Version 2.2, this method is replaced by
+     *  <code>removeAttribute()</code>
+     */
+    @Override
+    @Deprecated
+    public void removeValue(String name) {
+
+        removeAttribute(name);
+
+    }
+-----CSCI578-----
+
+
+    public void removeSessionListener(SessionListener listener) {
+        addAction(TYPE_LISTENER, ACTION_REMOVE, NAME_LISTENER ,listener);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a session event listener from this component.
+     */
+    @Override
+    public void removeSessionListener(SessionListener listener) {
+
+        listeners.remove(listener);
+
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void removeSessionListener(SessionListener listener) {
+        removeSessionListener(listener, true);
+    }
+
+
+    public void removeSessionListener(SessionListener listener, boolean addDeltaRequest) {
+        lock();
+        try {
+            super.removeSessionListener(listener);
+            if (addDeltaRequest && deltaRequest != null && listener instanceof ReplicatedSessionListener) {
+                deltaRequest.removeSessionListener(listener);
+            }
+        } finally {
+            unlock();
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------- HttpSession Properties
+
+    // ----------------------------------------------HttpSession Public Methods
+
+    /**
+     * Remove the object bound with the specified name from this session. If the
+     * session does not have an object bound with this name, this method does
+     * nothing.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueUnbound()</code> on the object.
+     *
+     * @param name
+     *            Name of the object to remove from this session.
+     * @param notify
+     *            Should we notify interested listeners that this attribute is
+     *            being removed?
+     *
+     * @exception IllegalStateException
+     *                if this method is called on an invalidated session
+     */
+    @Override
+    public void removeAttribute(String name, boolean notify) {
+        removeAttribute(name, notify, true);
+    }
+
+
+    public void removeAttribute(String name, boolean notify,boolean addDeltaRequest) {
+        // Validate our current state
+        if (!isValid()) throw new IllegalStateException(sm.getString("standardSession.removeAttribute.ise"));
+        removeAttributeInternal(name, notify, addDeltaRequest);
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+    protected void removeAttributeInternal(String name, boolean notify,
+                                           boolean addDeltaRequest) {
+        lock();
+        try {
+            // Remove this attribute from our collection
+            Object value = attributes.get(name);
+            if (value == null) return;
+
+            super.removeAttributeInternal(name,notify);
+            if (addDeltaRequest && deltaRequest != null && !exclude(name, null)) {
+                deltaRequest.removeAttribute(name);
+            }
+
+        } finally {
+            unlock();
+        }
+    }
+-----CSCI578-----
+
+
+    public void removeAttribute(String name) {
+        int action = ACTION_REMOVE;
+        addAction(TYPE_ATTRIBUTE,action,name,null);
+    }
+-----CSCI578-----
+
+
+    public void setAuthType(String authType) {
+        int action = (authType==null)?ACTION_REMOVE:ACTION_SET;
+        addAction(TYPE_AUTHTYPE,action,NAME_AUTHTYPE, authType);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the authentication type used to authenticate our cached
+     * Principal, if any.
+     *
+     * @param authType The new cached authentication type
+     */
+    @Override
+    public void setAuthType(String authType) {
+        setAuthType(authType, true);
+    }
+
+
+    public void setAuthType(String authType, boolean addDeltaRequest) {
+        lock();
+        try {
+            super.setAuthType(authType);
+            if (addDeltaRequest && (deltaRequest != null))
+                deltaRequest.setAuthType(authType);
+        } finally {
+            unlock();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the authentication type used to authenticate our cached
+     * Principal, if any.
+     *
+     * @param authType The new cached authentication type
+     */
+    @Override
+    public void setAuthType(String authType) {
+
+        String oldAuthType = this.authType;
+        this.authType = authType;
+        support.firePropertyChange("authType", oldAuthType, this.authType);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the <code>isNew</code> flag for this session.
+     *
+     * @param isNew
+     *            The new value for the <code>isNew</code> flag
+     */
+    @Override
+    public void setNew(boolean isNew) {
+        setNew(isNew, true);
+    }
+
+
+    public void setNew(boolean isNew, boolean addDeltaRequest) {
+        super.setNew(isNew);
+        if (addDeltaRequest && (deltaRequest != null)){
+            lock();
+            try {
+                deltaRequest.setNew(isNew);
+            } finally{
+                unlock();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public void setNew(boolean n) {
+        int action = ACTION_SET;
+        addAction(TYPE_ISNEW,action,NAME_ISNEW,Boolean.valueOf(n));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>isNew</code> flag for this session.
+     *
+     * @param isNew The new value for the <code>isNew</code> flag
+     */
+    @Override
+    public void setNew(boolean isNew) {
+
+        this.isNew = isNew;
+
+    }

@@ -1,0 +1,183 @@
+8
+-----CSCI578-----
+
+
+
+    /**
+     * Add a filter definition to this Context.
+     *
+     * @param filterDef The filter definition to be added
+     */
+    @Override
+    public void addFilterDef(FilterDef filterDef) {
+
+        synchronized (filterDefs) {
+            filterDefs.put(filterDef.getFilterName(), filterDef);
+        }
+        fireContainerEvent("addFilterDef", filterDef);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public FilterRegistration.Dynamic addFilter(String filterName,
+            String className) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (FilterRegistration.Dynamic) doPrivileged(
+                    "addFilter", new Object[]{filterName, className});
+        } else {
+            return context.addFilter(filterName, className);
+        }
+    }
+
+
+
+    @Override
+    public FilterRegistration.Dynamic addFilter(String filterName,
+            Filter filter) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (FilterRegistration.Dynamic) doPrivileged("addFilter",
+                    new Class[]{String.class, Filter.class},
+                    new Object[]{filterName, filter});
+        } else {
+            return context.addFilter(filterName, filter);
+        }
+    }
+
+
+
+    @Override
+    public FilterRegistration.Dynamic addFilter(String filterName,
+            Class<? extends Filter> filterClass) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (FilterRegistration.Dynamic) doPrivileged("addFilter",
+                    new Class[]{String.class, Class.class},
+                    new Object[]{filterName, filterClass});
+        } else {
+            return context.addFilter(filterName, filterClass);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public FilterRegistration.Dynamic addFilter(String filterName, String className) {
+        return addFilter(filterName, className, null);
+    }
+
+
+
+    @Override
+    public FilterRegistration.Dynamic addFilter(String filterName, Filter filter) {
+        return addFilter(filterName, null, filter);
+    }
+
+
+
+    @Override
+    public FilterRegistration.Dynamic addFilter(String filterName,
+            Class<? extends Filter> filterClass) {
+        return addFilter(filterName, filterClass.getName(), null);
+    }
+
+
+
+    private FilterRegistration.Dynamic addFilter(String filterName,
+            String filterClass, Filter filter) throws IllegalStateException {
+
+        if (filterName == null || filterName.equals("")) {
+            throw new IllegalArgumentException(sm.getString(
+                    "applicationContext.invalidFilterName", filterName));
+        }
+
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            //TODO Spec breaking enhancement to ignore this restriction
+            throw new IllegalStateException(
+                    sm.getString("applicationContext.addFilter.ise",
+                            getContextPath()));
+        }
+
+        FilterDef filterDef = context.findFilterDef(filterName);
+
+        // Assume a 'complete' FilterRegistration is one that has a class and
+        // a name
+        if (filterDef == null) {
+            filterDef = new FilterDef();
+            filterDef.setFilterName(filterName);
+            context.addFilterDef(filterDef);
+        } else {
+            if (filterDef.getFilterName() != null &&
+                    filterDef.getFilterClass() != null) {
+                return null;
+            }
+        }
+
+        if (filter == null) {
+            filterDef.setFilterClass(filterClass);
+        } else {
+            filterDef.setFilterClass(filter.getClass().getName());
+            filterDef.setFilter(filter);
+        }
+
+        return new ApplicationFilterRegistration(filterDef, context);
+    }
+-----CSCI578-----
+
+
+    public void setFilter(Filter filter) {
+        this.filter = filter;
+    }
+-----CSCI578-----
+
+
+    public String getFilterName() {
+        return (this.filterName);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a String representation of this object.
+     */
+    @Override
+    public String toString() {
+
+        StringBuilder sb = new StringBuilder("ApplicationFilterConfig[");
+        sb.append("name=");
+        sb.append(filterDef.getFilterName());
+        sb.append(", filterClass=");
+        sb.append(filterDef.getFilterClass());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String getName() {
+        return filterDef.getFilterName();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified filter definition from this Context, if it exists;
+     * otherwise, no action is taken.
+     *
+     * @param filterDef Filter definition to be removed
+     */
+    @Override
+    public void removeFilterDef(FilterDef filterDef) {
+
+        synchronized (filterDefs) {
+            filterDefs.remove(filterDef.getFilterName());
+        }
+        fireContainerEvent("removeFilterDef", filterDef);
+
+    }

@@ -1,0 +1,165 @@
+2
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------ Session Package Methods
+
+
+    /**
+     * Read a serialized version of the contents of this session object from
+     * the specified object input stream, without requiring that the
+     * StandardSession itself have been serialized.
+     *
+     * @param stream The object input stream to read from
+     *
+     * @exception ClassNotFoundException if an unknown class is specified
+     * @exception IOException if an input/output error occurs
+     */
+    public void readObjectData(ObjectInputStream stream)
+        throws ClassNotFoundException, IOException {
+
+        readObject(stream);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read a serialized version of this session object from the specified
+     * object input stream.
+     * <p>
+     * <b>IMPLEMENTATION NOTE</b>:  The reference to the owning Manager
+     * is not restored by this method, and must be set explicitly.
+     *
+     * @param stream The input stream to read from
+     *
+     * @exception ClassNotFoundException if an unknown class is specified
+     * @exception IOException if an input/output error occurs
+     */
+    protected void readObject(ObjectInputStream stream)
+        throws ClassNotFoundException, IOException {
+
+        // Deserialize the scalar instance variables (except Manager)
+        authType = null;        // Transient only
+        creationTime = ((Long) stream.readObject()).longValue();
+        lastAccessedTime = ((Long) stream.readObject()).longValue();
+        maxInactiveInterval = ((Integer) stream.readObject()).intValue();
+        isNew = ((Boolean) stream.readObject()).booleanValue();
+        isValid = ((Boolean) stream.readObject()).booleanValue();
+        thisAccessedTime = ((Long) stream.readObject()).longValue();
+        principal = null;        // Transient only
+        //        setId((String) stream.readObject());
+        id = (String) stream.readObject();
+        if (manager.getContainer().getLogger().isDebugEnabled())
+            manager.getContainer().getLogger().debug
+                ("readObject() loading session " + id);
+
+        // Deserialize the attribute count and attribute values
+        if (attributes == null)
+            attributes = new ConcurrentHashMap<String,Object>();
+        int n = ((Integer) stream.readObject()).intValue();
+        boolean isValidSave = isValid;
+        isValid = true;
+        for (int i = 0; i < n; i++) {
+            String name = (String) stream.readObject();
+            Object value = (Object) stream.readObject();
+            if ((value instanceof String) && (value.equals(NOT_SERIALIZED)))
+                continue;
+            if (manager.getContainer().getLogger().isDebugEnabled())
+                manager.getContainer().getLogger().debug("  loading attribute '" + name +
+                    "' with value '" + value + "'");
+            // Handle the case where the filter configuration was changed while
+            // the web application was stopped.
+            if (exclude(name, value)) {
+                continue;
+            }
+            attributes.put(name, value);
+        }
+        isValid = isValidSave;
+
+        if (listeners == null) {
+            listeners = new ArrayList();
+        }
+
+        if (notes == null) {
+            notes = new Hashtable();
+        }
+    }
+
+
+
+    /**
+     * Write a serialized version of this session object to the specified
+     * object output stream.
+     * <p>
+     * <b>IMPLEMENTATION NOTE</b>:  The owning Manager will not be stored
+     * in the serialized representation of this Session.  After calling
+     * <code>readObject()</code>, you must set the associated Manager
+     * explicitly.
+     * <p>
+     * <b>IMPLEMENTATION NOTE</b>:  Any attribute that is not Serializable
+     * will be unbound from the session, with appropriate actions if it
+     * implements HttpSessionBindingListener.  If you do not want any such
+     * attributes, be sure the <code>distributable</code> property of the
+     * associated Manager is set to <code>true</code>.
+     *
+     * @param stream The output stream to write to
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    protected void writeObject(ObjectOutputStream stream) throws IOException {
+
+        // Write the scalar instance variables (except Manager)
+        stream.writeObject(new Long(creationTime));
+        stream.writeObject(new Long(lastAccessedTime));
+        stream.writeObject(new Integer(maxInactiveInterval));
+        stream.writeObject(new Boolean(isNew));
+        stream.writeObject(new Boolean(isValid));
+        stream.writeObject(new Long(thisAccessedTime));
+        stream.writeObject(id);
+        if (manager.getContainer().getLogger().isDebugEnabled())
+            manager.getContainer().getLogger().debug
+                ("writeObject() storing session " + id);
+
+        // Accumulate the names of serializable and non-serializable attributes
+        String keys[] = keys();
+        ArrayList saveNames = new ArrayList();
+        ArrayList saveValues = new ArrayList();
+        for (int i = 0; i < keys.length; i++) {
+            Object value = attributes.get(keys[i]);
+            if (value == null) {
+                continue;
+            } else if (isAttributeDistributable(keys[i], value) && !exclude(keys[i], value)) {
+                saveNames.add(keys[i]);
+                saveValues.add(value);
+            } else {
+                removeAttributeInternal(keys[i], true);
+            }
+        }
+
+        // Serialize the attribute count and the Serializable attributes
+        int n = saveNames.size();
+        stream.writeObject(new Integer(n));
+        for (int i = 0; i < n; i++) {
+            stream.writeObject((String) saveNames.get(i));
+            try {
+                stream.writeObject(saveValues.get(i));
+                if (manager.getContainer().getLogger().isDebugEnabled())
+                    manager.getContainer().getLogger().debug
+                        ("  storing attribute '" + saveNames.get(i) +
+                        "' with value '" + saveValues.get(i) + "'");
+            } catch (NotSerializableException e) {
+                manager.getContainer().getLogger().warn
+                    (sm.getString("standardSession.notSerializable",
+                     saveNames.get(i), id), e);
+                stream.writeObject(NOT_SERIALIZED);
+                if (manager.getContainer().getLogger().isDebugEnabled())
+                    manager.getContainer().getLogger().debug
+                       ("  storing attribute '" + saveNames.get(i) +
+                        "' with value NOT_SERIALIZED");
+            }
+        }
+
+    }

@@ -1,0 +1,63 @@
+3
+-----CSCI578-----
+
+
+    public void mapMemberAdded(Member member) {
+        if ( member.equals(getChannel().getLocalMember(false)) ) return;
+        boolean memberAdded = false;
+        //select a backup node if we don't have one
+        Member mapMember = getChannel().getMember(member);
+        if (mapMember == null) {
+            log.warn(sm.getString("abstractReplicatedMap.mapMemberAdded.nullMember", member));
+            return;
+        }
+        synchronized (mapMembers) {
+            if (!mapMembers.containsKey(mapMember) ) {
+                if (log.isInfoEnabled())
+                    log.info(sm.getString("abstractReplicatedMap.mapMemberAdded.added", mapMember));
+                mapMembers.put(mapMember, Long.valueOf(System.currentTimeMillis()));
+                memberAdded = true;
+            }
+        }
+        if ( memberAdded ) {
+            synchronized (stateMutex) {
+                Iterator<Map.Entry<K,MapEntry<K,V>>> i = innerMap.entrySet().iterator();
+                while (i.hasNext()) {
+                    Map.Entry<K,MapEntry<K,V>> e = i.next();
+                    MapEntry<K,V> entry = innerMap.get(e.getKey());
+                    if ( entry == null ) continue;
+                    if (entry.isPrimary() && (entry.getBackupNodes() == null || entry.getBackupNodes().length == 0)) {
+                        try {
+                            Member[] backup = publishEntryInfo(entry.getKey(), entry.getValue());
+                            entry.setBackupNodes(backup);
+                            entry.setPrimary(channel.getLocalMember(false));
+                        } catch (ChannelException x) {
+                            log.error(sm.getString("abstractReplicatedMap.unableSelect.backup"), x);
+                        } //catch
+                    } //end if
+                } //while
+            } //synchronized
+        }//end if
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the member from the membership service with complete and
+     * recent data. Some implementations might serialize and send
+     * membership information along with a message, and instead of sending
+     * complete membership details, only send the primary identifier for the member
+     * but not the payload or other information. When such message is received
+     * the application can retrieve the cached member through this call.<br>
+     * In most cases, this is not necessary.
+     * @param mbr Member
+     * @return Member
+     */
+    public Member getMember(Member mbr);
+-----CSCI578-----
+ //MapMessage
+
+
+    public Channel getChannel() {
+        return channel;
+    }

@@ -1,0 +1,39 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private static Method getMethod(final Class<?> clazz,
+            final AnnotationCacheEntry entry) {
+        Method result = null;
+        if (Globals.IS_SECURITY_ENABLED) {
+            result = AccessController.doPrivileged(
+                    new PrivilegedAction<Method>() {
+                        @Override
+                        public Method run() {
+                            Method result = null;
+                            try {
+                                result = clazz.getDeclaredMethod(
+                                        entry.getAccessibleObjectName(),
+                                        entry.getParamTypes());
+                            } catch (NoSuchMethodException e) {
+                                // Should never happen. On that basis don't log
+                                // it.
+                            }
+                            return result;
+                        }
+            });
+        } else {
+            try {
+                result = clazz.getDeclaredMethod(
+                        entry.getAccessibleObjectName(), entry.getParamTypes());
+            } catch (NoSuchMethodException e) {
+                // Should never happen. On that basis don't log it.
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

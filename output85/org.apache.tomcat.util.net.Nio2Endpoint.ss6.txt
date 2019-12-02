@@ -1,0 +1,76 @@
+13
+-----CSCI578-----
+
+
+    /**
+     * Performs SSL handshake hence is a no-op for the non-secure
+     * implementation.
+     *
+     * @return Always returns zero
+     *
+     * @throws IOException Never for non-secure channel
+     */
+    public int handshake() throws IOException {
+        return 0;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean isHandshakeComplete() {
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected boolean processSocket0(SocketWrapperBase<Nio2Channel> socketWrapper, SocketEvent status, boolean dispatch) {
+        try {
+            SocketProcessor sc = processorCache.pop();
+            if (sc == null) {
+                sc = new SocketProcessor(socketWrapper, status);
+            } else {
+                sc.reset(socketWrapper, status);
+            }
+            Executor executor = getExecutor();
+            if (dispatch && executor != null) {
+                executor.execute(sc);
+            } else {
+                sc.run();
+            }
+        } catch (RejectedExecutionException ree) {
+            log.debug(sm.getString("endpoint.executor.fail", socketWrapper), ree);
+            return false;
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            // This means we got an OOM or similar creating a thread, or that
+            // the pool and its queue are full
+            log.error(sm.getString("endpoint.process.fail"), t);
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Free the channel memory
+     */
+    public void free() {
+        bufHandler.free();
+    }
+-----CSCI578-----
+
+
+    public void free() {
+        if (direct) {
+            ByteBufferUtils.cleanDirectBuffer(readBuffer);
+            ByteBufferUtils.cleanDirectBuffer(writeBuffer);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

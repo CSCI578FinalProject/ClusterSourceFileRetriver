@@ -1,0 +1,87 @@
+17
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Marks the object as returning to the pool.
+     */
+    void markReturning();
+-----CSCI578-----
+
+
+    /**
+     * Obtain the time in milliseconds that this object last spent in the the
+     * active state (it may still be active in which case subsequent calls will
+     * return an increased value).
+     *
+     * @return The time in milliseconds last spent in the active state
+     */
+    long getActiveTimeMillis();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the cap on the number of "idle" instances in the pool. If maxIdle
+     * is set too low on heavily loaded systems it is possible you will see
+     * objects being destroyed and almost immediately new objects being created.
+     * This is a result of the active threads momentarily returning objects
+     * faster than they are requesting them them, causing the number of idle
+     * objects to rise above maxIdle. The best value for maxIdle for heavily
+     * loaded system will vary but the default is a good starting point.
+     *
+     * @return the maximum number of "idle" instances that can be held in the
+     *         pool or a negative value if there is no limit
+     *
+     * @see #setMaxIdle
+     */
+    @Override
+    public int getMaxIdle() {
+        return maxIdle;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Destroys a wrapped pooled object.
+     *
+     * @param toDestory The wrapped pooled object to destroy
+     *
+     * @throws Exception If the factory fails to destroy the pooled object
+     *                   cleanly
+     */
+    private void destroy(PooledObject<T> toDestory) throws Exception {
+        toDestory.invalidate();
+        idleObjects.remove(toDestory);
+        allObjects.remove(new IdentityWrapper<>(toDestory.getObject()));
+        try {
+            factory.destroyObject(toDestory);
+        } finally {
+            destroyedCount.incrementAndGet();
+            createCount.decrementAndGet();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Whether or not abandoned object removal is configured for this pool.
+     *
+     * @return true if this pool is configured to detect and remove
+     * abandoned objects
+     */
+    @Override
+    public boolean isAbandonedConfig() {
+        return abandonedConfig != null;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

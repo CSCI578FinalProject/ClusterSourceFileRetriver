@@ -1,0 +1,106 @@
+6
+-----CSCI578-----
+
+
+    /**
+     * Check to make sure the factory is able to perform the function it is
+     * asked to do. Invoked by readMessage/writeMessage before those methods
+     * proceed.
+     *
+     * @param openForWrite The value to check
+     * @throws IllegalArgumentException if the state is not the expected one
+     */
+    protected void checkState(boolean openForWrite)
+            throws IllegalArgumentException {
+        if (this.openForWrite != openForWrite) {
+            cleanup();
+            if (openForWrite)
+                throw new IllegalArgumentException(
+                        "Can't write message, this factory is reading.");
+            else
+                throw new IllegalArgumentException(
+                        "Can't read message, this factory is writing.");
+        }
+        if (this.closed) {
+            cleanup();
+            throw new IllegalArgumentException("Factory has been closed.");
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Reads file data into the file message and sets the size, totalLength,
+     * totalNrOfMsgs and the message number <BR>
+     * If EOF is reached, the factory returns null, and closes itself, otherwise
+     * the same message is returned as was passed in. This makes sure that not
+     * more memory is ever used. To remember, neither the file message or the
+     * factory are thread safe. dont hand off the message to one thread and read
+     * the same with another.
+     *
+     * @param f
+     *            FileMessage - the message to be populated with file data
+     * @throws IllegalArgumentException -
+     *             if the factory is for writing or is closed
+     * @throws IOException -
+     *             if a file read exception occurs
+     * @return FileMessage - returns the same message passed in as a parameter,
+     *         or null if EOF
+     */
+    public FileMessage readMessage(FileMessage f)
+            throws IllegalArgumentException, IOException {
+        checkState(false);
+        int length = in.read(data);
+        if (length == -1) {
+            cleanup();
+            return null;
+        } else {
+            f.setData(data, length);
+            f.setTotalNrOfMsgs(totalNrOfMessages);
+            f.setMessageNumber(++nrOfMessagesProcessed);
+            return f;
+        }//end if
+    }
+-----CSCI578-----
+
+    public void setData(byte[] data, int length) {
+        this.data = data;
+        this.dataLength = length;
+    }
+-----CSCI578-----
+
+    public void setTotalNrOfMsgs(long totalNrOfMsgs) {
+        this.totalNrOfMsgs = totalNrOfMsgs;
+    }
+-----CSCI578-----
+
+    public void setMessageNumber(int messageNumber) {
+        this.messageNumber = messageNumber;
+    }
+-----CSCI578-----
+//writeMessage
+
+    /**
+     * Closes the factory, its streams and sets all its references to null
+     */
+    public void cleanup() {
+        if (in != null)
+            try {
+                in.close();
+            } catch (Exception ignore) {
+            }
+        if (out != null)
+            try {
+                out.close();
+            } catch (Exception ignore) {
+            }
+        in = null;
+        out = null;
+        size = 0;
+        closed = true;
+        data = null;
+        nrOfMessagesProcessed = 0;
+        totalNrOfMessages = 0;
+        msgBuffer.clear();
+        lastMessageProcessed = null;
+    }

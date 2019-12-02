@@ -1,0 +1,416 @@
+24
+-----CSCI578-----
+
+
+
+    /**
+     * Callback from the cluster, when a message is received, The cluster will
+     * broadcast it invoking the messageReceived on the receiver.
+     * 
+     * @param myobj
+     *            ClusterMessage - the message received from the cluster
+     */
+    public void messageReceived(ClusterMessage myobj) {
+        if (myobj != null && myobj instanceof SingleSignOnMessage) {
+            SingleSignOnMessage msg = (SingleSignOnMessage) myobj;
+            int action = msg.getAction();
+	    Session session = null;
+        Principal principal = null;
+
+	    if (log.isDebugEnabled())
+		log.debug("SingleSignOnMessage Received with action "
+			  + msg.getAction());
+
+	    switch(action) {
+	    case SingleSignOnMessage.ADD_SESSION:
+		session = getSession(msg.getSessionId(),
+				     msg.getContextName());
+		if (session != null)
+		    clusterSSO.associateLocal(msg.getSsoId(), session);
+		break;
+	    case SingleSignOnMessage.DEREGISTER_SESSION:
+		session = getSession(msg.getSessionId(),
+				     msg.getContextName());
+		if (session != null)
+		    clusterSSO.deregisterLocal(msg.getSsoId(), session);
+		break;
+	    case SingleSignOnMessage.LOGOUT_SESSION:
+		clusterSSO.deregisterLocal(msg.getSsoId());
+		break;
+	    case SingleSignOnMessage.REGISTER_SESSION:
+            if (msg.getPrincipal() != null) {
+                principal = msg.getPrincipal().getPrincipal(clusterSSO.getContainer().getRealm());
+            }
+            clusterSSO.registerLocal(msg.getSsoId(), principal, msg.getAuthType(),
+                    msg.getUsername(), msg.getPassword());
+		break;
+	    case SingleSignOnMessage.UPDATE_SESSION:
+            if (msg.getPrincipal() != null) {
+                principal = msg.getPrincipal().getPrincipal(clusterSSO.getContainer().getRealm());
+            }
+            clusterSSO.updateLocal(msg.getSsoId(), principal, msg.getAuthType(),
+                    msg.getUsername(), msg.getPassword());
+		break;
+	    case SingleSignOnMessage.REMOVE_SESSION:
+		session = getSession(msg.getSessionId(),
+				     msg.getContextName());
+		if (session != null)
+		    clusterSSO.removeSessionLocal(msg.getSsoId(), session);
+		break;
+	    }
+	}
+    }
+-----CSCI578-----
+
+
+    public SerializablePrincipal getPrincipal() {
+        return principal;
+    }
+-----CSCI578-----
+
+
+    public String getPassword() {
+	return password;
+    }
+-----CSCI578-----
+
+
+    public String getAuthType() {
+	return authType;
+    }
+-----CSCI578-----
+
+
+    public String getContextName() {
+	return ctxname;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public int getAction() {
+	return action;
+    }
+-----CSCI578-----
+
+
+    protected void associateLocal(String ssoId, Session session) {
+
+	super.associate(ssoId, session);
+
+    }
+-----CSCI578-----
+
+
+    protected void deregisterLocal(String ssoId, Session session) {
+
+	super.deregister(ssoId, session);
+
+    }
+
+
+    protected void deregisterLocal(String ssoId) {
+
+	super.deregister(ssoId);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Deregister the specified session.  If it is the last session,
+     * then also get rid of the single sign on identifier
+     *
+     * @param ssoId Single sign on identifier
+     * @param session Session to be deregistered
+     */
+    protected void deregister(String ssoId, Session session) {
+
+        synchronized (reverse) {
+            reverse.remove(session);
+        }
+
+        SingleSignOnEntry sso = lookup(ssoId);
+        if ( sso == null )
+            return;
+
+        sso.removeSession( session );
+
+        // see if we are the last session, if so blow away ssoId
+        Session sessions[] = sso.findSessions();
+        if ( sessions == null || sessions.length == 0 ) {
+            synchronized (cache) {
+                sso = (SingleSignOnEntry) cache.remove(ssoId);
+            }
+        }
+
+    }
+
+
+
+    /**
+     * Deregister the specified single sign on identifier, and invalidate
+     * any associated sessions.
+     *
+     * @param ssoId Single sign on identifier to deregister
+     */
+    protected void deregister(String ssoId) {
+
+        if (containerLog.isDebugEnabled())
+            containerLog.debug("Deregistering sso id '" + ssoId + "'");
+
+        // Look up and remove the corresponding SingleSignOnEntry
+        SingleSignOnEntry sso = null;
+        synchronized (cache) {
+            sso = (SingleSignOnEntry) cache.remove(ssoId);
+        }
+
+        if (sso == null)
+            return;
+
+        // Expire any associated sessions
+        Session sessions[] = sso.findSessions();
+        for (int i = 0; i < sessions.length; i++) {
+            if (containerLog.isTraceEnabled())
+                containerLog.trace(" Invalidating session " + sessions[i]);
+            // Remove from reverse cache first to avoid recursion
+            synchronized (reverse) {
+                reverse.remove(sessions[i]);
+            }
+            // Invalidate this session
+            sessions[i].expire();
+        }
+
+        // NOTE:  Clients may still possess the old single sign on cookie,
+        // but it will be removed on the next request since it is no longer
+        // in the cache
+
+    }
+-----CSCI578-----
+
+
+    protected void deregisterLocal(String ssoId, Session session) {
+
+	super.deregister(ssoId, session);
+
+    }
+
+
+    protected void deregisterLocal(String ssoId) {
+
+	super.deregister(ssoId);
+
+    }
+
+
+    protected void registerLocal(String ssoId, Principal principal, String authType,
+                  String username, String password) {
+
+	super.register(ssoId, principal, authType, username, password);
+
+    }
+-----CSCI578-----
+
+
+    protected void updateLocal(String ssoId, Principal principal, String authType,
+                          String username, String password) {
+
+	super.update(ssoId, principal, authType, username, password);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Updates any <code>SingleSignOnEntry</code> found under key
+     * <code>ssoId</code> with the given authentication data.
+     * <p>
+     * The purpose of this method is to allow an SSO entry that was
+     * established without a username/password combination (i.e. established
+     * following DIGEST or CLIENT_CERT authentication) to be updated with
+     * a username and password if one becomes available through a subsequent
+     * BASIC or FORM authentication.  The SSO entry will then be usable for
+     * reauthentication.
+     * <p>
+     * <b>NOTE:</b> Only updates the SSO entry if a call to
+     * <code>SingleSignOnEntry.getCanReauthenticate()</code> returns
+     * <code>false</code>; otherwise, it is assumed that the SSO entry already
+     * has sufficient information to allow reauthentication and that no update
+     * is needed.
+     *
+     * @param ssoId     identifier of Single sign to be updated
+     * @param principal the <code>Principal</code> returned by the latest
+     *                  call to <code>Realm.authenticate</code>.
+     * @param authType  the type of authenticator used (BASIC, CLIENT_CERT,
+     *                  DIGEST or FORM)
+     * @param username  the username (if any) used for the authentication
+     * @param password  the password (if any) used for the authentication
+     */
+    protected void update(String ssoId, Principal principal, String authType,
+                          String username, String password) {
+
+        SingleSignOnEntry sso = lookup(ssoId);
+        if (sso != null && !sso.getCanReauthenticate()) {
+            if (containerLog.isDebugEnabled())
+                containerLog.debug("Update sso id " + ssoId + " to auth type " + authType);
+
+            synchronized(sso) {
+                sso.updateCredentials(principal, authType, username, password);
+            }
+
+        }
+    }
+-----CSCI578-----
+
+
+    protected void removeSessionLocal(String ssoId, Session session) {
+
+	super.removeSession(ssoId, session);
+	
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Remove a single Session from a SingleSignOn.  Called when
+     * a session is timed out and no longer active.
+     *
+     * @param ssoId Single sign on identifier from which to remove the session.
+     * @param session the session to be removed.
+     */
+    protected void removeSession(String ssoId, Session session) {
+
+        if (containerLog.isDebugEnabled())
+            containerLog.debug("Removing session " + session.toString() + " from sso id " + 
+                ssoId );
+
+        // Get a reference to the SingleSignOn
+        SingleSignOnEntry entry = lookup(ssoId);
+        if (entry == null)
+            return;
+
+        // Remove the inactive session from SingleSignOnEntry
+        entry.removeSession(session);
+
+        // Remove the inactive session from the 'reverse' Map.
+        synchronized(reverse) {
+            reverse.remove(session);
+        }
+
+        // If there are not sessions left in the SingleSignOnEntry,
+        // deregister the entry.
+        if (entry.findSessions().length == 0) {
+            deregister(ssoId);
+        }
+    }
+-----CSCI578-----
+
+
+    public String getSessionId() {
+	return sessionId;
+    }
+-----CSCI578-----
+
+
+    public String getSsoId() {
+	return ssoId;
+    }
+-----CSCI578-----
+
+
+    public String getUsername() {
+	return username;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Look up and return the cached SingleSignOn entry associated with this
+     * sso id value, if there is one; otherwise return <code>null</code>.
+     *
+     * @param ssoId Single sign on identifier to look up
+     */
+    protected SingleSignOnEntry lookup(String ssoId) {
+
+        synchronized (cache) {
+            return ((SingleSignOnEntry) cache.get(ssoId));
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Removes the given <code>Session</code> from the list of those
+     * associated with this SSO.
+     *
+     * @param session  the <code>Session</code> to remove.
+     */
+    public synchronized void removeSession(Session session) {
+        Session[] nsessions = new Session[sessions.length - 1];
+        for (int i = 0, j = 0; i < sessions.length; i++) {
+            if (session == sessions[i])
+                continue;
+            nsessions[j++] = sessions[i];
+        }
+        sessions = nsessions;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the <code>Session</code>s associated with this SSO.
+     */
+    public synchronized Session[] findSessions() {
+        return (this.sessions);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets whether the authentication type associated with the original
+     * authentication supports reauthentication.
+     *
+     * @return  <code>true</code> if <code>getAuthType</code> returns
+     *          "BASIC" or "FORM", <code>false</code> otherwise.
+     */
+    public boolean getCanReauthenticate() {
+        return (this.canReauthenticate);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Each message must have a unique ID, in case of using async replication,
+     * and a smart queue, this id is used to replace messages not yet sent.
+     *
+     * @return String
+     */
+    public String getUniqueId() {
+	if (this.uniqueId != null)
+	    return this.uniqueId;
+	StringBuffer result = new StringBuffer(getSsoId());
+	result.append("#-#");
+	result.append(System.currentTimeMillis());
+	return result.toString();
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Return a String rendering of this object.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("SingleSignOnMessage[action=");
+	sb.append(getAction()).append(", ssoId=").append(getSsoId());
+	sb.append(", sessionId=").append(getSessionId()).append(", username=");
+	sb.append(getUsername()).append("]");
+        return (sb.toString());
+
+    }

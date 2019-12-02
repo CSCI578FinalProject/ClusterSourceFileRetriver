@@ -1,0 +1,105 @@
+9
+-----CSCI578-----
+
+
+    /**
+     * Compile the servlet from .java file to .class file
+     */
+    protected abstract void generateClass(String[] smap)
+            throws FileNotFoundException, JasperException, Exception;
+-----CSCI578-----
+
+
+    /**
+     * Removed the java and class files for the tag prototype generated from the
+     * current compilation.
+     *
+     * @param classFileName
+     *            If non-null, remove only the class file with with this name.
+     */
+    public void removeProtoTypeFiles(String classFileName) {
+        Iterator iter = tempVector.iterator();
+        while (iter.hasNext()) {
+            Compiler c = (Compiler) iter.next();
+            if (classFileName == null) {
+                c.removeGeneratedClassFiles();
+            } else if (classFileName.equals(c.getCompilationContext()
+                    .getClassFileName())) {
+                c.removeGeneratedClassFiles();
+                tempVector.remove(c);
+                return;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public void close() throws IOException {
+	writer.close();
+    }
+-----CSCI578-----
+
+
+    public void setWriter(ServletWriter writer) {
+        this.writer = writer;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Where is the servlet being generated?
+     */
+    public ServletWriter getWriter() {
+        return writer;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getClassFileName() {
+        if (classFileName == null) {
+            classFileName = getOutputDir() + getServletClassName() + ".class";
+        }
+        return classFileName;
+    }
+-----CSCI578-----
+
+
+    public void removeGeneratedClassFiles() {
+        try {
+            String classFileName = ctxt.getClassFileName();
+            if (classFileName != null) {
+                File classFile = new File(classFileName);
+                if (log.isDebugEnabled())
+                    log.debug("Deleting " + classFile);
+                if (classFile.exists()) {
+                    if (!classFile.delete()) {
+                        log.warn(Localizer.getMessage(
+                                "jsp.warning.compiler.classfile.delete.fail",
+                                classFile.getAbsolutePath()));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Remove as much as possible, log possible exceptions
+            log.warn(Localizer.getMessage("jsp.warning.compiler.classfile.delete.fail.unknown"),
+                     e);
+        }
+    }
+-----CSCI578-----
+
+
+    /** ---------- Input/Output  ---------- */
+    
+    /**
+     * The output directory to generate code into.  The output directory
+     * is make up of the scratch directory, which is provide in Options,
+     * plus the directory derived from the package name.
+     */
+    public String getOutputDir() {
+	if (outputDir == null) {
+	    createOutputDir();
+	}
+
+        return outputDir;
+    }

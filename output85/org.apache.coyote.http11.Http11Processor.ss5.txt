@@ -1,0 +1,588 @@
+40
+-----CSCI578-----
+
+
+
+    @Override
+    public SocketState service(SocketWrapperBase<?> socketWrapper)
+        throws IOException {
+        RequestInfo rp = request.getRequestProcessor();
+        rp.setStage(org.apache.coyote.Constants.STAGE_PARSE);
+
+        // Setting up the I/O
+        setSocketWrapper(socketWrapper);
+        inputBuffer.init(socketWrapper);
+        outputBuffer.init(socketWrapper);
+
+        // Flags
+        keepAlive = true;
+        openSocket = false;
+        readComplete = true;
+        boolean keptAlive = false;
+
+        while (!getErrorState().isError() && keepAlive && !isAsync() &&
+                upgradeToken == null && !endpoint.isPaused()) {
+
+            // Parsing the request header
+            try {
+                if (!inputBuffer.parseRequestLine(keptAlive)) {
+                    if (handleIncompleteRequestLineRead()) {
+                        break;
+                    }
+                }
+
+                if (endpoint.isPaused()) {
+                    // 503 - Service unavailable
+                    response.setStatus(503);
+                    setErrorState(ErrorState.CLOSE_CLEAN, null);
+                } else {
+                    keptAlive = true;
+                    // Set this every time in case limit has been changed via JMX
+                    request.getMimeHeaders().setLimit(endpoint.getMaxHeaderCount());
+                    if (!inputBuffer.parseHeaders()) {
+                        // We've read part of the request, don't recycle it
+                        // instead associate it with the socket
+                        openSocket = true;
+                        readComplete = false;
+                        break;
+                    }
+                    if (!disableUploadTimeout) {
+                        socketWrapper.setReadTimeout(connectionUploadTimeout);
+                    }
+                }
+            } catch (IOException e) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("http11processor.header.parse"), e);
+                }
+                setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
+                break;
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                UserDataHelper.Mode logMode = userDataHelper.getNextMode();
+                if (logMode != null) {
+                    String message = sm.getString("http11processor.header.parse");
+                    switch (logMode) {
+                        case INFO_THEN_DEBUG:
+                            message += sm.getString("http11processor.fallToDebug");
+                            //$FALL-THROUGH$
+                        case INFO:
+                            log.info(message, t);
+                            break;
+                        case DEBUG:
+                            log.debug(message, t);
+                    }
+                }
+                // 400 - Bad Request
+                response.setStatus(400);
+                setErrorState(ErrorState.CLOSE_CLEAN, t);
+                getAdapter().log(request, response, 0);
+            }
+
+            // Has an upgrade been requested?
+            Enumeration<String> connectionValues = request.getMimeHeaders().values("Connection");
+            boolean foundUpgrade = false;
+            while (connectionValues.hasMoreElements() && !foundUpgrade) {
+                foundUpgrade = connectionValues.nextElement().toLowerCase(
+                        Locale.ENGLISH).contains("upgrade");
+            }
+
+            if (foundUpgrade) {
+                // Check the protocol
+                String requestedProtocol = request.getHeader("Upgrade");
+
+                UpgradeProtocol upgradeProtocol = httpUpgradeProtocols.get(requestedProtocol);
+                if (upgradeProtocol != null) {
+                    if (upgradeProtocol.accept(request)) {
+                        // TODO Figure out how to handle request bodies at this
+                        // point.
+                        response.setStatus(HttpServletResponse.SC_SWITCHING_PROTOCOLS);
+                        response.setHeader("Connection", "Upgrade");
+                        response.setHeader("Upgrade", requestedProtocol);
+                        action(ActionCode.CLOSE,  null);
+                        getAdapter().log(request, response, 0);
+
+                        InternalHttpUpgradeHandler upgradeHandler =
+                                upgradeProtocol.getInternalUpgradeHandler(
+                                        getAdapter(), cloneRequest(request));
+                        UpgradeToken upgradeToken = new UpgradeToken(upgradeHandler, null, null);
+                        action(ActionCode.UPGRADE, upgradeToken);
+                        return SocketState.UPGRADING;
+                    }
+                }
+            }
+
+            if (!getErrorState().isError()) {
+                // Setting up filters, and parse some request headers
+                rp.setStage(org.apache.coyote.Constants.STAGE_PREPARE);
+                try {
+                    prepareRequest();
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("http11processor.request.prepare"), t);
+                    }
+                    // 500 - Internal Server Error
+                    response.setStatus(500);
+                    setErrorState(ErrorState.CLOSE_CLEAN, t);
+                    getAdapter().log(request, response, 0);
+                }
+            }
+
+            if (maxKeepAliveRequests == 1) {
+                keepAlive = false;
+            } else if (maxKeepAliveRequests > 0 &&
+                    socketWrapper.decrementKeepAlive() <= 0) {
+                keepAlive = false;
+            }
+
+            // Process the request in the adapter
+            if (!getErrorState().isError()) {
+                try {
+                    rp.setStage(org.apache.coyote.Constants.STAGE_SERVICE);
+                    getAdapter().service(request, response);
+                    // Handle when the response was committed before a serious
+                    // error occurred.  Throwing a ServletException should both
+                    // set the status to 500 and set the errorException.
+                    // If we fail here, then the response is likely already
+                    // committed, so we can't try and set headers.
+                    if(keepAlive && !getErrorState().isError() && (
+                            response.getErrorException() != null ||
+                                    (!isAsync() &&
+                                    statusDropsConnection(response.getStatus())))) {
+                        setErrorState(ErrorState.CLOSE_CLEAN, null);
+                    }
+                } catch (InterruptedIOException e) {
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
+                } catch (HeadersTooLargeException e) {
+                    // The response should not have been committed but check it
+                    // anyway to be safe
+                    if (response.isCommitted()) {
+                        setErrorState(ErrorState.CLOSE_NOW, e);
+                    } else {
+                        response.reset();
+                        response.setStatus(500);
+                        setErrorState(ErrorState.CLOSE_CLEAN, e);
+                        response.setHeader("Connection", "close"); // TODO: Remove
+                    }
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    log.error(sm.getString("http11processor.request.process"), t);
+                    // 500 - Internal Server Error
+                    response.setStatus(500);
+                    setErrorState(ErrorState.CLOSE_CLEAN, t);
+                    getAdapter().log(request, response, 0);
+                }
+            }
+
+            // Finish the handling of the request
+            rp.setStage(org.apache.coyote.Constants.STAGE_ENDINPUT);
+            if (!isAsync()) {
+                // If this is an async request then the request ends when it has
+                // been completed. The AsyncContext is responsible for calling
+                // endRequest() in that case.
+                endRequest();
+            }
+            rp.setStage(org.apache.coyote.Constants.STAGE_ENDOUTPUT);
+
+            // If there was an error, make sure the request is counted as
+            // and error, and update the statistics counter
+            if (getErrorState().isError()) {
+                response.setStatus(500);
+            }
+
+            if (!isAsync() || getErrorState().isError()) {
+                request.updateCounters();
+                if (getErrorState().isIoAllowed()) {
+                    inputBuffer.nextRequest();
+                    outputBuffer.nextRequest();
+                }
+            }
+
+            if (!disableUploadTimeout) {
+                int soTimeout = endpoint.getSoTimeout();
+                if(soTimeout > 0) {
+                    socketWrapper.setReadTimeout(soTimeout);
+                } else {
+                    socketWrapper.setReadTimeout(0);
+                }
+            }
+
+            rp.setStage(org.apache.coyote.Constants.STAGE_KEEPALIVE);
+
+            if (breakKeepAliveLoop(socketWrapper)) {
+                break;
+            }
+        }
+
+        rp.setStage(org.apache.coyote.Constants.STAGE_ENDED);
+
+        if (getErrorState().isError() || endpoint.isPaused()) {
+            return SocketState.CLOSED;
+        } else if (isAsync()) {
+            return SocketState.LONG;
+        } else if (isUpgrade()) {
+            return SocketState.UPGRADING;
+        } else {
+            if (sendfileData != null) {
+                return SocketState.SENDFILE;
+            } else {
+                if (openSocket) {
+                    if (readComplete) {
+                        return SocketState.OPEN;
+                    } else {
+                        return SocketState.LONG;
+                    }
+                } else {
+                    return SocketState.CLOSED;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    public int decrementKeepAlive() { return (--keepAliveLeft);}
+-----CSCI578-----
+
+
+
+    /**
+     * @param adapter The Adapter to use to configure the new upgrade handler
+     * @param request A copy (may be incomplete) of the request that triggered
+     *                the upgrade
+     *
+     * @return An instance of the HTTP upgrade handler for this protocol
+     */
+    public InternalHttpUpgradeHandler getInternalUpgradeHandler(Adapter adapter, Request request);
+-----CSCI578-----
+
+
+
+    /**
+     * Determine if we must drop the connection because of the HTTP status
+     * code.  Use the same list of codes as Apache/httpd.
+     */
+    private static boolean statusDropsConnection(int status) {
+        return status == 400 /* SC_BAD_REQUEST */ ||
+               status == 408 /* SC_REQUEST_TIMEOUT */ ||
+               status == 411 /* SC_LENGTH_REQUIRED */ ||
+               status == 413 /* SC_REQUEST_ENTITY_TOO_LARGE */ ||
+               status == 414 /* SC_REQUEST_URI_TOO_LONG */ ||
+               status == 500 /* SC_INTERNAL_SERVER_ERROR */ ||
+               status == 503 /* SC_SERVICE_UNAVAILABLE */ ||
+               status == 501 /* SC_NOT_IMPLEMENTED */;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * End request.
+     *
+     * @throws IOException an underlying I/O error occurred
+     */
+    public void endRequest() throws IOException {
+        if (finished) {
+            return;
+        }
+
+        if (lastActiveFilter != -1) {
+            activeFilters[lastActiveFilter].end();
+        }
+
+        flushBuffer(true);
+
+        finished = true;
+    }
+-----CSCI578-----
+
+
+
+    public void init(SocketWrapperBase<?> socketWrapper) {
+        this.socketWrapper = socketWrapper;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Some filters need additional parameters from the request.
+     *
+     * @param request The request to be associated with this filter
+     */
+    public void setRequest(Request request);
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isUpgrade() {
+        return upgradeToken != null;
+    }
+-----CSCI578-----
+
+
+
+    private void checkExpectationAndResponseStatus() {
+        if (request.hasExpectation() &&
+                (response.getStatus() < 200 || response.getStatus() > 299)) {
+            // Client sent Expect: 100-continue but received a
+            // non-2xx final response. Disable keep-alive (if enabled)
+            // to ensure that the connection is closed. Some clients may
+            // still send the body, some may send the next request.
+            // No way to differentiate, so close the connection to
+            // force the client to send the next request.
+            inputBuffer.setSwallowInput(false);
+            keepAlive = false;
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Allows the implementation to examine the request and accept or reject it
+     * based on what it finds.
+     *
+     * @param request The request that included an upgrade header for this
+     *                protocol
+     *
+     * @return <code>true</code> if the request is accepted, otherwise
+     *         <code>false</code>
+     */
+    public boolean accept(Request request);
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public RequestInfo getRequestProcessor() {
+        return reqProcessorMX;
+    }
+-----CSCI578-----
+
+
+    public long getStartTime() {
+        return startTime;
+    }
+-----CSCI578-----
+
+
+
+    public void setHeader(String name, String value) {
+        char cc=name.charAt(0);
+        if( cc=='C' || cc=='c' ) {
+            if( checkSpecialHeader(name, value) )
+            return;
+        }
+        headers.setValue(name).setString( value);
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- State --------------------
+
+    public int getStatus() {
+        return status;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get the Exception that occurred during request processing.
+     *
+     * @return The exception that occurred
+     */
+    public Exception getErrorException() {
+        return errorException;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- Methods --------------------
+
+
+    public void reset() throws IllegalStateException {
+
+        if (commited) {
+            throw new IllegalStateException();
+        }
+
+        recycle();
+
+        // Reset the stream
+        action(ActionCode.RESET, this);
+    }
+-----CSCI578-----
+
+
+    public void setStage(int stage) {
+        this.stage = stage;
+    }
+-----CSCI578-----
+
+
+    public boolean isPaused() {
+        return paused;
+    }
+-----CSCI578-----
+
+    public int getKeepAliveTimeout() {
+        if (keepAliveTimeout == null) {
+            return getSoTimeout();
+        } else {
+            return keepAliveTimeout.intValue();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Socket timeout.
+     *
+     * @return The current socket timeout for sockets created by this endpoint
+     */
+    public int getSoTimeout() { return socketProperties.getSoTimeout(); }
+-----CSCI578-----
+ // as in Apache HTTPD server
+    public int getMaxHeaderCount() {
+        return maxHeaderCount;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set internal fields for special header names.
+     * Called from set/addHeader.
+     * Return true if the header is special, no need to set the header.
+     */
+    private boolean checkSpecialHeader( String name, String value) {
+        // XXX Eliminate redundant fields !!!
+        // ( both header and in special fields )
+        if( name.equalsIgnoreCase( "Content-Type" ) ) {
+            setContentType( value );
+            return true;
+        }
+        if( name.equalsIgnoreCase( "Content-Length" ) ) {
+            try {
+                long cL=Long.parseLong( value );
+                setContentLength( cL );
+                return true;
+            } catch( NumberFormatException ex ) {
+                // Do nothing - the spec doesn't have any "throws"
+                // and the user might know what he's doing
+                return false;
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the timeout for reading. Values of zero or less will be changed to]
+     * -1.
+     *
+     * @param readTimeout The timeout in milliseconds. A value of -1 indicates
+     *                    an infinite timeout.
+     */
+    public void setReadTimeout(long readTimeout) {
+        if (readTimeout > 0) {
+            this.readTimeout = readTimeout;
+        } else {
+            this.readTimeout = -1;
+        }
+    }
+-----CSCI578-----
+
+
+    public void setStartTime(long startTime) {
+        this.startTime = startTime;
+    }
+-----CSCI578-----
+
+
+    public void log(Request req, Response res, long time);
+-----CSCI578-----
+
+
+    /**
+     * Set limit on the number of header fields.
+     * @param limit The new limit
+     */
+    public void setLimit(int limit) {
+        this.limit = limit;
+        if (limit > 0 && headers.length > limit && count < limit) {
+            // shrink header list array
+            MimeHeaderField tmp[] = new MimeHeaderField[limit];
+            System.arraycopy(headers, 0, tmp, 0, count);
+            headers = tmp;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * End the current request. It is acceptable to write extra bytes using
+     * buffer.doWrite during the execution of this method.
+     *
+     * @return Should return 0 unless the filter does some content length
+     * delimitation, in which case the number is the amount of extra bytes or
+     * missing bytes, which would indicate an error.
+     * Note: It is recommended that extra bytes be swallowed by the filter.
+     *
+     * @throws IOException If an I/O error occurs while writing to the client
+     */
+    public long end() throws IOException;
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public int getKeepAliveTimeout() { return endpoint.getKeepAliveTimeout(); }
+-----CSCI578-----
+
+
+    public int getMaxHeaderCount() {
+        return endpoint.getMaxHeaderCount();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected SocketState dispatchEndRequest() {
+        // Set keep alive timeout for next request if enabled
+        if (keepAliveTimeout > 0) {
+            socketWrapper.setReadTimeout(keepAliveTimeout);
+        }
+        return SocketState.OPEN;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * End the current request. It is acceptable to write extra bytes using
+     * buffer.doWrite during the execution of this method.
+     */
+    @Override
+    public long end()
+        throws IOException {
+        if (compressionStream == null) {
+            compressionStream = new GZIPOutputStream(fakeOutputStream, true);
+        }
+        compressionStream.finish();
+        compressionStream.close();
+        return ((OutputFilter) buffer).end();
+    }

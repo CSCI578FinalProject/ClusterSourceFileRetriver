@@ -1,0 +1,49 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /** Accept incoming connections, dispatch to the thread pool
+     */
+    void acceptConnections() {
+        if( apr==null ) return;
+
+        if( log.isDebugEnabled() )
+            log.debug("Accepting ajp connections on " + file);
+        
+        while( running ) {
+            try {
+                MsgContext ep=this.createMsgContext();
+
+                // blocking - opening a server connection.
+                int status=this.open(ep);
+                if( status != 0 && status != 2 ) {
+                    log.error( "Error acceptin connection on " + file );
+                    break;
+                }
+
+                //    if( log.isDebugEnabled() )
+                //     log.debug("Accepted ajp connections ");
+        
+                AprConnection ajpConn= new AprConnection(this, ep);
+                tp.runIt( ajpConn );
+            } catch( Exception ex ) {
+                ex.printStackTrace();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /** Open a connection - since we're listening that will block in
+        accept
+    */
+    public int open(MsgContext ep) throws IOException {
+        // Will associate a jk_endpoint with ep and call open() on it.
+        // jk_channel_un will accept a connection and set the socket info
+        // in the endpoint. MsgContext will represent an active connection.
+        return super.nativeDispatch( ep.getMsg(0), ep, CH_OPEN, 1 );
+    }
+-----CSCI578-----
+-----CSCI578-----

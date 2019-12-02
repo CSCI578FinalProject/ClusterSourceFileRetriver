@@ -1,0 +1,134 @@
+11
+-----CSCI578-----
+
+
+
+    @Override
+    protected void startInternal() throws LifecycleException {
+
+        // Ensure caches for timing stats are the right size by filling with
+        // nulls.
+        while (sessionCreationTiming.size() < TIMING_STATS_CACHE_SIZE) {
+            sessionCreationTiming.add(null);
+        }
+        while (sessionExpirationTiming.size() < TIMING_STATS_CACHE_SIZE) {
+            sessionExpirationTiming.add(null);
+        }
+
+        /* Create sessionIdGenerator if not explicitly configured */
+        SessionIdGenerator sessionIdGenerator = getSessionIdGenerator();
+        if (sessionIdGenerator == null) {
+            sessionIdGenerator = new StandardSessionIdGenerator();
+            setSessionIdGenerator(sessionIdGenerator);
+        }
+
+        sessionIdGenerator.setJvmRoute(getJvmRoute());
+        if (sessionIdGenerator instanceof SessionIdGeneratorBase) {
+            SessionIdGeneratorBase sig = (SessionIdGeneratorBase)sessionIdGenerator;
+            sig.setSecureRandomAlgorithm(getSecureRandomAlgorithm());
+            sig.setSecureRandomClass(getSecureRandomClass());
+            sig.setSecureRandomProvider(getSecureRandomProvider());
+        }
+
+        if (sessionIdGenerator instanceof Lifecycle) {
+            ((Lifecycle) sessionIdGenerator).start();
+        } else {
+            // Force initialization of the random number generator
+            if (log.isDebugEnabled())
+                log.debug("Force random number initialization starting");
+            sessionIdGenerator.generateSessionId();
+            if (log.isDebugEnabled())
+                log.debug("Force random number initialization completed");
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setSessionIdGenerator(SessionIdGenerator sessionIdGenerator) {
+        this.sessionIdGenerator = sessionIdGenerator;
+        sessionIdGeneratorClass = sessionIdGenerator.getClass();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return The secure random number generator algorithm name.
+     */
+    public String getSecureRandomAlgorithm() {
+        return secureRandomAlgorithm;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public SessionIdGenerator getSessionIdGenerator() {
+        if (sessionIdGenerator != null) {
+            return sessionIdGenerator;
+        } else if (sessionIdGeneratorClass != null) {
+            try {
+                sessionIdGenerator = sessionIdGeneratorClass.newInstance();
+                return sessionIdGenerator;
+            } catch(IllegalAccessException ex) {
+                // Ignore
+            } catch(InstantiationException ex) {
+                // Ignore
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return The secure random number generator provider name.
+     */
+    public String getSecureRandomProvider() {
+        return secureRandomProvider;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return The secure random number generator class name.
+     */
+    public String getSecureRandomClass() {
+
+        return (this.secureRandomClass);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Specify the node identifier associated with this node which will be
+     * included in the generated session ID.
+     *
+     * @param jvmRoute  The node identifier
+     */
+    public void setJvmRoute(String jvmRoute);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Generate and return a new session identifier.
+     *
+     * @return the newly generated session id
+     */
+    public String generateSessionId();
+
+
+    /**
+     * Generate and return a new session identifier.
+     *
+     * @param route   node identifier to include in generated id
+     * @return the newly generated session id
+     */
+    public String generateSessionId(String route);

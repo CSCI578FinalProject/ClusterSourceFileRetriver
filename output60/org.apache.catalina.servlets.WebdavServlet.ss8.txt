@@ -1,0 +1,350 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Propfind helper method.
+     *
+     * @param req The servlet request
+     * @param resources Resources object associated with this context
+     * @param generatedXML XML response to the Propfind request
+     * @param path Path of the current resource
+     * @param type Propfind type
+     * @param propertiesVector If the propfind type is find properties by
+     * name, then this Vector contains those properties
+     */
+    private void parseProperties(HttpServletRequest req,
+                                 XMLWriter generatedXML,
+                                 String path, int type,
+                                 Vector<String> propertiesVector) {
+
+        // Exclude any resource in the /WEB-INF and /META-INF subdirectories
+        if (isSpecialPath(path))
+            return;
+
+        CacheEntry cacheEntry = resources.lookupCache(path);
+        if (!cacheEntry.exists) {
+        	// File is in directory listing but doesn't appear to exist
+        	// Broken symlink or odd permission settings?
+        	return;
+        }
+
+        generatedXML.writeElement("D", "response", XMLWriter.OPENING);
+        String status = new String("HTTP/1.1 " + WebdavStatus.SC_OK + " "
+                                   + WebdavStatus.getStatusText
+                                   (WebdavStatus.SC_OK));
+
+        // Generating href element
+        generatedXML.writeElement("D", "href", XMLWriter.OPENING);
+
+        String href = req.getContextPath() + req.getServletPath();
+        if ((href.endsWith("/")) && (path.startsWith("/")))
+            href += path.substring(1);
+        else
+            href += path;
+        if ((cacheEntry.context != null) && (!href.endsWith("/")))
+            href += "/";
+
+        generatedXML.writeText(rewriteUrl(href));
+
+        generatedXML.writeElement("D", "href", XMLWriter.CLOSING);
+
+        String resourceName = path;
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash != -1)
+            resourceName = resourceName.substring(lastSlash + 1);
+
+        switch (type) {
+
+        case FIND_ALL_PROP :
+
+            generatedXML.writeElement("D", "propstat", XMLWriter.OPENING);
+            generatedXML.writeElement("D", "prop", XMLWriter.OPENING);
+
+            generatedXML.writeProperty("D", "creationdate",
+                    getISOCreationDate(cacheEntry.attributes.getCreation()));
+            generatedXML.writeElement("D", "displayname", XMLWriter.OPENING);
+            generatedXML.writeData(resourceName);
+            generatedXML.writeElement("D", "displayname", XMLWriter.CLOSING);
+            if (cacheEntry.resource != null) {
+                generatedXML.writeProperty
+                    ("D", "getlastmodified", FastHttpDateFormat.formatDate
+                           (cacheEntry.attributes.getLastModified(), null));
+                generatedXML.writeProperty
+                    ("D", "getcontentlength",
+                     String.valueOf(cacheEntry.attributes.getContentLength()));
+                String contentType = getServletContext().getMimeType
+                    (cacheEntry.name);
+                if (contentType != null) {
+                    generatedXML.writeProperty("D", "getcontenttype",
+                            contentType);
+                }
+                generatedXML.writeProperty("D", "getetag",
+                        cacheEntry.attributes.getETag());
+                generatedXML.writeElement("D", "resourcetype",
+                        XMLWriter.NO_CONTENT);
+            } else {
+                generatedXML.writeElement("D", "resourcetype",
+                        XMLWriter.OPENING);
+                generatedXML.writeElement("D", "collection",
+                        XMLWriter.NO_CONTENT);
+                generatedXML.writeElement("D", "resourcetype",
+                        XMLWriter.CLOSING);
+            }
+
+            generatedXML.writeProperty("D", "source", "");
+
+            String supportedLocks = "<D:lockentry>"
+                + "<D:lockscope><D:exclusive/></D:lockscope>"
+                + "<D:locktype><D:write/></D:locktype>"
+                + "</D:lockentry>" + "<D:lockentry>"
+                + "<D:lockscope><D:shared/></D:lockscope>"
+                + "<D:locktype><D:write/></D:locktype>"
+                + "</D:lockentry>";
+            generatedXML.writeElement("D", "supportedlock", XMLWriter.OPENING);
+            generatedXML.writeText(supportedLocks);
+            generatedXML.writeElement("D", "supportedlock", XMLWriter.CLOSING);
+
+            generateLockDiscovery(path, generatedXML);
+
+            generatedXML.writeElement("D", "prop", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "status", XMLWriter.OPENING);
+            generatedXML.writeText(status);
+            generatedXML.writeElement("D", "status", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "propstat", XMLWriter.CLOSING);
+
+            break;
+
+        case FIND_PROPERTY_NAMES :
+
+            generatedXML.writeElement("D", "propstat", XMLWriter.OPENING);
+            generatedXML.writeElement("D", "prop", XMLWriter.OPENING);
+
+            generatedXML.writeElement("D", "creationdate",
+                                      XMLWriter.NO_CONTENT);
+            generatedXML.writeElement("D", "displayname", XMLWriter.NO_CONTENT);
+            if (cacheEntry.resource != null) {
+                generatedXML.writeElement("D", "getcontentlanguage",
+                        XMLWriter.NO_CONTENT);
+                generatedXML.writeElement("D", "getcontentlength",
+                        XMLWriter.NO_CONTENT);
+                generatedXML.writeElement("D", "getcontenttype",
+                        XMLWriter.NO_CONTENT);
+                generatedXML.writeElement("D", "getetag", XMLWriter.NO_CONTENT);
+                generatedXML.writeElement("D", "getlastmodified",
+                        XMLWriter.NO_CONTENT);
+            }
+            generatedXML.writeElement("D", "resourcetype",
+                                      XMLWriter.NO_CONTENT);
+            generatedXML.writeElement("D", "source", XMLWriter.NO_CONTENT);
+            generatedXML.writeElement("D", "lockdiscovery",
+                                      XMLWriter.NO_CONTENT);
+
+            generatedXML.writeElement("D", "prop", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "status", XMLWriter.OPENING);
+            generatedXML.writeText(status);
+            generatedXML.writeElement("D", "status", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "propstat", XMLWriter.CLOSING);
+
+            break;
+
+        case FIND_BY_PROPERTY :
+
+            Vector<String> propertiesNotFound = new Vector<String>();
+
+            // Parse the list of properties
+
+            generatedXML.writeElement("D", "propstat", XMLWriter.OPENING);
+            generatedXML.writeElement("D", "prop", XMLWriter.OPENING);
+
+            Enumeration<String> properties = propertiesVector.elements();
+
+            while (properties.hasMoreElements()) {
+
+                String property = (String) properties.nextElement();
+
+                if (property.equals("creationdate")) {
+                    generatedXML.writeProperty
+                        ("D", "creationdate",
+                         getISOCreationDate(cacheEntry.attributes.getCreation()));
+                } else if (property.equals("displayname")) {
+                    generatedXML.writeElement
+                        ("D", "displayname", XMLWriter.OPENING);
+                    generatedXML.writeData(resourceName);
+                    generatedXML.writeElement
+                        ("D", "displayname", XMLWriter.CLOSING);
+                } else if (property.equals("getcontentlanguage")) {
+                    if (cacheEntry.context != null) {
+                        propertiesNotFound.addElement(property);
+                    } else {
+                        generatedXML.writeElement("D", "getcontentlanguage",
+                                                  XMLWriter.NO_CONTENT);
+                    }
+                } else if (property.equals("getcontentlength")) {
+                    if (cacheEntry.context != null) {
+                        propertiesNotFound.addElement(property);
+                    } else {
+                        generatedXML.writeProperty
+                            ("D", "getcontentlength",
+                             (String.valueOf(cacheEntry.attributes.getContentLength())));
+                    }
+                } else if (property.equals("getcontenttype")) {
+                    if (cacheEntry.context != null) {
+                        propertiesNotFound.addElement(property);
+                    } else {
+                        generatedXML.writeProperty
+                            ("D", "getcontenttype",
+                             getServletContext().getMimeType
+                             (cacheEntry.name));
+                    }
+                } else if (property.equals("getetag")) {
+                    if (cacheEntry.context != null) {
+                        propertiesNotFound.addElement(property);
+                    } else {
+                        generatedXML.writeProperty
+                            ("D", "getetag", cacheEntry.attributes.getETag());
+                    }
+                } else if (property.equals("getlastmodified")) {
+                    if (cacheEntry.context != null) {
+                        propertiesNotFound.addElement(property);
+                    } else {
+                        generatedXML.writeProperty
+                            ("D", "getlastmodified", FastHttpDateFormat.formatDate
+                                    (cacheEntry.attributes.getLastModified(), null));
+                    }
+                } else if (property.equals("resourcetype")) {
+                    if (cacheEntry.context != null) {
+                        generatedXML.writeElement("D", "resourcetype",
+                                XMLWriter.OPENING);
+                        generatedXML.writeElement("D", "collection",
+                                XMLWriter.NO_CONTENT);
+                        generatedXML.writeElement("D", "resourcetype",
+                                XMLWriter.CLOSING);
+                    } else {
+                        generatedXML.writeElement("D", "resourcetype",
+                                XMLWriter.NO_CONTENT);
+                    }
+                } else if (property.equals("source")) {
+                    generatedXML.writeProperty("D", "source", "");
+                } else if (property.equals("supportedlock")) {
+                    supportedLocks = "<D:lockentry>"
+                        + "<D:lockscope><D:exclusive/></D:lockscope>"
+                        + "<D:locktype><D:write/></D:locktype>"
+                        + "</D:lockentry>" + "<D:lockentry>"
+                        + "<D:lockscope><D:shared/></D:lockscope>"
+                        + "<D:locktype><D:write/></D:locktype>"
+                        + "</D:lockentry>";
+                    generatedXML.writeElement("D", "supportedlock",
+                            XMLWriter.OPENING);
+                    generatedXML.writeText(supportedLocks);
+                    generatedXML.writeElement("D", "supportedlock",
+                            XMLWriter.CLOSING);
+                } else if (property.equals("lockdiscovery")) {
+                    if (!generateLockDiscovery(path, generatedXML))
+                        propertiesNotFound.addElement(property);
+                } else {
+                    propertiesNotFound.addElement(property);
+                }
+
+            }
+
+            generatedXML.writeElement("D", "prop", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "status", XMLWriter.OPENING);
+            generatedXML.writeText(status);
+            generatedXML.writeElement("D", "status", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "propstat", XMLWriter.CLOSING);
+
+            Enumeration propertiesNotFoundList = propertiesNotFound.elements();
+
+            if (propertiesNotFoundList.hasMoreElements()) {
+
+                status = new String("HTTP/1.1 " + WebdavStatus.SC_NOT_FOUND
+                                    + " " + WebdavStatus.getStatusText
+                                    (WebdavStatus.SC_NOT_FOUND));
+
+                generatedXML.writeElement("D", "propstat", XMLWriter.OPENING);
+                generatedXML.writeElement("D", "prop", XMLWriter.OPENING);
+
+                while (propertiesNotFoundList.hasMoreElements()) {
+                    generatedXML.writeElement
+                        ("D", (String) propertiesNotFoundList.nextElement(),
+                         XMLWriter.NO_CONTENT);
+                }
+
+                generatedXML.writeElement("D", "prop", XMLWriter.CLOSING);
+                generatedXML.writeElement("D", "status", XMLWriter.OPENING);
+                generatedXML.writeText(status);
+                generatedXML.writeElement("D", "status", XMLWriter.CLOSING);
+                generatedXML.writeElement("D", "propstat", XMLWriter.CLOSING);
+
+            }
+
+            break;
+
+        }
+
+        generatedXML.writeElement("D", "response", XMLWriter.CLOSING);
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Get creation time.
+     * 
+     * @return creation time value
+     */
+    public long getCreation() {
+        if (creation != -1L)
+            return creation;
+        if (creationDate != null)
+            return creationDate.getTime();
+        if (attributes != null) {
+            Attribute attribute = attributes.get(CREATION_DATE);
+            if (attribute != null) {
+                try {
+                    Object value = attribute.get();
+                    if (value instanceof Long) {
+                        creation = ((Long) value).longValue();
+                    } else if (value instanceof Date) {
+                        creation = ((Date) value).getTime();
+                        creationDate = (Date) value;
+                    } else {
+                        String creationDateValue = value.toString();
+                        Date result = null;
+                        // Parsing the HTTP Date
+                        for (int i = 0; (result == null) && 
+                                 (i < formats.length); i++) {
+                            try {
+                                result = formats[i].parse(creationDateValue);
+                            } catch (ParseException e) {
+                                ;
+                            }
+                        }
+                        if (result != null) {
+                            creation = result.getTime();
+                            creationDate = result;
+                        }
+                    }
+                } catch (NamingException e) {
+                    ; // No value for the attribute
+                }
+            }
+        }
+        return creation;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write text.
+     *
+     * @param text Text to append
+     */
+    public void writeText(String text) {
+        buffer.append(text);
+    }
+-----CSCI578-----

@@ -1,0 +1,161 @@
+13
+-----CSCI578-----
+
+
+    public static Class forName(String name) throws ClassNotFoundException {
+        if (null == name || "".equals(name)) {
+            return null;
+        }
+        Class c = forNamePrimitive(name);
+        if (c == null) {
+            if (name.endsWith("[]")) {
+                String nc = name.substring(0, name.length() - 2);
+                c = Class.forName(nc, true, Thread.currentThread().getContextClassLoader());
+                c = Array.newInstance(c, 0).getClass();
+            } else {
+                c = Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+            }
+        }
+        return c;
+    }
+-----CSCI578-----
+
+
+    protected static Class forNamePrimitive(String name) {
+        if (name.length() <= 8) {
+            int p = Arrays.binarySearch(PRIMITIVE_NAMES, name);
+            if (p >= 0) {
+                return PRIMITIVES[p];
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see java.io.Externalizable#readExternal(java.io.ObjectInput)
+     */
+    public void readExternal(ObjectInput in) throws IOException,
+            ClassNotFoundException {
+        this.expr = in.readUTF();
+        String type = in.readUTF();
+        if (!"".equals(type)) {
+            this.expectedType = ReflectionUtil.forName(type);
+        }
+        this.paramTypes = ReflectionUtil.toTypeArray(((String[]) in
+                .readObject()));
+        this.fnMapper = (FunctionMapper) in.readObject();
+        this.varMapper = (VariableMapper) in.readObject();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Converts an array of Class names to Class types
+     */
+    public static Class[] toTypeArray(String[] s) throws ClassNotFoundException {
+        if (s == null)
+            return null;
+        Class[] c = new Class[s.length];
+        for (int i = 0; i < s.length; i++) {
+            c[i] = forName(s[i]);
+        }
+        return c;
+    }
+-----CSCI578-----
+
+
+    public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+        this.expr = in.readUTF();
+        String type = in.readUTF();
+        if (!"".equals(type)) {
+            this.expectedType = ReflectionUtil.forName(type);
+        }
+        this.paramTypes = ReflectionUtil.toTypeArray(((String[]) in
+                .readObject()));
+    }
+-----CSCI578-----
+
+
+    public void readExternal(ObjectInput in) throws IOException,
+            ClassNotFoundException {
+        this.expr = in.readUTF();
+        String type = in.readUTF();
+        if (!"".equals(type)) {
+            this.expectedType = ReflectionUtil.forName(type);
+        }
+        this.fnMapper = (FunctionMapper) in.readObject();
+        this.varMapper = (VariableMapper) in.readObject();
+    }
+-----CSCI578-----
+
+
+    public void readExternal(ObjectInput in) throws IOException,
+            ClassNotFoundException {
+        this.value = in.readObject();
+        String type = in.readUTF();
+        if (!"".equals(type)) {
+            this.expectedType = ReflectionUtil.forName(type);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /*
+     * (non-Javadoc)
+     * 
+     * @see javax.el.FunctionMapper#resolveFunction(java.lang.String,
+     *      java.lang.String)
+     */
+    public Method resolveFunction(String prefix, String localName) {
+        if (this.functions != null) {
+            Function f = this.functions.get(prefix + ":" + localName);
+            return f.getMethod();
+        }
+        return null;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Converts an array of Class types to Class names
+     */
+    public static String[] toTypeNameArray(Class[] c) {
+        if (c == null)
+            return null;
+        String[] s = new String[c.length];
+        for (int i = 0; i < c.length; i++) {
+            s[i] = c[i].getName();
+        }
+        return s;
+    }
+-----CSCI578-----
+
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see java.io.Externalizable#writeExternal(java.io.ObjectOutput)
+     */
+    public void writeExternal(ObjectOutput out) throws IOException {
+        out.writeUTF(this.expr);
+        out.writeUTF((this.expectedType != null) ? this.expectedType.getName()
+                : "");
+        out.writeObject(ReflectionUtil.toTypeNameArray(this.paramTypes));
+        out.writeObject(this.fnMapper);
+        out.writeObject(this.varMapper);
+    }
+-----CSCI578-----
+
+
+    public void writeExternal(ObjectOutput out) throws IOException {
+        out.writeUTF(this.expr);
+        out.writeUTF((this.expectedType != null) ? this.expectedType.getName()
+                : "");
+        out.writeObject(ReflectionUtil.toTypeNameArray(this.paramTypes));
+    }

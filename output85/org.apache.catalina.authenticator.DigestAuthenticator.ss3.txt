@@ -1,0 +1,85 @@
+9
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Authenticate the user making this request, based on the specified
+     * login configuration.  Return <code>true</code> if any specified
+     * constraint has been satisfied, or <code>false</code> if we have
+     * created a response challenge already.
+     *
+     * @param request Request we are processing
+     * @param response Response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public boolean authenticate(Request request, HttpServletResponse response)
+            throws IOException {
+
+        // NOTE: We don't try to reauthenticate using any existing SSO session,
+        // because that will only work if the original authentication was
+        // BASIC or FORM, which are less secure than the DIGEST auth-type
+        // specified for this webapp
+        //
+        // Change to true below to allow previous FORM or BASIC authentications
+        // to authenticate users for this webapp
+        // TODO make this a configurable attribute (in SingleSignOn??)
+        if (checkForCachedAuthentication(request, response, false)) {
+            return true;
+        }
+
+        // Validate any credentials already included with this request
+        Principal principal = null;
+        String authorization = request.getHeader("authorization");
+        DigestInfo digestInfo = new DigestInfo(getOpaque(), getNonceValidity(),
+                getKey(), nonces, isValidateUri());
+        if (authorization != null) {
+            if (digestInfo.parse(request, authorization)) {
+                if (digestInfo.validate(request)) {
+                    principal = digestInfo.authenticate(context.getRealm());
+                }
+
+                if (principal != null && !digestInfo.isNonceStale()) {
+                    register(request, response, principal,
+                            HttpServletRequest.DIGEST_AUTH,
+                            digestInfo.getUsername(), null);
+                    return true;
+                }
+            }
+        }
+
+        // Send an "unauthorized" response and an appropriate challenge
+
+        // Next, generate a nonce token (that is a token which is supposed
+        // to be unique).
+        String nonce = generateNonce(request);
+
+        setAuthenticateHeader(request, response, nonce,
+                principal != null && digestInfo.isNonceStale());
+        response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    public boolean isValidateUri() {
+        return validateUri;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public long getNonceValidity() {
+        return nonceValidity;
+    }

@@ -1,0 +1,109 @@
+6
+-----CSCI578-----
+
+
+
+    Map<String,String> getPathParams() {
+        return pathParams;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Checks to see if this is an HTTP request that includes a valid upgrade
+     * request to web socket.
+     * <p>
+     * Note: RFC 2616 does not limit HTTP upgrade to GET requests but the Java
+     *       WebSocket spec 1.0, section 8.2 implies such a limitation and RFC
+     *       6455 section 4.1 requires that a WebSocket Upgrade uses GET.
+     * @param request  The request to check if it is an HTTP upgrade request for
+     *                 a WebSocket connection
+     * @param response The response associated with the request
+     * @return <code>true</code> if the request includes a HTTP Upgrade request
+     *         for the WebSocket protocol, otherwise <code>false</code>
+     */
+    public static boolean isWebSocketUpgradeRequest(ServletRequest request,
+            ServletResponse response) {
+
+        return ((request instanceof HttpServletRequest) &&
+                (response instanceof HttpServletResponse) &&
+                headerContainsToken((HttpServletRequest) request,
+                        Constants.UPGRADE_HEADER_NAME,
+                        Constants.UPGRADE_HEADER_VALUE) &&
+                "GET".equals(((HttpServletRequest) request).getMethod()));
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * This only works for tokens. Quoted strings need more sophisticated
+     * parsing.
+     */
+    private static boolean headerContainsToken(HttpServletRequest req,
+            String headerName, String target) {
+        Enumeration<String> headers = req.getHeaders(headerName);
+        while (headers.hasMoreElements()) {
+            String header = headers.nextElement();
+            String[] tokens = header.split(",");
+            for (String token : tokens) {
+                if (target.equalsIgnoreCase(token.trim())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    ServerEndpointConfig getConfig() {
+        return config;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response,
+            FilterChain chain) throws IOException, ServletException {
+
+        // This filter only needs to handle WebSocket upgrade requests
+        if (!sc.areEndpointsRegistered() ||
+                !UpgradeUtil.isWebSocketUpgradeRequest(request, response)) {
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // HTTP request with an upgrade header for WebSocket present
+        HttpServletRequest req = (HttpServletRequest) request;
+        HttpServletResponse resp = (HttpServletResponse) response;
+
+        // Check to see if this WebSocket implementation has a matching mapping
+        String path;
+        String pathInfo = req.getPathInfo();
+        if (pathInfo == null) {
+            path = req.getServletPath();
+        } else {
+            path = req.getServletPath() + pathInfo;
+        }
+        WsMappingResult mappingResult = sc.findMapping(path);
+
+        if (mappingResult == null) {
+            // No endpoint registered for the requested path. Let the
+            // application handle it (it might redirect or forward for example)
+            chain.doFilter(request, response);
+            return;
+        }
+
+        UpgradeUtil.doUpgrade(sc, req, resp, mappingResult.getConfig(),
+                mappingResult.getPathParams());
+    }
+-----CSCI578-----
+
+
+
+    boolean areEndpointsRegistered() {
+        return endpointsRegistered;
+    }

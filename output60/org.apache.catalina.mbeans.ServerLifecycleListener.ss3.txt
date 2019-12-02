@@ -1,0 +1,508 @@
+18
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+
+
+    /**
+     * Deregister the MBeans for the specified Connector and its nested
+     * components.
+     *
+     * @param connector Connector for which to deregister MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean destruction
+     */
+    protected void destroyMBeans(Connector connector, Service service)
+        throws Exception {
+
+        // deregister the MBean for the Connector itself
+        if (log.isDebugEnabled())
+            log.debug("Destroying MBean for Connector " + connector);
+        MBeanUtils.destroyMBean(connector, service);
+
+    }
+
+
+
+    /**
+     * Deregister the MBeans for the specified Context and its nested
+     * components.
+     *
+     * @param context Context for which to deregister MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean destruction
+     */
+    protected void destroyMBeans(Context context) throws Exception {
+
+        // Deregister ourselves as a ContainerListener
+        context.removeContainerListener(this);
+
+        // Destroy the MBeans for the associated nested components
+        Realm hRealm = context.getParent().getRealm();
+        Realm cRealm = context.getRealm();
+        if ((cRealm != null) && (cRealm != hRealm)) {
+            if (log.isDebugEnabled())
+                log.debug("Destroying MBean for Realm " + cRealm);
+            //MBeanUtils.destroyMBean(cRealm);
+        }
+        Manager cManager = context.getManager();
+        if (cManager != null) {
+            if (log.isDebugEnabled())
+                log.debug("Destroying MBean for Manager " + cManager);
+            //MBeanUtils.destroyMBean(cManager);
+        }
+        Loader cLoader = context.getLoader();
+        if (cLoader != null) {
+            if (log.isDebugEnabled())
+                log.debug("Destroying MBean for Loader " + cLoader);
+            //MBeanUtils.destroyMBean(cLoader);
+        }
+
+        // Destroy the MBeans for the NamingResources (if any)
+        NamingResources resources = context.getNamingResources();
+        if (resources != null) {
+            destroyMBeans(resources);
+        }
+
+        // deregister the MBean for the Context itself
+        if (log.isDebugEnabled())
+            log.debug("Destroying MBean for Context " + context);
+        MBeanUtils.destroyMBean(context);
+        if (context instanceof StandardContext) {
+            ((StandardContext) context).
+                removePropertyChangeListener(this);
+        }
+
+    }
+
+
+
+    /**
+     * Deregister the MBeans for the specified ContextEnvironment entry.
+     *
+     * @param environment ContextEnvironment for which to destroy MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean destruction
+     */
+    protected void destroyMBeans(ContextEnvironment environment)
+        throws Exception {
+
+        // Destroy the MBean for the ContextEnvironment itself
+        if (log.isDebugEnabled()) {
+            log.debug("Destroying MBean for ContextEnvironment " + environment);
+        }
+        MBeanUtils.destroyMBean(environment);
+
+    }
+
+
+
+    /**
+     * Deregister the MBeans for the specified ContextResource entry.
+     *
+     * @param resource ContextResource for which to destroy MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean destruction
+     */
+    protected void destroyMBeans(ContextResource resource)
+        throws Exception {
+
+        // Destroy the MBean for the ContextResource itself
+        if (log.isDebugEnabled()) {
+            log.debug("Destroying MBean for ContextResource " + resource);
+        }
+        MBeanUtils.destroyMBean(resource);
+
+    }
+
+
+
+    /**
+     * Deregister the MBeans for the specified ContextResourceLink entry.
+     *
+     * @param resourceLink ContextResourceLink for which to destroy MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean destruction
+     */
+    protected void destroyMBeans(ContextResourceLink resourceLink)
+        throws Exception {
+
+        // Destroy the MBean for the ContextResourceLink itself
+        if (log.isDebugEnabled()) {
+            log.debug("Destroying MBean for ContextResourceLink " + resourceLink);
+        }
+        MBeanUtils.destroyMBean(resourceLink);
+
+    }
+
+
+
+    /**
+     * Deregister the MBeans for the specified DefaultContext and its nested
+     * components.
+     *
+     * @param dcontext DefaultContext for which to deregister MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean destruction
+     */
+    /*
+    protected void destroyMBeans(DefaultContext dcontext) throws Exception {
+
+        Manager dManager = dcontext.getManager();
+        if (dManager != null) {
+            if (log.isDebugEnabled())
+                log.debug("Destroying MBean for Manager " + dManager);
+            //MBeanUtils.destroyMBean(dManager);
+        }
+
+        Loader dLoader = dcontext.getLoader();
+        if (dLoader != null) {
+            if (log.isDebugEnabled())
+                log.debug("Destroying MBean for Loader " + dLoader);
+            //MBeanUtils.destroyMBean(dLoader);
+        }
+
+        // Destroy the MBeans for the NamingResources (if any)
+        NamingResources resources = dcontext.getNamingResources();
+        if (resources != null) {
+            destroyMBeans(resources);
+        }
+
+        // deregister the MBean for the DefaultContext itself
+        if (log.isDebugEnabled())
+            log.debug("Destroying MBean for Context " + dcontext);
+        MBeanUtils.destroyMBean(dcontext);
+        dcontext.removePropertyChangeListener(this);
+
+    }
+    */
+
+
+    /**
+     * Deregister the MBeans for the specified Engine and its nested
+     * components.
+     *
+     * @param engine Engine for which to destroy MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean destruction
+     */
+    protected void destroyMBeans(Engine engine) throws Exception {
+
+        // Deregister ourselves as a ContainerListener
+        engine.removeContainerListener(this);
+
+        // Deregister the MBeans for each child Host
+        Container hosts[] = engine.findChildren();
+        for (int k = 0; k < hosts.length; k++) {
+            destroyMBeans((Host) hosts[k]);
+        }
+
+        // Deregister the MBeans for the associated nested components
+        Realm eRealm = engine.getRealm();
+        if (eRealm != null) {
+            if (log.isDebugEnabled())
+                log.debug("Destroying MBean for Realm " + eRealm);
+            //MBeanUtils.destroyMBean(eRealm);
+        }
+
+        // Deregister the MBean for the Engine itself
+        if (log.isDebugEnabled()) {
+            log.debug("Destroying MBean for Engine " + engine);
+        }
+        MBeanUtils.destroyMBean(engine);
+
+    }
+
+
+
+    /**
+     * Deregister the MBeans for the specified Host and its nested components.
+     *
+     * @param host Host for which to destroy MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean destruction
+     */
+    protected void destroyMBeans(Host host) throws Exception {
+
+        // Deregister ourselves as a ContainerListener
+        host.removeContainerListener(this);
+
+        // Deregister the MBeans for each child Context
+        Container contexts[] = host.findChildren();
+        for (int k = 0; k < contexts.length; k++) {
+            destroyMBeans((Context) contexts[k]);
+        }
+
+
+        // Deregister the MBeans for the associated nested components
+        Realm eRealm = host.getParent().getRealm();
+        Realm hRealm = host.getRealm();
+        if ((hRealm != null) && (hRealm != eRealm)) {
+            if (log.isDebugEnabled())
+                log.debug("Destroying MBean for Realm " + hRealm);
+            //MBeanUtils.destroyMBean(hRealm);
+        }
+
+        // Deregister the MBean for the Host itself
+        if (log.isDebugEnabled()) {
+            log.debug("Destroying MBean for Host " + host);
+        }
+        MBeanUtils.destroyMBean(host);
+
+    }
+
+
+
+    /**
+     * Deregister the MBeans for the specified NamingResources and its
+     * nested components.
+     *
+     * @param resources NamingResources for which to destroy MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean destruction
+     */
+    protected void destroyMBeans(NamingResources resources) throws Exception {
+
+        // Destroy the MBeans for each child resource entry
+        ContextResource cresources[] = resources.findResources();
+        for (int i = 0; i < cresources.length; i++) {
+            destroyMBeans(cresources[i]);
+        }
+
+        // Destroy the MBeans for each child resource link entry
+        ContextResourceLink cresourcelinks[] = resources.findResourceLinks();
+        for (int i = 0; i < cresourcelinks.length; i++) {
+            destroyMBeans(cresourcelinks[i]);
+        }
+
+        // Destroy the MBeans for each child environment entry
+        ContextEnvironment environments[] = resources.findEnvironments();
+        for (int i = 0; i < environments.length; i++) {
+            destroyMBeans(environments[i]);
+        }
+
+        // Destroy the MBean for the NamingResources itself
+        if (log.isDebugEnabled()) {
+            log.debug("Destroying MBean for NamingResources " + resources);
+        }
+        MBeanUtils.destroyMBean(resources);
+        resources.removePropertyChangeListener(this);
+
+    }
+
+
+
+    /**
+     * Deregister the MBeans for the specified Server and its related
+     * components.
+     *
+     * @param server Server for which to destroy MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean destruction
+     */
+    protected void destroyMBeans(Server server) throws Exception {
+
+        // Destroy the MBeans for the global NamingResources (if any)
+        NamingResources resources = server.getGlobalNamingResources();
+        if (resources != null) {
+            destroyMBeans(resources);
+        }
+
+        // Destroy the MBeans for each child Service
+        Service services[] = server.findServices();
+        for (int i = 0; i < services.length; i++) {
+            // FIXME - Warp object hierarchy not currently supported
+            if (services[i].getContainer().getClass().getName().equals
+                ("org.apache.catalina.connector.warp.WarpEngine")) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Skipping MBean for Service " + services[i]);
+                }
+                continue;
+            }
+            destroyMBeans(services[i]);
+        }
+
+        // Destroy the MBean for the Server itself
+        if (log.isDebugEnabled()) {
+            log.debug("Destroying MBean for Server " + server);
+        }
+        MBeanUtils.destroyMBean(server);
+        if (server instanceof StandardServer) {
+            ((StandardServer) server).removePropertyChangeListener(this);
+        }
+
+    }
+
+
+
+    /**
+     * Deregister the MBeans for the specified Service and its nested
+     * components.
+     *
+     * @param service Service for which to destroy MBeans
+     *
+     * @exception Exception if an exception is thrown during MBean destruction
+     */
+    protected void destroyMBeans(Service service) throws Exception {
+
+        // Deregister the MBeans for the associated Engine
+        Engine engine = (Engine) service.getContainer();
+        if (engine != null) {
+            destroyMBeans(engine);
+        }
+
+        // Deregister the MBeans for the corresponding Connectors
+        Connector connectors[] = service.findConnectors();
+        for (int j = 0; j < connectors.length; j++) {
+            destroyMBeans(connectors[j], service);
+        }
+
+        if (service instanceof StandardService) {
+            ((StandardService) service).removePropertyChangeListener(this);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a property change listener from this component.
+     *
+     * @param listener The listener to remove
+     */
+    public void removePropertyChangeListener(PropertyChangeListener listener) {
+
+        support.removePropertyChangeListener(listener);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a property change listener from this component.
+     *
+     * @param listener The listener to remove
+     */
+    public void removePropertyChangeListener(PropertyChangeListener listener) {
+
+        support.removePropertyChangeListener(listener);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Realm with which this Container is associated.  If there is
+     * no associated Realm, return the Realm associated with our parent
+     * Container (if any); otherwise return <code>null</code>.
+     */
+    public Realm getRealm();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Return the <code>Container</code> that handles requests for all
+     * <code>Connectors</code> associated with this Service.
+     */
+    public Container getContainer();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the global naming resources.
+     */
+    public NamingResources getGlobalNamingResources();
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a property change listener from this component.
+     *
+     * @param listener The listener to remove
+     */
+    public void removePropertyChangeListener(PropertyChangeListener listener) {
+
+        support.removePropertyChangeListener(listener);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the defined resource links for this application.  If
+     * none have been defined, a zero-length array is returned.
+     */
+    public ContextResourceLink[] findResourceLinks() {
+
+        synchronized (resourceLinks) {
+            ContextResourceLink results[] = 
+                new ContextResourceLink[resourceLinks.size()];
+            return ((ContextResourceLink[]) resourceLinks.values()
+                    .toArray(results));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the defined resource references for this application.  If
+     * none have been defined, a zero-length array is returned.
+     */
+    public ContextResource[] findResources() {
+
+        synchronized (resources) {
+            ContextResource results[] = new ContextResource[resources.size()];
+            return ((ContextResource[]) resources.values().toArray(results));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of defined environment entries for this web
+     * application.  If none have been defined, a zero-length array
+     * is returned.
+     */
+    public ContextEnvironment[] findEnvironments() {
+
+        synchronized (envs) {
+            ContextEnvironment results[] = new ContextEnvironment[envs.size()];
+            return ((ContextEnvironment[]) envs.values().toArray(results));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of Services defined within this Server.
+     */
+    public Service[] findServices();
+-----CSCI578-----
+
+
+    /**
+     * Find and return the set of Connectors associated with this Service.
+     */
+    public Connector[] findConnectors();
+-----CSCI578-----
+-----CSCI578-----

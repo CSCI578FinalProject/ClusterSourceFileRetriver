@@ -1,0 +1,530 @@
+32
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /*
+     * Implementation note:
+     * Validation applicable to all incoming frames should be implemented here.
+     * Frame type specific validation should be performed in the appropriate
+     * readXxxFrame() method.
+     * For validation applicable to some but not all frame types, use your
+     * judgement.
+     */
+    private void validateFrame(FrameType expected, FrameType frameType, int streamId, int flags,
+            int payloadSize) throws Http2Exception {
+
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("http2Parser.processFrame", connectionId,
+                    Integer.toString(streamId), frameType, Integer.toString(flags),
+                    Integer.toString(payloadSize)));
+        }
+
+        if (expected != null && frameType != expected) {
+            throw new StreamException(sm.getString("http2Parser.processFrame.unexpectedType",
+                    expected, frameType), Http2Error.PROTOCOL_ERROR, streamId);
+        }
+
+        int maxFrameSize = input.getMaxFrameSize();
+        if (payloadSize > maxFrameSize) {
+            throw new ConnectionException(sm.getString("http2Parser.payloadTooBig",
+                    Integer.toString(payloadSize), Integer.toString(maxFrameSize)),
+                    Http2Error.FRAME_SIZE_ERROR);
+        }
+
+        if (headersCurrentStream != -1) {
+            if (headersCurrentStream != streamId) {
+                throw new ConnectionException(sm.getString("http2Parser.headers.wrongStream",
+                        connectionId, Integer.toString(headersCurrentStream),
+                        Integer.toString(streamId)), Http2Error.COMPRESSION_ERROR);
+            }
+            if (frameType == FrameType.RST) {
+                // NO-OP: RST is OK here
+            } else if (frameType != FrameType.CONTINUATION) {
+                throw new ConnectionException(sm.getString("http2Parser.headers.wrongFrameType",
+                        connectionId, Integer.toString(headersCurrentStream),
+                        frameType), Http2Error.COMPRESSION_ERROR);
+            }
+        }
+
+        frameType.check(streamId, payloadSize);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void readWindowUpdateFrame(int streamId) throws Http2Exception, IOException {
+        byte[] payload = new byte[4];
+        input.fill(true,  payload);
+        int windowSizeIncrement = ByteUtil.get31Bits(payload, 0);
+
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("http2Parser.processFrameWindowUpdate.debug", connectionId,
+                    Integer.toString(streamId), Integer.toString(windowSizeIncrement)));
+        }
+
+        // Validate the data
+        if (windowSizeIncrement == 0) {
+            if (streamId == 0) {
+                throw new ConnectionException(
+                        sm.getString("http2Parser.processFrameWindowUpdate.invalidIncrement"),
+                        Http2Error.PROTOCOL_ERROR);
+            } else {
+                throw new StreamException(
+                        sm.getString("http2Parser.processFrameWindowUpdate.invalidIncrement"),
+                        Http2Error.PROTOCOL_ERROR, streamId);
+            }
+        }
+
+        output.incrementWindowSize(streamId, windowSizeIncrement);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void readSettingsFrame(int flags, int payloadSize) throws Http2Exception, IOException {
+        boolean ack = Flags.isAck(flags);
+        if (payloadSize > 0 && ack) {
+            throw new ConnectionException(sm.getString(
+                    "http2Parser.processFrameSettings.ackWithNonZeroPayload"),
+                    Http2Error.FRAME_SIZE_ERROR);
+        }
+
+        if (payloadSize != 0) {
+            // Process the settings
+            byte[] setting = new byte[6];
+            for (int i = 0; i < payloadSize / 6; i++) {
+                input.fill(true, setting);
+                int id = ByteUtil.getTwoBytes(setting, 0);
+                long value = ByteUtil.getFourBytes(setting, 2);
+                output.setting(Setting.valueOf(id), value);
+            }
+        }
+        output.settingsEnd(ack);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Decodes an integer in the HPACK prefex format. If the return value is -1
+     * it means that there was not enough data in the buffer to complete the decoding
+     * sequence.
+     * <p/>
+     * If this method returns -1 then the source buffer will not have been modified.
+     *
+     * @param source The buffer that contains the integer
+     * @param n      The encoding prefix length
+     * @return The encoded integer, or -1 if there was not enough data
+     */
+    static int decodeInteger(ByteBuffer source, int n) throws HpackException {
+        if (source.remaining() == 0) {
+            return -1;
+        }
+        int count = 1;
+        int sp = source.position();
+        int mask = PREFIX_TABLE[n];
+
+        int i = mask & source.get();
+        int b;
+        if (i < PREFIX_TABLE[n]) {
+            return i;
+        } else {
+            int m = 0;
+            do {
+                if(count++ > MAX_INTEGER_OCTETS) {
+                    throw new HpackException(sm.getString("hpack.integerEncodedOverTooManyOctets",
+                            Integer.valueOf(MAX_INTEGER_OCTETS)));
+                }
+                if (source.remaining() == 0) {
+                    //we have run out of data
+                    //reset
+                    source.position(sp);
+                    return -1;
+                }
+                b = source.get();
+                i = i + (b & 127) * (PREFIX_TABLE[m] + 1);
+                m += 7;
+            } while ((b & 128) == 128);
+        }
+        return i;
+    }
+-----CSCI578-----
+
+
+
+    private void readHeaderBlock(int payloadSize, boolean endOfHeaders)
+            throws Http2Exception, IOException {
+
+        while (payloadSize > 0) {
+            int toRead = Math.min(headerReadBuffer.remaining(), payloadSize);
+            // headerReadBuffer in write mode
+            input.fill(true, headerReadBuffer, toRead);
+            // switch to read mode
+            headerReadBuffer.flip();
+            try {
+                hpackDecoder.decode(headerReadBuffer);
+            } catch (HpackException hpe) {
+                throw new ConnectionException(
+                        sm.getString("http2Parser.processFrameHeaders.decodingFailed"),
+                        Http2Error.COMPRESSION_ERROR);
+            }
+            // switches to write mode
+            headerReadBuffer.compact();
+            payloadSize -= toRead;
+        }
+
+        if (headerReadBuffer.position() > 0 && endOfHeaders) {
+            throw new ConnectionException(
+                    sm.getString("http2Parser.processFrameHeaders.decodingDataLeft"),
+                    Http2Error.COMPRESSION_ERROR);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Decodes the provided frame data. If this method leaves data in the buffer
+     * then this buffer should be compacted so this data is preserved, unless
+     * there is no more data in which case this should be considered a protocol error.
+     *
+     * @param buffer The buffer
+     *
+     * @throws HpackException If the packed data is not valid
+     */
+    public void decode(ByteBuffer buffer) throws HpackException {
+        while (buffer.hasRemaining()) {
+            int originalPos = buffer.position();
+            byte b = buffer.get();
+            if ((b & 0b10000000) != 0) {
+                //if the first bit is set it is an indexed header field
+                buffer.position(buffer.position() - 1); //unget the byte
+                int index = Hpack.decodeInteger(buffer, 7); //prefix is 7
+                if (index == -1) {
+                    buffer.position(originalPos);
+                    return;
+                } else if(index == 0) {
+                    throw new HpackException(
+                            sm.getString("hpackdecoder.zeroNotValidHeaderTableIndex"));
+                }
+                handleIndex(index);
+            } else if ((b & 0b01000000) != 0) {
+                //Literal Header Field with Incremental Indexing
+                String headerName = readHeaderName(buffer, 6);
+                if (headerName == null) {
+                    buffer.position(originalPos);
+                    return;
+                }
+                String headerValue = readHpackString(buffer);
+                if (headerValue == null) {
+                    buffer.position(originalPos);
+                    return;
+                }
+                headerEmitter.emitHeader(headerName, headerValue, false);
+                addEntryToHeaderTable(new Hpack.HeaderField(headerName, headerValue));
+            } else if ((b & 0b11110000) == 0) {
+                //Literal Header Field without Indexing
+                String headerName = readHeaderName(buffer, 4);
+                if (headerName == null) {
+                    buffer.position(originalPos);
+                    return;
+                }
+                String headerValue = readHpackString(buffer);
+                if (headerValue == null) {
+                    buffer.position(originalPos);
+                    return;
+                }
+                headerEmitter.emitHeader(headerName, headerValue, false);
+            } else if ((b & 0b11110000) == 0b00010000) {
+                //Literal Header Field never indexed
+                String headerName = readHeaderName(buffer, 4);
+                if (headerName == null) {
+                    buffer.position(originalPos);
+                    return;
+                }
+                String headerValue = readHpackString(buffer);
+                if (headerValue == null) {
+                    buffer.position(originalPos);
+                    return;
+                }
+                headerEmitter.emitHeader(headerName, headerValue, true);
+            } else if ((b & 0b11100000) == 0b00100000) {
+                //context update max table size change
+                if (!handleMaxMemorySizeChange(buffer, originalPos)) {
+                    return;
+                }
+            } else {
+                throw new RuntimeException("Not yet implemented");
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * because we use a ring buffer type construct, and don't actually shuffle
+     * items in the array, we need to figure out the real index to use.
+     * <p/>
+     * package private for unit tests
+     *
+     * @param index The index from the hpack
+     * @return the real index into the array
+     */
+    int getRealIndex(int index) {
+        //the index is one based, but our table is zero based, hence -1
+        //also because of our ring buffer setup the indexes are reversed
+        //index = 1 is at position firstSlotPosition + filledSlots
+        return (firstSlotPosition + (filledTableSlots - index)) % headerTable.length;
+    }
+-----CSCI578-----
+
+
+    private boolean handleMaxMemorySizeChange(ByteBuffer buffer, int originalPos) throws HpackException {
+        buffer.position(buffer.position() - 1); //unget the byte
+        int size = Hpack.decodeInteger(buffer, 5);
+        if (size == -1) {
+            buffer.position(originalPos);
+            return false;
+        }
+        maxMemorySize = size;
+        if (currentMemorySize > maxMemorySize) {
+            int newTableSlots = filledTableSlots;
+            int tableLength = headerTable.length;
+            int newSize = currentMemorySize;
+            while (newSize > maxMemorySize) {
+                int clearIndex = firstSlotPosition;
+                firstSlotPosition++;
+                if (firstSlotPosition == tableLength) {
+                    firstSlotPosition = 0;
+                }
+                Hpack.HeaderField oldData = headerTable[clearIndex];
+                headerTable[clearIndex] = null;
+                newSize -= oldData.size;
+                newTableSlots--;
+            }
+            this.filledTableSlots = newTableSlots;
+            currentMemorySize = newSize;
+        }
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void readGoawayFrame(int payloadSize) throws IOException {
+        byte[] payload = new byte[payloadSize];
+        input.fill(true, payload);
+
+        int lastStreamId = ByteUtil.get31Bits(payload, 0);
+        long errorCode = ByteUtil.getFourBytes(payload, 4);
+        String debugData = null;
+        if (payloadSize > 8) {
+            debugData = new String(payload, 8, payloadSize - 8, StandardCharsets.UTF_8);
+        }
+        output.goaway(lastStreamId, errorCode, debugData);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void readPingFrame(int flags) throws IOException {
+        // Read the payload
+        byte[] payload = new byte[8];
+        input.fill(true, payload);
+        output.pingReceive(payload, Flags.isAck(flags));
+    }
+-----CSCI578-----
+
+
+
+    private void readHeadersFrame(int streamId, int flags, int payloadSize)
+            throws Http2Exception, IOException {
+
+        if (hpackDecoder == null) {
+            hpackDecoder = output.getHpackDecoder();
+        }
+        try {
+            hpackDecoder.setHeaderEmitter(output.headersStart(streamId));
+        } catch (StreamException se) {
+            swallow(streamId, payloadSize, false);
+            throw se;
+        }
+
+        int padLength = 0;
+        boolean padding = Flags.hasPadding(flags);
+        boolean priority = Flags.hasPriority(flags);
+        int optionalLen = 0;
+        if (padding) {
+            optionalLen = 1;
+        }
+        if (priority) {
+            optionalLen += 5;
+        }
+        if (optionalLen > 0) {
+            byte[] optional = new byte[optionalLen];
+            input.fill(true, optional);
+            int optionalPos = 0;
+            if (padding) {
+                padLength = ByteUtil.getOneByte(optional, optionalPos++);
+                if (padLength >= payloadSize) {
+                    throw new ConnectionException(
+                            sm.getString("http2Parser.processFrame.tooMuchPadding", connectionId,
+                                    Integer.toString(streamId), Integer.toString(padLength),
+                                    Integer.toString(payloadSize)), Http2Error.PROTOCOL_ERROR);
+                }
+            }
+            if (priority) {
+                boolean exclusive = ByteUtil.isBit7Set(optional[optionalPos]);
+                int parentStreamId = ByteUtil.get31Bits(optional, optionalPos);
+                int weight = ByteUtil.getOneByte(optional, optionalPos + 4) + 1;
+                output.reprioritise(streamId, parentStreamId, exclusive, weight);
+            }
+
+            payloadSize -= optionalLen;
+            payloadSize -= padLength;
+        }
+
+        boolean endOfHeaders = Flags.isEndOfHeaders(flags);
+
+        readHeaderBlock(payloadSize, endOfHeaders);
+
+        swallow(streamId, padLength, true);
+
+        if (endOfHeaders) {
+            output.headersEnd(streamId);
+        } else {
+            headersCurrentStream = streamId;
+        }
+
+        if (Flags.isEndOfStream(flags)) {
+            if (headersCurrentStream == -1) {
+                output.receiveEndOfStream(streamId);
+            } else {
+                headersEndStream = true;
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setHeaderEmitter(HeaderEmitter headerEmitter) {
+        this.headerEmitter = headerEmitter;
+    }
+-----CSCI578-----
+
+
+
+    public static boolean hasPriority(int flags) {
+        return (flags & 0x20) > 0;
+    }
+-----CSCI578-----
+
+
+
+    private void readDataFrame(int streamId, int flags, int payloadSize)
+            throws Http2Exception, IOException {
+        // Process the Stream
+        int padLength = 0;
+
+        boolean endOfStream = Flags.isEndOfStream(flags);
+
+        int dataLength;
+        if (Flags.hasPadding(flags)) {
+            byte[] b = new byte[1];
+            input.fill(true, b);
+            padLength = b[0] & 0xFF;
+
+            if (padLength >= payloadSize) {
+                throw new ConnectionException(
+                        sm.getString("http2Parser.processFrame.tooMuchPadding", connectionId,
+                                Integer.toString(streamId), Integer.toString(padLength),
+                                Integer.toString(payloadSize)), Http2Error.PROTOCOL_ERROR);
+            }
+            // +1 is for the padding length byte we just read above
+            dataLength = payloadSize - (padLength + 1);
+        } else {
+            dataLength = payloadSize;
+        }
+
+        if (log.isDebugEnabled()) {
+            String padding;
+            if (Flags.hasPadding(flags)) {
+                padding = Integer.toString(padLength);
+            } else {
+                padding = "none";
+            }
+            log.debug(sm.getString("http2Parser.processFrameData.lengths", connectionId,
+                    Integer.toString(streamId), Integer.toString(dataLength), padding));
+        }
+
+        ByteBuffer dest = output.startRequestBodyFrame(streamId, payloadSize);
+        if (dest == null) {
+            swallow(streamId, dataLength, false);
+            // Process padding before sending any notifications in case padding
+            // is invalid.
+            if (padLength > 0) {
+                swallow(streamId, padLength, true);
+            }
+            if (endOfStream) {
+                output.receiveEndOfStream(streamId);
+            }
+        } else {
+            synchronized (dest) {
+                input.fill(true, dest, dataLength);
+                // Process padding before sending any notifications in case
+                // padding is invalid.
+                if (padLength > 0) {
+                    swallow(streamId, padLength, true);
+                }
+                if (endOfStream) {
+                    output.receiveEndOfStream(streamId);
+                }
+                output.endRequestBodyFrame(streamId);
+            }
+        }
+        if (padLength > 0) {
+            output.swallowedPadding(streamId, padLength);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void readRstFrame(int streamId) throws Http2Exception, IOException {
+        byte[] payload = new byte[4];
+        input.fill(true, payload);
+
+        long errorCode = ByteUtil.getFourBytes(payload, 0);
+        output.reset(streamId, errorCode);
+        headersCurrentStream = -1;
+        headersEndStream = false;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void readUnknownFrame(int streamId, FrameType frameType, int flags, int payloadSize)
+            throws IOException {
+        try {
+            swallow(streamId, payloadSize, false);
+        } catch (ConnectionException e) {
+            // Will never happen because swallow() is called with mustBeZero set
+            // to false
+        }
+        output.swallowed(streamId, frameType, flags, payloadSize);
+    }
+-----CSCI578-----

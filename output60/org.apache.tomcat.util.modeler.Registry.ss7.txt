@@ -1,0 +1,352 @@
+15
+-----CSCI578-----
+
+
+    /** Lookup the component descriptor in the package and
+     * in the parent packages.
+     *
+     * @param beanClass
+     * @param type
+     */
+    private void findDescriptor( Class beanClass, String type ) {
+        if( type==null ) {
+            type=beanClass.getName();
+        }
+        ClassLoader classLoader=null;
+        if( beanClass!=null ) {
+            classLoader=beanClass.getClassLoader();
+        }
+        if( classLoader==null ) {
+            classLoader=Thread.currentThread().getContextClassLoader();
+        }
+        if( classLoader==null ) {
+            classLoader=this.getClass().getClassLoader();
+        }
+        
+        String className=type;
+        String pkg=className;
+        while( pkg.indexOf( ".") > 0 ) {
+            int lastComp=pkg.lastIndexOf( ".");
+            if( lastComp <= 0 ) return;
+            pkg=pkg.substring(0, lastComp);
+            if( searchedPaths.get( pkg ) != null ) {
+                return;
+            }
+            loadDescriptors(pkg, classLoader);
+        }
+        return;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Find and return the managed bean definition for the specified
+     * bean name, if any; otherwise return <code>null</code>.
+     *
+     * @param name Name of the managed bean to be returned. Since 1.1, both
+     *   short names or the full name of the class can be used.
+     * @since 1.0
+     */
+    public ManagedBean findManagedBean(String name) {
+        // XXX Group ?? Use Group + Type
+        ManagedBean mb=((ManagedBean) descriptors.get(name));
+        if( mb==null )
+            mb=(ManagedBean)descriptorsByClass.get(name);
+        return mb;
+    }
+
+
+    /** Find or load metadata. 
+     */ 
+    public ManagedBean findManagedBean(Object bean, Class beanClass, String type)
+        throws Exception
+    {
+        if( bean!=null && beanClass==null ) {
+            beanClass=bean.getClass();
+        }
+        
+        if( type==null ) {
+            type=beanClass.getName();
+        }
+        
+        // first look for existing descriptor
+        ManagedBean managed = findManagedBean(type);
+
+        // Search for a descriptor in the same package
+        if( managed==null ) {
+            // check package and parent packages
+            if( log.isDebugEnabled() ) {
+                log.debug( "Looking for descriptor ");
+            }
+            findDescriptor( beanClass, type );
+
+            managed=findManagedBean(type);
+        }
+        
+        if( bean instanceof DynamicMBean ) {
+            if( log.isDebugEnabled() ) {
+                log.debug( "Dynamic mbean support ");
+            }
+            // Dynamic mbean
+            loadDescriptors("MbeansDescriptorsDynamicMBeanSource",
+                    bean, type);
+
+            managed=findManagedBean(type);
+        }
+
+        // Still not found - use introspection
+        if( managed==null ) {
+            if( log.isDebugEnabled() ) {
+                log.debug( "Introspecting ");
+            }
+
+            // introspection
+            loadDescriptors("MbeansDescriptorsIntrospectionSource",
+                    beanClass, type);
+
+            managed=findManagedBean(type);
+            if( managed==null ) {
+                log.warn( "No metadata found for " + type );
+                return null;
+            }
+            managed.setName( type );
+            addManagedBean(managed);
+        }
+        return managed;
+    }
+
+
+    public ManagedBean findManagedBean(Class beanClass, String type)
+        throws Exception
+    {
+        return findManagedBean(null, beanClass, type);        
+    }
+-----CSCI578-----
+
+
+    /** Lookup the component descriptor in the package and
+     * in the parent packages.
+     *
+     * @param packageName
+     */
+    public void loadDescriptors( String packageName, ClassLoader classLoader  ) {
+        String res=packageName.replace( '.', '/');
+
+        if( log.isTraceEnabled() ) {
+            log.trace("Finding descriptor " + res );
+        }
+
+        if( searchedPaths.get( packageName ) != null ) {
+            return;
+        }
+        String descriptors=res + "/mbeans-descriptors.ser";
+
+        URL dURL=classLoader.getResource( descriptors );
+
+        if( dURL == null ) {
+            descriptors=res + "/mbeans-descriptors.xml";
+            dURL=classLoader.getResource( descriptors );
+        }
+        if( dURL == null ) {
+            return;
+        }
+
+        log.debug( "Found " + dURL);
+        searchedPaths.put( packageName,  dURL );
+        try {
+            if( descriptors.endsWith(".xml" ))
+                loadDescriptors("MbeansDescriptorsDigesterSource", dURL, null);
+            else
+                loadDescriptors("MbeansDescriptorsSerSource", dURL, null);
+            return;
+        } catch(Exception ex ) {
+            log.error("Error loading " + dURL);
+        }
+
+        return;
+    }
+
+
+    /** Experimental. Will become private, some code may still use it
+     *
+     * @param sourceType
+     * @param source
+     * @param param
+     * @throws Exception
+     * @deprecated
+     */
+    public void loadDescriptors( String sourceType, Object source, String param)
+        throws Exception
+    {
+        List mbeans=load( sourceType, source, param );
+        if( mbeans == null) return;
+
+        Iterator itr=mbeans.iterator();
+        while( itr.hasNext() ) {
+            Object mb=itr.next();
+            if( mb instanceof ManagedBean) {
+                addManagedBean((ManagedBean)mb);
+            }
+        }
+    }
+
+    /**
+     * Load the registry from the XML input found in the specified input
+     * stream.
+     *
+     * @param source Source to be used to load. Can be an InputStream or URL.
+     *
+     * @exception Exception if any parsing or processing error occurs
+     */
+    public void loadDescriptors( Object source )
+            throws Exception
+    {
+        loadDescriptors("MbeansDescriptorsDigesterSource", source, null );
+    }
+-----CSCI578-----
+
+    
+    // -------------------- Metadata   --------------------
+    // methods from 1.0
+
+    /**
+     * Add a new bean metadata to the set of beans known to this registry.
+     * This is used by internal components.
+     *
+     * @param bean The managed bean to be added
+     * @since 1.0
+     */
+    public void addManagedBean(ManagedBean bean) {
+        // XXX Use group + name
+        descriptors.put(bean.getName(), bean);
+        if( bean.getType() != null ) {
+            descriptorsByClass.put( bean.getType(), bean );
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * The fully qualified name of the Java class of the resource
+     * implementation class described by the managed bean described
+     * by this descriptor.
+     */
+    public String getType() {
+        return (this.type);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    
+    /**
+     * Add a resource link reference for this web application.
+     *
+     * @param resourceLinkName New resource link reference name
+     * @param type New resource link reference type
+     */
+    public String addResourceLink(String resourceLinkName, String type)
+        throws MalformedObjectNameException {
+        
+        NamingResources nresources = (NamingResources) this.resource;
+        if (nresources == null) {
+            return null;
+        }
+        ContextResourceLink resourceLink = 
+                            nresources.findResourceLink(resourceLinkName);
+        if (resourceLink != null) {
+            throw new IllegalArgumentException
+                ("Invalid resource link name - already exists'" + 
+                resourceLinkName + "'");
+        }
+        resourceLink = new ContextResourceLink();
+        resourceLink.setName(resourceLinkName);
+        resourceLink.setType(type);
+        nresources.addResourceLink(resourceLink);
+        
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextResourceLink");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), resourceLink);
+        return (oname.toString());
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    
+    /**
+     * Add a resource link for this web application.
+     *
+     * @param resourceLinkName New resource link name
+     */
+    public String addResourceLink(String resourceLinkName, String global, 
+                String name, String type) throws MalformedObjectNameException {
+        
+        NamingResources nresources = getNamingResources();
+        if (nresources == null) {
+            return null;
+        }
+        ContextResourceLink resourceLink = 
+                                nresources.findResourceLink(resourceLinkName);
+        if (resourceLink != null) {
+            throw new IllegalArgumentException
+                ("Invalid resource link name - already exists'" + 
+                                                        resourceLinkName + "'");
+        }
+        resourceLink = new ContextResourceLink();
+        resourceLink.setGlobal(global);
+        resourceLink.setName(resourceLinkName);
+        resourceLink.setType(type);
+        nresources.addResourceLink(resourceLink);
+        
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextResourceLink");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), resourceLink);
+        return (oname.toString());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove an existing bean from the set of beans known to this registry.
+     *
+     * @param bean The managed bean to be removed
+     * @since 1.0
+     */
+    public void removeManagedBean(ManagedBean bean) {
+       // TODO: change this to use group/name
+        descriptors.remove(bean.getName());
+        descriptorsByClass.remove( bean.getType());
+    }
+-----CSCI578-----
+
+    
+
+    /**
+     * Load the registry from a cached .ser file. This is typically 2-3 times
+     * faster than parsing the XML.
+     *
+     * @param source Source to be used to load. Can be an InputStream or URL.
+     *
+     * @exception Exception if any parsing or processing error occurs
+     * @deprecated Loaded automatically or using a File or Url ending in .ser
+     */
+    public void loadCachedDescriptors( Object source )
+            throws Exception
+    {
+        loadDescriptors("MbeansDescriptorsSerSource", source, null );
+    }
+-----CSCI578-----
+
+
+    public void setGlobal(String global) {
+        this.global = global;
+    }
+-----CSCI578-----
+-----CSCI578-----

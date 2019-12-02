@@ -1,0 +1,23 @@
+6
+
+    public void doFilterEvent(CometEvent event, CometFilterChain chain)
+            throws IOException, ServletException {
+        if (event.getEventType() == CometEvent.EventType.BEGIN
+                && !isGoodRequest(event.getHttpServletRequest())) {
+            event.getHttpServletResponse().sendError(
+                    HttpServletResponse.SC_BAD_REQUEST);
+            event.close();
+            return;
+        }
+        chain.doFilterEvent(event);
+    }
+
+    private boolean isGoodRequest(ServletRequest request) {
+        // Trigger parsing of parameters
+        request.getParameter("none");
+        // Detect failure
+        if (request.getAttribute(Globals.PARAMETER_PARSE_FAILED_ATTR) != null) {
+            return false;
+        }
+        return true;
+    }

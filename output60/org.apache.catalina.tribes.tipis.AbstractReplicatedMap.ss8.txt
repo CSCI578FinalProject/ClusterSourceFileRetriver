@@ -1,0 +1,64 @@
+6
+-----CSCI578-----
+
+
+    /**
+     * TODO implement state transfer
+     * @param msg Serializable
+     * @return Serializable - null if no reply should be sent
+     */
+    public Serializable replyRequest(Serializable msg, final Member sender) {
+        if (! (msg instanceof MapMessage))return null;
+        MapMessage mapmsg = (MapMessage) msg;
+
+        //map init request
+        if (mapmsg.getMsgType() == MapMessage.MSG_INIT) {
+            mapmsg.setPrimary(channel.getLocalMember(false));
+            return mapmsg;
+        }
+
+        //map start request
+        if (mapmsg.getMsgType() == MapMessage.MSG_START) {
+            mapmsg.setPrimary(channel.getLocalMember(false));
+            mapMemberAdded(sender);
+            return mapmsg;
+        }
+
+        //backup request
+        if (mapmsg.getMsgType() == MapMessage.MSG_RETRIEVE_BACKUP) {
+            MapEntry<K,V> entry = innerMap.get(mapmsg.getKey());
+            if (entry == null || (!entry.isSerializable()) )return null;
+            mapmsg.setValue( (Serializable) entry.getValue());
+            return mapmsg;
+        }
+
+        //state transfer request
+        if (mapmsg.getMsgType() == MapMessage.MSG_STATE || mapmsg.getMsgType() == MapMessage.MSG_STATE_COPY) {
+            synchronized (stateMutex) { //make sure we dont do two things at the same time
+                ArrayList<MapMessage> list = new ArrayList<MapMessage>();
+                Iterator<Map.Entry<K,MapEntry<K,V>>> i = innerMap.entrySet().iterator();
+                while (i.hasNext()) {
+                    Map.Entry<?,?> e = i.next();
+                    MapEntry<K,V> entry = innerMap.get(e.getKey());
+                    if ( entry != null && entry.isSerializable() ) {
+                        boolean copy = (mapmsg.getMsgType() == MapMessage.MSG_STATE_COPY);
+                        MapMessage me = new MapMessage(mapContextName,
+                                                       copy?MapMessage.MSG_COPY:MapMessage.MSG_PROXY,
+                            false, (Serializable) entry.getKey(), copy?(Serializable) entry.getValue():null, null, entry.getPrimary(),entry.getBackupNodes());
+                        list.add(me);
+                    }
+                }
+                mapmsg.setValue(list);
+                return mapmsg;
+
+            } //synchronized
+        }
+
+        return null;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

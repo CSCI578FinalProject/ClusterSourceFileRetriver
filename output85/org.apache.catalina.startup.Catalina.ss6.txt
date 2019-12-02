@@ -1,0 +1,222 @@
+10
+-----CSCI578-----
+
+
+
+    /**
+     * Wait until a proper shutdown command is received, then return.
+     */
+    public void await();
+-----CSCI578-----
+
+
+
+    /**
+     * Await and shutdown.
+     */
+    public void await() {
+
+        getServer().await();
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the outer Catalina startup/shutdown component if present.
+     *
+     * @param catalina the outer Catalina component
+     */
+    public void setCatalina(Catalina catalina);
+-----CSCI578-----
+
+
+
+    /**
+     * Start a new server instance.
+     */
+    public void load() {
+
+        long t1 = System.nanoTime();
+
+        initDirs();
+
+        // Before digester - it may be needed
+        initNaming();
+
+        // Create and execute our Digester
+        Digester digester = createStartDigester();
+
+        InputSource inputSource = null;
+        InputStream inputStream = null;
+        File file = null;
+        try {
+            try {
+                file = configFile();
+                inputStream = new FileInputStream(file);
+                inputSource = new InputSource(file.toURI().toURL().toString());
+            } catch (Exception e) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("catalina.configFail", file), e);
+                }
+            }
+            if (inputStream == null) {
+                try {
+                    inputStream = getClass().getClassLoader()
+                        .getResourceAsStream(getConfigFile());
+                    inputSource = new InputSource
+                        (getClass().getClassLoader()
+                         .getResource(getConfigFile()).toString());
+                } catch (Exception e) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("catalina.configFail",
+                                getConfigFile()), e);
+                    }
+                }
+            }
+
+            // This should be included in catalina.jar
+            // Alternative: don't bother with xml, just create it manually.
+            if (inputStream == null) {
+                try {
+                    inputStream = getClass().getClassLoader()
+                            .getResourceAsStream("server-embed.xml");
+                    inputSource = new InputSource
+                    (getClass().getClassLoader()
+                            .getResource("server-embed.xml").toString());
+                } catch (Exception e) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("catalina.configFail",
+                                "server-embed.xml"), e);
+                    }
+                }
+            }
+
+
+            if (inputStream == null || inputSource == null) {
+                if  (file == null) {
+                    log.warn(sm.getString("catalina.configFail",
+                            getConfigFile() + "] or [server-embed.xml]"));
+                } else {
+                    log.warn(sm.getString("catalina.configFail",
+                            file.getAbsolutePath()));
+                    if (file.exists() && !file.canRead()) {
+                        log.warn("Permissions incorrect, read permission is not allowed on the file.");
+                    }
+                }
+                return;
+            }
+
+            try {
+                inputSource.setByteStream(inputStream);
+                digester.push(this);
+                digester.parse(inputSource);
+            } catch (SAXParseException spe) {
+                log.warn("Catalina.start using " + getConfigFile() + ": " +
+                        spe.getMessage());
+                return;
+            } catch (Exception e) {
+                log.warn("Catalina.start using " + getConfigFile() + ": " , e);
+                return;
+            }
+        } finally {
+            if (inputStream != null) {
+                try {
+                    inputStream.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+        }
+
+        getServer().setCatalina(this);
+        getServer().setCatalinaHome(Bootstrap.getCatalinaHomeFile());
+        getServer().setCatalinaBase(Bootstrap.getCatalinaBaseFile());
+
+        // Stream redirection
+        initStreams();
+
+        // Start the new server
+        try {
+            getServer().init();
+        } catch (LifecycleException e) {
+            if (Boolean.getBoolean("org.apache.catalina.startup.EXIT_ON_INIT_FAILURE")) {
+                throw new java.lang.Error(e);
+            } else {
+                log.error("Catalina.start", e);
+            }
+        }
+
+        long t2 = System.nanoTime();
+        if(log.isInfoEnabled()) {
+            log.info("Initialization processed in " + ((t2 - t1) / 1000000) + " ms");
+        }
+    }
+
+
+
+    /*
+     * Load using arguments
+     */
+    public void load(String args[]) {
+
+        try {
+            if (arguments(args)) {
+                load();
+            }
+        } catch (Exception e) {
+            e.printStackTrace(System.out);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public String getConfigFile() {
+        return configFile;
+    }
+-----CSCI578-----
+
+
+
+    protected void initDirs() {
+        String temp = System.getProperty("java.io.tmpdir");
+        if (temp == null || (!(new File(temp)).isDirectory())) {
+            log.error(sm.getString("embedded.notmp", temp));
+        }
+    }
+-----CSCI578-----
+
+
+
+    protected void initNaming() {
+        // Setting additional variables
+        if (!useNaming) {
+            log.info( "Catalina naming disabled");
+            System.setProperty("catalina.useNaming", "false");
+        } else {
+            System.setProperty("catalina.useNaming", "true");
+            String value = "org.apache.naming";
+            String oldValue =
+                System.getProperty(javax.naming.Context.URL_PKG_PREFIXES);
+            if (oldValue != null) {
+                value = value + ":" + oldValue;
+            }
+            System.setProperty(javax.naming.Context.URL_PKG_PREFIXES, value);
+            if( log.isDebugEnabled() ) {
+                log.debug("Setting naming prefix=" + value);
+            }
+            value = System.getProperty
+                (javax.naming.Context.INITIAL_CONTEXT_FACTORY);
+            if (value == null) {
+                System.setProperty
+                    (javax.naming.Context.INITIAL_CONTEXT_FACTORY,
+                     "org.apache.naming.java.javaURLContextFactory");
+            } else {
+                log.debug( "INITIAL_CONTEXT_FACTORY already set " + value );
+            }
+        }
+    }
+-----CSCI578-----

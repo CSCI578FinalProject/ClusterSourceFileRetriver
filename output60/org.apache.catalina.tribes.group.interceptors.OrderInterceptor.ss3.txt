@@ -1,0 +1,84 @@
+13
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    /**
+     * 
+     * @param order MessageOrder
+     * @return boolean - true if a message expired and was processed
+     */
+    protected boolean processIncoming(MessageOrder order) {
+        boolean result = false;
+        Member member = order.getMessage().getAddress();
+        Counter cnt = getInCounter(member);
+        
+        MessageOrder tmp = (MessageOrder)incoming.get(member);
+        if ( tmp != null ) {
+            order = MessageOrder.add(tmp,order);
+        }
+        
+        
+        while ( (order!=null) && (order.getMsgNr() <= cnt.getCounter())  ) {
+            //we are right on target. process orders
+            if ( order.getMsgNr() == cnt.getCounter() ) cnt.inc();
+            else if ( order.getMsgNr() > cnt.getCounter() ) cnt.setCounter(order.getMsgNr());
+            super.messageReceived(order.getMessage());
+            order.setMessage(null);
+            order = order.next;
+        }
+        MessageOrder head = order;
+        MessageOrder prev = null;
+        tmp = order;
+        //flag to empty out the queue when it larger than maxQueue
+        boolean empty = order!=null?order.getCount()>=maxQueue:false;
+        while ( tmp != null ) {
+            //process expired messages or empty out the queue
+            if ( tmp.isExpired(expire) || empty ) {
+                //reset the head
+                if ( tmp == head ) head = tmp.next;
+                cnt.setCounter(tmp.getMsgNr()+1);
+                if ( getForwardExpired() ) 
+                    super.messageReceived(tmp.getMessage());
+                tmp.setMessage(null);
+                tmp = tmp.next;
+                if ( prev != null ) prev.next = tmp;  
+                result = true;
+            } else {
+                prev = tmp;
+                tmp = tmp.next;
+            }
+        }
+        if ( head == null ) incoming.remove(member);
+        else incoming.put(member, head);
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean getForwardExpired() {
+        return forwardExpired;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    
+    
+    /**
+     * Get the address that this message originated from.  
+     * Almost always <code>Channel.getLocalMember(boolean)</code><br>
+     * This would be set to a different address 
+     * if the message was being relayed from a host other than the one
+     * that originally sent it.
+     * @return the source or reply-to address of this message
+     */
+    public Member getAddress();
+-----CSCI578-----

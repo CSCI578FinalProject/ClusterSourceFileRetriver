@@ -1,0 +1,75 @@
+5
+-----CSCI578-----
+
+
+    void setRegistry(StoreRegistry aRegistry);
+-----CSCI578-----
+
+
+    void setStoreAppender(StoreAppender storeWriter);
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Handle the beginning of an XML element.
+     *
+     * @param namespace XML namespace
+     * @param name The element name
+     * @param attributes The attributes of this element
+     * @exception Exception if a processing error occurs
+     */
+    @Override
+    public void begin(String namespace, String name, Attributes attributes)
+            throws Exception {
+
+        IStoreFactory factory = (IStoreFactory) newInstance(attributeName,
+                storeFactoryClass, attributes);
+        StoreAppender storeAppender = (StoreAppender) newInstance(
+                appenderAttributeName, storeAppenderClass, attributes);
+        factory.setStoreAppender(storeAppender);
+
+        // Add this StoreFactory to our associated component
+        StoreDescription desc = (StoreDescription) digester.peek(0);
+        StoreRegistry registry = (StoreRegistry) digester.peek(1);
+        factory.setRegistry(registry);
+        desc.setStoreFactory(factory);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param storeFactory
+     *            The storeFactory to set.
+     */
+    public void setStoreFactory(IStoreFactory storeFactory) {
+        this.storeFactory = storeFactory;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create new instance from attribute className!
+     *
+     * @param attr class Name attribute
+     * @param defaultName Default Class
+     * @param attributes current digester attribute elements
+     * @return new configured object instance
+     * @throws ClassNotFoundException Class was not found
+     * @throws InstantiationException Error creating an instance
+     * @throws IllegalAccessException Security exception
+     */
+    protected Object newInstance(String attr, String defaultName,
+            Attributes attributes) throws ClassNotFoundException,
+            InstantiationException, IllegalAccessException {
+        String className = defaultName;
+        if (attr != null) {
+            String value = attributes.getValue(attr);
+            if (value != null)
+                className = value;
+        }
+        Class<?> clazz = Class.forName(className);
+        return clazz.newInstance();
+    }

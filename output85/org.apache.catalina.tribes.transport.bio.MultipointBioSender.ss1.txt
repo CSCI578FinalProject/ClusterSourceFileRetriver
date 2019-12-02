@@ -1,0 +1,109 @@
+7
+-----CSCI578-----
+
+
+
+    private synchronized void close() throws ChannelException  {
+        ChannelException x = null;
+        Object[] members = bioSenders.keySet().toArray();
+        for (int i=0; i<members.length; i++ ) {
+            Member mbr = (Member)members[i];
+            try {
+                BioSender sender = bioSenders.get(mbr);
+                sender.disconnect();
+            }catch ( Exception e ) {
+                if ( x == null ) x = new ChannelException(e);
+                x.addFaultyMember(mbr,e);
+            }
+            bioSenders.remove(mbr);
+        }
+        if ( x != null ) throw x;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void finalize() throws Throwable {
+        try {disconnect(); }catch ( Exception e){/* Ignore */}
+        super.finalize();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public synchronized void disconnect() {
+        try {close(); }catch (Exception x){/* Ignore */}
+        setConnected(false);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * disconnect and close socket
+     *
+     * @see org.apache.catalina.tribes.transport.DataSender#disconnect()
+     */
+    @Override
+    public  void disconnect() {
+        boolean connect = isConnected();
+        closeSocket();
+        if (connect) {
+            if (log.isDebugEnabled())
+                log.debug(sm.getString("bioSender.disconnect", getAddress().getHostAddress(), Integer.valueOf(getPort()), Long.valueOf(0)));
+        }
+
+    }
+
+
+    /**
+     * Close socket.
+     *
+     * @see #disconnect()
+     */
+    protected void closeSocket() {
+        if(isConnected()) {
+             if (socket != null) {
+                try {
+                    socket.close();
+                } catch (IOException x) {
+                    // Ignore
+                } finally {
+                    socket = null;
+                    soOut = null;
+                    soIn = null;
+                }
+            }
+            setRequestCount(0);
+            setConnected(false);
+            if (log.isDebugEnabled())
+                log.debug(sm.getString("bioSender.closeSocket",getAddress().getHostAddress(), Integer.valueOf(getPort()), Long.valueOf(0)));
+       }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void connect() throws IOException {
+        //do nothing, we connect on demand
+        setConnected(true);
+    }
+
+
+
+    @Override
+    public synchronized void disconnect() {
+        try {close(); }catch (Exception x){/* Ignore */}
+        setConnected(false);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void remove(Member member) {
+        //disconnect senders
+        BioSender sender = bioSenders.remove(member);
+        if ( sender != null ) sender.disconnect();
+    }

@@ -1,0 +1,115 @@
+8
+-----CSCI578-----
+
+
+
+    @Override
+    public AsyncContext startAsync() throws IllegalStateException {
+        return request.startAsync();
+    }
+
+
+
+    @Override
+    public AsyncContext startAsync(ServletRequest request, ServletResponse response)
+    throws IllegalStateException {
+        return this.request.startAsync(request, response);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public AsyncContext startAsync() {
+        return startAsync(getRequest(),response.getResponse());
+    }
+
+
+    @Override
+    public AsyncContext startAsync(ServletRequest request,
+            ServletResponse response) {
+        if (!isAsyncSupported()) {
+            throw new IllegalStateException(sm.getString("request.asyncNotSupported"));
+        }
+
+        if (asyncContext == null) {
+            asyncContext = new AsyncContextImpl(this);
+        }
+
+        asyncContext.setStarted(getContext(), request, response,
+                request==getRequest() && response==getResponse().getResponse());
+        asyncContext.setTimeout(getConnector().getAsyncTimeout());
+
+        return asyncContext;
+    }
+-----CSCI578-----
+
+
+
+    public void fireOnStartAsync(AsyncEvent event) throws IOException {
+        listener.onStartAsync(event);
+    }
+-----CSCI578-----
+
+
+    public void setStarted(Context context, ServletRequest request,
+            ServletResponse response, boolean originalRequestResponse) {
+
+        synchronized (asyncContextLock) {
+            this.request.getCoyoteRequest().action(
+                    ActionCode.ASYNC_START, this);
+
+            this.context = context;
+            this.servletRequest = request;
+            this.servletResponse = response;
+            this.hasOriginalRequestAndResponse = originalRequestResponse;
+            this.event = new AsyncEvent(this, request, response);
+
+            List<AsyncListenerWrapper> listenersCopy = new ArrayList<>();
+            listenersCopy.addAll(listeners);
+            listeners.clear();
+            for (AsyncListenerWrapper listener : listenersCopy) {
+                try {
+                    listener.fireOnStartAsync(event);
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    log.warn("onStartAsync() failed for listener of type [" +
+                            listener.getClass().getName() + "]", t);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setTimeout(long timeout) {
+        check();
+        this.timeout = timeout;
+        request.getCoyoteRequest().action(ActionCode.ASYNC_SETTIMEOUT,
+                Long.valueOf(timeout));
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the default timeout for async requests in ms.
+     */
+    public long getAsyncTimeout() {
+
+        return asyncTimeout;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get the Coyote request.
+     *
+     * @return the Coyote request object
+     */
+    public org.apache.coyote.Request getCoyoteRequest() {
+        return (this.coyoteRequest);
+    }

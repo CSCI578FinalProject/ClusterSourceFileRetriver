@@ -1,0 +1,51 @@
+2
+-----CSCI578-----
+
+
+    public static MediaType parseMediaType(StringReader input)
+            throws IOException {
+
+        // Type (required)
+        String type = readToken(input);
+        if (type == null || type.length() == 0) {
+            return null;
+        }
+
+        if (skipConstant(input, "/") == SkipConstantResult.NOT_FOUND) {
+            return null;
+        }
+
+        // Subtype (required)
+        String subtype = readToken(input);
+        if (subtype == null || subtype.length() == 0) {
+            return null;
+        }
+
+        LinkedHashMap<String,String> parameters =
+                new LinkedHashMap<String, String>();
+
+        SkipConstantResult lookForSemiColon = skipConstant(input, ";");
+        if (lookForSemiColon == SkipConstantResult.NOT_FOUND) {
+            return null;
+        }
+        while (lookForSemiColon == SkipConstantResult.FOUND) {
+            String attribute = readToken(input);
+
+            String value = "";
+            if (skipConstant(input, "=") == SkipConstantResult.FOUND) {
+                value = readTokenOrQuotedString(input, true);
+            }
+
+            if (attribute != null) {
+                parameters.put(attribute.toLowerCase(Locale.ENGLISH), value);
+            }
+
+            lookForSemiColon = skipConstant(input, ";");
+            if (lookForSemiColon == SkipConstantResult.NOT_FOUND) {
+                return null;
+            }
+        }
+
+        return new MediaType(type, subtype, parameters);
+    }
+-----CSCI578-----

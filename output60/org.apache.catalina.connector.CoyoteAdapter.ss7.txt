@@ -1,0 +1,354 @@
+11
+-----CSCI578-----
+
+
+
+    /**
+     * Normalize URI.
+     * <p>
+     * This method normalizes "\", "//", "/./" and "/../". This method will
+     * return false when trying to go above the root, or if the URI contains
+     * a null byte.
+     *
+     * @param uriMB URI to be normalized
+     */
+    public static boolean normalize(MessageBytes uriMB) {
+
+        ByteChunk uriBC = uriMB.getByteChunk();
+        final byte[] b = uriBC.getBytes();
+        final int start = uriBC.getStart();
+        int end = uriBC.getEnd();
+
+        // An empty URL is not acceptable
+        if (start == end)
+            return false;
+
+        // URL * is acceptable
+        if ((end - start == 1) && b[start] == (byte) '*')
+          return true;
+
+        int pos = 0;
+        int index = 0;
+
+        // Replace '\' with '/'
+        // Check for null byte
+        for (pos = start; pos < end; pos++) {
+            if (b[pos] == (byte) '\\') {
+                if (ALLOW_BACKSLASH) {
+                    b[pos] = (byte) '/';
+                } else {
+                    return false;
+                }
+            }
+            if (b[pos] == (byte) 0) {
+                return false;
+            }
+        }
+
+        // The URL must start with '/'
+        if (b[start] != (byte) '/') {
+            return false;
+        }
+
+        // Replace "//" with "/"
+        for (pos = start; pos < (end - 1); pos++) {
+            if (b[pos] == (byte) '/') {
+                while ((pos + 1 < end) && (b[pos + 1] == (byte) '/')) {
+                    copyBytes(b, pos, pos + 1, end - pos - 1);
+                    end--;
+                }
+            }
+        }
+
+        // If the URI ends with "/." or "/..", then we append an extra "/"
+        // Note: It is possible to extend the URI by 1 without any side effect
+        // as the next character is a non-significant WS.
+        if (((end - start) >= 2) && (b[end - 1] == (byte) '.')) {
+            if ((b[end - 2] == (byte) '/')
+                || ((b[end - 2] == (byte) '.')
+                    && (b[end - 3] == (byte) '/'))) {
+                b[end] = (byte) '/';
+                end++;
+            }
+        }
+
+        uriBC.setEnd(end);
+
+        index = 0;
+
+        // Resolve occurrences of "/./" in the normalized path
+        while (true) {
+            index = uriBC.indexOf("/./", 0, 3, index);
+            if (index < 0)
+                break;
+            copyBytes(b, start + index, start + index + 2,
+                      end - start - index - 2);
+            end = end - 2;
+            uriBC.setEnd(end);
+        }
+
+        index = 0;
+
+        // Resolve occurrences of "/../" in the normalized path
+        while (true) {
+            index = uriBC.indexOf("/../", 0, 4, index);
+            if (index < 0)
+                break;
+            // Prevent from going outside our context
+            if (index == 0)
+                return false;
+            int index2 = -1;
+            for (pos = start + index - 1; (pos >= 0) && (index2 < 0); pos --) {
+                if (b[pos] == (byte) '/') {
+                    index2 = pos;
+                }
+            }
+            copyBytes(b, start + index2, start + index + 3,
+                      end - start - index - 3);
+            end = end + index2 - index - 3;
+            uriBC.setEnd(end);
+            index = index2;
+        }
+
+        return true;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Copy an array of bytes to a different position. Used during
+     * normalization.
+     */
+    protected static void copyBytes(byte[] b, int dest, int src, int len) {
+        for (int pos = 0; pos < len; pos++) {
+            b[pos + dest] = b[pos + src];
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Parse session id in URL.
+     */
+    protected void parseSessionCookiesId(org.apache.coyote.Request req, Request request) {
+
+        // If session tracking via cookies has been disabled for the current
+        // context, don't go looking for a session ID in a cookie as a cookie
+        // from a parent context with a session ID may be present which would
+        // overwrite the valid session ID encoded in the URL
+        Context context = (Context) request.getMappingData().context;
+        if (context != null && !context.getCookies())
+            return;
+
+        // Parse session id from cookies
+        Cookies serverCookies = req.getCookies();
+        int count = serverCookies.getCookieCount();
+        if (count <= 0)
+            return;
+
+        String sessionCookieName = getSessionCookieName(context);
+
+        for (int i = 0; i < count; i++) {
+            ServerCookie scookie = serverCookies.getCookie(i);
+            if (scookie.getName().equals(sessionCookieName)) {
+                // Override anything requested in the URL
+                if (!request.isRequestedSessionIdFromCookie()) {
+                    // Accept only the first session id cookie
+                    convertMB(scookie.getValue());
+                    request.setRequestedSessionId
+                        (scookie.getValue().toString());
+                    request.setRequestedSessionCookie(true);
+                    request.setRequestedSessionURL(false);
+                    if (log.isDebugEnabled())
+                        log.debug(" Requested cookie session id is " +
+                            request.getRequestedSessionId());
+                } else {
+                    if (!request.isRequestedSessionIdValid()) {
+                        // Replace the session id until one is valid
+                        convertMB(scookie.getValue());
+                        request.setRequestedSessionId
+                            (scookie.getValue().toString());
+                    }
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set a flag indicating whether or not the requested session ID for this
+     * request came in through a cookie.  This is normally called by the
+     * HTTP Connector, when it parses the request headers.
+     *
+     * @param flag The new flag
+     */
+    public void setRequestedSessionCookie(boolean flag) {
+
+        this.requestedSessionCookie = flag;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Character conversion of the a US-ASCII MessageBytes.
+     */
+    protected void convertMB(MessageBytes mb) {
+
+        // This is of course only meaningful for bytes
+        if (mb.getType() != MessageBytes.T_BYTES)
+            return;
+
+        ByteChunk bc = mb.getByteChunk();
+        CharChunk cc = mb.getCharChunk();
+        int length = bc.getLength();
+        cc.allocate(length, -1);
+
+        // Default encoding: fast conversion
+        byte[] bbuf = bc.getBuffer();
+        char[] cbuf = cc.getBuffer();
+        int start = bc.getStart();
+        for (int i = 0; i < length; i++) {
+            cbuf[i] = (char) (bbuf[i + start] & 0xff);
+        }
+        mb.setChars(cbuf, 0, length);
+
+    }
+-----CSCI578-----
+
+    private String getSessionCookieName(Context context) {
+
+        String result = null;
+
+        if (context != null) {
+            result = context.getSessionCookieName();
+        }
+
+        if (result == null) {
+            result = Globals.SESSION_COOKIE_NAME;
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return <code>true</code> if the session identifier included in this
+     * request identifies a valid session.
+     */
+    public boolean isRequestedSessionIdValid() {
+
+        if (requestedSessionId == null)
+            return (false);
+        if (context == null)
+            return (false);
+        Manager manager = context.getManager();
+        if (manager == null)
+            return (false);
+        Session session = null;
+        try {
+            session = manager.findSession(requestedSessionId);
+        } catch (IOException e) {
+            session = null;
+        }
+        if ((session != null) && session.isValid())
+            return (true);
+        else
+            return (false);
+
+    }
+-----CSCI578-----
+
+
+
+     /**
+      * Set the URI encoding to be used for the URI.
+      *
+      * @param URIEncoding The new URI character encoding.
+      */
+     public void setURIEncoding(String URIEncoding) {
+
+         this.URIEncoding = URIEncoding;
+         setProperty("uRIEncoding", URIEncoding);
+
+     }
+-----CSCI578-----
+
+
+
+    /**
+     * Character conversion of the URI.
+     */
+    protected void convertURI(MessageBytes uri, Request request)
+        throws Exception {
+
+        ByteChunk bc = uri.getByteChunk();
+        int length = bc.getLength();
+        CharChunk cc = uri.getCharChunk();
+        cc.allocate(length, -1);
+
+        String enc = connector.getURIEncoding();
+        if (enc != null) {
+            B2CConverter conv = request.getURIConverter();
+            try {
+                if (conv == null) {
+                    conv = new B2CConverter(enc);
+                    request.setURIConverter(conv);
+                }
+            } catch (IOException e) {
+                // Ignore
+                log.error("Invalid URI encoding; using HTTP default");
+                connector.setURIEncoding(null);
+            }
+            if (conv != null) {
+                try {
+                    conv.convert(bc, cc);
+                    uri.setChars(cc.getBuffer(), cc.getStart(),
+                                 cc.getLength());
+                    return;
+                } catch (IOException e) {
+                    log.error("Invalid URI character encoding; trying ascii");
+                    cc.recycle();
+                }
+            }
+        }
+
+        // Default encoding: fast conversion
+        byte[] bbuf = bc.getBuffer();
+        char[] cbuf = cc.getBuffer();
+        int start = bc.getStart();
+        for (int i = 0; i < length; i++) {
+            cbuf[i] = (char) (bbuf[i + start] & 0xff);
+        }
+        uri.setChars(cbuf, 0, length);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the URI converter.
+     *
+     * @param URIConverter the new URI connverter
+     */
+    protected void setURIConverter(B2CConverter URIConverter) {
+        this.URIConverter = URIConverter;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the URI converter.
+     */
+    protected B2CConverter getURIConverter() {
+        return URIConverter;
+    }

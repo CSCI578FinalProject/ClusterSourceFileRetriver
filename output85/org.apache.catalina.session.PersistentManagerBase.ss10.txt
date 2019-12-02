@@ -1,0 +1,435 @@
+18
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Swap idle sessions out to Store if they are idle too long.
+     */
+    protected void processMaxIdleSwaps() {
+
+        if (!getState().isAvailable() || maxIdleSwap < 0)
+            return;
+
+        Session sessions[] = findSessions();
+
+        // Swap out all sessions idle longer than maxIdleSwap
+        if (maxIdleSwap >= 0) {
+            for (int i = 0; i < sessions.length; i++) {
+                StandardSession session = (StandardSession) sessions[i];
+                synchronized (session) {
+                    if (!session.isValid())
+                        continue;
+                    int timeIdle = (int) (session.getIdleTimeInternal() / 1000L);
+                    if (timeIdle >= maxIdleSwap && timeIdle >= minIdleSwap) {
+                        if (session.accessCount != null &&
+                                session.accessCount.get() > 0) {
+                            // Session is currently being accessed - skip it
+                            continue;
+                        }
+                        if (log.isDebugEnabled())
+                            log.debug(sm.getString
+                                ("persistentManager.swapMaxIdle",
+                                 session.getIdInternal(),
+                                 Integer.valueOf(timeIdle)));
+                        try {
+                            swapOut(session);
+                        } catch (IOException e) {
+                            // This is logged in writeSession()
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the last client access time without invalidation check
+     * @see #getLastAccessedTime()
+     */
+    @Override
+    public long getLastAccessedTimeInternal() {
+        return (this.lastAccessedTime);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Back up idle sessions.
+     */
+    protected void processMaxIdleBackups() {
+
+        if (!getState().isAvailable() || maxIdleBackup < 0)
+            return;
+
+        Session sessions[] = findSessions();
+
+        // Back up all sessions idle longer than maxIdleBackup
+        if (maxIdleBackup >= 0) {
+            for (int i = 0; i < sessions.length; i++) {
+                StandardSession session = (StandardSession) sessions[i];
+                synchronized (session) {
+                    if (!session.isValid())
+                        continue;
+                    long lastAccessedTime = session.getLastAccessedTimeInternal();
+                    Long persistedLastAccessedTime =
+                            (Long) session.getNote(PERSISTED_LAST_ACCESSED_TIME);
+                    if (persistedLastAccessedTime != null &&
+                            lastAccessedTime == persistedLastAccessedTime.longValue())
+                        continue;
+                    int timeIdle = (int) (session.getIdleTimeInternal() / 1000L);
+                    if (timeIdle >= maxIdleBackup) {
+                        if (log.isDebugEnabled())
+                            log.debug(sm.getString
+                                ("persistentManager.backupMaxIdle",
+                                session.getIdInternal(),
+                                Integer.valueOf(timeIdle)));
+
+                        try {
+                            writeSession(session);
+                        } catch (IOException e) {
+                            // This is logged in writeSession()
+                        }
+                        session.setNote(PERSISTED_LAST_ACCESSED_TIME,
+                                Long.valueOf(lastAccessedTime));
+                    }
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the object bound with the specified name to the internal notes
+     * for this session, or <code>null</code> if no such binding exists.
+     *
+     * @param name Name of the note to be returned
+     */
+    @Override
+    public Object getNote(String name) {
+
+        return (notes.get(name));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Called by the background thread after active sessions have been checked
+     * for expiration, to allow sessions to be swapped out, backed up, etc.
+     */
+    public void processPersistenceChecks() {
+
+        processMaxIdleSwaps();
+        processMaxActiveSwaps();
+        processMaxIdleBackups();
+
+    }
+
+
+    /**
+     * Load all sessions found in the persistence mechanism, assuming
+     * they are marked as valid and have not passed their expiration
+     * limit. If persistence is not supported, this method returns
+     * without doing anything.
+     * <p>
+     * Note that by default, this method is not called by the MiddleManager
+     * class. In order to use it, a subclass must specifically call it,
+     * for example in the start() and/or processPersistenceChecks() methods.
+     */
+    @Override
+    public void load() {
+
+        // Initialize our internal data structures
+        sessions.clear();
+
+        if (store == null)
+            return;
+
+        String[] ids = null;
+        try {
+            if (SecurityUtil.isPackageProtectionEnabled()){
+                try{
+                    ids = AccessController.doPrivileged(
+                            new PrivilegedStoreKeys());
+                }catch(PrivilegedActionException ex){
+                    Exception exception = ex.getException();
+                    log.error("Exception in the Store during load: "
+                              + exception, exception);
+                    return;
+                }
+            } else {
+                ids = store.keys();
+            }
+        } catch (IOException e) {
+            log.error("Can't load sessions from store, " + e.getMessage(), e);
+            return;
+        }
+
+        int n = ids.length;
+        if (n == 0)
+            return;
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("persistentManager.loading", String.valueOf(n)));
+
+        for (int i = 0; i < n; i++)
+            try {
+                swapIn(ids[i]);
+            } catch (IOException e) {
+                log.error("Failed load session from store, " + e.getMessage(), e);
+            }
+
+    }
+
+
+    /**
+     * Save all currently active sessions in the appropriate persistence
+     * mechanism, if any.  If persistence is not supported, this method
+     * returns without doing anything.
+     * <p>
+     * Note that by default, this method is not called by the MiddleManager
+     * class. In order to use it, a subclass must specifically call it,
+     * for example in the stop() and/or processPersistenceChecks() methods.
+     */
+    @Override
+    public void unload() {
+
+        if (store == null)
+            return;
+
+        Session sessions[] = findSessions();
+        int n = sessions.length;
+        if (n == 0)
+            return;
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("persistentManager.unloading",
+                             String.valueOf(n)));
+
+        for (int i = 0; i < n; i++)
+            try {
+                swapOut(sessions[i]);
+            } catch (IOException e) {
+                // This is logged in writeSession()
+            }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Swap idle sessions out to Store if too many are active
+     */
+    protected void processMaxActiveSwaps() {
+
+        if (!getState().isAvailable() || getMaxActiveSessions() < 0)
+            return;
+
+        Session sessions[] = findSessions();
+
+        // FIXME: Smarter algorithm (LRU)
+        if (getMaxActiveSessions() >= sessions.length)
+            return;
+
+        if(log.isDebugEnabled())
+            log.debug(sm.getString
+                ("persistentManager.tooManyActive",
+                 Integer.valueOf(sessions.length)));
+
+        int toswap = sessions.length - getMaxActiveSessions();
+
+        for (int i = 0; i < sessions.length && toswap > 0; i++) {
+            StandardSession session =  (StandardSession) sessions[i];
+            synchronized (session) {
+                int timeIdle = (int) (session.getIdleTimeInternal() / 1000L);
+                if (timeIdle >= minIdleSwap) {
+                    if (session.accessCount != null &&
+                            session.accessCount.get() > 0) {
+                        // Session is currently being accessed - skip it
+                        continue;
+                    }
+                    if(log.isDebugEnabled())
+                        log.debug(sm.getString
+                            ("persistentManager.swapTooManyActive",
+                             session.getIdInternal(),
+                             Integer.valueOf(timeIdle)));
+                    try {
+                        swapOut(session);
+                    } catch (IOException e) {
+                        // This is logged in writeSession()
+                    }
+                    toswap--;
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Bind an object to a specified name in the internal notes associated
+     * with this session, replacing any existing binding for this name.
+     *
+     * @param name Name to which the object should be bound
+     * @param value Object to be bound to the specified name
+     */
+    @Override
+    public void setNote(String name, Object value) {
+
+        notes.put(name, value);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the session from the Manager's list of active
+     * sessions and write it out to the Store. If the session
+     * is past its expiration or invalid, this method does
+     * nothing.
+     *
+     * @param session The Session to write out
+     * @throws IOException an IO error occurred
+     */
+    protected void swapOut(Session session) throws IOException {
+
+        if (store == null || !session.isValid()) {
+            return;
+        }
+
+        ((StandardSession)session).passivate();
+        writeSession(session);
+        super.remove(session, true);
+        session.recycle();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Perform the internal processing required to passivate
+     * this session.
+     */
+    public void passivate() {
+
+        // Notify interested session event listeners
+        fireSessionEvent(Session.SESSION_PASSIVATED_EVENT, null);
+
+        // Notify ActivationListeners
+        HttpSessionEvent event = null;
+        String keys[] = keys();
+        for (int i = 0; i < keys.length; i++) {
+            Object attribute = attributes.get(keys[i]);
+            if (attribute instanceof HttpSessionActivationListener) {
+                if (event == null)
+                    event = new HttpSessionEvent(getSession());
+                try {
+                    ((HttpSessionActivationListener)attribute)
+                        .sessionWillPassivate(event);
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    manager.getContext().getLogger().error
+                        (sm.getString("standardSession.attributeEvent"), t);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the <code>isValid</code> flag for this session.
+     */
+    @Override
+    public boolean isValid() {
+
+        if (!this.isValid) {
+            return false;
+        }
+
+        if (this.expiring) {
+            return true;
+        }
+
+        if (ACTIVITY_CHECK && accessCount.get() > 0) {
+            return true;
+        }
+
+        if (maxInactiveInterval > 0) {
+            int timeIdle = (int) (getIdleTimeInternal() / 1000L);
+            if (timeIdle >= maxInactiveInterval) {
+                expire(true);
+            }
+        }
+
+        return this.isValid;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the idle time from last client access time without invalidation check
+     * @see #getIdleTime()
+     */
+    @Override
+    public long getIdleTimeInternal() {
+        long timeNow = System.currentTimeMillis();
+        long timeIdle;
+        if (LAST_ACCESS_AT_START) {
+            timeIdle = timeNow - lastAccessedTime;
+        } else {
+            timeIdle = timeNow - thisAccessedTime;
+        }
+        return timeIdle;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the session identifier for this session.
+     */
+    @Override
+    public String getIdInternal() {
+
+        return (this.id);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the names of all currently defined session attributes
+     * as an array of Strings.  If there are no defined attributes, a
+     * zero-length array is returned.
+     */
+    protected String[] keys() {
+
+        return attributes.keySet().toArray(EMPTY_ARRAY);
+
+    }
+-----CSCI578-----

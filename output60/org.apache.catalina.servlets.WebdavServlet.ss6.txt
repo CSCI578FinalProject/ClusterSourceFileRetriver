@@ -1,0 +1,196 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * MKCOL Method.
+     */
+    protected void doMkcol(HttpServletRequest req, HttpServletResponse resp)
+        throws ServletException, IOException {
+
+        if (readOnly) {
+            resp.sendError(WebdavStatus.SC_FORBIDDEN);
+            return;
+        }
+
+        if (isLocked(req)) {
+            resp.sendError(WebdavStatus.SC_LOCKED);
+            return;
+        }
+
+        String path = getRelativePath(req);
+
+        boolean exists = true;
+        Object object = null;
+        try {
+            object = resources.lookup(path);
+        } catch (NamingException e) {
+            exists = false;
+        }
+
+        // Can't create a collection if a resource already exists at the given
+        // path
+        if (exists) {
+            // Get allowed methods
+            StringBuffer methodsAllowed = determineMethodsAllowed(resources,
+                                                                  req);
+
+            resp.addHeader("Allow", methodsAllowed.toString());
+
+            resp.sendError(WebdavStatus.SC_METHOD_NOT_ALLOWED);
+            return;
+        }
+
+        if (req.getInputStream().available() > 0) {
+            DocumentBuilder documentBuilder = getDocumentBuilder();
+            try {
+                Document document = documentBuilder.parse
+                    (new InputSource(req.getInputStream()));
+                // TODO : Process this request body
+                resp.sendError(WebdavStatus.SC_NOT_IMPLEMENTED);
+                return;
+
+            } catch(SAXException saxe) {
+                // Parse error - assume invalid content
+                resp.sendError(WebdavStatus.SC_BAD_REQUEST);
+                return;
+            }
+        }
+
+        boolean result = true;
+        try {
+            resources.createSubcontext(path);
+        } catch (NamingException e) {
+            result = false;
+        }
+
+        if (!result) {
+            resp.sendError(WebdavStatus.SC_CONFLICT,
+                           WebdavStatus.getStatusText
+                           (WebdavStatus.SC_CONFLICT));
+        } else {
+            resp.setStatus(WebdavStatus.SC_CREATED);
+            // Removing any lock-null resource which would be present
+            lockNullResources.remove(path);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Creates and binds a new context. Creates a new context with the given 
+     * name and binds it in the target context (that named by all but 
+     * terminal atomic component of the name). All intermediate contexts and 
+     * the target context must already exist.
+     * 
+     * @param name the name of the context to create; may not be empty
+     * @return the newly created context
+     * @exception NameAlreadyBoundException if name is already bound
+     * @exception InvalidAttributesException if creation of the subcontext 
+     * requires specification of mandatory attributes
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Context createSubcontext(Name name)
+        throws NamingException {
+        Context context = dirContext.createSubcontext(parseName(name));
+        cacheUnload(name.toString());
+        return context;
+    }
+
+
+
+    /**
+     * Creates and binds a new context.
+     * 
+     * @param name the name of the context to create; may not be empty
+     * @return the newly created context
+     * @exception NameAlreadyBoundException if name is already bound
+     * @exception InvalidAttributesException if creation of the subcontext 
+     * requires specification of mandatory attributes
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Context createSubcontext(String name)
+        throws NamingException {
+        Context context = dirContext.createSubcontext(parseName(name));
+        cacheUnload(name);
+        return context;
+    }
+
+
+
+    /**
+     * Creates and binds a new context, along with associated attributes. 
+     * This method creates a new subcontext with the given name, binds it in 
+     * the target context (that named by all but terminal atomic component of 
+     * the name), and associates the supplied attributes with the newly 
+     * created object. All intermediate and target contexts must already 
+     * exist. If attrs is null, this method is equivalent to 
+     * Context.createSubcontext().
+     * 
+     * @param name the name of the context to create; may not be empty
+     * @param attrs the attributes to associate with the newly created context
+     * @return the newly created context
+     * @exception NameAlreadyBoundException if the name is already bound
+     * @exception InvalidAttributesException if attrs does not contain all 
+     * the mandatory attributes required for creation
+     * @exception NamingException if a naming exception is encountered
+     */
+    public DirContext createSubcontext(Name name, Attributes attrs)
+        throws NamingException {
+        DirContext context = 
+            dirContext.createSubcontext(parseName(name), attrs);
+        cacheUnload(name.toString());
+        return context;
+    }
+
+
+
+    /**
+     * Creates and binds a new context, along with associated attributes.
+     * 
+     * @param name the name of the context to create; may not be empty
+     * @param attrs the attributes to associate with the newly created context
+     * @return the newly created context
+     * @exception NameAlreadyBoundException if the name is already bound
+     * @exception InvalidAttributesException if attrs does not contain all 
+     * the mandatory attributes required for creation
+     * @exception NamingException if a naming exception is encountered
+     */
+    public DirContext createSubcontext(String name, Attributes attrs)
+        throws NamingException {
+        DirContext context = 
+            dirContext.createSubcontext(parseName(name), attrs);
+        cacheUnload(name);
+        return context;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Return JAXP document builder instance.
+     */
+    protected DocumentBuilder getDocumentBuilder()
+        throws ServletException {
+        DocumentBuilder documentBuilder = null;
+        DocumentBuilderFactory documentBuilderFactory = null;
+        try {
+            documentBuilderFactory = DocumentBuilderFactory.newInstance();
+            documentBuilderFactory.setNamespaceAware(true);
+            documentBuilderFactory.setExpandEntityReferences(false);
+            documentBuilder = documentBuilderFactory.newDocumentBuilder();
+            documentBuilder.setEntityResolver(
+                    new WebdavResolver(this.getServletContext()));
+        } catch(ParserConfigurationException e) {
+            throw new ServletException
+                (sm.getString("webdavservlet.jaxpfailed"));
+        }
+        return documentBuilder;
+    }
+-----CSCI578-----

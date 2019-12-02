@@ -1,0 +1,83 @@
+6
+-----CSCI578-----
+
+    
+    public void sendMessage(Member[] destination, ChannelMessage msg, InterceptorPayload payload) throws ChannelException {
+        try {
+            super.sendMessage(destination, msg, payload);
+        }catch ( ChannelException cx ) {
+            FaultyMember[] mbrs = cx.getFaultyMembers();
+            for ( int i=0; i<mbrs.length; i++ ) {
+                if ( mbrs[i].getCause()!=null &&  
+                     (!(mbrs[i].getCause() instanceof RemoteProcessException)) ) {//RemoteProcessException's are ok
+                    this.memberDisappeared(mbrs[i].getMember());
+                }//end if
+            }//for
+            throw cx;
+        }
+    }
+-----CSCI578-----
+
+    
+    public boolean contains(Member mbr) { 
+        return getMember(mbr)!=null;
+    }
+-----CSCI578-----
+
+
+    public void memberDisappeared(Member member) {
+        if ( membership == null ) setupMembership();
+        boolean notify = false;
+        boolean shutdown = Arrays.equals(member.getCommand(),Member.SHUTDOWN_PAYLOAD);
+        if ( !shutdown ) 
+            if(log.isInfoEnabled())
+                log.info("Received memberDisappeared["+member+"] message. Will verify.");
+        synchronized (membership) {
+            if (!membership.contains(member)) {
+                if(log.isInfoEnabled())
+                    log.info("Verification complete. Member already disappeared["+member+"]");
+                return;
+            }
+            //check to see if the member really is gone
+            //if the payload is not a shutdown message
+            if (shutdown || !memberAlive(member)) {
+                //not correct, we need to maintain the map
+                membership.removeMember( (MemberImpl) member);
+                removeSuspects.remove(member);
+                if (member instanceof StaticMember) {
+                    addSuspects.put(member, Long.valueOf(System.currentTimeMillis()));
+                }
+                notify = true;
+            } else {
+                //add the member as suspect
+                removeSuspects.put(member, new Long(System.currentTimeMillis()));
+            }
+        }
+        if ( notify ) {
+            if(log.isInfoEnabled())
+                log.info("Verification complete. Member disappeared["+member+"]");
+            super.memberDisappeared(member);
+        } else {
+            if(log.isInfoEnabled())
+                log.info("Verification complete. Member still alive["+member+"]");
+
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    protected synchronized void setupMembership() {
+        if ( membership == null ) {
+            membership = new Membership((MemberImpl)super.getLocalMember(true));
+        }
+        
+    }
+-----CSCI578-----
+
+    
+    /**
+     * returns the command associated with this member
+     * @return byte[]
+     */
+    public byte[] getCommand();

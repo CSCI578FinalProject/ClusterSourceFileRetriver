@@ -1,0 +1,102 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Try to get user name from the session, if possible.
+     * @param in_session
+     * @return String
+     */
+    public static String guessDisplayUserFromSession(Session in_session) {
+        Object user = SessionUtils.guessUserFromSession(in_session);
+        return escapeXml(user);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Try to get user from the session, if possible.
+     * @param in_session
+     * @return Object
+     */
+    public static Object guessUserFromSession(final Session in_session) {
+    	if (null == in_session) {
+			return null;
+		}
+    	if (in_session.getPrincipal() != null) {
+			return in_session.getPrincipal().getName();
+		}
+    	HttpSession httpSession = in_session.getSession();
+    	try {
+	        Object user = null;
+	        // First search "known locations"
+	        for (int i = 0; i < USER_TEST_ATTRIBUTES.length; ++i) {
+	            Object obj = httpSession.getAttribute(USER_TEST_ATTRIBUTES[i]);
+	            if (null != obj) {
+	                user = obj;
+	                break;
+	            }
+	            obj = httpSession.getAttribute(USER_TEST_ATTRIBUTES[i].toLowerCase());
+	            if (null != obj) {
+	                user = obj;
+	                break;
+	            }
+	            obj = httpSession.getAttribute(USER_TEST_ATTRIBUTES[i].toUpperCase());
+	            if (null != obj) {
+	                user = obj;
+	                break;
+	            }
+	        }
+	
+	        if (null != user) {
+	            return user;
+	        }
+	
+	        // Last guess: iterate over all attributes, to find a java.security.Principal or javax.security.auth.Subject
+	        // If there is only one, consider it to be /the/ user
+	        {
+	            final List principalArray = new ArrayList();
+	            for (Enumeration enumeration = httpSession.getAttributeNames(); enumeration.hasMoreElements();) {
+	                String name = (String) enumeration.nextElement();
+	                Object obj = httpSession.getAttribute(name);
+	                if (null != obj && (obj instanceof Principal || obj instanceof Subject)) {
+	                    principalArray.add(obj);
+	                }
+	                // This workaround for JDK 1.3 compatibility. For JDK 1.4+, use previous (commented) instanceof.
+//	                try {
+//	                    Class subjectClass = Class.forName("javax.security.auth.Subject", true, Thread.currentThread().getContextClassLoader());
+//	                    if (subjectClass.isInstance(obj)) {
+//	                        principalArray.add(obj);
+//	                    }
+//	                } catch (ClassNotFoundException cnfe) {
+//	                    // This is JDK 1.3: javax.security.auth.Subject does not exist; do nothing
+//	                }
+	            }
+	            if (principalArray.size() == 1) {
+	                user = principalArray.get(0);
+	            }
+	        }
+	
+	        if (null != user) {
+	            return user;
+	        }
+
+	        return user;
+        } catch (IllegalStateException ise) {
+        	//ignore: invalidated session
+        	return null;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the authenticated Principal that is associated with this Session.
+     * This provides an <code>Authenticator</code> with a means to cache a
+     * previously authenticated Principal, and avoid potentially expensive
+     * <code>Realm.authenticate()</code> calls on every request.  If there
+     * is no current associated Principal, return <code>null</code>.
+     */
+    public Principal getPrincipal();

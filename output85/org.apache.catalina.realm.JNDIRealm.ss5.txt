@@ -1,0 +1,172 @@
+1
+-----CSCI578-----
+
+
+    // ---------------------------------------------------------- Realm Methods
+
+    /**
+     * Return the Principal associated with the specified username and
+     * credentials, if there is one; otherwise return <code>null</code>.
+     *
+     * If there are any errors with the JDBC connection, executing
+     * the query or anything we return null (don't authenticate). This
+     * event is also logged, and the connection will be closed so that
+     * a subsequent request will automatically re-open it.
+     *
+     * @param username Username of the Principal to look up
+     * @param credentials Password or other credentials to use in
+     *  authenticating this username
+     * @return the associated principal, or <code>null</code> if there is none.
+     */
+    @Override
+    public Principal authenticate(String username, String credentials) {
+
+        DirContext context = null;
+        Principal principal = null;
+
+        try {
+
+            // Ensure that we have a directory context available
+            context = open();
+
+            // Occasionally the directory context will timeout.  Try one more
+            // time before giving up.
+            try {
+
+                // Authenticate the specified username if possible
+                principal = authenticate(context, username, credentials);
+
+            } catch (NullPointerException | CommunicationException
+                    | ServiceUnavailableException e) {
+                /* BZ 42449 - Catch NPE - Kludge Sun's LDAP provider
+                   with broken SSL
+                */
+                // log the exception so we know it's there.
+                containerLog.info(sm.getString("jndiRealm.exception.retry"), e);
+
+                // close the connection so we know it will be reopened.
+                if (context != null)
+                    close(context);
+
+                // open a new directory context.
+                context = open();
+
+                // Try the authentication again.
+                principal = authenticate(context, username, credentials);
+            }
+
+
+            // Release this context
+            release(context);
+
+            // Return the authenticated Principal (if any)
+            return principal;
+
+        } catch (NamingException e) {
+
+            // Log the problem for posterity
+            containerLog.error(sm.getString("jndiRealm.exception"), e);
+
+            // Close the connection so that it gets reopened next time
+            if (context != null)
+                close(context);
+
+            // Return "not authenticated" for this request
+            if (containerLog.isDebugEnabled())
+                containerLog.debug("Returning null principal.");
+            return null;
+
+        }
+
+    }
+
+
+
+    // -------------------------------------------------------- Package Methods
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Return the Principal associated with the specified username and
+     * credentials, if there is one; otherwise return <code>null</code>.
+     *
+     * @param context The directory context
+     * @param username Username of the Principal to look up
+     * @param credentials Password or other credentials to use in
+     *  authenticating this username
+     * @return the associated principal, or <code>null</code> if there is none.
+     *
+     * @exception NamingException if a directory server error occurs
+     */
+    public synchronized Principal authenticate(DirContext context,
+                                               String username,
+                                               String credentials)
+        throws NamingException {
+
+        if (username == null || username.equals("")
+            || credentials == null || credentials.equals("")) {
+            if (containerLog.isDebugEnabled())
+                containerLog.debug("username null or empty: returning null principal.");
+            return null;
+        }
+
+        if (userPatternArray != null) {
+            for (int curUserPattern = 0;
+                 curUserPattern < userPatternFormatArray.length;
+                 curUserPattern++) {
+                // Retrieve user information
+                User user = getUser(context, username, credentials, curUserPattern);
+                if (user != null) {
+                    try {
+                        // Check the user's credentials
+                        if (checkCredentials(context, user, credentials)) {
+                            // Search for additional roles
+                            List<String> roles = getRoles(context, user);
+                            if (containerLog.isDebugEnabled()) {
+                                Iterator<String> it = roles.iterator();
+                                // TODO: Use a single log message
+                                while (it.hasNext()) {
+                                    containerLog.debug("Found role: " + it.next());
+                                }
+                            }
+                            return (new GenericPrincipal(username,
+                                                         credentials,
+                                                         roles));
+                        }
+                    } catch (InvalidNameException ine) {
+                        // Log the problem for posterity
+                        containerLog.warn(sm.getString("jndiRealm.exception"), ine);
+                        // ignore; this is probably due to a name not fitting
+                        // the search path format exactly, as in a fully-
+                        // qualified name being munged into a search path
+                        // that already contains cn= or vice-versa
+                    }
+                }
+            }
+            return null;
+        } else {
+            // Retrieve user information
+            User user = getUser(context, username, credentials);
+            if (user == null)
+                return null;
+
+            // Check the user's credentials
+            if (!checkCredentials(context, user, credentials))
+                return null;
+
+            // Search for additional roles
+            List<String> roles = getRoles(context, user);
+            if (containerLog.isDebugEnabled()) {
+                Iterator<String> it = roles.iterator();
+                // TODO: Use a single log message
+                while (it.hasNext()) {
+                    containerLog.debug("Found role: " + it.next());
+                }
+            }
+
+            // Create and return a suitable Principal for this user
+            return new GenericPrincipal(username, credentials, roles);
+        }
+    }

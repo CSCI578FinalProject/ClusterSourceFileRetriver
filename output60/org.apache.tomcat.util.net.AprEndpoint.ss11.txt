@@ -1,0 +1,94 @@
+21
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Start the APR endpoint, creating acceptor, poller and sendfile threads.
+     */
+    public void start()
+        throws Exception {
+        // Initialize socket if not done before
+        if (!initialized) {
+            init();
+        }
+        if (!running) {
+            running = true;
+            paused = false;
+
+            // Create worker collection
+            if (executor == null) {
+                workers = new WorkerStack(maxThreads);
+            }
+
+            // Start poller threads
+            pollers = new Poller[pollerThreadCount];
+            for (int i = 0; i < pollerThreadCount; i++) {
+                pollers[i] = new Poller(false);
+                pollers[i].init();
+                pollers[i].setName(getName() + "-Poller-" + i);
+                pollers[i].setPriority(threadPriority);
+                pollers[i].setDaemon(true);
+                pollers[i].start();
+            }
+
+            // Start comet poller threads
+            cometPollers = new Poller[pollerThreadCount];
+            for (int i = 0; i < pollerThreadCount; i++) {
+                cometPollers[i] = new Poller(true);
+                cometPollers[i].init();
+                cometPollers[i].setName(getName() + "-CometPoller-" + i);
+                cometPollers[i].setPriority(threadPriority);
+                cometPollers[i].setDaemon(true);
+                cometPollers[i].start();
+            }
+
+            // Start sendfile threads
+            if (useSendfile) {
+                sendfiles = new Sendfile[sendfileThreadCount];
+                for (int i = 0; i < sendfileThreadCount; i++) {
+                    sendfiles[i] = new Sendfile();
+                    sendfiles[i].init();
+                    sendfiles[i].setName(getName() + "-Sendfile-" + i);
+                    sendfiles[i].setPriority(threadPriority);
+                    sendfiles[i].setDaemon(true);
+                    sendfiles[i].start();
+                }
+            }
+
+            // Start acceptor threads
+            acceptors = new Acceptor[acceptorThreadCount];
+            for (int i = 0; i < acceptorThreadCount; i++) {
+                acceptors[i] = new Acceptor();
+                acceptors[i].setName(getName() + "-Acceptor-" + i);
+                acceptors[i].setPriority(threadPriority);
+                acceptors[i].setDaemon(getDaemon());
+                acceptors[i].start();
+            }
+
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    public boolean getDaemon() { return daemon; }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    public String getName() { return name; }

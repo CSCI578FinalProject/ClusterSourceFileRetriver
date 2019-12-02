@@ -1,0 +1,42 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Return the value of the specified initialization parameter, or
+     * <code>null</code> if this parameter does not exist.
+     *
+     * @param name Name of the initialization parameter to retrieve
+     */
+    public String getInitParameter(final String name) {
+        // Special handling for XML settings as the context setting must
+        // always override anything that might have been set by an application.
+        if (Globals.JASPER_XML_VALIDATION_TLD_INIT_PARAM.equals(name) &&
+                context.getTldValidation()) {
+            return "true";
+        }
+        if (Globals.JASPER_XML_VALIDATION_INIT_PARAM.equals(name) &&
+                context.getXmlValidation()) {
+            return "true";
+        }
+        if (Globals.JASPER_XML_BLOCK_EXTERNAL_INIT_PARAM.equals(name)) {
+            if (!context.getXmlBlockExternal()) {
+                // System admin has explicitly changed the default
+                return "false";
+            }
+        }
+        return parameters.get(name);
+    }
+-----CSCI578-----
+
+
+
+    public String getInitParameter(String name) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (String) doPrivileged("getInitParameter", 
+                                         new Object[]{name});
+        } else {
+            return context.getInitParameter(name);
+        }
+    }

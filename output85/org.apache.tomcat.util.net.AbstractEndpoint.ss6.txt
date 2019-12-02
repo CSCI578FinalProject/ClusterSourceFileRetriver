@@ -1,0 +1,139 @@
+5
+-----CSCI578-----
+
+    public String getProperty(String name) {
+        String value = (String) getAttribute(name);
+        final String socketName = "socket.";
+        if (value == null && name.startsWith(socketName)) {
+            Object result = IntrospectionUtils.getProperty(socketProperties, name.substring(socketName.length()));
+            if (result != null) {
+                value = result.toString();
+            }
+        }
+        return value;
+    }
+-----CSCI578-----
+
+    /**
+     * Used by sub-components to retrieve configuration information.
+     *
+     * @param key The name of the property for which the value should be
+     *            retrieved
+     *
+     * @return The value of the specified property
+     */
+    public Object getAttribute(String key) {
+        Object value = attributes.get(key);
+        if (getLog().isTraceEnabled()) {
+            getLog().trace(sm.getString("endpoint.getAttribute", key, value));
+        }
+        return value;
+    }
+-----CSCI578-----
+
+
+    public static Object getProperty(Object o, String name) {
+        String getter = "get" + capitalize(name);
+        String isGetter = "is" + capitalize(name);
+
+        try {
+            Method methods[] = findMethods(o.getClass());
+            Method getPropertyMethod = null;
+
+            // First, the ideal case - a getFoo() method
+            for (int i = 0; i < methods.length; i++) {
+                Class<?> paramT[] = methods[i].getParameterTypes();
+                if (getter.equals(methods[i].getName()) && paramT.length == 0) {
+                    return methods[i].invoke(o, (Object[]) null);
+                }
+                if (isGetter.equals(methods[i].getName()) && paramT.length == 0) {
+                    return methods[i].invoke(o, (Object[]) null);
+                }
+
+                if ("getProperty".equals(methods[i].getName())) {
+                    getPropertyMethod = methods[i];
+                }
+            }
+
+            // Ok, no setXXX found, try a getProperty("name")
+            if (getPropertyMethod != null) {
+                Object params[] = new Object[1];
+                params[0] = name;
+                return getPropertyMethod.invoke(o, params);
+            }
+
+        } catch (IllegalArgumentException ex2) {
+            log.warn("IAE " + o + " " + name, ex2);
+        } catch (SecurityException ex1) {
+            log.warn("IntrospectionUtils: SecurityException for " +
+                    o.getClass() + " " + name + ")", ex1);
+        } catch (IllegalAccessException iae) {
+            log.warn("IntrospectionUtils: IllegalAccessException for " +
+                    o.getClass() + " " + name + ")", iae);
+        } catch (InvocationTargetException ie) {
+            if (ie.getCause() instanceof NullPointerException) {
+                // Assume the underlying object uses a storage to represent an unset property
+                return null;
+            }
+            ExceptionUtils.handleThrowable(ie.getCause());
+            log.warn("IntrospectionUtils: InvocationTargetException for " +
+                    o.getClass() + " " + name + ")", ie);
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+    /**
+     * Obtain and return the value of a specific attribute of this MBean.
+     *
+     * @param name Name of the requested attribute
+     *
+     * @exception AttributeNotFoundException if this attribute is not
+     *  supported by this MBean
+     * @exception MBeanException if the initializer of an object
+     *  throws an exception
+     * @exception ReflectionException if a Java reflection exception
+     *  occurs when invoking the getter
+     */
+    @Override
+    public Object getAttribute(String name) throws AttributeNotFoundException,
+            MBeanException, ReflectionException {
+
+        // Validate the input parameters
+        if (name == null)
+            throw new RuntimeOperationsException(new IllegalArgumentException(
+                    "Attribute name is null"), "Attribute name is null");
+
+        Object result = null;
+        try {
+            Connector connector = (Connector) getManagedResource();
+            result = IntrospectionUtils.getProperty(connector, name);
+        } catch (InstanceNotFoundException e) {
+            throw new MBeanException(e);
+        } catch (InvalidTargetObjectTypeException e) {
+            throw new MBeanException(e);
+        }
+
+        return result;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Generic property getter used by the digester. Other code should not need
+     * to use this.
+     *
+     * @param name The name of the property to get
+     *
+     * @return The value of the property converted to a string
+     */
+    public String getProperty(String name) {
+        return endpoint.getProperty(name);
+    }

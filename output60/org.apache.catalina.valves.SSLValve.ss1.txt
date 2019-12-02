@@ -1,0 +1,224 @@
+9
+-----CSCI578-----
+ 
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        /* mod_header converts the '\n' into ' ' so we have to rebuild the client certificate */
+        String strcert0 = mygetHeader(request, "ssl_client_cert");
+        if (strcert0 != null && strcert0.length()>28) {
+            String strcert1 = strcert0.replace(' ', '\n');
+            String strcert2 = strcert1.substring(28, strcert1.length()-26);
+            String strcert3 = "-----BEGIN CERTIFICATE-----\n";
+            String strcert4 = strcert3.concat(strcert2);
+            String strcerts = strcert4.concat("\n-----END CERTIFICATE-----\n");
+            // ByteArrayInputStream bais = new ByteArrayInputStream(strcerts.getBytes("UTF-8"));
+            ByteArrayInputStream bais = new ByteArrayInputStream(strcerts.getBytes());
+            X509Certificate jsseCerts[] = null;
+            String providerName = (String) request.getConnector().getProperty(
+                    "clientCertProvider");
+            try {
+                CertificateFactory cf;
+                if (providerName == null) {
+                    cf = CertificateFactory.getInstance("X.509");
+                } else {
+                    cf = CertificateFactory.getInstance("X.509", providerName);
+                }
+                X509Certificate cert = (X509Certificate) cf.generateCertificate(bais);
+                jsseCerts = new X509Certificate[1];
+                jsseCerts[0] = cert;
+            } catch (java.security.cert.CertificateException e) {
+                log.warn(sm.getString("sslValve.certError", strcerts), e);
+            } catch (NoSuchProviderException e) {
+                log.error(sm.getString(
+                        "sslValve.invalidProvider", providerName), e);
+
+            }
+            request.setAttribute("javax.servlet.request.X509Certificate", jsseCerts);
+        }
+        strcert0 = mygetHeader(request, "ssl_cipher");
+        if (strcert0 != null) {
+            request.setAttribute("javax.servlet.request.cipher_suite", strcert0);
+        }
+        strcert0 = mygetHeader(request, "ssl_session_id");
+        if (strcert0 != null) {
+            request.setAttribute("javax.servlet.request.ssl_session", strcert0);
+        }
+        strcert0 = mygetHeader(request, "ssl_cipher_usekeysize");
+        if (strcert0 != null) {
+            request.setAttribute("javax.servlet.request.key_size",
+                    Integer.valueOf(strcert0));
+        }
+        getNext().invoke(request, response);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified request attribute to the specified value.
+     *
+     * @param name Name of the request attribute to set
+     * @param value The associated value
+     */
+    public void setAttribute(String name, Object value) {
+
+        // Name cannot be null
+        if (name == null)
+            throw new IllegalArgumentException
+                (sm.getString("coyoteRequest.setAttribute.namenull"));
+
+        // Null value is the same as removeAttribute()
+        if (value == null) {
+            removeAttribute(name);
+            return;
+        }
+
+        if (name.equals(Globals.DISPATCHER_TYPE_ATTR)) {
+            dispatcherType = value;
+            return;
+        } else if (name.equals(Globals.DISPATCHER_REQUEST_PATH_ATTR)) {
+            requestDispatcherPath = value;
+            return;
+        }
+
+        Object oldValue = null;
+        boolean replaced = false;
+
+        // Add or replace the specified attribute
+        // Check for read only attribute
+        // requests are per thread so synchronization unnecessary
+        if (readOnlyAttributes.containsKey(name)) {
+            return;
+        }
+
+        // Do the security check before any updates are made
+        if (Globals.IS_SECURITY_ENABLED &&
+                name.equals("org.apache.tomcat.sendfile.filename")) {
+            // Use the canonical file name to avoid any possible symlink and
+            // relative path issues
+            String canonicalPath;
+            try {
+                canonicalPath = new File(value.toString()).getCanonicalPath();
+            } catch (IOException e) {
+                throw new SecurityException(sm.getString(
+                        "coyoteRequest.sendfileNotCanonical", value), e);
+            }
+            // Sendfile is performed in Tomcat's security context so need to
+            // check if the web app is permitted to access the file while still
+            // in the web app's security context
+            System.getSecurityManager().checkRead(canonicalPath);
+            // Update the value so the canonical path is used
+            value = canonicalPath;
+        }
+
+        oldValue = attributes.put(name, value);
+        if (oldValue != null) {
+            replaced = true;
+        }
+
+        // Pass special attributes to the native layer
+        if (name.startsWith("org.apache.tomcat.")) {
+            coyoteRequest.setAttribute(name, value);
+        }
+
+        // Notify interested application event listeners
+        Object listeners[] = context.getApplicationEventListeners();
+        if ((listeners == null) || (listeners.length == 0))
+            return;
+        ServletRequestAttributeEvent event = null;
+        if (replaced)
+            event =
+                new ServletRequestAttributeEvent(context.getServletContext(),
+                                                 getRequest(), name, oldValue);
+        else
+            event =
+                new ServletRequestAttributeEvent(context.getServletContext(),
+                                                 getRequest(), name, value);
+
+        for (int i = 0; i < listeners.length; i++) {
+            if (!(listeners[i] instanceof ServletRequestAttributeListener))
+                continue;
+            ServletRequestAttributeListener listener =
+                (ServletRequestAttributeListener) listeners[i];
+            try {
+                if (replaced) {
+                    listener.attributeReplaced(event);
+                } else {
+                    listener.attributeAdded(event);
+                }
+            } catch (Throwable t) {
+                context.getLogger().error(sm.getString("coyoteRequest.attributeEvent"), t);
+                // Error valve will pick this execption up and display it to user
+                attributes.put( Globals.EXCEPTION_ATTR, t );
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the Connector through which this Request was received.
+     */
+    public Connector getConnector() {
+        return (this.connector);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Alternate flag to enable recycling of facades.
+     */
+    public static final boolean RECYCLE_FACADES =
+        Boolean.valueOf(System.getProperty("org.apache.catalina.connector.RECYCLE_FACADES", "false")).booleanValue();
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Return a configured property.
+     */
+    public Object getProperty(String name) {
+        String repl = name;
+        if (replacements.get(name) != null) {
+            repl = (String) replacements.get(name);
+        }
+        return IntrospectionUtils.getProperty(protocolHandler, repl);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return a configured property.
+     */
+    public Object getAttribute(String name) {
+        return getProperty(name);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the maximum number of headers that are allowed by the container. A
+     * value of less than 0 means no limit.
+     */
+    public int getMaxHeaderCount() {
+        Object value = getProperty("maxHeaderCount");
+        if (value instanceof Integer) {
+            return ((Integer) value).intValue();
+        } else if (value == null) {
+            // JkCoyoteHandler does not return the actual value, but the
+            // one passed to the previous call of setProperty(), which
+            // is null by default.
+            // The actual value can be seen in JkHandler MBean "request".
+            // The default value for maxHeaderCount is known to be 100.
+            return 100;
+        }
+        return Integer.parseInt((String) value);
+    }
+-----CSCI578-----

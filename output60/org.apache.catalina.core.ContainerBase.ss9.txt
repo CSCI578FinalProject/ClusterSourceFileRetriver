@@ -1,0 +1,54 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Container with which this Loader has been associated.
+     *
+     * @param container The associated Container
+     */
+    public void setContainer(Container container);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Loader with which this Container is associated.
+     *
+     * @param loader The newly associated loader
+     */
+    public synchronized void setLoader(Loader loader) {
+
+        // Change components if necessary
+        Loader oldLoader = this.loader;
+        if (oldLoader == loader)
+            return;
+        this.loader = loader;
+
+        // Stop the old component if necessary
+        if (started && (oldLoader != null) &&
+            (oldLoader instanceof Lifecycle)) {
+            try {
+                ((Lifecycle) oldLoader).stop();
+            } catch (LifecycleException e) {
+                log.error("ContainerBase.setLoader: stop: ", e);
+            }
+        }
+
+        // Start the new component if necessary
+        if (loader != null)
+            loader.setContainer(this);
+        if (started && (loader != null) &&
+            (loader instanceof Lifecycle)) {
+            try {
+                ((Lifecycle) loader).start();
+            } catch (LifecycleException e) {
+                log.error("ContainerBase.setLoader: start: ", e);
+            }
+        }
+
+        // Report this property change to interested listeners
+        support.firePropertyChange("loader", oldLoader, this.loader);
+
+    }

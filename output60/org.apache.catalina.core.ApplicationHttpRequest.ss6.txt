@@ -1,0 +1,251 @@
+13
+-----CSCI578-----
+
+
+
+    /**
+     * Parses the parameters of this request.
+     *
+     * If parameters are present in both the query string and the request
+     * content, they are merged.
+     */
+    void parseParameters() {
+
+	if (parsedParams) {
+	    return;
+	}
+
+        parameters = new ParameterMap<String,String[]>();
+        parameters.putAll(getRequest().getParameterMap());
+        mergeParameters();
+        ((ParameterMap<String,String[]>) parameters).setLocked(true);
+        parsedParams = true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Merge the two sets of parameter values into a single String array.
+     *
+     * @param values1 First set of values
+     * @param values2 Second set of values
+     */
+    protected String[] mergeValues(Object values1, Object values2) {
+
+        ArrayList<String> results = new ArrayList<String>();
+
+        if (values1 == null) {
+            // Skip - nothing to merge
+        } else if (values1 instanceof String[]) {
+            String values[] = (String[]) values1;
+            for (int i = 0; i < values.length; i++) {
+                results.add(values[i]);
+            }
+        } else { // String
+            results.add(values1.toString());
+        }
+
+        if (values2 == null) {
+            // Skip - nothing to merge
+        } else if (values2 instanceof String[]) {
+            String values[] = (String[]) values2;
+            for (int i = 0; i < values.length; i++) {
+                results.add(values[i]);
+            }
+        } else { // String
+            results.add(values2.toString());
+        }
+
+        String values[] = new String[results.size()];
+        return results.toArray(values);
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Private Methods
+
+
+    /**
+     * Merge the parameters from the saved query parameter string (if any), and
+     * the parameters already present on this request (if any), such that the
+     * parameter values from the query string show up first if there are
+     * duplicate parameter names.
+     */
+    private void mergeParameters() {
+
+        if ((queryParamString == null) || (queryParamString.length() < 1))
+            return;
+
+        // Parse the query string from the dispatch target
+        Parameters paramParser = new Parameters();
+        MessageBytes queryMB = MessageBytes.newInstance();
+        queryMB.setString(queryParamString);
+
+        String encoding = getCharacterEncoding();
+        // No need to process null value, as ISO-8859-1 is the default encoding
+        // in MessageBytes.toBytes().
+        if (encoding != null) {
+            try {
+                queryMB.setCharset(B2CConverter.getCharset(encoding));
+            } catch (UnsupportedEncodingException ignored) {
+                // Fall-back to ISO-8859-1
+            }
+        }
+
+        paramParser.setQuery(queryMB);
+        paramParser.setQueryStringEncoding(encoding);
+        paramParser.handleQueryParameters();
+
+        // Insert the additional parameters from the dispatch target
+        Enumeration<String> dispParamNames = paramParser.getParameterNames();
+        while (dispParamNames.hasMoreElements()) {
+            String dispParamName = dispParamNames.nextElement();
+            String[] dispParamValues = paramParser.getParameterValues(dispParamName);
+            String[] originalValues = (String[]) parameters.get(dispParamName);
+            if (originalValues == null) {
+                parameters.put(dispParamName, dispParamValues);
+                continue;
+            }
+            parameters.put(dispParamName, mergeValues(dispParamValues, originalValues));
+        }
+    }
+-----CSCI578-----
+
+
+    public void setQueryStringEncoding( String s ) {
+        queryStringEncoding=s;
+        if(log.isDebugEnabled()) {
+            log.debug( "Set query string encoding to " + s );
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the locked state of this parameter map.
+     *
+     * @param locked The new locked state
+     */
+    public void setLocked(boolean locked) {
+
+        this.locked = locked;
+
+    }
+-----CSCI578-----
+
+
+    public Enumeration<String> getParameterNames() {
+        handleQueryParameters();
+        return Collections.enumeration(paramHashValues.keySet());
+    }
+-----CSCI578-----
+
+
+    public String[] getParameterValues(String name) {
+        handleQueryParameters();
+        // no "facade"
+        ArrayList<String> values = paramHashValues.get(name);
+        if (values == null) {
+            return null;
+        }
+        return values.toArray(new String[values.size()]);
+    }
+-----CSCI578-----
+
+    // -------------------- Processing --------------------
+    /** Process the query string into parameters
+     */
+    public void handleQueryParameters() {
+        if( didQueryParameters ) return;
+
+        didQueryParameters=true;
+
+        if( queryMB==null || queryMB.isNull() )
+            return;
+
+        if(log.isDebugEnabled()) {
+            log.debug("Decoding query " + decodedQuery + " " +
+                    queryStringEncoding);
+        }
+
+        try {
+            decodedQuery.duplicate( queryMB );
+        } catch (IOException e) {
+            // Can't happen, as decodedQuery can't overflow
+            e.printStackTrace();
+        }
+        processParameters( decodedQuery, queryStringEncoding );
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Override the <code>getParameter()</code> method of the wrapped request.
+     *
+     * @param name Name of the requested parameter
+     */
+    public String getParameter(String name) {
+
+	parseParameters();
+
+        Object value = parameters.get(name);
+        if (value == null)
+            return (null);
+        else if (value instanceof String[])
+            return (((String[]) value)[0]);
+        else if (value instanceof String)
+            return ((String) value);
+        else
+            return (value.toString());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Override the <code>getParameterMap()</code> method of the
+     * wrapped request.
+     */
+    public Map getParameterMap() {
+
+	parseParameters();
+        return (parameters);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Override the <code>getParameterValues()</code> method of the
+     * wrapped request.
+     *
+     * @param name Name of the requested parameter
+     */
+    public String[] getParameterValues(String name) {
+
+	parseParameters();
+        Object value = parameters.get(name);
+        if (value == null)
+            return ((String[]) null);
+        else if (value instanceof String[])
+            return ((String[]) value);
+        else if (value instanceof String) {
+            String values[] = new String[1];
+            values[0] = (String) value;
+            return (values);
+        } else {
+            String values[] = new String[1];
+            values[0] = value.toString();
+            return (values);
+        }
+
+    }

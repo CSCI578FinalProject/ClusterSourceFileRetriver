@@ -1,0 +1,49 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    void closeConnection(Http2Exception ce) {
+        try {
+            writeGoAwayFrame(maxProcessedStreamId, ce.getError().getCode(),
+                    ce.getMessage().getBytes(StandardCharsets.UTF_8));
+        } catch (IOException ioe) {
+            // Ignore. GOAWAY is sent on a best efforts basis and the original
+            // error has already been logged.
+        }
+        close();
+    }
+-----CSCI578-----
+
+
+
+    private void writeGoAwayFrame(int maxStreamId, long errorCode, byte[] debugMsg)
+            throws IOException {
+        byte[] fixedPayload = new byte[8];
+        ByteUtil.set31Bits(fixedPayload, 0, maxStreamId);
+        ByteUtil.setFourBytes(fixedPayload, 4, errorCode);
+        int len = 8;
+        if (debugMsg != null) {
+            len += debugMsg.length;
+        }
+        byte[] payloadLength = new byte[3];
+        ByteUtil.setThreeBytes(payloadLength, 0, len);
+
+        synchronized (socketWrapper) {
+            socketWrapper.write(true, payloadLength, 0, payloadLength.length);
+            socketWrapper.write(true, GOAWAY, 0, GOAWAY.length);
+            socketWrapper.write(true, fixedPayload, 0, 8);
+            if (debugMsg != null) {
+                socketWrapper.write(true, debugMsg, 0, debugMsg.length);
+            }
+            socketWrapper.flush(true);
+        }
+    }
+-----CSCI578-----
+
+
+
+    public Http2Error getError() {
+        return error;
+    }

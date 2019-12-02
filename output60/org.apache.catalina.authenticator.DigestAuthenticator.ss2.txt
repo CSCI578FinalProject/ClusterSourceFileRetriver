@@ -1,0 +1,91 @@
+8
+-----CSCI578-----
+
+
+
+    public void setOpaque(String opaque) {
+        this.opaque = opaque;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public void setKey(String key) {
+        this.key = key;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called after <code>configure()</code>,
+     * and before any of the public methods of the component are utilized.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (started)
+            throw new LifecycleException
+                (sm.getString("authenticator.alreadyStarted"));
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+        started = true;
+
+        // Look up the SingleSignOn implementation in our request processing
+        // path, if there is one
+        Container parent = context.getParent();
+        while ((sso == null) && (parent != null)) {
+            if (!(parent instanceof Pipeline)) {
+                parent = parent.getParent();
+                continue;
+            }
+            Valve valves[] = ((Pipeline) parent).getValves();
+            for (int i = 0; i < valves.length; i++) {
+                if (valves[i] instanceof SingleSignOn) {
+                    sso = (SingleSignOn) valves[i];
+                    break;
+                }
+            }
+            if (sso == null)
+                parent = parent.getParent();
+        }
+        if (log.isDebugEnabled()) {
+            if (sso != null)
+                log.debug("Found SingleSignOn Valve at " + sso);
+            else
+                log.debug("No SingleSignOn Valve is present");
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public String getKey() {
+        return key;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Lifecycle Methods
+
+
+    /**
+     * Initialize the database we will be using for client verification
+     * and certificate validation (if any).
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+
+        super.start();
+
+    }

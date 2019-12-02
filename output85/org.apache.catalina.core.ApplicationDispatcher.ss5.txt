@@ -1,0 +1,97 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * The last response passed to a servlet for servicing from the current
+     * thread.
+     *
+     * @return The last response to be serviced.
+     */
+    public static ServletResponse getLastServicedResponse() {
+        return lastServicedResponse.get();
+    }
+-----CSCI578-----
+
+
+    private void checkSameObjects(ServletRequest appRequest,
+            ServletResponse appResponse) throws ServletException {
+        ServletRequest originalRequest =
+            ApplicationFilterChain.getLastServicedRequest();
+        ServletResponse originalResponse =
+            ApplicationFilterChain.getLastServicedResponse();
+
+        // Some forwards, eg from valves will not set original values
+        if (originalRequest == null || originalResponse == null) {
+            return;
+        }
+
+        boolean same = false;
+        ServletRequest dispatchedRequest = appRequest;
+
+        //find the request that was passed into the service method
+        while (originalRequest instanceof ServletRequestWrapper &&
+                ((ServletRequestWrapper) originalRequest).getRequest()!=null ) {
+            originalRequest =
+                ((ServletRequestWrapper) originalRequest).getRequest();
+        }
+        //compare with the dispatched request
+        while (!same) {
+            if (originalRequest.equals(dispatchedRequest)) {
+                same = true;
+            }
+            if (!same && dispatchedRequest instanceof ServletRequestWrapper) {
+                dispatchedRequest =
+                    ((ServletRequestWrapper) dispatchedRequest).getRequest();
+            } else {
+                break;
+            }
+        }
+        if (!same) {
+            throw new ServletException(sm.getString(
+                    "applicationDispatcher.specViolation.request"));
+        }
+
+        same = false;
+        ServletResponse dispatchedResponse = appResponse;
+
+        //find the response that was passed into the service method
+        while (originalResponse instanceof ServletResponseWrapper &&
+                ((ServletResponseWrapper) originalResponse).getResponse() !=
+                    null ) {
+            originalResponse =
+                ((ServletResponseWrapper) originalResponse).getResponse();
+        }
+        //compare with the dispatched response
+        while (!same) {
+            if (originalResponse.equals(dispatchedResponse)) {
+                same = true;
+            }
+
+            if (!same && dispatchedResponse instanceof ServletResponseWrapper) {
+                dispatchedResponse =
+                    ((ServletResponseWrapper) dispatchedResponse).getResponse();
+            } else {
+                break;
+            }
+        }
+
+        if (!same) {
+            throw new ServletException(sm.getString(
+                    "applicationDispatcher.specViolation.response"));
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * The last request passed to a servlet for servicing from the current
+     * thread.
+     *
+     * @return The last request to be serviced.
+     */
+    public static ServletRequest getLastServicedRequest() {
+        return lastServicedRequest.get();
+    }

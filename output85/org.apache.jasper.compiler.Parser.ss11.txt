@@ -1,0 +1,71 @@
+7
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * The main entry for Parser
+     *
+     * @param pc  The ParseController, use for getting other objects in compiler
+     *            and for parsing included pages
+     * @param reader To read the page
+     * @param parent The parent node to this page, null for top level page
+     * @param isTagFile Is the page being parsed a tag file?
+     * @param directivesOnly Should only directives be parsed?
+     * @param jar JAR, if any, that this page was loaded from
+     * @param pageEnc The encoding of the source
+     * @param jspConfigPageEnc The encoding for the page
+     * @param isDefaultPageEncoding Is the page encoding the default?
+     * @param isBomPresent Is a BOM present in the source
+     * @return list of nodes representing the parsed page
+     *
+     * @throws JasperException If an error occurs during parsing
+     */
+    public static Node.Nodes parse(ParserController pc, JspReader reader,
+            Node parent, boolean isTagFile, boolean directivesOnly,
+            Jar jar, String pageEnc, String jspConfigPageEnc,
+            boolean isDefaultPageEncoding, boolean isBomPresent)
+            throws JasperException {
+
+        Parser parser = new Parser(pc, reader, isTagFile, directivesOnly, jar);
+
+        Node.Root root = new Node.Root(reader.mark(), parent, false);
+        root.setPageEncoding(pageEnc);
+        root.setJspConfigPageEncoding(jspConfigPageEnc);
+        root.setIsDefaultPageEncoding(isDefaultPageEncoding);
+        root.setIsBomPresent(isBomPresent);
+
+        // For the Top level page, add include-prelude and include-coda
+        PageInfo pageInfo = pc.getCompiler().getPageInfo();
+        if (parent == null && !isTagFile) {
+            parser.addInclude(root, pageInfo.getIncludePrelude());
+        }
+        if (directivesOnly) {
+            parser.parseFileDirectives(root);
+        } else {
+            while (reader.hasMoreInput()) {
+                parser.parseElements(root);
+            }
+        }
+        if (parent == null && !isTagFile) {
+            parser.addInclude(root, pageInfo.getIncludeCoda());
+        }
+
+        Node.Nodes page = new Node.Nodes(root);
+        return page;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Checks if the current file has more input.
+     *
+     * @return True if more reading is possible
+     */
+    boolean hasMoreInput() {
+        return current.cursor < current.stream.length;
+    }
+-----CSCI578-----

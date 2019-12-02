@@ -1,0 +1,159 @@
+10
+-----CSCI578-----
+
+
+   public ClusterManager cloneFromTemplate();
+-----CSCI578-----
+
+
+    /**
+     * Create new Manager without add to cluster (comes with start the manager)
+     *
+     * @param name
+     *            Context Name of this manager
+     * @see org.apache.catalina.Cluster#createManager(java.lang.String)
+     * @see DeltaManager#start()
+     */
+    @Override
+    public synchronized Manager createManager(String name) {
+        if (log.isDebugEnabled()) {
+            log.debug("Creating ClusterManager for context " + name +
+                    " using class " + getManagerTemplate().getClass().getName());
+        }
+        ClusterManager manager = null;
+        try {
+            manager = managerTemplate.cloneFromTemplate();
+            manager.setName(name);
+        } catch (Exception x) {
+            log.error(sm.getString("simpleTcpCluster.clustermanager.cloneFailed"), x);
+            manager = new org.apache.catalina.ha.session.DeltaManager();
+        } finally {
+            if ( manager != null) manager.setCluster(this);
+        }
+        return manager;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+   /**
+    * Set the name of the manager, at host /context name and at engine hostname+/context
+    * @param name The manager name
+    * @since 5.5.10
+    */
+   public void setName(String name);
+-----CSCI578-----
+
+
+   public void setCluster(CatalinaCluster cluster);
+-----CSCI578-----
+
+
+
+    /**
+     * send message to all cluster members
+     * @param msg message to transfer
+     *
+     * @see org.apache.catalina.ha.CatalinaCluster#send(org.apache.catalina.ha.ClusterMessage)
+     */
+    @Override
+    public void send(ClusterMessage msg) {
+        send(msg, null);
+    }
+
+
+    /**
+     * send a cluster message to one member
+     *
+     * @param msg message to transfer
+     * @param dest Receiver member
+     * @see org.apache.catalina.ha.CatalinaCluster#send(org.apache.catalina.ha.ClusterMessage,
+     *      org.apache.catalina.tribes.Member)
+     */
+    @Override
+    public void send(ClusterMessage msg, Member dest) {
+        try {
+            msg.setAddress(getLocalMember());
+            int sendOptions = channelSendOptions;
+            if (msg instanceof SessionMessage
+                    && ((SessionMessage)msg).getEventType() == SessionMessage.EVT_ALL_SESSION_DATA) {
+                sendOptions = Channel.SEND_OPTIONS_SYNCHRONIZED_ACK|Channel.SEND_OPTIONS_USE_ACK;
+            }
+            if (dest != null) {
+                if (!getLocalMember().equals(dest)) {
+                    channel.send(new Member[] {dest}, msg, sendOptions);
+                } else
+                    log.error(sm.getString("simpleTcpCluster.unableSend.localMember", msg));
+            } else {
+                Member[] destmembers = channel.getMembers();
+                if (destmembers.length>0)
+                    channel.send(destmembers,msg, sendOptions);
+                else if (log.isDebugEnabled())
+                    log.debug("No members in cluster, ignoring message:"+msg);
+            }
+        } catch (Exception x) {
+            log.error(sm.getString("simpleTcpCluster.sendFailed"), x);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the member that represents this node.
+     *
+     * @return Member
+     */
+    @Override
+    public Member getLocalMember() {
+        return channel.getLocalMember(true);
+    }
+-----CSCI578-----
+
+
+    /**
+     * returns the event type
+     * @return one of the event types EVT_XXXX
+     */
+    public int getEventType();
+-----CSCI578-----
+
+    public void setAddress(Member member);
+-----CSCI578-----
+
+
+    // -------------------------------------------------------- Replication
+    // Methods
+
+    /**
+     * A message was received from another node, this is the callback method to
+     * implement if you are interested in receiving replication messages.
+     *
+     * @param cmsg -
+     *            the message received.
+     */
+    @Override
+    public void messageDataReceived(ClusterMessage cmsg) {
+        if (cmsg instanceof SessionMessage) {
+            SessionMessage msg = (SessionMessage) cmsg;
+            switch (msg.getEventType()) {
+                case SessionMessage.EVT_GET_ALL_SESSIONS:
+                case SessionMessage.EVT_SESSION_CREATED:
+                case SessionMessage.EVT_SESSION_EXPIRED:
+                case SessionMessage.EVT_SESSION_ACCESSED:
+                case SessionMessage.EVT_SESSION_DELTA:
+                case SessionMessage.EVT_CHANGE_SESSION_ID:
+                    synchronized(receivedMessageQueue) {
+                        if(receiverQueue) {
+                            receivedMessageQueue.add(msg);
+                            return ;
+                        }
+                    }
+                   break;
+                default:
+                    //we didn't queue, do nothing
+                    break;
+            } //switch
+
+            messageReceived(msg, msg.getAddress() != null ? (Member) msg.getAddress() : null);
+        }
+    }

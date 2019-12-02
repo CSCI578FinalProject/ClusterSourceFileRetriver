@@ -1,0 +1,45 @@
+1
+-----CSCI578-----
+
+
+
+    /**
+     * Return a List of all registered Rule instances that match the specified
+     * nesting pattern, or a zero-length List if there are no matches.  If more
+     * than one Rule instance matches, they <strong>must</strong> be returned
+     * in the order originally registered through the <code>add()</code>
+     * method.
+     *
+     * @param namespaceURI Namespace URI for which to select matching rules,
+     *  or <code>null</code> to match regardless of namespace URI
+     * @param pattern Nesting pattern to be matched
+     */
+    @Override
+    public List<Rule> match(String namespaceURI, String pattern) {
+
+        // List rulesList = (List) this.cache.get(pattern);
+        List<Rule> rulesList = lookup(namespaceURI, pattern);
+        if ((rulesList == null) || (rulesList.size() < 1)) {
+            // Find the longest key, ie more discriminant
+            String longKey = "";
+            Iterator<String> keys = this.cache.keySet().iterator();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                if (key.startsWith("*/")) {
+                    if (pattern.equals(key.substring(2)) ||
+                        pattern.endsWith(key.substring(1))) {
+                        if (key.length() > longKey.length()) {
+                            // rulesList = (List) this.cache.get(key);
+                            rulesList = lookup(namespaceURI, key);
+                            longKey = key;
+                        }
+                    }
+                }
+            }
+        }
+        if (rulesList == null) {
+            rulesList = new ArrayList<>();
+        }
+        return (rulesList);
+
+    }

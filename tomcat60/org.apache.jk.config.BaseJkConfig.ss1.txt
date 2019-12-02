@@ -1,0 +1,209 @@
+22
+    protected void generateContextMappings(Context context, PrintWriter mod_jk){
+    }
+
+    /** 
+     *  Generate configuration files.  Override with method to generate
+     *  web server specific configuration.
+     */
+    protected void executeEngine(Engine egn, PrintWriter mod_jk) {
+        if(egn.getJvmRoute() != null) {
+            jkWorker = egn.getJvmRoute();
+        }
+        executeServer(egn.getService().getServer(), mod_jk);
+        Container [] children = egn.findChildren();
+        for(int ii=0; ii < children.length; ii++) {
+            if( children[ii] instanceof Host ) {
+                executeHost((Host)children[ii], mod_jk);
+            } else if( children[ii] instanceof Context ) {
+                executeContext((Context)children[ii], mod_jk);
+            }
+        }
+    }
+
+    /** 
+     * Generate Virtual Host start
+     */
+    protected void generateVhostHead(Host host, PrintWriter mod_jk) {
+    }
+
+    // -------------------- Tomcat callbacks --------------------
+
+
+    // Auto-config should be able to react to dynamic config changes,
+    // and regenerate the config.
+
+    /** 
+     *  Generate the configuration - only when the server is
+     *  completely initialized ( before starting )
+     */
+    public void lifecycleEvent(LifecycleEvent evt) {
+        if(Lifecycle.START_EVENT.equals(evt.getType())) {
+           execute( evt );
+        } 
+    }
+
+    /** 
+     *  Generate configuration files.  Override with method to generate
+     *  web server specific configuration.
+     */
+    public void execute(LifecycleEvent evt) {
+        initProperties();
+        PrintWriter mod_jk = null;
+        try {
+            mod_jk = getWriter();
+        } catch(IOException iex) {
+            log.warn("Unable to open config file");
+            return;
+        }
+        Lifecycle who = evt.getLifecycle();
+        if( who instanceof Server ) {
+            executeServer((Server)who, mod_jk);
+        } else if(who instanceof Engine) {
+            executeEngine((Engine)who, mod_jk);
+        } else if ( who instanceof Host ) {
+            executeHost((Host)who, mod_jk);
+        } else if( who instanceof Context ) {
+            executeContext((Context)who, mod_jk);
+        }
+        mod_jk.close();
+    }
+    /** 
+     *  Generate configuration files.  Override with method to generate
+     *  web server specific configuration.
+     */
+    public void executeServer(Server svr, PrintWriter mod_jk) {
+        if(! append ) {
+            if( ! generateJkHead(mod_jk) )
+                return;
+            generateSSLConfig(mod_jk);
+            generateJkTail(mod_jk);
+        }
+    }
+
+    /** 
+     *  Generate configuration files.  Override with method to generate
+     *  web server specific configuration.
+     */
+    protected void executeEngine(Engine egn, PrintWriter mod_jk) {
+        if(egn.getJvmRoute() != null) {
+            jkWorker = egn.getJvmRoute();
+        }
+        executeServer(egn.getService().getServer(), mod_jk);
+        Container [] children = egn.findChildren();
+        for(int ii=0; ii < children.length; ii++) {
+            if( children[ii] instanceof Host ) {
+                executeHost((Host)children[ii], mod_jk);
+            } else if( children[ii] instanceof Context ) {
+                executeContext((Context)children[ii], mod_jk);
+            }
+        }
+    }
+    /**
+     *  Generate configuration files.  Override with method to generate
+     *  web server specific configuration.
+     */
+    protected void executeHost(Host hst, PrintWriter mod_jk) {
+        generateVhostHead(hst, mod_jk);
+        Container [] children = hst.findChildren();
+        for(int ii=0; ii < children.length; ii++) {
+            if(children[ii] instanceof Context) {
+                executeContext((Context)children[ii],mod_jk);
+            }
+        }
+        generateVhostTail(hst, mod_jk);
+    }
+    /**
+     *   executes the ApacheConfig interceptor. This method generates apache
+     *   configuration files for use with  mod_jk.
+     *   @param context a Context object.
+     *   @param mod_jk Writer for output.
+    */
+    public void executeContext(Context context, PrintWriter mod_jk){
+
+        if(context.getPath().length() > 0 || ! noRoot ) {
+            String docRoot = context.getServletContext().getRealPath("/");
+            if( forwardAll || docRoot == null)
+                generateStupidMappings( context, mod_jk );
+            else
+                generateContextMappings( context, mod_jk);
+        }
+    }
+
+    /** 
+     * Generate Virtual Host end
+     */
+    protected void generateVhostTail(Host host, PrintWriter mod_jk) {
+    }
+    /** 
+     *  Generate configuration files.  Override with method to generate
+     *  web server specific configuration.
+     */
+    public void executeServer(Server svr, PrintWriter mod_jk) {
+        if(! append ) {
+            if( ! generateJkHead(mod_jk) )
+                return;
+            generateSSLConfig(mod_jk);
+            generateJkTail(mod_jk);
+        }
+    }
+
+    protected void generateStupidMappings(Context context, PrintWriter mod_jk){
+    }
+
+    /** 
+     * Generate SSL options
+     */
+    protected void generateSSLConfig(PrintWriter mod_jk) {
+    }
+
+    /** 
+     * Generate general options
+     */
+    protected void generateJkTail(PrintWriter mod_jk) {
+    }
+    /**
+     *   executes the ApacheConfig interceptor. This method generates apache
+     *   configuration files for use with  mod_jk.
+     *   @param context a Context object.
+     *   @param mod_jk Writer for output.
+    */
+    public void executeContext(Context context, PrintWriter mod_jk){
+
+        if(context.getPath().length() > 0 || ! noRoot ) {
+            String docRoot = context.getServletContext().getRealPath("/");
+            if( forwardAll || docRoot == null)
+                generateStupidMappings( context, mod_jk );
+            else
+                generateContextMappings( context, mod_jk);
+        }
+    }
+
+    /** 
+     *  Get the output Writer.  Override with method to generate
+     *  web server specific configuration.
+     */
+    protected PrintWriter getWriter() throws IOException {
+        return null;
+    }
+
+    /** 
+     * Generate general options
+     */
+    protected boolean generateJkHead(PrintWriter mod_jk)  {
+        return true;
+    }
+    /**
+     *  Generate configuration files.  Override with method to generate
+     *  web server specific configuration.
+     */
+    protected void executeHost(Host hst, PrintWriter mod_jk) {
+        generateVhostHead(hst, mod_jk);
+        Container [] children = hst.findChildren();
+        for(int ii=0; ii < children.length; ii++) {
+            if(children[ii] instanceof Context) {
+                executeContext((Context)children[ii],mod_jk);
+            }
+        }
+        generateVhostTail(hst, mod_jk);
+    }

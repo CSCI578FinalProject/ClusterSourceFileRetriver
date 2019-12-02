@@ -1,0 +1,486 @@
+17
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    void startInputProcessing() {
+        try {
+            processSocketRead();
+        } catch (IOException e) {
+            close(e);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private static ByteBuffer createProxyRequest(String host, int port) {
+        StringBuilder request = new StringBuilder();
+        request.append("CONNECT ");
+        request.append(host);
+        if (port != -1) {
+            request.append(':');
+            request.append(port);
+        }
+        request.append(" HTTP/1.1\r\nProxy-Connection: keep-alive\r\nConnection: keepalive\r\nHost: ");
+        request.append(host);
+        if (port != -1) {
+            request.append(':');
+            request.append(port);
+        }
+        request.append("\r\n\r\n");
+
+        byte[] bytes = request.toString().getBytes(StandardCharsets.ISO_8859_1);
+        return ByteBuffer.wrap(bytes);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public Session connectToServer(Object pojo, URI path)
+            throws DeploymentException {
+
+        ClientEndpoint annotation =
+                pojo.getClass().getAnnotation(ClientEndpoint.class);
+        if (annotation == null) {
+            throw new DeploymentException(
+                    sm.getString("wsWebSocketContainer.missingAnnotation",
+                            pojo.getClass().getName()));
+        }
+
+        Endpoint ep = new PojoEndpointClient(pojo, Arrays.asList(annotation.decoders()));
+
+        Class<? extends ClientEndpointConfig.Configurator> configuratorClazz =
+                annotation.configurator();
+
+        ClientEndpointConfig.Configurator configurator = null;
+        if (!ClientEndpointConfig.Configurator.class.equals(
+                configuratorClazz)) {
+            try {
+                configurator = configuratorClazz.newInstance();
+            } catch (InstantiationException | IllegalAccessException e) {
+                throw new DeploymentException(sm.getString(
+                        "wsWebSocketContainer.defaultConfiguratorFail"), e);
+            }
+        }
+
+        ClientEndpointConfig.Builder builder = ClientEndpointConfig.Builder.create();
+        // Avoid NPE when using RI API JAR - see BZ 56343
+        if (configurator != null) {
+            builder.configurator(configurator);
+        }
+        ClientEndpointConfig config = builder.
+                decoders(Arrays.asList(annotation.decoders())).
+                encoders(Arrays.asList(annotation.encoders())).
+                preferredSubprotocols(Arrays.asList(annotation.subprotocols())).
+                build();
+        return connectToServer(ep, config, path);
+    }
+
+
+
+    @Override
+    public Session connectToServer(Class<?> annotatedEndpointClass, URI path)
+            throws DeploymentException {
+
+        Object pojo;
+        try {
+            pojo = annotatedEndpointClass.newInstance();
+        } catch (InstantiationException | IllegalAccessException e) {
+            throw new DeploymentException(sm.getString(
+                    "wsWebSocketContainer.endpointCreateFail",
+                    annotatedEndpointClass.getName()), e);
+        }
+
+        return connectToServer(pojo, path);
+    }
+
+
+
+    @Override
+    public Session connectToServer(Class<? extends Endpoint> clazz,
+            ClientEndpointConfig clientEndpointConfiguration, URI path)
+            throws DeploymentException {
+
+        Endpoint endpoint;
+        try {
+            endpoint = clazz.newInstance();
+        } catch (InstantiationException | IllegalAccessException e) {
+            throw new DeploymentException(sm.getString(
+                    "wsWebSocketContainer.endpointCreateFail", clazz.getName()),
+                    e);
+        }
+
+        return connectToServer(endpoint, clientEndpointConfiguration, path);
+    }
+
+
+
+    @SuppressWarnings("resource") // socketChannel is closed
+    @Override
+    public Session connectToServer(Endpoint endpoint,
+            ClientEndpointConfig clientEndpointConfiguration, URI path)
+            throws DeploymentException {
+
+        boolean secure = false;
+        ByteBuffer proxyConnect = null;
+        URI proxyPath;
+
+        // Validate scheme (and build proxyPath)
+        String scheme = path.getScheme();
+        if ("ws".equalsIgnoreCase(scheme)) {
+            proxyPath = URI.create("http" + path.toString().substring(2));
+        } else if ("wss".equalsIgnoreCase(scheme)) {
+            proxyPath = URI.create("https" + path.toString().substring(3));
+            secure = true;
+        } else {
+            throw new DeploymentException(sm.getString(
+                    "wsWebSocketContainer.pathWrongScheme", scheme));
+        }
+
+        // Validate host
+        String host = path.getHost();
+        if (host == null) {
+            throw new DeploymentException(
+                    sm.getString("wsWebSocketContainer.pathNoHost"));
+        }
+        int port = path.getPort();
+
+        SocketAddress sa = null;
+
+        // Check to see if a proxy is configured. Javadoc indicates return value
+        // will never be null
+        List<Proxy> proxies = ProxySelector.getDefault().select(proxyPath);
+        Proxy selectedProxy = null;
+        for (Proxy proxy : proxies) {
+            if (proxy.type().equals(Proxy.Type.HTTP)) {
+                sa = proxy.address();
+                if (sa instanceof InetSocketAddress) {
+                    InetSocketAddress inet = (InetSocketAddress) sa;
+                    if (inet.isUnresolved()) {
+                        sa = new InetSocketAddress(inet.getHostName(), inet.getPort());
+                    }
+                }
+                selectedProxy = proxy;
+                break;
+            }
+        }
+
+        // If sa is null, no proxy is configured so need to create sa
+        if (sa == null) {
+            if (port == -1) {
+                if ("ws".equalsIgnoreCase(scheme)) {
+                    sa = new InetSocketAddress(host, 80);
+                } else {
+                    // Must be wss due to scheme validation above
+                    sa = new InetSocketAddress(host, 443);
+                }
+            } else {
+                sa = new InetSocketAddress(host, port);
+            }
+        } else {
+            proxyConnect = createProxyRequest(host, port);
+        }
+
+        // Create the initial HTTP request to open the WebSocket connection
+        Map<String,List<String>> reqHeaders = createRequestHeaders(host, port,
+                clientEndpointConfiguration.getPreferredSubprotocols(),
+                clientEndpointConfiguration.getExtensions());
+        clientEndpointConfiguration.getConfigurator().
+                beforeRequest(reqHeaders);
+        if (Constants.DEFAULT_ORIGIN_HEADER_VALUE != null &&
+                !reqHeaders.containsKey(Constants.ORIGIN_HEADER_NAME)) {
+            List<String> originValues = new ArrayList<>(1);
+            originValues.add(Constants.DEFAULT_ORIGIN_HEADER_VALUE);
+            reqHeaders.put(Constants.ORIGIN_HEADER_NAME, originValues);
+        }
+        ByteBuffer request = createRequest(path, reqHeaders);
+
+        AsynchronousSocketChannel socketChannel;
+        try {
+            socketChannel = AsynchronousSocketChannel.open(getAsynchronousChannelGroup());
+        } catch (IOException ioe) {
+            throw new DeploymentException(sm.getString(
+                    "wsWebSocketContainer.asynchronousSocketChannelFail"), ioe);
+        }
+
+        // Get the connection timeout
+        long timeout = Constants.IO_TIMEOUT_MS_DEFAULT;
+        String timeoutValue = (String) clientEndpointConfiguration.getUserProperties().get(
+                Constants.IO_TIMEOUT_MS_PROPERTY);
+        if (timeoutValue != null) {
+            timeout = Long.valueOf(timeoutValue).intValue();
+        }
+
+        // Set-up
+        // Same size as the WsFrame input buffer
+        ByteBuffer response = ByteBuffer.allocate(maxBinaryMessageBufferSize);
+        String subProtocol;
+        boolean success = false;
+        List<Extension> extensionsAgreed = new ArrayList<>();
+        Transformation transformation = null;
+
+        // Open the connection
+        Future<Void> fConnect = socketChannel.connect(sa);
+        AsyncChannelWrapper channel = null;
+
+        if (proxyConnect != null) {
+            try {
+                fConnect.get(timeout, TimeUnit.MILLISECONDS);
+                // Proxy CONNECT is clear text
+                channel = new AsyncChannelWrapperNonSecure(socketChannel);
+                writeRequest(channel, proxyConnect, timeout);
+                HttpResponse httpResponse = processResponse(response, channel, timeout);
+                if (httpResponse.getStatus() != 200) {
+                    throw new DeploymentException(sm.getString(
+                            "wsWebSocketContainer.proxyConnectFail", selectedProxy,
+                            Integer.toString(httpResponse.getStatus())));
+                }
+            } catch (TimeoutException | InterruptedException | ExecutionException |
+                    EOFException e) {
+                if (channel != null) {
+                    channel.close();
+                }
+                throw new DeploymentException(
+                        sm.getString("wsWebSocketContainer.httpRequestFailed"), e);
+            }
+        }
+
+        if (secure) {
+            // Regardless of whether a non-secure wrapper was created for a
+            // proxy CONNECT, need to use TLS from this point on so wrap the
+            // original AsynchronousSocketChannel
+            SSLEngine sslEngine = createSSLEngine(
+                    clientEndpointConfiguration.getUserProperties());
+            channel = new AsyncChannelWrapperSecure(socketChannel, sslEngine);
+        } else if (channel == null) {
+            // Only need to wrap as this point if it wasn't wrapped to process a
+            // proxy CONNECT
+            channel = new AsyncChannelWrapperNonSecure(socketChannel);
+        }
+
+        try {
+            fConnect.get(timeout, TimeUnit.MILLISECONDS);
+
+            Future<Void> fHandshake = channel.handshake();
+            fHandshake.get(timeout, TimeUnit.MILLISECONDS);
+
+            writeRequest(channel, request, timeout);
+
+            HttpResponse httpResponse = processResponse(response, channel, timeout);
+            // TODO: Handle redirects
+            if (httpResponse.status != 101) {
+                throw new DeploymentException(sm.getString("wsWebSocketContainer.invalidStatus",
+                        Integer.toString(httpResponse.status)));
+            }
+            HandshakeResponse handshakeResponse = httpResponse.getHandshakeResponse();
+            clientEndpointConfiguration.getConfigurator().afterResponse(handshakeResponse);
+
+            // Sub-protocol
+            List<String> protocolHeaders = handshakeResponse.getHeaders().get(
+                    Constants.WS_PROTOCOL_HEADER_NAME);
+            if (protocolHeaders == null || protocolHeaders.size() == 0) {
+                subProtocol = null;
+            } else if (protocolHeaders.size() == 1) {
+                subProtocol = protocolHeaders.get(0);
+            } else {
+                throw new DeploymentException(
+                        sm.getString("wsWebSocketContainer.invalidSubProtocol"));
+            }
+
+            // Extensions
+            // Should normally only be one header but handle the case of
+            // multiple headers
+            List<String> extHeaders = handshakeResponse.getHeaders().get(
+                    Constants.WS_EXTENSIONS_HEADER_NAME);
+            if (extHeaders != null) {
+                for (String extHeader : extHeaders) {
+                    Util.parseExtensionHeader(extensionsAgreed, extHeader);
+                }
+            }
+
+            // Build the transformations
+            TransformationFactory factory = TransformationFactory.getInstance();
+            for (Extension extension : extensionsAgreed) {
+                List<List<Extension.Parameter>> wrapper = new ArrayList<>(1);
+                wrapper.add(extension.getParameters());
+                Transformation t = factory.create(extension.getName(), wrapper, false);
+                if (t == null) {
+                    throw new DeploymentException(sm.getString(
+                            "wsWebSocketContainer.invalidExtensionParameters"));
+                }
+                if (transformation == null) {
+                    transformation = t;
+                } else {
+                    transformation.setNext(t);
+                }
+            }
+
+            success = true;
+        } catch (ExecutionException | InterruptedException | SSLException |
+                EOFException | TimeoutException e) {
+            throw new DeploymentException(
+                    sm.getString("wsWebSocketContainer.httpRequestFailed"), e);
+        } finally {
+            if (!success) {
+                channel.close();
+            }
+        }
+
+        // Switch to WebSocket
+        WsRemoteEndpointImplClient wsRemoteEndpointClient = new WsRemoteEndpointImplClient(channel);
+
+        WsSession wsSession = new WsSession(endpoint, wsRemoteEndpointClient,
+                this, null, null, null, null, null, extensionsAgreed,
+                subProtocol, Collections.<String,String>emptyMap(), secure,
+                clientEndpointConfiguration);
+
+        WsFrameClient wsFrameClient = new WsFrameClient(response, channel,
+                wsSession, transformation);
+        // WsFrame adds the necessary final transformations. Copy the
+        // completed transformation chain to the remote end point.
+        wsRemoteEndpointClient.setTransformation(wsFrameClient.getTransformation());
+
+        endpoint.onOpen(wsSession, clientEndpointConfiguration);
+        registerSession(endpoint, wsSession);
+
+        /* It is possible that the server sent one or more messages as soon as
+         * the WebSocket connection was established. Depending on the exact
+         * timing of when those messages were sent they could be sat in the
+         * input buffer waiting to be read and will not trigger a "data
+         * available to read" event. Therefore, it is necessary to process the
+         * input buffer here. Note that this happens on the current thread which
+         * means that this thread will be used for any onMessage notifications.
+         * This is a special case. Subsequent "data available to read" events
+         * will be handled by threads from the AsyncChannelGroup's executor.
+         */
+        wsFrameClient.startInputProcessing();
+
+        return wsSession;
+    }
+-----CSCI578-----
+
+
+    Future<Void> handshake() throws SSLException;
+-----CSCI578-----
+
+
+
+    private SSLEngine createSSLEngine(Map<String,Object> userProperties)
+            throws DeploymentException {
+
+        try {
+            // See if a custom SSLContext has been provided
+            SSLContext sslContext =
+                    (SSLContext) userProperties.get(Constants.SSL_CONTEXT_PROPERTY);
+
+            if (sslContext == null) {
+                // Create the SSL Context
+                sslContext = SSLContext.getInstance("TLS");
+
+                // Trust store
+                String sslTrustStoreValue =
+                        (String) userProperties.get(Constants.SSL_TRUSTSTORE_PROPERTY);
+                if (sslTrustStoreValue != null) {
+                    String sslTrustStorePwdValue = (String) userProperties.get(
+                            Constants.SSL_TRUSTSTORE_PWD_PROPERTY);
+                    if (sslTrustStorePwdValue == null) {
+                        sslTrustStorePwdValue = Constants.SSL_TRUSTSTORE_PWD_DEFAULT;
+                    }
+
+                    File keyStoreFile = new File(sslTrustStoreValue);
+                    KeyStore ks = KeyStore.getInstance("JKS");
+                    try (InputStream is = new FileInputStream(keyStoreFile)) {
+                        ks.load(is, sslTrustStorePwdValue.toCharArray());
+                    }
+
+                    TrustManagerFactory tmf = TrustManagerFactory.getInstance(
+                            TrustManagerFactory.getDefaultAlgorithm());
+                    tmf.init(ks);
+
+                    sslContext.init(null, tmf.getTrustManagers(), null);
+                } else {
+                    sslContext.init(null, null, null);
+                }
+            }
+
+            SSLEngine engine = sslContext.createSSLEngine();
+
+            String sslProtocolsValue =
+                    (String) userProperties.get(Constants.SSL_PROTOCOLS_PROPERTY);
+            if (sslProtocolsValue != null) {
+                engine.setEnabledProtocols(sslProtocolsValue.split(","));
+            }
+
+            engine.setUseClientMode(true);
+
+            return engine;
+        } catch (Exception e) {
+            throw new DeploymentException(sm.getString(
+                    "wsWebSocketContainer.sslEngineFail"), e);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private static void writeRequest(AsyncChannelWrapper channel, ByteBuffer request,
+            long timeout) throws TimeoutException, InterruptedException, ExecutionException {
+        int toWrite = request.limit();
+
+        Future<Integer> fWrite = channel.write(request);
+        Integer thisWrite = fWrite.get(timeout, TimeUnit.MILLISECONDS);
+        toWrite -= thisWrite.intValue();
+
+        while (toWrite > 0) {
+            fWrite = channel.write(request);
+            thisWrite = fWrite.get(timeout, TimeUnit.MILLISECONDS);
+            toWrite -= thisWrite.intValue();
+        }
+    }
+-----CSCI578-----
+
+
+
+    private final void close(Throwable t) {
+        CloseReason cr;
+        if (t instanceof WsIOException) {
+            cr = ((WsIOException) t).getCloseReason();
+        } else {
+            cr = new CloseReason(
+                CloseCodes.CLOSED_ABNORMALLY, t.getMessage());
+        }
+
+        try {
+            wsSession.close(cr);
+        } catch (IOException ignore) {
+            // Ignore
+        }
+    }
+-----CSCI578-----
+
+
+    Future<Integer> write(ByteBuffer src);
+
+
+    <B,A extends B> void write(ByteBuffer[] srcs, int offset, int length,
+            long timeout, TimeUnit unit, A attachment,
+            CompletionHandler<Long,B> handler);
+-----CSCI578-----
+
+
+    void close();
+-----CSCI578-----
+
+
+    @Override
+    protected void doClose() {
+        channel.close();
+    }

@@ -1,0 +1,827 @@
+21
+-----CSCI578-----
+
+
+    /**
+     * COPY Method.
+     * @param req The Servlet request
+     * @param resp The Servlet response
+     * @throws IOException If an IO error occurs
+     */
+    protected void doCopy(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+
+        if (readOnly) {
+            resp.sendError(WebdavStatus.SC_FORBIDDEN);
+            return;
+        }
+
+        copyResource(req, resp);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * MKCOL Method.
+     * @param req The Servlet request
+     * @param resp The Servlet response
+     * @throws ServletException If an error occurs
+     * @throws IOException If an IO error occurs
+     */
+    protected void doMkcol(HttpServletRequest req, HttpServletResponse resp)
+        throws ServletException, IOException {
+
+        if (readOnly) {
+            resp.sendError(WebdavStatus.SC_FORBIDDEN);
+            return;
+        }
+
+        if (isLocked(req)) {
+            resp.sendError(WebdavStatus.SC_LOCKED);
+            return;
+        }
+
+        String path = getRelativePath(req);
+
+        WebResource resource = resources.getResource(path);
+
+        // Can't create a collection if a resource already exists at the given
+        // path
+        if (resource.exists()) {
+            // Get allowed methods
+            StringBuilder methodsAllowed = determineMethodsAllowed(req);
+
+            resp.addHeader("Allow", methodsAllowed.toString());
+
+            resp.sendError(WebdavStatus.SC_METHOD_NOT_ALLOWED);
+            return;
+        }
+
+        if (req.getContentLengthLong() > 0) {
+            DocumentBuilder documentBuilder = getDocumentBuilder();
+            try {
+                // Document document =
+                documentBuilder.parse(new InputSource(req.getInputStream()));
+                // TODO : Process this request body
+                resp.sendError(WebdavStatus.SC_NOT_IMPLEMENTED);
+                return;
+
+            } catch(SAXException saxe) {
+                // Parse error - assume invalid content
+                resp.sendError(WebdavStatus.SC_UNSUPPORTED_MEDIA_TYPE);
+                return;
+            }
+        }
+
+        if (resources.mkdir(path)) {
+            resp.setStatus(WebdavStatus.SC_CREATED);
+            // Removing any lock-null resource which would be present
+            lockNullResources.remove(path);
+        } else {
+            resp.sendError(WebdavStatus.SC_CONFLICT,
+                           WebdavStatus.getStatusText
+                           (WebdavStatus.SC_CONFLICT));
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * UNLOCK Method.
+     * @param req The Servlet request
+     * @param resp The Servlet response
+     * @throws IOException If an IO error occurs
+     */
+    protected void doUnlock(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+
+        if (readOnly) {
+            resp.sendError(WebdavStatus.SC_FORBIDDEN);
+            return;
+        }
+
+        if (isLocked(req)) {
+            resp.sendError(WebdavStatus.SC_LOCKED);
+            return;
+        }
+
+        String path = getRelativePath(req);
+
+        String lockTokenHeader = req.getHeader("Lock-Token");
+        if (lockTokenHeader == null)
+            lockTokenHeader = "";
+
+        // Checking resource locks
+
+        LockInfo lock = resourceLocks.get(path);
+        Enumeration<String> tokenList = null;
+        if (lock != null) {
+
+            // At least one of the tokens of the locks must have been given
+
+            tokenList = lock.tokens.elements();
+            while (tokenList.hasMoreElements()) {
+                String token = tokenList.nextElement();
+                if (lockTokenHeader.indexOf(token) != -1) {
+                    lock.tokens.removeElement(token);
+                }
+            }
+
+            if (lock.tokens.isEmpty()) {
+                resourceLocks.remove(path);
+                // Removing any lock-null resource which would be present
+                lockNullResources.remove(path);
+            }
+
+        }
+
+        // Checking inheritable collection locks
+
+        Enumeration<LockInfo> collectionLocksList = collectionLocks.elements();
+        while (collectionLocksList.hasMoreElements()) {
+            lock = collectionLocksList.nextElement();
+            if (path.equals(lock.path)) {
+
+                tokenList = lock.tokens.elements();
+                while (tokenList.hasMoreElements()) {
+                    String token = tokenList.nextElement();
+                    if (lockTokenHeader.indexOf(token) != -1) {
+                        lock.tokens.removeElement(token);
+                        break;
+                    }
+                }
+
+                if (lock.tokens.isEmpty()) {
+                    collectionLocks.removeElement(lock);
+                    // Removing any lock-null resource which would be present
+                    lockNullResources.remove(path);
+                }
+
+            }
+        }
+
+        resp.setStatus(WebdavStatus.SC_NO_CONTENT);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Handles the special WebDAV methods.
+     */
+    @Override
+    protected void service(HttpServletRequest req, HttpServletResponse resp)
+        throws ServletException, IOException {
+
+        final String path = getRelativePath(req);
+
+        // Block access to special subdirectories.
+        // DefaultServlet assumes it services resources from the root of the web app
+        // and doesn't add any special path protection
+        // WebdavServlet remounts the webapp under a new path, so this check is
+        // necessary on all methods (including GET).
+        if (isSpecialPath(path)) {
+            resp.sendError(WebdavStatus.SC_NOT_FOUND);
+            return;
+        }
+
+        final String method = req.getMethod();
+
+        if (debug > 0) {
+            log("[" + method + "] " + path);
+        }
+
+        if (method.equals(METHOD_PROPFIND)) {
+            doPropfind(req, resp);
+        } else if (method.equals(METHOD_PROPPATCH)) {
+            doProppatch(req, resp);
+        } else if (method.equals(METHOD_MKCOL)) {
+            doMkcol(req, resp);
+        } else if (method.equals(METHOD_COPY)) {
+            doCopy(req, resp);
+        } else if (method.equals(METHOD_MOVE)) {
+            doMove(req, resp);
+        } else if (method.equals(METHOD_LOCK)) {
+            doLock(req, resp);
+        } else if (method.equals(METHOD_UNLOCK)) {
+            doUnlock(req, resp);
+        } else {
+            // DefaultServlet processing
+            super.service(req, resp);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * PROPPATCH Method.
+     * @param req The Servlet request
+     * @param resp The Servlet response
+     * @throws IOException If an IO error occurs
+     */
+    protected void doProppatch(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+
+        if (readOnly) {
+            resp.sendError(WebdavStatus.SC_FORBIDDEN);
+            return;
+        }
+
+        if (isLocked(req)) {
+            resp.sendError(WebdavStatus.SC_LOCKED);
+            return;
+        }
+
+        resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Copy a resource.
+     *
+     * @param req Servlet request
+     * @param resp Servlet response
+     * @return boolean true if the copy is successful
+     * @throws IOException If an IO error occurs
+     */
+    private boolean copyResource(HttpServletRequest req,
+                                 HttpServletResponse resp)
+            throws IOException {
+
+        // Parsing destination header
+
+        String destinationPath = req.getHeader("Destination");
+
+        if (destinationPath == null) {
+            resp.sendError(WebdavStatus.SC_BAD_REQUEST);
+            return false;
+        }
+
+        // Remove url encoding from destination
+        destinationPath = UDecoder.URLDecode(destinationPath, "UTF8");
+
+        int protocolIndex = destinationPath.indexOf("://");
+        if (protocolIndex >= 0) {
+            // if the Destination URL contains the protocol, we can safely
+            // trim everything upto the first "/" character after "://"
+            int firstSeparator =
+                destinationPath.indexOf('/', protocolIndex + 4);
+            if (firstSeparator < 0) {
+                destinationPath = "/";
+            } else {
+                destinationPath = destinationPath.substring(firstSeparator);
+            }
+        } else {
+            String hostName = req.getServerName();
+            if ((hostName != null) && (destinationPath.startsWith(hostName))) {
+                destinationPath = destinationPath.substring(hostName.length());
+            }
+
+            int portIndex = destinationPath.indexOf(':');
+            if (portIndex >= 0) {
+                destinationPath = destinationPath.substring(portIndex);
+            }
+
+            if (destinationPath.startsWith(":")) {
+                int firstSeparator = destinationPath.indexOf('/');
+                if (firstSeparator < 0) {
+                    destinationPath = "/";
+                } else {
+                    destinationPath =
+                        destinationPath.substring(firstSeparator);
+                }
+            }
+        }
+
+        // Normalise destination path (remove '.' and '..')
+        destinationPath = RequestUtil.normalize(destinationPath);
+
+        String contextPath = req.getContextPath();
+        if ((contextPath != null) &&
+            (destinationPath.startsWith(contextPath))) {
+            destinationPath = destinationPath.substring(contextPath.length());
+        }
+
+        String pathInfo = req.getPathInfo();
+        if (pathInfo != null) {
+            String servletPath = req.getServletPath();
+            if ((servletPath != null) &&
+                (destinationPath.startsWith(servletPath))) {
+                destinationPath = destinationPath
+                    .substring(servletPath.length());
+            }
+        }
+
+        if (debug > 0)
+            log("Dest path :" + destinationPath);
+
+        // Check destination path to protect special subdirectories
+        if (isSpecialPath(destinationPath)) {
+            resp.sendError(WebdavStatus.SC_FORBIDDEN);
+            return false;
+        }
+
+        String path = getRelativePath(req);
+
+        if (destinationPath.equals(path)) {
+            resp.sendError(WebdavStatus.SC_FORBIDDEN);
+            return false;
+        }
+
+        // Parsing overwrite header
+
+        boolean overwrite = true;
+        String overwriteHeader = req.getHeader("Overwrite");
+
+        if (overwriteHeader != null) {
+            if (overwriteHeader.equalsIgnoreCase("T")) {
+                overwrite = true;
+            } else {
+                overwrite = false;
+            }
+        }
+
+        // Overwriting the destination
+
+        WebResource destination = resources.getResource(destinationPath);
+
+        if (overwrite) {
+            // Delete destination resource, if it exists
+            if (destination.exists()) {
+                if (!deleteResource(destinationPath, req, resp, true)) {
+                    return false;
+                }
+            } else {
+                resp.setStatus(WebdavStatus.SC_CREATED);
+            }
+        } else {
+            // If the destination exists, then it's a conflict
+            if (destination.exists()) {
+                resp.sendError(WebdavStatus.SC_PRECONDITION_FAILED);
+                return false;
+            }
+        }
+
+        // Copying source to destination
+
+        Hashtable<String,Integer> errorList = new Hashtable<>();
+
+        boolean result = copyResource(errorList, path, destinationPath);
+
+        if ((!result) || (!errorList.isEmpty())) {
+            if (errorList.size() == 1) {
+                resp.sendError(errorList.elements().nextElement().intValue());
+            } else {
+                sendReport(req, resp, errorList);
+            }
+            return false;
+        }
+
+        // Copy was successful
+        if (destination.exists()) {
+            resp.setStatus(WebdavStatus.SC_NO_CONTENT);
+        } else {
+            resp.setStatus(WebdavStatus.SC_CREATED);
+        }
+
+        // Removing any lock-null resource which would be present at
+        // the destination path
+        lockNullResources.remove(destinationPath);
+
+        return true;
+    }
+
+
+
+    /**
+     * Copy a collection.
+     *
+     * @param errorList Hashtable containing the list of errors which occurred
+     * during the copy operation
+     * @param source Path of the resource to be copied
+     * @param dest Destination path
+     * @return <code>true</code> if the copy was successful
+     */
+    private boolean copyResource(Hashtable<String,Integer> errorList,
+            String source, String dest) {
+
+        if (debug > 1)
+            log("Copy: " + source + " To: " + dest);
+
+        WebResource sourceResource = resources.getResource(source);
+
+        if (sourceResource.isDirectory()) {
+            if (!resources.mkdir(dest)) {
+                WebResource destResource = resources.getResource(dest);
+                if (!destResource.isDirectory()) {
+                    errorList.put(dest, Integer.valueOf(WebdavStatus.SC_CONFLICT));
+                    return false;
+                }
+            }
+
+            String[] entries = resources.list(source);
+            for (String entry : entries) {
+                String childDest = dest;
+                if (!childDest.equals("/")) {
+                    childDest += "/";
+                }
+                childDest += entry;
+                String childSrc = source;
+                if (!childSrc.equals("/")) {
+                    childSrc += "/";
+                }
+                childSrc += entry;
+                copyResource(errorList, childSrc, childDest);
+            }
+        } else if (sourceResource.isFile()) {
+            WebResource destResource = resources.getResource(dest);
+            if (!destResource.exists() && !destResource.getWebappPath().endsWith("/")) {
+                int lastSlash = destResource.getWebappPath().lastIndexOf('/');
+                if (lastSlash > 0) {
+                    String parent = destResource.getWebappPath().substring(0, lastSlash);
+                    WebResource parentResource = resources.getResource(parent);
+                    if (!parentResource.isDirectory()) {
+                        errorList.put(source, Integer.valueOf(WebdavStatus.SC_CONFLICT));
+                        return false;
+                    }
+                }
+            }
+            if (!resources.write(dest, sourceResource.getInputStream(),
+                    false)) {
+                errorList.put(source,
+                        Integer.valueOf(WebdavStatus.SC_INTERNAL_SERVER_ERROR));
+                return false;
+            }
+        } else {
+            errorList.put(source,
+                    Integer.valueOf(WebdavStatus.SC_INTERNAL_SERVER_ERROR));
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create a new directory at the given path.
+     *
+     * @param path  The path for the new resource to create relative to the root
+     *              of the web application. It must start with '/'.
+     *
+     * @return  <code>true</code> if the directory was created, otherwise
+     *          <code>false</code>
+     */
+    boolean mkdir(String path);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * MOVE Method.
+     * @param req The Servlet request
+     * @param resp The Servlet response
+     * @throws IOException If an IO error occurs
+     */
+    protected void doMove(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+
+        if (readOnly) {
+            resp.sendError(WebdavStatus.SC_FORBIDDEN);
+            return;
+        }
+
+        if (isLocked(req)) {
+            resp.sendError(WebdavStatus.SC_LOCKED);
+            return;
+        }
+
+        String path = getRelativePath(req);
+
+        if (copyResource(req, resp)) {
+            deleteResource(path, req, resp, false);
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create a new resource at the requested path using the provided
+     * InputStream.
+     *
+     * @param path      The path to be used for the new Resource. It is relative
+     *                  to the root of the web application and must start with
+     *                  '/'.
+     * @param is        The InputStream that will provide the content for the
+     *                  new Resource.
+     * @param overwrite If <code>true</code> and the resource already exists it
+     *                  will be overwritten. If <code>false</code> and the
+     *                  resource already exists the write will fail.
+     *
+     * @return  <code>true</code> if and only if the new Resource is written
+     */
+    boolean write(String path, InputStream is, boolean overwrite);
+-----CSCI578-----
+
+
+
+    /**
+     * Override the DefaultServlet implementation and only use the PathInfo. If
+     * the ServletPath is non-null, it will be because the WebDAV servlet has
+     * been mapped to a url other than /* to configure editing at different url
+     * than normal viewing.
+     *
+     * @param request The servlet request we are processing
+     */
+    @Override
+    protected String getRelativePath(HttpServletRequest request) {
+        return getRelativePath(request, false);
+    }
+
+
+    @Override
+    protected String getRelativePath(HttpServletRequest request, boolean allowEmptyPath) {
+        String pathInfo;
+
+        if (request.getAttribute(RequestDispatcher.INCLUDE_REQUEST_URI) != null) {
+            // For includes, get the info from the attributes
+            pathInfo = (String) request.getAttribute(RequestDispatcher.INCLUDE_PATH_INFO);
+        } else {
+            pathInfo = request.getPathInfo();
+        }
+
+        StringBuilder result = new StringBuilder();
+        if (pathInfo != null) {
+            result.append(pathInfo);
+        }
+        if (result.length() == 0) {
+            result.append('/');
+        }
+
+        return result.toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Checks whether a given path refers to a resource under
+     * <code>WEB-INF</code> or <code>META-INF</code>.
+     * @param path the full path of the resource being accessed
+     * @return <code>true</code> if the resource specified is under a special path
+     */
+    private final boolean isSpecialPath(final String path) {
+        return !allowSpecialPaths && (
+                path.toUpperCase(Locale.ENGLISH).startsWith("/WEB-INF") ||
+                path.toUpperCase(Locale.ENGLISH).startsWith("/META-INF"));
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Determines the methods normally allowed for the resource.
+     * @param req The Servlet request
+     * @return a string builder with the allowed HTTP methods
+     */
+    private StringBuilder determineMethodsAllowed(HttpServletRequest req) {
+
+        StringBuilder methodsAllowed = new StringBuilder();
+
+        WebResource resource = resources.getResource(getRelativePath(req));
+
+        if (!resource.exists()) {
+            methodsAllowed.append("OPTIONS, MKCOL, PUT, LOCK");
+            return methodsAllowed;
+        }
+
+        methodsAllowed.append("OPTIONS, GET, HEAD, POST, DELETE, TRACE");
+        methodsAllowed.append(", PROPPATCH, COPY, MOVE, LOCK, UNLOCK");
+
+        if (listings) {
+            methodsAllowed.append(", PROPFIND");
+        }
+
+        if (resource.isFile()) {
+            methodsAllowed.append(", PUT");
+        }
+
+        return methodsAllowed;
+    }
+-----CSCI578-----
+
+
+    // -------------------------------------------------------- Private Methods
+
+    /**
+     * Check to see if a resource is currently write locked. The method
+     * will look at the "If" header to make sure the client
+     * has give the appropriate lock tokens.
+     *
+     * @param req Servlet request
+     * @return <code>true</code> if the resource is locked (and no appropriate
+     *  lock token has been found for at least one of
+     *  the non-shared locks which are present on the resource).
+     */
+    private boolean isLocked(HttpServletRequest req) {
+
+        String path = getRelativePath(req);
+
+        String ifHeader = req.getHeader("If");
+        if (ifHeader == null)
+            ifHeader = "";
+
+        String lockTokenHeader = req.getHeader("Lock-Token");
+        if (lockTokenHeader == null)
+            lockTokenHeader = "";
+
+        return isLocked(path, ifHeader + lockTokenHeader);
+
+    }
+
+
+
+    /**
+     * Check to see if a resource is currently write locked.
+     *
+     * @param path Path of the resource
+     * @param ifHeader "If" HTTP header which was included in the request
+     * @return <code>true</code> if the resource is locked (and no appropriate
+     *  lock token has been found for at least one of
+     *  the non-shared locks which are present on the resource).
+     */
+    private boolean isLocked(String path, String ifHeader) {
+
+        // Checking resource locks
+
+        LockInfo lock = resourceLocks.get(path);
+        Enumeration<String> tokenList = null;
+        if ((lock != null) && (lock.hasExpired())) {
+            resourceLocks.remove(path);
+        } else if (lock != null) {
+
+            // At least one of the tokens of the locks must have been given
+
+            tokenList = lock.tokens.elements();
+            boolean tokenMatch = false;
+            while (tokenList.hasMoreElements()) {
+                String token = tokenList.nextElement();
+                if (ifHeader.indexOf(token) != -1) {
+                    tokenMatch = true;
+                    break;
+                }
+            }
+            if (!tokenMatch)
+                return true;
+
+        }
+
+        // Checking inheritable collection locks
+
+        Enumeration<LockInfo> collectionLocksList = collectionLocks.elements();
+        while (collectionLocksList.hasMoreElements()) {
+            lock = collectionLocksList.nextElement();
+            if (lock.hasExpired()) {
+                collectionLocks.removeElement(lock);
+            } else if (path.startsWith(lock.path)) {
+
+                tokenList = lock.tokens.elements();
+                boolean tokenMatch = false;
+                while (tokenList.hasMoreElements()) {
+                    String token = tokenList.nextElement();
+                    if (ifHeader.indexOf(token) != -1) {
+                        tokenMatch = true;
+                        break;
+                    }
+                }
+                if (!tokenMatch)
+                    return true;
+
+            }
+        }
+
+        return false;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Send a multistatus element containing a complete error report to the
+     * client.
+     *
+     * @param req Servlet request
+     * @param resp Servlet response
+     * @param errorList List of error to be displayed
+     * @throws IOException If an IO error occurs
+     */
+    private void sendReport(HttpServletRequest req, HttpServletResponse resp,
+                            Hashtable<String,Integer> errorList)
+            throws IOException {
+
+        resp.setStatus(WebdavStatus.SC_MULTI_STATUS);
+
+        String absoluteUri = req.getRequestURI();
+        String relativePath = getRelativePath(req);
+
+        XMLWriter generatedXML = new XMLWriter();
+        generatedXML.writeXMLHeader();
+
+        generatedXML.writeElement("D", DEFAULT_NAMESPACE, "multistatus",
+                XMLWriter.OPENING);
+
+        Enumeration<String> pathList = errorList.keys();
+        while (pathList.hasMoreElements()) {
+
+            String errorPath = pathList.nextElement();
+            int errorCode = errorList.get(errorPath).intValue();
+
+            generatedXML.writeElement("D", "response", XMLWriter.OPENING);
+
+            generatedXML.writeElement("D", "href", XMLWriter.OPENING);
+            String toAppend = errorPath.substring(relativePath.length());
+            if (!toAppend.startsWith("/"))
+                toAppend = "/" + toAppend;
+            generatedXML.writeText(absoluteUri + toAppend);
+            generatedXML.writeElement("D", "href", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "status", XMLWriter.OPENING);
+            generatedXML.writeText("HTTP/1.1 " + errorCode + " "
+                    + WebdavStatus.getStatusText(errorCode));
+            generatedXML.writeElement("D", "status", XMLWriter.CLOSING);
+
+            generatedXML.writeElement("D", "response", XMLWriter.CLOSING);
+
+        }
+
+        generatedXML.writeElement("D", "multistatus", XMLWriter.CLOSING);
+
+        Writer writer = resp.getWriter();
+        writer.write(generatedXML.toString());
+        writer.close();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * OPTIONS Method.
+     *
+     * @param req The Servlet request
+     * @param resp The Servlet response
+     * @throws ServletException If an error occurs
+     * @throws IOException If an IO error occurs
+     */
+    @Override
+    protected void doOptions(HttpServletRequest req, HttpServletResponse resp)
+        throws ServletException, IOException {
+
+        resp.addHeader("DAV", "1,2");
+
+        StringBuilder methodsAllowed = determineMethodsAllowed(req);
+
+        resp.addHeader("Allow", methodsAllowed.toString());
+        resp.addHeader("MS-Author-Via", "DAV");
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * DELETE Method.
+     * @param req The Servlet request
+     * @param resp The Servlet response
+     * @throws ServletException If an error occurs
+     * @throws IOException If an IO error occurs
+     */
+    @Override
+    protected void doDelete(HttpServletRequest req, HttpServletResponse resp)
+        throws ServletException, IOException {
+
+        if (readOnly) {
+            resp.sendError(WebdavStatus.SC_FORBIDDEN);
+            return;
+        }
+
+        if (isLocked(req)) {
+            resp.sendError(WebdavStatus.SC_LOCKED);
+            return;
+        }
+
+        deleteResource(req, resp);
+
+    }

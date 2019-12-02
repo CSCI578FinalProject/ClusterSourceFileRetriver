@@ -1,0 +1,88 @@
+7
+-----CSCI578-----
+
+
+    /**
+     * Store the specified server element children.
+     *
+     * @param aWriter Current output writer
+     * @param indent Indentation level
+     * @param aObject Server to store
+     * @param parentDesc The element description
+     * @throws Exception Configuration storing error
+     */
+    @Override
+    public void storeChildren(PrintWriter aWriter, int indent, Object aObject,
+            StoreDescription parentDesc) throws Exception {
+        if (aObject instanceof StandardServer) {
+            StandardServer server = (StandardServer) aObject;
+            // Store nested <Listener> elements
+            LifecycleListener listeners[] = ((Lifecycle) server)
+                    .findLifecycleListeners();
+            storeElementArray(aWriter, indent, listeners);
+            /*LifecycleListener listener = null;
+            for (int i = 0; listener == null && i < listeners.length; i++)
+                if (listeners[i] instanceof ServerLifecycleListener)
+                    listener = listeners[i];
+            if (listener != null) {
+                StoreDescription elementDesc = getRegistry()
+                        .findDescription(
+                                StandardServer.class.getName()
+                                        + ".[ServerLifecycleListener]");
+                if (elementDesc != null) {
+                    elementDesc.getStoreFactory().store(aWriter, indent,
+                            listener);
+                }
+            }*/
+            // Store nested <GlobalNamingResources> element
+            NamingResourcesImpl globalNamingResources = server
+                    .getGlobalNamingResources();
+            StoreDescription elementDesc = getRegistry().findDescription(
+                    NamingResourcesImpl.class.getName()
+                            + ".[GlobalNamingResources]");
+            if (elementDesc != null) {
+                elementDesc.getStoreFactory().store(aWriter, indent,
+                        globalNamingResources);
+            }
+            // Store nested <Service> elements
+            Service services[] = server.findServices();
+            storeElementArray(aWriter, indent, services);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the global naming resources.
+     */
+    @Override
+    public NamingResourcesImpl getGlobalNamingResources() {
+
+        return (this.globalNamingResources);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the set of Services defined within this Server.
+     */
+    @Override
+    public Service[] findServices() {
+
+        return services;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * @return the domain under which this container will be / has been
+     * registered.
+     */
+    public String getDomain();

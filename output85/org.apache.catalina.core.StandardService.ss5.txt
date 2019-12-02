@@ -1,0 +1,63 @@
+7
+-----CSCI578-----
+
+
+
+    /**
+     * Specify the domain under which this component should be registered. Used
+     * with components that cannot (easily) navigate the component hierarchy to
+     * determine the correct domain to use.
+     *
+     * @param domain The name of the domain under which this component should be
+     *               registered
+     */
+    void setDomain(String domain);
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Invoke a pre-startup initialization. This is used to allow connectors
+     * to bind to restricted ports under Unix operating environments.
+     */
+    @Override
+    protected void initInternal() throws LifecycleException {
+
+        super.initInternal();
+
+        if (engine != null) {
+            engine.init();
+        }
+
+        // Initialize any Executors
+        for (Executor executor : findExecutors()) {
+            if (executor instanceof JmxEnabled) {
+                ((JmxEnabled) executor).setDomain(getDomain());
+            }
+            executor.init();
+        }
+
+        // Initialize mapper listener
+        mapperListener.init();
+
+        // Initialize our defined Connectors
+        synchronized (connectorsLock) {
+            for (Connector connector : connectors) {
+                try {
+                    connector.init();
+                } catch (Exception e) {
+                    String message = sm.getString(
+                            "standardService.connector.initFailed", connector);
+                    log.error(message, e);
+
+                    if (Boolean.getBoolean("org.apache.catalina.startup.EXIT_ON_INIT_FAILURE"))
+                        throw new LifecycleException(message);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

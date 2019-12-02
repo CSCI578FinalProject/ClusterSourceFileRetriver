@@ -1,0 +1,45 @@
+7
+    
+
+    // -------------------------------------------------- Master Slave Methods
+
+
+    /**
+     * Create (or allocate) and return an available processor for use in
+     * processing a specific HTTP request, if possible.  If the maximum
+     * allowed processors have already been created and are in use, return
+     * <code>null</code> instead.
+     */
+    private MasterSlaveWorkerThread createWorkerThread() {
+
+        synchronized (workerThreads) {
+            if (workerThreads.size() > 0) {
+                return ((MasterSlaveWorkerThread) workerThreads.pop());
+            }
+            if ((maxThreads > 0) && (curThreads < maxThreads)) {
+                return (newWorkerThread());
+            } else {
+                if (maxThreads < 0) {
+                    return (newWorkerThread());
+                } else {
+                    return (null);
+                }
+            }
+        }
+
+    }
+
+    
+    /**
+     * Create and return a new processor suitable for processing HTTP
+     * requests and returning the corresponding responses.
+     */
+    private MasterSlaveWorkerThread newWorkerThread() {
+
+        MasterSlaveWorkerThread workerThread = 
+            new MasterSlaveWorkerThread(this, tp.getName() + "-" + (++curThreads));
+        workerThread.start();
+        created.addElement(workerThread);
+        return (workerThread);
+
+    }

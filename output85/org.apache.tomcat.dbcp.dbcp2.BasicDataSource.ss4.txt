@@ -1,0 +1,265 @@
+22
+-----CSCI578-----
+
+
+    public void setMaxOpenPrepatedStatements(int maxOpenPreparedStatements) {
+        this.maxOpenPreparedStatements = maxOpenPreparedStatements;
+    }
+-----CSCI578-----
+
+
+    public void setPoolStatements(boolean poolStatements) {
+        this.poolStatements = poolStatements;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Closes the connection pool, silently swallowing any exception that occurs.
+     */
+    private void closeConnectionPool() {
+        GenericObjectPool<?> oldpool = connectionPool;
+        connectionPool = null;
+        try {
+            if (oldpool != null) {
+                oldpool.close();
+            }
+        } catch(Exception e) {
+            /* Ignore */
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * The data source we will use to manage connections.  This object should
+     * be acquired <strong>ONLY</strong> by calls to the
+     * <code>createDataSource()</code> method.
+     */
+    private volatile DataSource dataSource = null;
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * <p>Create (if necessary) and return the internal data source we are
+     * using to manage our connections.</p>
+     * @return the data source
+     * @throws SQLException if the object pool cannot be created.
+     */
+    protected DataSource createDataSource()
+        throws SQLException {
+        if (closed) {
+            throw new SQLException("Data source is closed");
+        }
+
+        // Return the pool if we have already created it
+        // This is double-checked locking. This is safe since dataSource is
+        // volatile and the code is targeted at Java 5 onwards.
+        if (dataSource != null) {
+            return dataSource;
+        }
+        synchronized (this) {
+            if (dataSource != null) {
+                return dataSource;
+            }
+
+            jmxRegister();
+
+            // create factory which returns raw physical connections
+            ConnectionFactory driverConnectionFactory = createConnectionFactory();
+
+            // Set up the poolable connection factory
+            boolean success = false;
+            PoolableConnectionFactory poolableConnectionFactory;
+            try {
+                poolableConnectionFactory = createPoolableConnectionFactory(
+                        driverConnectionFactory);
+                poolableConnectionFactory.setPoolStatements(
+                        poolPreparedStatements);
+                poolableConnectionFactory.setMaxOpenPrepatedStatements(
+                        maxOpenPreparedStatements);
+                success = true;
+            } catch (SQLException se) {
+                throw se;
+            } catch (RuntimeException rte) {
+                throw rte;
+            } catch (Exception ex) {
+                throw new SQLException("Error creating connection factory", ex);
+            }
+
+            if (success) {
+                // create a pool for our connections
+                createConnectionPool(poolableConnectionFactory);
+            }
+
+            // Create the pooling data source to manage connections
+            DataSource newDataSource;
+            success = false;
+            try {
+                newDataSource = createDataSourceInstance();
+                newDataSource.setLogWriter(logWriter);
+                success = true;
+            } catch (SQLException se) {
+                throw se;
+            } catch (RuntimeException rte) {
+                throw rte;
+            } catch (Exception ex) {
+                throw new SQLException("Error creating datasource", ex);
+            } finally {
+                if (!success) {
+                    closeConnectionPool();
+                }
+            }
+
+            // If initialSize > 0, preload the pool
+            try {
+                for (int i = 0 ; i < initialSize ; i++) {
+                    connectionPool.addObject();
+                }
+            } catch (Exception e) {
+                closeConnectionPool();
+                throw new SQLException("Error preloading the connection pool", e);
+            }
+
+            // If timeBetweenEvictionRunsMillis > 0, start the pool's evictor task
+            startPoolMaintenance();
+
+            dataSource = newDataSource;
+            return dataSource;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Starts the connection pool maintenance task, if configured.
+     */
+    protected void startPoolMaintenance() {
+        if (connectionPool != null && timeBetweenEvictionRunsMillis > 0) {
+            connectionPool.setTimeBetweenEvictionRunsMillis(timeBetweenEvictionRunsMillis);
+        }
+    }
+-----CSCI578-----
+
+
+    private void jmxRegister() {
+        // Return immediately if this DataSource has already been registered
+        if (registeredJmxName != null) {
+            return;
+        }
+        // Return immediately if no JMX name has been specified
+        String requestedName = getJmxName();
+        if (requestedName == null) {
+            return;
+        }
+        ObjectName oname;
+        try {
+             oname = new ObjectName(requestedName);
+        } catch (MalformedObjectNameException e) {
+            log.warn("The requested JMX name [" + requestedName +
+                    "] was not valid and will be ignored.");
+            return;
+        }
+
+        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+        try {
+            mbs.registerMBean(this, oname);
+        } catch (InstanceAlreadyExistsException | MBeanRegistrationException
+                | NotCompliantMBeanException e) {
+            log.warn("Failed to complete JMX registration", e);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * @return the JMX name that has been requested for this DataSource. If the
+     * requested name is not valid, an alternative may be chosen.
+     */
+    public String getJmxName() {
+        return jmxName;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public ObjectName preRegister(MBeanServer server, ObjectName name) {
+        String requestedName = getJmxName();
+        if (requestedName != null) {
+            try {
+                registeredJmxName = new ObjectName(requestedName);
+            } catch (MalformedObjectNameException e) {
+                log.warn("The requested JMX name [" + requestedName +
+                        "] was not valid and will be ignored.");
+            }
+        }
+        if (registeredJmxName == null) {
+            registeredJmxName = name;
+        }
+        return registeredJmxName;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public synchronized void closePool(String name) throws SQLException {
+        ObjectPool<? extends Connection> pool = pools.get(name);
+        if (pool != null) {
+            pools.remove(name);
+            try {
+                pool.close();
+            }
+            catch (Exception e) {
+                throw new SQLException("Error closing pool " + name, e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Verifies that the username matches the user whose connections are being managed by this
+     * factory and closes the pool if this is the case; otherwise does nothing.
+     */
+    @Override
+    public void closePool(String username) throws SQLException {
+        synchronized (this) {
+            if (username == null || !username.equals(_username)) {
+                return;
+            }
+        }
+        try {
+            _pool.close();
+        } catch (Exception ex) {
+            throw new SQLException("Error closing connection pool", ex);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Close pool(s) being maintained by this datasource.
+     */
+    @Override
+    public void close() {
+        for (PooledConnectionManager manager : managers.values()) {
+            try {
+              ((CPDSConnectionFactory) manager).getPool().close();
+            } catch (Exception closePoolException) {
+                    //ignore and try to close others.
+            }
+        }
+        InstanceKeyDataSourceFactory.removeInstance(getInstanceKey());
+    }
+-----CSCI578-----
+-----CSCI578-----

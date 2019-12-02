@@ -1,0 +1,140 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Convert the given bytes to characters.
+     *
+     * @param bc byte input
+     * @param cc char output
+     * @param endOfInput    Is this all of the available data
+     *
+     * @throws IOException If the conversion can not be completed
+     */
+    public void convert(ByteChunk bc, CharChunk cc, boolean endOfInput)
+            throws IOException {
+        if ((bb == null) || (bb.array() != bc.getBuffer())) {
+            // Create a new byte buffer if anything changed
+            bb = ByteBuffer.wrap(bc.getBuffer(), bc.getStart(), bc.getLength());
+        } else {
+            // Initialize the byte buffer
+            bb.limit(bc.getEnd());
+            bb.position(bc.getStart());
+        }
+        if ((cb == null) || (cb.array() != cc.getBuffer())) {
+            // Create a new char buffer if anything changed
+            cb = CharBuffer.wrap(cc.getBuffer(), cc.getEnd(),
+                    cc.getBuffer().length - cc.getEnd());
+        } else {
+            // Initialize the char buffer
+            cb.limit(cc.getBuffer().length);
+            cb.position(cc.getEnd());
+        }
+        CoderResult result = null;
+        // Parse leftover if any are present
+        if (leftovers.position() > 0) {
+            int pos = cb.position();
+            // Loop until one char is decoded or there is a decoder error
+            do {
+                leftovers.put(bc.substractB());
+                leftovers.flip();
+                result = decoder.decode(leftovers, cb, endOfInput);
+                leftovers.position(leftovers.limit());
+                leftovers.limit(leftovers.array().length);
+            } while (result.isUnderflow() && (cb.position() == pos));
+            if (result.isError() || result.isMalformed()) {
+                result.throwException();
+            }
+            bb.position(bc.getStart());
+            leftovers.position(0);
+        }
+        // Do the decoding and get the results into the byte chunk and the char
+        // chunk
+        result = decoder.decode(bb, cb, endOfInput);
+        if (result.isError() || result.isMalformed()) {
+            result.throwException();
+        } else if (result.isOverflow()) {
+            // Propagate current positions to the byte chunk and char chunk, if
+            // this continues the char buffer will get resized
+            bc.setOffset(bb.position());
+            cc.setEnd(cb.position());
+        } else if (result.isUnderflow()) {
+            // Propagate current positions to the byte chunk and char chunk
+            bc.setOffset(bb.position());
+            cc.setEnd(cb.position());
+            // Put leftovers in the leftovers byte buffer
+            if (bc.getLength() > 0) {
+                leftovers.limit(leftovers.array().length);
+                leftovers.position(bc.getLength());
+                bc.substract(leftovers.array(), 0, bc.getLength());
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    public byte substractB() throws IOException {
+        if (checkEof()) {
+            return -1;
+        }
+        return buff[start++];
+    }
+-----CSCI578-----
+
+
+    public void setOffset(int off) {
+        if (end < off ) {
+            end=off;
+        }
+        start=off;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- Removing data from the buffer --------------------
+
+    public int substract() throws IOException {
+        if (checkEof()) {
+            return -1;
+        }
+        return buff[start++] & 0xFF;
+    }
+
+
+
+    public int substract(byte dest[], int off, int len ) throws IOException {
+        if (checkEof()) {
+            return -1;
+        }
+        int n = len;
+        if (len > getLength()) {
+            n = getLength();
+        }
+        System.arraycopy(buff, start, dest, off, n);
+        start += n;
+        return n;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public int doRead(ByteChunk chunk) throws IOException {
+        if(input.getOffset()>= input.getEnd())
+            return -1;
+
+        int writeLength = 0;
+
+        if (chunk.getLimit() > 0 && chunk.getLimit() < input.getLength()) {
+            writeLength = chunk.getLimit();
+        } else {
+            writeLength = input.getLength();
+        }
+
+        input.substract(chunk.getBuffer(), 0, writeLength);
+        chunk.setOffset(0);
+        chunk.setEnd(writeLength);
+
+        return writeLength;
+    }

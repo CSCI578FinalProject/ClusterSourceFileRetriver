@@ -1,0 +1,38 @@
+4
+-----CSCI578-----
+
+    
+    
+    private synchronized void close() throws ChannelException  {
+        ChannelException x = null;
+        Object[] members = nioSenders.keySet().toArray();
+        for (int i=0; i<members.length; i++ ) {
+            Member mbr = (Member)members[i];
+            try {
+                NioSender sender = (NioSender)nioSenders.get(mbr);
+                sender.disconnect();
+            }catch ( Exception e ) {
+                if ( x == null ) x = new ChannelException(e);
+                x.addFaultyMember(mbr,e);
+            }
+            nioSenders.remove(mbr);
+        }
+        if ( x != null ) throw x;
+    }
+-----CSCI578-----
+
+
+    
+    public synchronized void disconnect() {
+        setConnected(false);
+        try {close(); }catch (Exception x){}
+        
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    public void finalize() {
+        try {disconnect(); }catch ( Exception ignore){}
+        try {selector.close();} catch (Exception ignore) {}
+    }

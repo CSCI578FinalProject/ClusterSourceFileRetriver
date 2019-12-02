@@ -1,0 +1,39 @@
+8
+
+    /**
+     * Inform the pool that the specific thread finish.
+     *
+     * Called by the ControlRunnable.run() when the runnable
+     * throws an exception.
+     */
+    protected synchronized void notifyThreadEnd(ControlRunnable c) {
+        currentThreadsBusy--;
+        currentThreadCount --;
+        notify();
+    }
+    
+    public final void setThreadData(Object control, Object thData[] ) {
+        this.thData=thData;
+    }
+
+    /**
+     * Returns the thread to the pool.
+     * Called by threads as they are becoming idel.
+     */
+    protected synchronized void returnController(ControlRunnable c) {
+
+        if(0 == currentThreadCount || stopThePool) {
+            c.terminate();
+            return;
+        }
+
+        // atomic
+        currentThreadsBusy--;
+
+        pool[currentThreadCount - currentThreadsBusy - 1] = c;
+        notify();
+    }
+    
+    public final Object[] getThreadData(Object control ) {
+        return thData;
+    }

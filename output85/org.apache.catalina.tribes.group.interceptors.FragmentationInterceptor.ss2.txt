@@ -1,0 +1,34 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public long getExpire() {
+        return expire;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void heartbeat() {
+        try {
+            Set<FragKey> set = fragpieces.keySet();
+            Object[] keys = set.toArray();
+            for ( int i=0; i<keys.length; i++ ) {
+                FragKey key = (FragKey)keys[i];
+                if ( key != null && key.expired(getExpire()) )
+                    removeFragCollection(key);
+            }
+        }catch ( Exception x ) {
+            if ( log.isErrorEnabled() ) {
+                log.error(sm.getString("fragmentationInterceptor.heartbeat.failed"),x);
+            }
+        }
+        super.heartbeat();
+    }
+-----CSCI578-----
+
+
+    public void removeFragCollection(FragKey key) {
+        fragpieces.remove(key);
+    }

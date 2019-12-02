@@ -1,0 +1,49 @@
+3
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+    @Override
+    public int getStartStopThreads() {
+        return startStopThreads;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Handles the special values.
+     */
+    private int getStartStopThreadsInternal() {
+        int result = getStartStopThreads();
+
+        // Positive values are unchanged
+        if (result > 0) {
+            return result;
+        }
+
+        // Zero == Runtime.getRuntime().availableProcessors()
+        // -ve  == Runtime.getRuntime().availableProcessors() + value
+        // These two are the same
+        result = Runtime.getRuntime().availableProcessors() + result;
+        if (result < 1) {
+            result = 1;
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setStartStopThreads(int startStopThreads) {
+        this.startStopThreads = startStopThreads;
+
+        // Use local copies to ensure thread safety
+        ThreadPoolExecutor executor = startStopExecutor;
+        if (executor != null) {
+            int newThreads = getStartStopThreadsInternal();
+            executor.setMaximumPoolSize(newThreads);
+            executor.setCorePoolSize(newThreads);
+        }
+    }

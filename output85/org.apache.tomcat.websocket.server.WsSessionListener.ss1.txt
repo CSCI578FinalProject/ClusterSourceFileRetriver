@@ -1,0 +1,42 @@
+3
+-----CSCI578-----
+
+
+
+    public void closeAuthenticatedSession(String httpSessionId) {
+        Set<WsSession> wsSessions = authenticatedSessions.remove(httpSessionId);
+
+        if (wsSessions != null && !wsSessions.isEmpty()) {
+            for (WsSession wsSession : wsSessions) {
+                try {
+                    wsSession.close(AUTHENTICATED_HTTP_SESSION_CLOSED);
+                } catch (IOException e) {
+                    // Any IOExceptions during close will have been caught and the
+                    // onError method called.
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void sessionDestroyed(HttpSessionEvent se) {
+        wsServerContainer.closeAuthenticatedSession(se.getSession().getId());
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void close() throws IOException {
+        close(new CloseReason(CloseCodes.NORMAL_CLOSURE, ""));
+    }
+
+
+
+    @Override
+    public void close(CloseReason closeReason) throws IOException {
+        doClose(closeReason, closeReason);
+    }

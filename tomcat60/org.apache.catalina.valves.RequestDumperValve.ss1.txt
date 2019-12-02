@@ -1,0 +1,87 @@
+56
+
+    // -------------------- Conversion and getters --------------------
+
+    /** Compute the string value
+     */
+    public String toString() {
+        if( hasStrValue ) return strValue;
+
+        switch (type) {
+        case T_CHARS:
+            strValue=charC.toString();
+            hasStrValue=true;
+            return strValue;
+        case T_BYTES:
+            strValue=byteC.toString();
+            hasStrValue=true;
+            return strValue;
+        }
+        return null;
+    }
+
+
+    public int getContentLength() {
+        long length = getContentLengthLong();
+
+        if (length < Integer.MAX_VALUE) {
+            return (int) length;
+        }
+        return -1;
+    }
+
+    public long getContentLengthLong() {
+        if( contentLength > -1 ) return contentLength;
+
+        MessageBytes clB = headers.getUniqueValue("content-length");
+        contentLength = (clB == null || clB.isNull()) ? -1 : clB.getLong();
+
+        return contentLength;
+    }
+
+    public String getContentType() {
+        contentType();
+        if ((contentTypeMB == null) || contentTypeMB.isNull()) 
+            return null;
+        return contentTypeMB.toString();
+    }
+
+
+    // ----------------------------------------------------- Instance Variables
+    Request req;
+    Response res;
+    int stage = Constants.STAGE_NEW;
+    String workerThreadName;
+    ObjectName rpName;
+
+    // -------------------- Information about the current request  -----------
+    // This is usefull for long-running requests only
+
+    public String getMethod() {
+        return req.method().toString();
+    }
+
+    public String getCurrentUri() {
+        return req.requestURI().toString();
+    }
+
+    public String getCurrentQueryString() {
+        return req.queryString().toString();
+    }
+
+    public String getProtocol() {
+        return req.protocol().toString();
+    }
+
+    public String getVirtualHost() {
+        return req.serverName().toString();
+    }
+
+    public String getRemoteAddr() {
+        req.action(ActionCode.ACTION_REQ_HOST_ADDR_ATTRIBUTE, null);
+        return req.remoteAddr().toString();
+    }
+
+    public int getContentLength() {
+        return req.getContentLength();
+    }

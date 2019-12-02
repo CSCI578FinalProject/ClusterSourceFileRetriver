@@ -1,0 +1,553 @@
+20
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Bind the socket to its associated port
+     * @param sock The socket to bind
+     * @param sa The socket address to bind to
+     * This may be where we will find out if there is any other process
+     *      using the selected port.
+     * @return the operation status
+     */
+    public static native int bind(long sock, long sa);
+-----CSCI578-----
+
+
+    /**
+     * Listen to a bound socket for connections.
+     * @param sock The socket to listen on
+     * @param backlog The number of outstanding connections allowed in the sockets
+     *                listen queue.  If this value is less than zero, the listen
+     *                queue size is set to zero.
+     * @return the operation status
+     */
+    public static native int listen(long sock, int backlog);
+-----CSCI578-----
+
+
+    /**
+     * Create apr_sockaddr_t from hostname, address family, and port.
+     * @param hostname The hostname or numeric address string to resolve/parse, or
+     *               NULL to build an address that corresponds to 0.0.0.0 or ::
+     * @param family The address family to use, or APR_UNSPEC if the system should
+     *               decide.
+     * @param port The port number.
+     * @param flags Special processing flags:
+     * <PRE>
+     *       APR_IPV4_ADDR_OK          first query for IPv4 addresses; only look
+     *                                 for IPv6 addresses if the first query failed;
+     *                                 only valid if family is APR_UNSPEC and hostname
+     *                                 isn't NULL; mutually exclusive with
+     *                                 APR_IPV6_ADDR_OK
+     *       APR_IPV6_ADDR_OK          first query for IPv6 addresses; only look
+     *                                 for IPv4 addresses if the first query failed;
+     *                                 only valid if family is APR_UNSPEC and hostname
+     *                                 isn't NULL and APR_HAVE_IPV6; mutually exclusive
+     *                                 with APR_IPV4_ADDR_OK
+     * </PRE>
+     * @param p The pool for the apr_sockaddr_t and associated storage.
+     * @return The new apr_sockaddr_t.
+     * @throws Exception Operation failed
+     */
+    public static native long info(String hostname, int family,
+                                   int port, int flags, long p)
+        throws Exception;
+
+    /**
+     * Look up the host name from an apr_sockaddr_t.
+     * @param sa The apr_sockaddr_t.
+     * @param flags Special processing flags.
+     * @return The hostname.
+     */
+    public static native String getnameinfo(long sa, int flags);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    /*
+     * For internal use to avoid setting the useSendFileSet flag
+     */
+    private void setUseSendfileInternal(boolean useSendfile) {
+        super.setUseSendfile(useSendfile);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Register an OpenSSL SSLContext that will be used to initiate TLS
+     * connections that may use the SNI extension with the component that will
+     * be used to map the requested hostname to the correct OpenSSL SSLContext
+     * for the remainder of the connection.
+     *
+     * @param defaultSSLContext The Java representation of a pointer to the
+     *                          OpenSSL SSLContext that will be used to
+     *                          initiate TLS connections
+     * @param sniCallBack The component that will map SNI hosts names received
+     *                    via connections initiated using
+     *                    <code>defaultSSLContext</code> to the correct  OpenSSL
+     *                    SSLContext
+     */
+    public static void registerDefault(Long defaultSSLContext,
+            SNICallBack sniCallBack) {
+        sniCallBacks.put(defaultSSLContext, sniCallBack);
+    }
+
+
+    /**
+     * Unregister an OpenSSL SSLContext that will no longer be used to initiate
+     * TLS connections that may use the SNI extension.
+     *
+     * @param defaultSSLContext The Java representation of a pointer to the
+     *                          OpenSSL SSLContext that will no longer be used
+     */
+    public static void unregisterDefault(Long defaultSSLContext) {
+        sniCallBacks.remove(defaultSSLContext);
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------- Public Lifecycle Methods
+
+
+    /**
+     * Initialize the endpoint.
+     */
+    @Override
+    public void bind() throws Exception {
+
+        // Create the root APR memory pool
+        try {
+            rootPool = Pool.create(0);
+        } catch (UnsatisfiedLinkError e) {
+            throw new Exception(sm.getString("endpoint.init.notavail"));
+        }
+
+        // Create the pool for the server socket
+        serverSockPool = Pool.create(rootPool);
+        // Create the APR address that will be bound
+        String addressStr = null;
+        if (getAddress() != null) {
+            addressStr = getAddress().getHostAddress();
+        }
+        int family = Socket.APR_INET;
+        if (Library.APR_HAVE_IPV6) {
+            if (addressStr == null) {
+                if (!OS.IS_BSD && !OS.IS_WIN32 && !OS.IS_WIN64)
+                    family = Socket.APR_UNSPEC;
+            } else if (addressStr.indexOf(':') >= 0) {
+                family = Socket.APR_UNSPEC;
+            }
+         }
+
+        long inetAddress = Address.info(addressStr, family,
+                getPort(), 0, rootPool);
+        // Create the APR server socket
+        serverSock = Socket.create(Address.getInfo(inetAddress).family,
+                Socket.SOCK_STREAM,
+                Socket.APR_PROTO_TCP, rootPool);
+        if (OS.IS_UNIX) {
+            Socket.optSet(serverSock, Socket.APR_SO_REUSEADDR, 1);
+        }
+        // Deal with the firewalls that tend to drop the inactive sockets
+        Socket.optSet(serverSock, Socket.APR_SO_KEEPALIVE, 1);
+        // Bind the server socket
+        int ret = Socket.bind(serverSock, inetAddress);
+        if (ret != 0) {
+            throw new Exception(sm.getString("endpoint.init.bind", "" + ret, Error.strerror(ret)));
+        }
+        // Start listening on the server socket
+        ret = Socket.listen(serverSock, getBacklog());
+        if (ret != 0) {
+            throw new Exception(sm.getString("endpoint.init.listen", "" + ret, Error.strerror(ret)));
+        }
+        if (OS.IS_WIN32 || OS.IS_WIN64) {
+            // On Windows set the reuseaddr flag after the bind/listen
+            Socket.optSet(serverSock, Socket.APR_SO_REUSEADDR, 1);
+        }
+
+        // Enable Sendfile by default if it has not been configured but usage on
+        // systems which don't support it cause major problems
+        if (!useSendFileSet) {
+            setUseSendfileInternal(Library.APR_HAS_SENDFILE);
+        } else if (getUseSendfile() && !Library.APR_HAS_SENDFILE) {
+            setUseSendfileInternal(false);
+        }
+
+        // Initialize thread count default for acceptor
+        if (acceptorThreadCount == 0) {
+            // FIXME: Doesn't seem to work that well with multiple accept threads
+            acceptorThreadCount = 1;
+        }
+
+        // Delay accepting of new connections until data is available
+        // Only Linux kernels 2.4 + have that implemented
+        // on other platforms this call is noop and will return APR_ENOTIMPL.
+        if (deferAccept) {
+            if (Socket.optSet(serverSock, Socket.APR_TCP_DEFER_ACCEPT, 1) == Status.APR_ENOTIMPL) {
+                deferAccept = false;
+            }
+        }
+
+        // Initialize SSL if needed
+        if (isSSLEnabled()) {
+            for (SSLHostConfig sslHostConfig : sslHostConfigs.values()) {
+
+                Set<SSLHostConfigCertificate> certificates = sslHostConfig.getCertificates(true);
+                boolean firstCertificate = true;
+                for (SSLHostConfigCertificate certificate : certificates) {
+                    if (SSLHostConfig.adjustRelativePath(certificate.getCertificateFile()) == null) {
+                        // This is required
+                        throw new Exception(sm.getString("endpoint.apr.noSslCertFile"));
+                    }
+                    if (firstCertificate) {
+                        // TODO: Duplicates code in SSLUtilBase. Consider
+                        //       refactoring to reduce duplication
+                        firstCertificate = false;
+                        // Configure the enabled protocols
+                        List<String> enabledProtocols = SSLUtilBase.getEnabled("protocols", log,
+                                true, sslHostConfig.getProtocols(),
+                                OpenSSLEngine.IMPLEMENTED_PROTOCOLS_SET);
+                        sslHostConfig.setEnabledProtocols(
+                                enabledProtocols.toArray(new String[enabledProtocols.size()]));
+                        // Configure the enabled ciphers
+                        List<String> enabledCiphers = SSLUtilBase.getEnabled("ciphers", log,
+                                false, sslHostConfig.getJsseCipherNames(),
+                                OpenSSLEngine.AVAILABLE_CIPHER_SUITES);
+                        sslHostConfig.setEnabledCiphers(
+                                enabledCiphers.toArray(new String[enabledCiphers.size()]));
+                    }
+                }
+                if (certificates.size() > 2) {
+                    // TODO: Can this limitation be removed?
+                    throw new Exception(sm.getString("endpoint.apr.tooManyCertFiles"));
+                }
+
+                // SSL protocol
+                int value = SSL.SSL_PROTOCOL_NONE;
+                if (sslHostConfig.getProtocols().size() == 0) {
+                    // Native fallback used if protocols=""
+                    value = SSL.SSL_PROTOCOL_ALL;
+                } else {
+                    for (String protocol : sslHostConfig.getEnabledProtocols()) {
+                        if (Constants.SSL_PROTO_SSLv2Hello.equalsIgnoreCase(protocol)) {
+                            // NO-OP. OpenSSL always supports SSLv2Hello
+                        } else if (Constants.SSL_PROTO_SSLv2.equalsIgnoreCase(protocol)) {
+                            value |= SSL.SSL_PROTOCOL_SSLV2;
+                        } else if (Constants.SSL_PROTO_SSLv3.equalsIgnoreCase(protocol)) {
+                            value |= SSL.SSL_PROTOCOL_SSLV3;
+                        } else if (Constants.SSL_PROTO_TLSv1.equalsIgnoreCase(protocol)) {
+                            value |= SSL.SSL_PROTOCOL_TLSV1;
+                        } else if (Constants.SSL_PROTO_TLSv1_1.equalsIgnoreCase(protocol)) {
+                            value |= SSL.SSL_PROTOCOL_TLSV1_1;
+                        } else if (Constants.SSL_PROTO_TLSv1_2.equalsIgnoreCase(protocol)) {
+                            value |= SSL.SSL_PROTOCOL_TLSV1_2;
+                        } else {
+                            // Should not happen since filtering to build
+                            // enabled protocols removes invalid values.
+                            throw new Exception(sm.getString(
+                                    "endpoint.apr.invalidSslProtocol", protocol));
+                        }
+                    }
+                }
+
+                // Create SSL Context
+                long ctx = 0;
+                try {
+                    ctx = SSLContext.make(rootPool, value, SSL.SSL_MODE_SERVER);
+                } catch (Exception e) {
+                    // If the sslEngine is disabled on the AprLifecycleListener
+                    // there will be an Exception here but there is no way to check
+                    // the AprLifecycleListener settings from here
+                    throw new Exception(
+                            sm.getString("endpoint.apr.failSslContextMake"), e);
+                }
+
+                boolean legacyRenegSupported = false;
+                try {
+                    legacyRenegSupported = SSL.hasOp(SSL.SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
+                    if (legacyRenegSupported)
+                        if (sslHostConfig.getInsecureRenegotiation()) {
+                            SSLContext.setOptions(ctx, SSL.SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
+                        } else {
+                            SSLContext.clearOptions(ctx, SSL.SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
+                        }
+                } catch (UnsatisfiedLinkError e) {
+                    // Ignore
+                }
+                if (!legacyRenegSupported) {
+                    // OpenSSL does not support unsafe legacy renegotiation.
+                    log.warn(sm.getString("endpoint.warn.noInsecureReneg",
+                                          SSL.versionString()));
+                }
+
+                // Use server's preference order for ciphers (rather than
+                // client's)
+                boolean orderCiphersSupported = false;
+                try {
+                    orderCiphersSupported = SSL.hasOp(SSL.SSL_OP_CIPHER_SERVER_PREFERENCE);
+                    if (orderCiphersSupported) {
+                        if (sslHostConfig.getHonorCipherOrder()) {
+                            SSLContext.setOptions(ctx, SSL.SSL_OP_CIPHER_SERVER_PREFERENCE);
+                        } else {
+                            SSLContext.clearOptions(ctx, SSL.SSL_OP_CIPHER_SERVER_PREFERENCE);
+                        }
+                    }
+                } catch (UnsatisfiedLinkError e) {
+                    // Ignore
+                }
+                if (!orderCiphersSupported) {
+                    // OpenSSL does not support ciphers ordering.
+                    log.warn(sm.getString("endpoint.warn.noHonorCipherOrder",
+                                          SSL.versionString()));
+                }
+
+                // Disable compression if requested
+                boolean disableCompressionSupported = false;
+                try {
+                    disableCompressionSupported = SSL.hasOp(SSL.SSL_OP_NO_COMPRESSION);
+                    if (disableCompressionSupported) {
+                        if (sslHostConfig.getDisableCompression()) {
+                            SSLContext.setOptions(ctx, SSL.SSL_OP_NO_COMPRESSION);
+                        } else {
+                            SSLContext.clearOptions(ctx, SSL.SSL_OP_NO_COMPRESSION);
+                        }
+                    }
+                } catch (UnsatisfiedLinkError e) {
+                    // Ignore
+                }
+                if (!disableCompressionSupported) {
+                    // OpenSSL does not support ciphers ordering.
+                    log.warn(sm.getString("endpoint.warn.noDisableCompression",
+                                          SSL.versionString()));
+                }
+
+                // Disable TLS Session Tickets (RFC4507) to protect perfect forward secrecy
+                boolean disableSessionTicketsSupported = false;
+                try {
+                    disableSessionTicketsSupported = SSL.hasOp(SSL.SSL_OP_NO_TICKET);
+                    if (disableSessionTicketsSupported) {
+                        if (sslHostConfig.getDisableSessionTickets()) {
+                            SSLContext.setOptions(ctx, SSL.SSL_OP_NO_TICKET);
+                        } else {
+                            SSLContext.clearOptions(ctx, SSL.SSL_OP_NO_TICKET);
+                        }
+                    }
+                } catch (UnsatisfiedLinkError e) {
+                    // Ignore
+                }
+                if (!disableSessionTicketsSupported) {
+                    // OpenSSL is too old to support TLS Session Tickets.
+                    log.warn(sm.getString("endpoint.warn.noDisableSessionTickets",
+                                          SSL.versionString()));
+                }
+
+                // List the ciphers that the client is permitted to negotiate
+                SSLContext.setCipherSuite(ctx, sslHostConfig.getCiphers());
+                // Load Server key and certificate
+                // TODO: Confirm assumption that idx is not specific to
+                //       key/certificate type
+                int idx = 0;
+                for (SSLHostConfigCertificate certificate : sslHostConfig.getCertificates(true)) {
+                    SSLContext.setCertificate(ctx,
+                            SSLHostConfig.adjustRelativePath(certificate.getCertificateFile()),
+                            SSLHostConfig.adjustRelativePath(certificate.getCertificateKeyFile()),
+                            certificate.getCertificateKeyPassword(), idx++);
+                    // Set certificate chain file
+                    SSLContext.setCertificateChainFile(ctx,
+                            SSLHostConfig.adjustRelativePath(certificate.getCertificateChainFile()), false);
+                }
+                // Support Client Certificates
+                SSLContext.setCACertificate(ctx,
+                        SSLHostConfig.adjustRelativePath(sslHostConfig.getCaCertificateFile()),
+                        SSLHostConfig.adjustRelativePath(sslHostConfig.getCaCertificatePath()));
+                // Set revocation
+                SSLContext.setCARevocation(ctx,
+                        SSLHostConfig.adjustRelativePath(
+                                sslHostConfig.getCertificateRevocationListFile()),
+                        SSLHostConfig.adjustRelativePath(
+                                sslHostConfig.getCertificateRevocationListPath()));
+                // Client certificate verification
+                switch (sslHostConfig.getCertificateVerification()) {
+                case NONE:
+                    value = SSL.SSL_CVERIFY_NONE;
+                    break;
+                case OPTIONAL:
+                    value = SSL.SSL_CVERIFY_OPTIONAL;
+                    break;
+                case OPTIONAL_NO_CA:
+                    value = SSL.SSL_CVERIFY_OPTIONAL_NO_CA;
+                    break;
+                case REQUIRED:
+                    value = SSL.SSL_CVERIFY_REQUIRE;
+                    break;
+                }
+                SSLContext.setVerify(ctx, value, sslHostConfig.getCertificateVerificationDepth());
+                // For now, sendfile is not supported with SSL
+                if (getUseSendfile()) {
+                    setUseSendfileInternal(false);
+                    if (useSendFileSet) {
+                        log.warn(sm.getString("endpoint.apr.noSendfileWithSSL"));
+                    }
+                }
+
+                if (negotiableProtocols.size() > 0) {
+                    ArrayList<String> protocols = new ArrayList<>();
+                    protocols.addAll(negotiableProtocols);
+                    protocols.add("http/1.1");
+                    String[] protocolsArray = protocols.toArray(new String[0]);
+                    SSLContext.setAlpnProtos(ctx, protocolsArray, SSL.SSL_SELECTOR_FAILURE_NO_ADVERTISE);
+                }
+                sslHostConfig.setOpenSslContext(Long.valueOf(ctx));
+            }
+            SSLHostConfig defaultSSLHostConfig = sslHostConfigs.get(getDefaultSSLHostConfigName());
+            Long defaultSSLContext = defaultSSLHostConfig.getOpenSslContext();
+            sslContext = defaultSSLContext.longValue();
+            SSLContext.registerDefault(defaultSSLContext, this);
+        }
+    }
+
+
+
+    /**
+     * Deallocate APR memory pools, and close server socket.
+     */
+    @Override
+    public void unbind() throws Exception {
+        if (running) {
+            stop();
+        }
+
+        // Destroy pool if it was initialised
+        if (serverSockPool != 0) {
+            Pool.destroy(serverSockPool);
+            serverSockPool = 0;
+        }
+
+        // Close server socket if it was initialised
+        if (serverSock != 0) {
+            Socket.close(serverSock);
+            serverSock = 0;
+        }
+
+        if (sslContext != 0) {
+            Long ctx = Long.valueOf(sslContext);
+            SSLContext.unregisterDefault(ctx);
+            for (SSLHostConfig sslHostConfig : sslHostConfigs.values()) {
+                sslHostConfig.setOpenSslContext(null);
+            }
+            sslContext = 0;
+        }
+
+        // Close all APR memory pools and resources if initialised
+        if (rootPool != 0) {
+            Pool.destroy(rootPool);
+            rootPool = 0;
+        }
+
+        getHandler().recycle();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create a socket.
+     * @param family The address family of the socket (e.g., APR_INET).
+     * @param type The type of the socket (e.g., SOCK_STREAM).
+     * @param protocol The protocol of the socket (e.g., APR_PROTO_TCP).
+     * @param cont The parent pool to use
+     * @return The new socket that has been set up.
+     * @throws Exception Error creating socket
+     */
+    public static native long create(int family, int type,
+                                     int protocol, long cont)
+        throws Exception;
+-----CSCI578-----
+
+
+
+    public Set<SSLHostConfigCertificate> getCertificates() {
+        return getCertificates(false);
+    }
+
+
+
+    public Set<SSLHostConfigCertificate> getCertificates(boolean createDefaultIfEmpty) {
+        if (certificates.size() == 0 && createDefaultIfEmpty) {
+            registerDefaultCertificate();
+        }
+        return certificates;
+    }
+-----CSCI578-----
+
+    public void setUseSendfile(boolean useSendfile) {
+        this.useSendfile = useSendfile;
+    }
+-----CSCI578-----
+
+
+
+    void setEnabledProtocols(String[] enabledProtocols) {
+        this.enabledProtocols = enabledProtocols;
+    }
+-----CSCI578-----
+
+
+
+    void setEnabledCiphers(String[] enabledCiphers) {
+        this.enabledCiphers = enabledCiphers;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create the Sockaddr object from apr_sockaddr_t
+     * @param sa Structure pointer
+     * @return the socket address
+     */
+    public static native Sockaddr getInfo(long sa);
+-----CSCI578-----
+
+
+    /**
+     * Return a human readable string describing the specified error.
+     * @param statcode The error code the get a string for.
+     * @return The error string.
+    */
+    public static native String strerror(int statcode);
+-----CSCI578-----
+
+    public void setUseSendfile(boolean useSendfile) { getEndpoint().setUseSendfile(useSendfile); }
+-----CSCI578-----
+
+    @Override
+    public void setUseSendfile(boolean useSendfile) {
+        useSendFileSet = true;
+        super.setUseSendfile(useSendfile);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Port in use.
+     */
+    @Override
+    public int getLocalPort() {
+        long s = serverSock;
+        if (s == 0) {
+            return -1;
+        } else {
+            long sa;
+            try {
+                sa = Address.get(Socket.APR_LOCAL, s);
+                Sockaddr addr = Address.getInfo(sa);
+                return addr.port;
+            } catch (Exception e) {
+                return -1;
+            }
+        }
+    }

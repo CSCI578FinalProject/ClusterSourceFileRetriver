@@ -1,0 +1,44 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public E pollLast() {
+        lock.lock();
+        try {
+            return unlinkLast();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+
+    /**
+     * Unlinks the last element in the queue, waiting up to the specified time
+     * to do so if the queue is empty.
+     *
+     * @param timeout   length of time to wait
+     * @param unit      units that timeout is expressed in
+     *
+     * @return the unlinked element
+     * @throws InterruptedException if the current thread is interrupted
+     */
+    public E pollLast(long timeout, TimeUnit unit)
+        throws InterruptedException {
+        long nanos = unit.toNanos(timeout);
+        lock.lockInterruptibly();
+        try {
+            E x;
+            while ( (x = unlinkLast()) == null) {
+                if (nanos <= 0) {
+                    return null;
+                }
+                nanos = notEmpty.awaitNanos(nanos);
+            }
+            return x;
+        } finally {
+            lock.unlock();
+        }
+    }
+-----CSCI578-----

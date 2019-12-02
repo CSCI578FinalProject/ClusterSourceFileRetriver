@@ -1,0 +1,98 @@
+7
+-----CSCI578-----
+-----CSCI578-----
+
+    
+
+    // -------------------------------------------------- Master Slave Methods
+
+
+    /**
+     * Create (or allocate) and return an available processor for use in
+     * processing a specific HTTP request, if possible.  If the maximum
+     * allowed processors have already been created and are in use, return
+     * <code>null</code> instead.
+     */
+    private MasterSlaveWorkerThread createWorkerThread() {
+
+        synchronized (workerThreads) {
+            if (workerThreads.size() > 0) {
+                return ((MasterSlaveWorkerThread) workerThreads.pop());
+            }
+            if ((maxThreads > 0) && (curThreads < maxThreads)) {
+                return (newWorkerThread());
+            } else {
+                if (maxThreads < 0) {
+                    return (newWorkerThread());
+                } else {
+                    return (null);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Create and return a new processor suitable for processing HTTP
+     * requests and returning the corresponding responses.
+     */
+    private MasterSlaveWorkerThread newWorkerThread() {
+
+        MasterSlaveWorkerThread workerThread = 
+            new MasterSlaveWorkerThread(this, tp.getName() + "-" + (++curThreads));
+        workerThread.start();
+        created.addElement(workerThread);
+        return (workerThread);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Start the background processing thread.
+     */
+    public void start() {
+        threadData = endpoint.getConnectionHandler().init();
+        thread = new ThreadWithAttributes(null, this);
+        thread.setName(threadName);
+        thread.setDaemon(true);
+        thread.start();
+    }
+-----CSCI578-----
+
+    
+    /** Called before the call to processConnection.
+     *  If the thread is reused, init() should be called once per thread.
+     *
+     *  It may look strange, but it's a _very_ good way to avoid synchronized
+     *  methods and keep per thread data.
+     *
+     *  Assert: the object returned from init() will be passed to
+     *  all processConnection() methods happening in the same thread.
+     * 
+     */
+    public Object[] init( );
+
+
+    /**
+     *  Assert: connection!=null
+     *  Assert: connection.getSocket() != null
+     *  Assert: thData != null and is the result of calling init()
+     *  Assert: thData is preserved per Thread.
+     */
+    public void processConnection(TcpConnection connection, Object thData[]);
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Object[] getInitData() {
+        // no synchronization overhead, but 2 array access 
+        Object obj[]=new Object[2];
+        obj[1]= endpoint.getConnectionHandler().init();
+        obj[0]=new TcpConnection();
+        return obj;
+    }

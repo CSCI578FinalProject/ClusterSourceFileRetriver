@@ -1,0 +1,94 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * returns true if the network buffer has
+     * been flushed out and is empty
+     * @return boolean
+     */
+    public boolean flush(boolean block, Selector s, long timeout,MutableInteger lastWrite) throws IOException {
+        if (lastWrite!=null) lastWrite.set(1);
+        return true; //no network buffer in the regular channel
+    }
+-----CSCI578-----
+
+
+    public NioSelectorPool getSelectorPool() {
+        return pool;
+    }
+-----CSCI578-----
+
+
+    /**
+     * 
+     * @param bytebuffer ByteBuffer
+     * @param flip boolean
+     * @return int
+     * @throws IOException
+     * @todo Fix non blocking write properly
+     */
+    private synchronized int writeToSocket(ByteBuffer bytebuffer, boolean block, boolean flip) throws IOException {
+        if ( flip ) bytebuffer.flip();
+
+        int written = 0;
+        NioEndpoint.KeyAttachment att = (NioEndpoint.KeyAttachment)socket.getAttachment(false);
+        if ( att == null ) throw new IOException("Key must be cancelled");
+        long writeTimeout = att.getTimeout();
+        Selector selector = null;
+        try {
+            selector = getSelectorPool().get();
+        } catch ( IOException x ) {
+            //ignore
+        }
+        try {
+            written = getSelectorPool().write(bytebuffer, socket, selector, writeTimeout, block,lastWrite);
+            //make sure we are flushed 
+            do {
+                if (socket.flush(true,selector,writeTimeout,lastWrite)) break;
+            }while ( true );
+        }finally { 
+            if ( selector != null ) getSelectorPool().put(selector);
+        }
+        if ( block ) bytebuffer.clear(); //only clear
+        this.total = 0;
+        return written;
+    }
+-----CSCI578-----
+
+
+    public Selector get() throws IOException{
+        if ( SHARED ) {
+            return getSharedSelector();
+        }
+        if ( (!enabled) || active.incrementAndGet() >= maxSelectors ) {
+            if ( enabled ) active.decrementAndGet();
+            return null;
+        }
+        Selector s = null;
+        try {
+            s = selectors.size()>0?selectors.poll():null;
+            if (s == null) s = Selector.open();
+            else spare.decrementAndGet();
+
+        }catch (NoSuchElementException x ) {
+            try {s = Selector.open();}catch (IOException iox){}
+        } finally {
+            if ( s == null ) active.decrementAndGet();//we were unable to find a selector
+        }
+        return s;
+    }
+-----CSCI578-----
+
+
+
+
+    public void put(Selector s) throws IOException {
+        if ( SHARED ) return;
+        if ( enabled ) active.decrementAndGet();
+        if ( enabled && (maxSpareSelectors==-1 || spare.get() < Math.min(maxSpareSelectors,maxSelectors)) ) {
+            spare.incrementAndGet();
+            selectors.offer(s);
+        }
+        else s.close();
+    }

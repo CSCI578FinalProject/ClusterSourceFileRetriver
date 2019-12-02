@@ -1,0 +1,143 @@
+6
+-----CSCI578-----
+
+
+
+    /**
+     * Gets the domain to use for session cookies. Overrides any setting that
+     * may be specified by the application.
+     *
+     * @return  The value of the default session cookie domain or null if not
+     *          specified
+     */
+    public String getSessionCookieDomain();
+-----CSCI578-----
+
+
+    /**
+     * Creates a new session cookie for the given session ID
+     *
+     * @param context     The Context for the web application
+     * @param sessionId   The ID of the session for which the cookie will be
+     *                    created
+     * @param secure      Should session cookie be configured as secure
+     * @return the cookie for the session
+     */
+    public static Cookie createSessionCookie(Context context,
+            String sessionId, boolean secure) {
+
+        SessionCookieConfig scc =
+            context.getServletContext().getSessionCookieConfig();
+
+        // NOTE: The priority order for session cookie configuration is:
+        //       1. Context level configuration
+        //       2. Values from SessionCookieConfig
+        //       3. Defaults
+
+        Cookie cookie = new Cookie(
+                SessionConfig.getSessionCookieName(context), sessionId);
+
+        // Just apply the defaults.
+        cookie.setMaxAge(scc.getMaxAge());
+        cookie.setComment(scc.getComment());
+
+        if (context.getSessionCookieDomain() == null) {
+            // Avoid possible NPE
+            if (scc.getDomain() != null) {
+                cookie.setDomain(scc.getDomain());
+            }
+        } else {
+            cookie.setDomain(context.getSessionCookieDomain());
+        }
+
+        // Always set secure if the request is secure
+        if (scc.isSecure() || secure) {
+            cookie.setSecure(true);
+        }
+
+        // Always set httpOnly if the context is configured for that
+        if (scc.isHttpOnly() || context.getUseHttpOnly()) {
+            cookie.setHttpOnly(true);
+        }
+
+        String contextPath = context.getSessionCookiePath();
+        if (contextPath == null || contextPath.length() == 0) {
+            contextPath = scc.getPath();
+        }
+        if (contextPath == null || contextPath.length() == 0) {
+            contextPath = context.getEncodedPath();
+        }
+        if (context.getSessionCookiePathUsesTrailingSlash()) {
+            // Handle special case of ROOT context where cookies require a path of
+            // '/' but the servlet spec uses an empty string
+            // Also ensure the cookies for a context with a path of /foo don't get
+            // sent for requests with a path of /foobar
+            if (!contextPath.endsWith("/")) {
+                contextPath = contextPath + "/";
+            }
+        } else {
+            // Only handle special case of ROOT context where cookies require a
+            // path of '/' but the servlet spec uses an empty string
+            if (contextPath.length() == 0) {
+                contextPath = "/";
+            }
+        }
+        cookie.setPath(contextPath);
+
+        return cookie;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Is a / added to the end of the session cookie path to ensure browsers,
+     * particularly IE, don't send a session cookie for context /foo with
+     * requests intended for context /foobar.
+     *
+     * @return <code>true</code> if the slash is added, otherwise
+     *         <code>false</code>
+     */
+    public boolean getSessionCookiePathUsesTrailingSlash();
+-----CSCI578-----
+
+
+
+    /**
+     * Gets the value of the use HttpOnly cookies for session cookies flag.
+     *
+     * @return <code>true</code> if the HttpOnly flag should be set on session
+     *         cookies
+     */
+    public boolean getUseHttpOnly();
+-----CSCI578-----
+
+
+    /**
+     * Determine the name to use for the session cookie for the provided
+     * context.
+     * @param context The context
+     * @return the cookie name for the context
+     */
+    public static String getSessionCookieName(Context context) {
+
+        String result = getConfiguredSessionCookieName(context);
+
+        if (result == null) {
+            result = DEFAULT_SESSION_COOKIE_NAME;
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Gets the path to use for session cookies. Overrides any setting that
+     * may be specified by the application.
+     *
+     * @return  The value of the default session cookie path or null if not
+     *          specified
+     */
+    public String getSessionCookiePath();

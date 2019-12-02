@@ -1,0 +1,38 @@
+1
+-----CSCI578-----
+
+    
+    public void destroy() throws LifecycleException {
+        if( ! initialized ) return;
+        initialized=false;
+        
+        // if we created it, make sure it's also destroyed
+        // this call implizit this.stop()
+        ((StandardService)service).destroy();
+
+        if( mbeans != null ) {
+            try {
+                Registry.getRegistry(null, null)
+                    .invoke(mbeans, "destroy", false);
+            } catch (Exception e) {
+                log.error(sm.getString("standardEngine.unregister.mbeans.failed" ,mbeansFile), e);
+            }
+        }
+        // 
+        if( mbeans != null ) {
+            try {
+                for( int i=0; i<mbeans.size() ; i++ ) {
+                    Registry.getRegistry(null, null)
+                        .unregisterComponent((ObjectName)mbeans.get(i));
+                }
+            } catch (Exception e) {
+                log.error(sm.getString("standardEngine.unregister.mbeans.failed", mbeansFile), e);
+            }
+        }
+        
+        // force all metadata to be reloaded.
+        // That doesn't affect existing beans. We should make it per
+        // registry - and stop using the static.
+        Registry.getRegistry(null, null).resetMetadata();
+        
+    }

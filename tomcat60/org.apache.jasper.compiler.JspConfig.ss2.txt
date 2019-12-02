@@ -1,0 +1,171 @@
+10
+
+
+    /**
+     * Find a property that best matches the supplied resource.
+     * @param uri the resource supplied.
+     * @return a JspProperty indicating the best match, or some default.
+     */
+    public JspProperty findJspProperty(String uri) throws JasperException {
+
+        init();
+
+        // JSP Configuration settings do not apply to tag files
+        if (jspProperties == null || uri.endsWith(".tag")
+                || uri.endsWith(".tagx")) {
+            return defaultJspProperty;
+        }
+
+        String uriPath = null;
+        int index = uri.lastIndexOf('/');
+        if (index >=0 ) {
+            uriPath = uri.substring(0, index+1);
+        }
+        String uriExtension = null;
+        index = uri.lastIndexOf('.');
+        if (index >=0) {
+            uriExtension = uri.substring(index+1);
+        }
+
+        Vector includePreludes = new Vector();
+        Vector includeCodas = new Vector();
+
+        JspPropertyGroup isXmlMatch = null;
+        JspPropertyGroup elIgnoredMatch = null;
+        JspPropertyGroup scriptingInvalidMatch = null;
+        JspPropertyGroup pageEncodingMatch = null;
+        JspPropertyGroup deferedSyntaxAllowedAsLiteralMatch = null;
+        JspPropertyGroup trimDirectiveWhitespacesMatch = null;
+
+        Iterator iter = jspProperties.iterator();
+        while (iter.hasNext()) {
+
+            JspPropertyGroup jpg = (JspPropertyGroup) iter.next();
+            JspProperty jp = jpg.getJspProperty();
+
+            // (arrays will be the same length)
+            String extension = jpg.getExtension();
+            String path = jpg.getPath();
+
+            if (extension == null) {
+                // exact match pattern: /a/foo.jsp
+                if (!uri.equals(path)) {
+                    // not matched;
+                    continue;
+                }
+            } else {
+                // Matching patterns *.ext or /p/*
+                if (path != null && uriPath != null &&
+                        ! uriPath.startsWith(path)) {
+                    // not matched
+                    continue;
+                }
+                if (!extension.equals("*") &&
+                        !extension.equals(uriExtension)) {
+                    // not matched
+                    continue;
+                }
+            }
+            // We have a match
+            // Add include-preludes and include-codas
+            if (jp.getIncludePrelude() != null) {
+                includePreludes.addAll(jp.getIncludePrelude());
+            }
+            if (jp.getIncludeCoda() != null) {
+                includeCodas.addAll(jp.getIncludeCoda());
+            }
+
+            // If there is a previous match for the same property, remember
+            // the one that is more restrictive.
+            if (jp.isXml() != null) {
+                isXmlMatch = selectProperty(isXmlMatch, jpg);
+            }
+            if (jp.isELIgnored() != null) {
+                elIgnoredMatch = selectProperty(elIgnoredMatch, jpg);
+            }
+            if (jp.isScriptingInvalid() != null) {
+                scriptingInvalidMatch =
+                    selectProperty(scriptingInvalidMatch, jpg);
+            }
+            if (jp.getPageEncoding() != null) {
+                pageEncodingMatch = selectProperty(pageEncodingMatch, jpg);
+            }
+            if (jp.isDeferedSyntaxAllowedAsLiteral() != null) {
+                deferedSyntaxAllowedAsLiteralMatch =
+                    selectProperty(deferedSyntaxAllowedAsLiteralMatch, jpg);
+            }
+            if (jp.isTrimDirectiveWhitespaces() != null) {
+                trimDirectiveWhitespacesMatch =
+                    selectProperty(trimDirectiveWhitespacesMatch, jpg);
+            }
+        }
+
+
+        String isXml = defaultIsXml;
+        String isELIgnored = defaultIsELIgnored;
+        String isScriptingInvalid = defaultIsScriptingInvalid;
+        String pageEncoding = null;
+        String isDeferedSyntaxAllowedAsLiteral = defaultDeferedSyntaxAllowedAsLiteral;
+        String isTrimDirectiveWhitespaces = defaultTrimDirectiveWhitespaces;
+
+        if (isXmlMatch != null) {
+            isXml = isXmlMatch.getJspProperty().isXml();
+        }
+        if (elIgnoredMatch != null) {
+            isELIgnored = elIgnoredMatch.getJspProperty().isELIgnored();
+        }
+        if (scriptingInvalidMatch != null) {
+            isScriptingInvalid =
+                scriptingInvalidMatch.getJspProperty().isScriptingInvalid();
+        }
+        if (pageEncodingMatch != null) {
+            pageEncoding = pageEncodingMatch.getJspProperty().getPageEncoding();
+        }
+        if (deferedSyntaxAllowedAsLiteralMatch != null) {
+            isDeferedSyntaxAllowedAsLiteral =
+                deferedSyntaxAllowedAsLiteralMatch.getJspProperty().isDeferedSyntaxAllowedAsLiteral();
+        }
+        if (trimDirectiveWhitespacesMatch != null) {
+            isTrimDirectiveWhitespaces =
+                trimDirectiveWhitespacesMatch.getJspProperty().isTrimDirectiveWhitespaces();
+        }
+
+        return new JspProperty(isXml, isELIgnored, isScriptingInvalid,
+                pageEncoding, includePreludes, includeCodas,
+                isDeferedSyntaxAllowedAsLiteral, isTrimDirectiveWhitespaces);
+    }
+
+    /**
+     * Select the property group that has more restrictive url-pattern.
+     * In case of tie, select the first.
+     */
+    private JspPropertyGroup selectProperty(JspPropertyGroup prev,
+            JspPropertyGroup curr) {
+        if (prev == null) {
+            return curr;
+        }
+        if (prev.getExtension() == null) {
+            // exact match
+            return prev;
+        }
+        if (curr.getExtension() == null) {
+            // exact match
+            return curr;
+        }
+        String prevPath = prev.getPath();
+        String currPath = curr.getPath();
+        if (prevPath == null && currPath == null) {
+            // Both specifies a *.ext, keep the first one
+            return prev;
+        }
+        if (prevPath == null && currPath != null) {
+            return curr;
+        }
+        if (prevPath != null && currPath == null) {
+            return prev;
+        }
+        if (prevPath.length() >= currPath.length()) {
+            return prev;
+        }
+        return curr;
+    }

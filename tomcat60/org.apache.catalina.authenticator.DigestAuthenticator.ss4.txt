@@ -1,0 +1,31 @@
+2
+
+    /**
+     * Generate a unique token. The token is generated according to the
+     * following pattern. NOnceToken = Base64 ( MD5 ( client-IP ":"
+     * time-stamp ":" private-key ) ).
+     *
+     * @param request HTTP Servlet request
+     */
+    protected String generateNonce(Request request) {
+
+        long currentTime = System.currentTimeMillis();
+
+        
+        String ipTimeKey =
+            request.getRemoteAddr() + ":" + currentTime + ":" + getKey();
+
+        byte[] buffer;
+        synchronized (md5Helper) {
+            buffer = md5Helper.digest(ipTimeKey.getBytes());
+        }
+
+        String nonce = currentTime + ":" + md5Encoder.encode(buffer);
+
+        NonceInfo info = new NonceInfo(currentTime, 100);
+        synchronized (nonces) {
+            nonces.put(nonce, info);
+        }
+
+        return nonce;
+    }

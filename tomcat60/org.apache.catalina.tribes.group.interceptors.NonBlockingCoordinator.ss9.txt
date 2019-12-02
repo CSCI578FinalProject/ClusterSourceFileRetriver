@@ -1,0 +1,389 @@
+38
+    
+    protected void handleToken(CoordinationMessage msg, Member sender,Membership merged) throws ChannelException {
+        MemberImpl local = (MemberImpl)getLocalMember(false);
+        if ( local.equals(msg.getSource()) ) {
+            //my message msg.src=local
+            handleMyToken(local, msg, sender,merged);
+        } else {
+            handleOtherToken(local, msg, sender,merged);
+        }
+    }
+    
+    protected void handleMyToken(MemberImpl local, CoordinationMessage msg, Member sender,Membership merged) throws ChannelException {
+        if ( local.equals(msg.getLeader()) ) {
+            //no leadership change
+            if ( Arrays.sameMembers(msg.getMembers(),merged.getMembers()) ) {
+                msg.type = COORD_CONF;
+                super.sendMessage(Arrays.remove(msg.getMembers(),local),createData(msg,local),null);
+                handleViewConf(msg,local,merged);
+            } else {
+                //membership change
+                suggestedView = new Membership(local,AbsoluteOrder.comp,true);
+                suggestedviewId = msg.getId();
+                Arrays.fill(suggestedView,merged.getMembers());
+                msg.view = (MemberImpl[])merged.getMembers();
+                sendElectionMsgToNextInline(local,msg);
+            }
+        } else {
+            //leadership change
+            suggestedView = null;
+            suggestedviewId = null;
+            msg.view = (MemberImpl[])merged.getMembers();
+            sendElectionMsgToNextInline(local,msg);
+        }
+    }
+    
+    protected void handleOtherToken(MemberImpl local, CoordinationMessage msg, Member sender,Membership merged) throws ChannelException {
+        if ( local.equals(msg.getLeader()) ) {
+            //I am the new leader
+            //startElection(false);
+        } else {
+            msg.view = (MemberImpl[])merged.getMembers();
+            sendElectionMsgToNextInline(local,msg);
+        }
+    }
+    
+    public static boolean sameMembers(Member[] m1, Member[] m2) {
+        AbsoluteOrder.absoluteOrder(m1);
+        AbsoluteOrder.absoluteOrder(m2);
+        return equals(m1,m2);
+    }
+
+    public void memberAdded(Member member) {
+        memberAdded(member,true);
+    }
+
+    public void memberAdded(Member member,boolean elect) {
+        try {
+            if ( membership == null ) setupMembership();
+            if ( membership.memberAlive((MemberImpl)member) ) super.memberAdded(member);
+            try {
+                fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_MBR_ADD,this,"Member add("+member.getName()+")"));
+                if (started && elect) startElection(false);
+            }catch ( ChannelException x ) {
+                log.error("Unable to start election when member was added.",x);
+            }
+        }finally {
+        }
+        
+    }
+    
+    protected void processCoordMessage(CoordinationMessage msg, Member sender) throws ChannelException {
+        if ( !coordMsgReceived.get() ) {
+            coordMsgReceived.set(true);
+            synchronized (electionMutex) { electionMutex.notifyAll();}
+        } 
+        msg.timestamp = System.currentTimeMillis();
+        Membership merged = mergeOnArrive(msg, sender);
+        if (isViewConf(msg)) handleViewConf(msg, sender, merged);
+        else handleToken(msg, sender, merged);
+        ClassLoader loader;
+
+    }
+    
+    protected void sendElectionMsgToNextInline(MemberImpl local, CoordinationMessage msg) throws ChannelException { 
+        int next = Arrays.nextIndex(local,msg.getMembers());
+        int current = next;
+        msg.leader = msg.getMembers()[0];
+        boolean sent =  false;
+        while ( !sent && current >= 0 ) {
+            try {
+                sendElectionMsg(local, (MemberImpl) msg.getMembers()[current], msg);
+                sent = true;
+            }catch ( ChannelException x  ) {
+                log.warn("Unable to send election message to:"+msg.getMembers()[current]);
+                current = Arrays.nextIndex(msg.getMembers()[current],msg.getMembers());
+                if ( current == next ) throw x;
+            }
+        }
+    }
+    
+    protected Membership mergeOnArrive(CoordinationMessage msg, Member sender) {
+        fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_PRE_MERGE,this,"Pre merge"));
+        MemberImpl local = (MemberImpl)getLocalMember(false);
+        Membership merged = new Membership(local,AbsoluteOrder.comp,true);
+        Arrays.fill(merged,msg.getMembers());
+        Arrays.fill(merged,getMembers());
+        Member[] diff = Arrays.diff(merged,membership,local);
+        for ( int i=0; i<diff.length; i++ ) {
+            if (!alive(diff[i])) merged.removeMember((MemberImpl)diff[i]);
+            else memberAdded(diff[i],false);
+        }
+        fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_POST_MERGE,this,"Post merge"));
+        return merged;
+    }
+
+    /**
+     * Get all current cluster members
+     * @return all members or empty array
+     */
+    public Member[] getMembers() {
+        
+        return membership.getMembers();
+    }
+    
+    public static boolean equals(byte[] o1, byte[] o2) {
+        return java.util.Arrays.equals(o1,o2);
+    }
+
+    public static boolean equals(Object[] o1, Object[] o2) {
+        boolean result = o1.length == o2.length;
+        if ( result ) for (int i=0; i<o1.length && result; i++ ) result = o1[i].equals(o2[i]);
+        return result;
+    }
+
+    
+    /**
+     * Returns coordinator if one is available
+     * @return Member
+     */
+    public Member getCoordinator() {
+        return (view != null && view.hasMembers()) ? view.getMembers()[0] : null;
+    }
+
+    /**
+     * Return the member that represents this node.
+     *
+     * @return Member
+     */
+    public Member getLocalMember(boolean incAlive) {
+        Member local = super.getLocalMember(incAlive);
+        if ( view == null && (local != null)) setupMembership();
+        return local;
+    }
+    
+    public void fireInterceptorEvent(InterceptorEvent event) {
+        if (event instanceof CoordinationEvent &&
+            ((CoordinationEvent)event).type == CoordinationEvent.EVT_CONF_RX) 
+            log.info(event);
+    }
+    
+    public static Member[] diff(Membership complete, Membership local, MemberImpl ignore) {
+        ArrayList result = new ArrayList();
+        MemberImpl[] comp = complete.getMembers();
+        for ( int i=0; i<comp.length; i++ ) {
+            if ( ignore!=null && ignore.equals(comp[i]) ) continue;
+            if ( local.getMember(comp[i]) == null ) result.add(comp[i]);
+        }
+        return (MemberImpl[])result.toArray(new MemberImpl[result.size()]);
+    }
+
+    protected void sendElectionMsg(MemberImpl local, MemberImpl next, CoordinationMessage msg) throws ChannelException {
+        fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_SEND_MSG,this,"Sending election message to("+next.getName()+")"));
+        super.sendMessage(new Member[] {next}, createData(msg, local), null);
+    }
+    
+    protected void sendElectionMsgToNextInline(MemberImpl local, CoordinationMessage msg) throws ChannelException { 
+        int next = Arrays.nextIndex(local,msg.getMembers());
+        int current = next;
+        msg.leader = msg.getMembers()[0];
+        boolean sent =  false;
+        while ( !sent && current >= 0 ) {
+            try {
+                sendElectionMsg(local, (MemberImpl) msg.getMembers()[current], msg);
+                sent = true;
+            }catch ( ChannelException x  ) {
+                log.warn("Unable to send election message to:"+msg.getMembers()[current]);
+                current = Arrays.nextIndex(msg.getMembers()[current],msg.getMembers());
+                if ( current == next ) throw x;
+            }
+        }
+    }
+
+    
+    
+    public static void absoluteOrder(Member[] members) {
+        if ( members == null || members.length == 0 ) return;
+        Arrays.sort(members,comp);
+    }
+    
+    protected synchronized void setupMembership() {
+        if ( membership == null ) {
+            membership  = new Membership((MemberImpl)super.getLocalMember(true),AbsoluteOrder.comp,false);
+        }
+    }
+
+    /**
+     * Return the member that represents this node.
+     *
+     * @return Member
+     */
+    public Member getLocalMember(boolean incAlive) {
+        if ( getNext()!=null ) return getNext().getLocalMember(incAlive);
+        else return null;
+    }
+
+    public Member[] getMembers() {
+        if ( membership == null ) setupMembership();
+        return membership.getMembers();
+    }
+
+    public Member getLocalMember(boolean incAlive) {
+        return super.getLocalMember(incAlive);
+    }
+    
+    protected boolean started = false;
+    protected final int startsvc = 0xFFFF;
+    
+//============================================================================================================    
+//              COORDINATION HANDLING
+//============================================================================================================
+    
+    public void startElection(boolean force) throws ChannelException {
+        synchronized (electionMutex) {
+            MemberImpl local = (MemberImpl)getLocalMember(false);
+            MemberImpl[] others = (MemberImpl[])membership.getMembers();
+            fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_START_ELECT,this,"Election initated"));
+            if ( others.length == 0 ) {
+                this.viewId = new UniqueId(UUIDGenerator.randomUUID(false));
+                this.view = new Membership(local,AbsoluteOrder.comp, true);
+                this.handleViewConf(this.createElectionMsg(local,others,local),local,view);
+                return; //the only member, no need for an election
+            }
+            if ( suggestedviewId != null ) {
+                
+                if ( view != null && Arrays.diff(view,suggestedView,local).length == 0 &&  Arrays.diff(suggestedView,view,local).length == 0) {
+                    suggestedviewId = null;
+                    suggestedView = null;
+                    fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_ELECT_ABANDONED,this,"Election abandoned, running election matches view"));
+                } else {
+                    fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_ELECT_ABANDONED,this,"Election abandoned, election running"));
+                }
+                return; //election already running, I'm not allowed to have two of them
+            }
+            if ( view != null && Arrays.diff(view,membership,local).length == 0 &&  Arrays.diff(membership,view,local).length == 0) {
+                fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_ELECT_ABANDONED,this,"Election abandoned, view matches membership"));
+                return; //already have this view installed
+            }            
+            int prio = AbsoluteOrder.comp.compare(local,others[0]);
+            MemberImpl leader = ( prio < 0 )?local:others[0];//am I the leader in my view?
+            if ( local.equals(leader) || force ) {
+                CoordinationMessage msg = createElectionMsg(local, others, leader);
+                suggestedviewId = msg.getId();
+                suggestedView = new Membership(local,AbsoluteOrder.comp,true);
+                Arrays.fill(suggestedView,msg.getMembers());
+                fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_PROCESS_ELECT,this,"Election, sending request"));
+                sendElectionMsg(local,others[0],msg);
+            } else {
+                try {
+                    coordMsgReceived.set(false);
+                    fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_WAIT_FOR_MSG,this,"Election, waiting for request"));
+                    electionMutex.wait(waitForCoordMsgTimeout);
+                }catch ( InterruptedException x ) {
+                    Thread.currentThread().interrupted();
+                }
+                if ( suggestedviewId == null && (!coordMsgReceived.get())) {
+                    //no message arrived, send the coord msg
+//                    fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_WAIT_FOR_MSG,this,"Election, waiting timed out."));
+//                    startElection(true);
+                    fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_ELECT_ABANDONED,this,"Election abandoned, waiting timed out."));
+                } else {
+                    fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_ELECT_ABANDONED,this,"Election abandoned, received a message"));
+                }
+            }//end if
+            
+        }
+    }
+
+    
+//============================================================================================================    
+//              OVERRIDDEN METHODS FROM CHANNEL INTERCEPTOR BASE    
+//============================================================================================================
+    public void start(int svc) throws ChannelException {
+            if (membership == null) setupMembership();
+            if (started)return;
+            fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_START, this, "Before start"));
+            super.start(startsvc);
+            started = true;
+            if (view == null) view = new Membership( (MemberImpl)super.getLocalMember(true), AbsoluteOrder.comp, true);
+            fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_START, this, "After start"));
+            startElection(false);
+    }
+
+    public void heartbeat() {
+        try {
+            MemberImpl local = (MemberImpl)getLocalMember(false);
+            if ( view != null && (Arrays.diff(view,membership,local).length != 0 ||  Arrays.diff(membership,view,local).length != 0) ) {
+                if ( isHighest() ) {
+                    fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_START_ELECT, this,
+                                                               "Heartbeat found inconsistency, restart election"));
+                    startElection(true);
+                }            
+            }
+        } catch ( Exception x  ){
+            log.error("Unable to perform heartbeat.",x);
+        } finally {
+            super.heartbeat();
+        }
+    }
+
+    public Member[] getMembers() {
+        if ( membership == null ) setupMembership();
+        return membership.getMembers();
+    }
+
+    public Member getLocalMember(boolean incAlive) {
+        return super.getLocalMember(incAlive);
+    }
+
+
+    /**
+     * Return all the members by name
+     */
+    public String[] getMembersByName() {
+        Member[] currentMembers = getMembers();
+        String [] membernames ;
+        if(currentMembers != null) {
+            membernames = new String[currentMembers.length];
+            for (int i = 0; i < currentMembers.length; i++) {
+                membernames[i] = currentMembers[i].toString() ;
+            }
+        } else
+            membernames = new String[0] ;
+        return membernames ;
+    }
+    public Member[] getMembers() {
+        if ( impl == null || impl.membership == null ) return EMPTY_MEMBERS;
+        return impl.membership.getMembers();
+    }
+ 
+    /**
+     * Return the member by name
+     */
+    public Member findMemberByName(String name) {
+        Member[] currentMembers = getMembers();
+        for (int i = 0; i < currentMembers.length; i++) {
+            if (name.equals(currentMembers[i].toString()))
+                return currentMembers[i];
+        }
+        return null;
+    }
+    
+    public static Member[] merge(Member[] m1, Member[] m2) {
+        AbsoluteOrder.absoluteOrder(m1);
+        AbsoluteOrder.absoluteOrder(m2);
+        ArrayList list = new ArrayList(java.util.Arrays.asList(m1));
+        for (int i=0; i<m2.length; i++) if ( !list.contains(m2[i]) ) list.add(m2[i]);
+        Member[] result = new Member[list.size()];
+        list.toArray(result);
+        AbsoluteOrder.absoluteOrder(result);
+        return result;
+    }
+
+
+    /**
+     * Return all the members by name
+     */
+    public String[] getMembersByName() {
+        Member[] currentMembers = getMembers();
+        String [] membernames ;
+        if(currentMembers != null) {
+            membernames = new String[currentMembers.length];
+            for (int i = 0; i < currentMembers.length; i++) {
+                membernames[i] = currentMembers[i].toString() ;
+            }
+        } else
+            membernames = new String[0] ;
+        return membernames ;
+    }

@@ -1,0 +1,76 @@
+3
+-----CSCI578-----
+
+
+
+    @Override
+    public SocketState asyncPostProcess() {
+        return asyncStateMachine.asyncPostProcess();
+    }
+-----CSCI578-----
+
+    public void fireOnComplete();
+-----CSCI578-----
+
+
+    /*
+     * Async has been processed. Whether or not to enter a long poll depends on
+     * current state. For example, as per SRV.2.3.3.3 can now process calls to
+     * complete() or dispatch().
+     */
+    public synchronized SocketState asyncPostProcess() {
+
+        // Unpause any non-container threads that may be waiting for this
+        // container thread to complete this method. Note because of the syncs
+        // those non-container threads won't start back up until until this
+        // method exits.
+        notifyAll();
+
+        if (state == AsyncState.STARTING || state == AsyncState.READ_WRITE_OP) {
+            state = AsyncState.STARTED;
+            return SocketState.LONG;
+        } else if (state == AsyncState.MUST_COMPLETE) {
+            asyncCtxt.fireOnComplete();
+            state = AsyncState.DISPATCHED;
+            return SocketState.ASYNC_END;
+        } else if (state == AsyncState.COMPLETING) {
+            asyncCtxt.fireOnComplete();
+            state = AsyncState.DISPATCHED;
+            return SocketState.ASYNC_END;
+        } else if (state == AsyncState.MUST_DISPATCH) {
+            state = AsyncState.DISPATCHING;
+            return SocketState.ASYNC_END;
+        } else if (state == AsyncState.DISPATCHING) {
+            state = AsyncState.DISPATCHED;
+            return SocketState.ASYNC_END;
+        } else if (state == AsyncState.STARTED) {
+            // This can occur if an async listener does a dispatch to an async
+            // servlet during onTimeout
+            return SocketState.LONG;
+        } else {
+            throw new IllegalStateException(
+                    sm.getString("asyncStateMachine.invalidAsyncState",
+                            "asyncPostProcess()", state));
+        }
+    }
+
+
+
+    /*
+     * startAsync() has been called but the container thread where this was
+     * called has not completed processing. To avoid various race conditions -
+     * including several related to error page handling - pause this
+     * non-container thread until the container thread has finished processing.
+     * The non-container thread will be paused until the container thread
+     * completes asyncPostProcess().
+     */
+    private synchronized void pauseNonContainerThread() {
+        while (!ContainerThreadMarker.isContainerThread() &&
+                state.getPauseNonContainerThread()) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
+                // TODO Log this?
+            }
+        }
+    }

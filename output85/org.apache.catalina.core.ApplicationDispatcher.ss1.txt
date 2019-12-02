@@ -1,0 +1,38 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Forward this request and response to another resource for processing.
+     * Any runtime exception, IOException, or ServletException thrown by the
+     * called servlet will be propagated to the caller.
+     *
+     * @param request The servlet request to be forwarded
+     * @param response The servlet response to be forwarded
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet exception occurs
+     */
+    @Override
+    public void forward(ServletRequest request, ServletResponse response)
+        throws ServletException, IOException
+    {
+        if (Globals.IS_SECURITY_ENABLED) {
+            try {
+                PrivilegedForward dp = new PrivilegedForward(request,response);
+                AccessController.doPrivileged(dp);
+            } catch (PrivilegedActionException pe) {
+                Exception e = pe.getException();
+                if (e instanceof ServletException)
+                    throw (ServletException) e;
+                throw (IOException) e;
+            }
+        } else {
+            doForward(request,response);
+        }
+    }

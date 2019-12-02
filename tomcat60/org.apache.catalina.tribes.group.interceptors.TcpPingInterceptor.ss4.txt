@@ -1,0 +1,26 @@
+7
+    
+    WeakReference<TcpFailureDetector> failureDetector = null;
+    WeakReference<StaticMembershipInterceptor> staticMembers = null;
+    
+    public synchronized void start(int svc) throws ChannelException {
+        super.start(svc);
+        running = true;
+        if ( thread == null && useThread) {
+            thread = new PingThread();
+            thread.setDaemon(true);
+            thread.setName("TcpPingInterceptor.PingThread-"+cnt.addAndGet(1));
+            thread.start();
+        }
+        
+        //acquire the interceptors to invoke on send ping events
+        ChannelInterceptor next = getNext();
+        while ( next != null ) {
+            if ( next instanceof TcpFailureDetector ) 
+                failureDetector = new WeakReference<TcpFailureDetector>((TcpFailureDetector)next);
+            if ( next instanceof StaticMembershipInterceptor ) 
+                staticMembers = new WeakReference<StaticMembershipInterceptor>((StaticMembershipInterceptor)next);
+            next = next.getNext();
+        }
+        
+    }

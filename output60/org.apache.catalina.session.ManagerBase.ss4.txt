@@ -1,0 +1,107 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Generate and return a new session identifier.
+     */
+    protected synchronized String generateSessionId() {
+
+        byte random[] = new byte[16];
+        String jvmRoute = getJvmRoute();
+        String result = null;
+
+        // Render the result as a String of hexadecimal digits
+        StringBuffer buffer = new StringBuffer();
+        do {
+            int resultLenBytes = 0;
+            if (result != null) {
+                buffer = new StringBuffer();
+                duplicates++;
+            }
+
+            while (resultLenBytes < this.sessionIdLength) {
+                getRandomBytes(random);
+                random = getDigest().digest(random);
+                for (int j = 0;
+                j < random.length && resultLenBytes < this.sessionIdLength;
+                j++) {
+                    byte b1 = (byte) ((random[j] & 0xf0) >> 4);
+                    byte b2 = (byte) (random[j] & 0x0f);
+                    if (b1 < 10)
+                        buffer.append((char) ('0' + b1));
+                    else
+                        buffer.append((char) ('A' + (b1 - 10)));
+                    if (b2 < 10)
+                        buffer.append((char) ('0' + b2));
+                    else
+                        buffer.append((char) ('A' + (b2 - 10)));
+                    resultLenBytes++;
+                }
+            }
+            if (jvmRoute != null) {
+                buffer.append('.').append(jvmRoute);
+            }
+            result = buffer.toString();
+        } while (sessions.containsKey(result));
+        return (result);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the MessageDigest object to be used for calculating
+     * session identifiers.  If none has been created yet, initialize
+     * one the first time this method is called.
+     */
+    public synchronized MessageDigest getDigest() {
+
+        if (this.digest == null) {
+            long t1=System.currentTimeMillis();
+            if (log.isDebugEnabled())
+                log.debug(sm.getString("managerBase.getting", algorithm));
+            try {
+                this.digest = MessageDigest.getInstance(algorithm);
+            } catch (NoSuchAlgorithmException e) {
+                log.error(sm.getString("managerBase.digest", algorithm), e);
+                try {
+                    this.digest = MessageDigest.getInstance(DEFAULT_ALGORITHM);
+                } catch (NoSuchAlgorithmException f) {
+                    log.error(sm.getString("managerBase.digest",
+                                     DEFAULT_ALGORITHM), e);
+                    this.digest = null;
+                }
+            }
+            if (log.isDebugEnabled())
+                log.debug(sm.getString("managerBase.gotten"));
+            long t2=System.currentTimeMillis();
+            if( log.isDebugEnabled() )
+                log.debug("getDigest() " + (t2-t1));
+        }
+
+        return (this.digest);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Change the session ID of the current session to a new randomly generated
+     * session ID.
+     * 
+     * @param session   The session to change the session ID for
+     */
+    public void changeSessionId(Session session) {
+        String oldId = session.getIdInternal();
+        session.setId(generateSessionId(), false);
+        String newId = session.getIdInternal();
+        if (container instanceof ContainerBase) {
+            ((ContainerBase)container).fireContainerEvent(
+                    Context.CHANGE_SESSION_ID_EVENT,
+                    new String[] {oldId, newId});
+        }
+    }

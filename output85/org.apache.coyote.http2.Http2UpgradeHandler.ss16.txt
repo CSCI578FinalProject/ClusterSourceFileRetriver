@@ -1,0 +1,47 @@
+4
+-----CSCI578-----
+
+
+
+    @Override
+    public HeaderEmitter headersStart(int streamId) throws Http2Exception {
+        if (connectionState.get().isNewStreamAllowed()) {
+            Stream stream = getStream(streamId, false);
+            if (stream == null) {
+                stream = createRemoteStream(streamId);
+            }
+            stream.checkState(FrameType.HEADERS);
+            stream.receivedStartOfHeaders();
+            closeIdleStreams(streamId);
+            if (localSettings.getMaxConcurrentStreams() < activeRemoteStreamCount.incrementAndGet()) {
+                activeRemoteStreamCount.decrementAndGet();
+                throw new StreamException(sm.getString("upgradeHandler.tooManyRemoteStreams",
+                        Long.toString(localSettings.getMaxConcurrentStreams())),
+                        Http2Error.REFUSED_STREAM, streamId);
+            }
+            return stream;
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("upgradeHandler.noNewStreams",
+                        connectionId, Integer.toString(streamId)));
+            }
+            // Stateless so a static can be used to save on GC
+            return HEADER_SINK;
+        }
+    }
+-----CSCI578-----
+
+
+
+    void receivedStartOfHeaders() {
+        state.receivedStartOfHeaders();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public synchronized void receivedStartOfHeaders() {
+        stateChange(State.IDLE, State.OPEN);
+        stateChange(State.RESERVED_REMOTE, State.HALF_CLOSED_LOCAL);
+    }

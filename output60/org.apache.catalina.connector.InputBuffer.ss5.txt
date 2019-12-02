@@ -1,0 +1,66 @@
+4
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Recycle the output buffer.
+     */
+    public void recycle() {
+        
+        state = INITIAL_STATE;
+        bytesRead = 0;
+        charsRead = 0;
+        
+        // If usage of mark made the buffer too big, reallocate it
+        if (cb.getChars().length > size) {
+            cb = new CharChunk(size);
+            cb.setLimit(size);
+            cb.setOptimizedWrite(false);
+            cb.setCharInputChannel(this);
+            cb.setCharOutputChannel(this);
+        } else {
+            cb.recycle();
+        }
+        markPos = -1;
+        bb.recycle(); 
+        closed = false;
+        
+        if (conv != null) {
+            conv.recycle();
+        }
+        
+        gotEnc = false;
+        enc = null;
+        
+    }
+-----CSCI578-----
+
+
+
+    public void setOptimizedWrite(boolean optimizedWrite) {
+        this.optimizedWrite = optimizedWrite;
+    }
+-----CSCI578-----
+
+
+    /**
+     * When the buffer is empty, read the data from the input channel.
+     */
+    public void setCharInputChannel(CharInputChannel in) {
+        this.in = in;
+    }
+-----CSCI578-----
+
+
+    /** When the buffer is full, write the data to the output channel.
+     *         Also used when large amount of data is appended.
+     *
+     *  If not set, the buffer will grow to the limit.
+     */
+    public void setCharOutputChannel(CharOutputChannel out) {
+        this.out=out;
+    }

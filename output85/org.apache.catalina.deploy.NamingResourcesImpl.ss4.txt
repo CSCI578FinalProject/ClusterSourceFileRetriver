@@ -1,0 +1,224 @@
+11
+-----CSCI578-----
+
+
+    // Container should be an instance of Server or Context. If it is anything
+    // else, return null which will trigger a NPE.
+    private Server getServer() {
+        if (container instanceof Server) {
+            return (Server) container;
+        }
+        if (container instanceof Context) {
+            // Could do this in one go. Lots of casts so split out for clarity
+            Engine engine =
+                (Engine) ((Context) container).getParent().getParent();
+            return engine.getService().getServer();
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    public boolean getOverride() {
+        return (this.override);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add an environment entry for this web application.
+     *
+     * @param environment New environment entry
+     */
+    @Override
+    public void addEnvironment(ContextEnvironment environment) {
+
+        if (entries.contains(environment.getName())) {
+            ContextEnvironment ce = findEnvironment(environment.getName());
+            ContextResourceLink rl = findResourceLink(environment.getName());
+            if (ce != null) {
+                if (ce.getOverride()) {
+                    removeEnvironment(environment.getName());
+                } else {
+                    return;
+                }
+            } else if (rl != null) {
+                // Link. Need to look at the global resources
+                NamingResourcesImpl global = getServer().getGlobalNamingResources();
+                if (global.findEnvironment(rl.getGlobal()) != null) {
+                    if (global.findEnvironment(rl.getGlobal()).getOverride()) {
+                        removeResourceLink(environment.getName());
+                    } else {
+                        return;
+                    }
+                }
+            } else {
+                // It exists but it isn't an env or a res link...
+                return;
+            }
+        }
+
+        if (!checkResourceType(environment)) {
+            throw new IllegalArgumentException(sm.getString(
+                    "namingResources.resourceTypeFail", environment.getName(),
+                    environment.getType()));
+        }
+
+        entries.add(environment.getName());
+
+        synchronized (envs) {
+            environment.setNamingResources(this);
+            envs.put(environment.getName(), environment);
+        }
+        support.firePropertyChange("environment", null, environment);
+
+        // Register with JMX
+        if (resourceRequireExplicitRegistration) {
+            try {
+                MBeanUtils.createMBean(environment);
+            } catch (Exception e) {
+                log.warn(sm.getString("namingResources.mbeanCreateFail",
+                        environment.getName()), e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Properties
+
+    /**
+     * @return the global naming resources.
+     */
+    public NamingResourcesImpl getGlobalNamingResources();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the environment entry with the specified name, if any;
+     * otherwise, return <code>null</code>.
+     *
+     * @param name Name of the desired environment entry
+     */
+    public ContextEnvironment findEnvironment(String name) {
+
+        synchronized (envs) {
+            return envs.get(name);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any environment entry with the specified name.
+     *
+     * @param name Name of the environment entry to remove
+     */
+    @Override
+    public void removeEnvironment(String name) {
+
+        entries.remove(name);
+
+        ContextEnvironment environment = null;
+        synchronized (envs) {
+            environment = envs.remove(name);
+        }
+        if (environment != null) {
+            support.firePropertyChange("environment", environment, null);
+            // De-register with JMX
+            if (resourceRequireExplicitRegistration) {
+                try {
+                    MBeanUtils.destroyMBean(environment);
+                } catch (Exception e) {
+                    log.warn(sm.getString("namingResources.mbeanDestroyFail",
+                            environment.getName()), e);
+                }
+            }
+            environment.setNamingResources(null);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any resource link with the specified name.
+     *
+     * @param name Name of the resource link to remove
+     */
+    @Override
+    public void removeResourceLink(String name) {
+
+        entries.remove(name);
+
+        ContextResourceLink resourceLink = null;
+        synchronized (resourceLinks) {
+            resourceLink = resourceLinks.remove(name);
+        }
+        if (resourceLink != null) {
+            support.firePropertyChange("resourceLink", resourceLink, null);
+            // De-register with JMX
+            if (resourceRequireExplicitRegistration) {
+                try {
+                    MBeanUtils.destroyMBean(resourceLink);
+                } catch (Exception e) {
+                    log.warn(sm.getString("namingResources.mbeanDestroyFail",
+                            resourceLink.getName()), e);
+                }
+            }
+            resourceLink.setNamingResources(null);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any environment entry with the specified name.
+     *
+     * @param envName Name of the environment entry to remove
+     */
+    public void removeEnvironment(String envName) {
+
+        NamingResourcesImpl nresources = (NamingResourcesImpl) this.resource;
+        if (nresources == null) {
+            return;
+        }
+        ContextEnvironment env = nresources.findEnvironment(envName);
+        if (env == null) {
+            throw new IllegalArgumentException
+                ("Invalid environment name '" + envName + "'");
+        }
+        nresources.removeEnvironment(envName);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any resource link reference with the specified name.
+     *
+     * @param resourceLinkName Name of the resource link reference to remove
+     */
+    public void removeResourceLink(String resourceLinkName) {
+
+        resourceLinkName = ObjectName.unquote(resourceLinkName);
+        NamingResourcesImpl nresources = (NamingResourcesImpl) this.resource;
+        if (nresources == null) {
+            return;
+        }
+        ContextResourceLink resourceLink =
+                            nresources.findResourceLink(resourceLinkName);
+        if (resourceLink == null) {
+            throw new IllegalArgumentException
+                ("Invalid resource Link name '" + resourceLinkName + "'");
+        }
+        nresources.removeResourceLink(resourceLinkName);
+    }

@@ -1,0 +1,126 @@
+6
+-----CSCI578-----
+
+
+
+    void sendMessageBlock(CharBuffer part, boolean last) throws IOException {
+        long timeoutExpiry = getTimeoutExpiry();
+        boolean isDone = false;
+        while (!isDone) {
+            encoderBuffer.clear();
+            CoderResult cr = encoder.encode(part, encoderBuffer, true);
+            if (cr.isError()) {
+                throw new IllegalArgumentException(cr.toString());
+            }
+            isDone = !cr.isOverflow();
+            encoderBuffer.flip();
+            sendMessageBlock(Constants.OPCODE_TEXT, encoderBuffer, last && isDone, timeoutExpiry);
+        }
+        stateMachine.complete(last);
+    }
+
+
+
+    void sendMessageBlock(byte opCode, ByteBuffer payload, boolean last)
+            throws IOException {
+        sendMessageBlock(opCode, payload, last, getTimeoutExpiry());
+    }
+
+
+
+    private void sendMessageBlock(byte opCode, ByteBuffer payload, boolean last,
+            long timeoutExpiry) throws IOException {
+        wsSession.updateLastActive();
+
+        BlockingSendHandler bsh = new BlockingSendHandler();
+
+        List<MessagePart> messageParts = new ArrayList<>();
+        messageParts.add(new MessagePart(last, 0, opCode, payload, bsh, bsh, timeoutExpiry));
+
+        messageParts = transformation.sendMessagePart(messageParts);
+
+        // Some extensions/transformations may buffer messages so it is possible
+        // that no message parts will be returned. If this is the case simply
+        // return.
+        if (messageParts.size() == 0) {
+            return;
+        }
+
+        long timeout = timeoutExpiry - System.currentTimeMillis();
+        try {
+            if (!messagePartInProgress.tryAcquire(timeout, TimeUnit.MILLISECONDS)) {
+                String msg = sm.getString("wsRemoteEndpoint.acquireTimeout");
+                wsSession.doClose(new CloseReason(CloseCodes.GOING_AWAY, msg),
+                        new CloseReason(CloseCodes.CLOSED_ABNORMALLY, msg));
+                throw new SocketTimeoutException(msg);
+            }
+        } catch (InterruptedException e) {
+            String msg = sm.getString("wsRemoteEndpoint.sendInterupt");
+            wsSession.doClose(new CloseReason(CloseCodes.GOING_AWAY, msg),
+                    new CloseReason(CloseCodes.CLOSED_ABNORMALLY, msg));
+            throw new IOException(msg, e);
+        }
+
+        for (MessagePart mp : messageParts) {
+            writeMessagePart(mp);
+            if (!bsh.getSendResult().isOK()) {
+                messagePartInProgress.release();
+                Throwable t = bsh.getSendResult().getException();
+                wsSession.doClose(new CloseReason(CloseCodes.GOING_AWAY, t.getMessage()),
+                        new CloseReason(CloseCodes.CLOSED_ABNORMALLY, t.getMessage()));
+                throw new IOException (t);
+            }
+            // The BlockingSendHandler doesn't call end message so update the
+            // flags.
+            fragmented = nextFragmented;
+            text = nextText;
+        }
+
+        if (payload != null) {
+            payload.clear();
+        }
+
+        endMessage(null, null);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    void endMessage(SendHandler handler, SendResult result) {
+        boolean doWrite = false;
+        MessagePart mpNext = null;
+        synchronized (messagePartLock) {
+
+            fragmented = nextFragmented;
+            text = nextText;
+
+            mpNext = messagePartQueue.poll();
+            if (mpNext == null) {
+                messagePartInProgress.release();
+            } else if (!closed){
+                // Session may have been closed unexpectedly in the middle of
+                // sending a fragmented message closing the endpoint. If this
+                // happens, clearly there is no point trying to send the rest of
+                // the message.
+                doWrite = true;
+            }
+        }
+        if (doWrite) {
+            // Actual write has to be outside sync block to avoid possible
+            // deadlock between messagePartLock and writeLock in
+            // o.a.coyote.http11.upgrade.AbstractServletOutputStream
+            writeMessagePart(mpNext);
+        }
+
+        wsSession.updateLastActive();
+
+        // Some handlers, such as the IntermediateMessageHandler, do not have a
+        // nested handler so handler may be null.
+        if (handler != null) {
+            handler.onResult(result);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

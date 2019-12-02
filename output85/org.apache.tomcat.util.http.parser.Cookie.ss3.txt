@@ -1,0 +1,88 @@
+6
+-----CSCI578-----
+
+
+
+    private static void skipUntilSemiColonOrComma(ByteBuffer bb) {
+        while(bb.hasRemaining()) {
+            byte b = bb.get();
+            if (b == SEMICOLON_BYTE || b == COMMA_BYTE) {
+                break;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    private static void skipInvalidCookie(ByteBuffer bb) {
+        logInvalidHeader(bb);
+        // Invalid cookie value. Skip to the next semi-colon
+        skipUntilSemiColonOrComma(bb);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private static ByteBuffer readQuotedString(ByteBuffer bb) {
+        int start = bb.position();
+
+        // Read the opening quote
+        bb.get();
+        boolean escaped = false;
+        while (bb.hasRemaining()) {
+            byte b = bb.get();
+            if (b == SLASH_BYTE) {
+                // Escaping another character
+                escaped = true;
+            } else if (escaped && b > (byte) -1) {
+                escaped = false;
+            } else if (b == QUOTE_BYTE) {
+                return new ByteBuffer(bb.bytes, start, bb.position() - start);
+            } else if (isText[b & 0xFF]) {
+                escaped = false;
+            } else {
+                return null;
+            }
+        }
+
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    private static ByteBuffer readTokenAllowForwardSlash(ByteBuffer bb) {
+        final int start = bb.position();
+        int end = bb.limit();
+        while (bb.hasRemaining()) {
+            byte b = bb.get();
+            if (b != FORWARDSLASH_BYTE && !HttpParser.isToken(b)) {
+                end = bb.position() - 1;
+                bb.position(end);
+                break;
+            }
+        }
+
+        return new ByteBuffer(bb.bytes, start, end - start);
+    }
+-----CSCI578-----
+
+
+
+    private static ByteBuffer readCookieValueRfc2109(ByteBuffer bb, boolean allowForwardSlash) {
+        if (!bb.hasRemaining()) {
+            return null;
+        }
+
+        if (bb.peek() == QUOTE_BYTE) {
+            return readQuotedString(bb);
+        } else {
+            if (allowForwardSlash) {
+                return readTokenAllowForwardSlash(bb);
+            } else {
+                return readToken(bb);
+            }
+        }
+    }

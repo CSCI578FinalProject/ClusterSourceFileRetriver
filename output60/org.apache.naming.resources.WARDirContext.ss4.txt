@@ -1,0 +1,132 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Enumerates the names bound in the named context, along with the class 
+     * names of objects bound to them. The contents of any subcontexts are 
+     * not included.
+     * <p>
+     * If a binding is added to or removed from this context, its effect on 
+     * an enumeration previously returned is undefined.
+     * 
+     * @param name the name of the context to list
+     * @return an enumeration of the names and class names of the bindings in 
+     * this context. Each element of the enumeration is of type NameClassPair.
+     * @exception NamingException if a naming exception is encountered
+     */
+    public NamingEnumeration list(String name)
+        throws NamingException {
+        return list(new CompositeName(name));
+    }
+
+
+
+    /**
+     * Enumerates the names bound in the named context, along with the class 
+     * names of objects bound to them. The contents of any subcontexts are 
+     * not included.
+     * <p>
+     * If a binding is added to or removed from this context, its effect on 
+     * an enumeration previously returned is undefined.
+     * 
+     * @param name the name of the context to list
+     * @return an enumeration of the names and class names of the bindings in 
+     * this context. Each element of the enumeration is of type NameClassPair.
+     * @exception NamingException if a naming exception is encountered
+     */
+    public NamingEnumeration list(Name name)
+        throws NamingException {
+        if (name.isEmpty())
+            return new NamingContextEnumeration(list(entries).iterator());
+        Entry entry = treeLookup(name);
+        if (entry == null)
+            throw new NamingException
+                (sm.getString("resources.notFound", name));
+        return new NamingContextEnumeration(list(entry).iterator());
+    }
+
+
+
+    /**
+     * List children as objects.
+     */
+    protected ArrayList list(Entry entry) {
+        
+        ArrayList entries = new ArrayList();
+        Entry[] children = entry.getChildren();
+        Arrays.sort(children);
+        NamingEntry namingEntry = null;
+        
+        for (int i = 0; i < children.length; i++) {
+            ZipEntry current = children[i].getEntry();
+            Object object = null;
+            if (current.isDirectory()) {
+                object = new WARDirContext(base, children[i]);
+            } else {
+                object = new WARResource(current);
+            }
+            namingEntry = new NamingEntry
+                (children[i].getName(), object, NamingEntry.ENTRY);
+            entries.add(namingEntry);
+        }
+        
+        return entries;
+        
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Enumerates the names bound in the named context, along with the 
+     * objects bound to them. The contents of any subcontexts are not 
+     * included.
+     * <p>
+     * If a binding is added to or removed from this context, its effect on 
+     * an enumeration previously returned is undefined.
+     * 
+     * @param name the name of the context to list
+     * @return an enumeration of the bindings in this context. 
+     * Each element of the enumeration is of type Binding.
+     * @exception NamingException if a naming exception is encountered
+     */
+    public NamingEnumeration listBindings(String name)
+        throws NamingException {
+        return listBindings(new CompositeName(name));
+    }
+
+
+
+    /**
+     * Enumerates the names bound in the named context, along with the 
+     * objects bound to them. The contents of any subcontexts are not 
+     * included.
+     * <p>
+     * If a binding is added to or removed from this context, its effect on 
+     * an enumeration previously returned is undefined.
+     * 
+     * @param name the name of the context to list
+     * @return an enumeration of the bindings in this context. 
+     * Each element of the enumeration is of type Binding.
+     * @exception NamingException if a naming exception is encountered
+     */
+    public NamingEnumeration listBindings(Name name)
+        throws NamingException {
+        if (name.isEmpty())
+            return new NamingContextBindingsEnumeration(list(entries).iterator(),
+                    this);
+        Entry entry = treeLookup(name);
+        if (entry == null)
+            throw new NamingException
+                (sm.getString("resources.notFound", name));
+        return new NamingContextBindingsEnumeration(list(entry).iterator(),
+                this);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

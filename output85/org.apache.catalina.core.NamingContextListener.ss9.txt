@@ -1,0 +1,362 @@
+16
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------- LifecycleListener Methods
+
+    /**
+     * Acknowledge the occurrence of the specified event.
+     *
+     * @param event LifecycleEvent that has occurred
+     */
+    @Override
+    public void lifecycleEvent(LifecycleEvent event) {
+
+        container = event.getLifecycle();
+
+        if (container instanceof Context) {
+            namingResources = ((Context) container).getNamingResources();
+            logger = log;
+            token = ((Context) container).getNamingToken();
+        } else if (container instanceof Server) {
+            namingResources = ((Server) container).getGlobalNamingResources();
+            token = ((Server) container).getNamingToken();
+        } else {
+            return;
+        }
+
+        if (Lifecycle.CONFIGURE_START_EVENT.equals(event.getType())) {
+
+            if (initialized)
+                return;
+
+            try {
+                Hashtable<String, Object> contextEnv = new Hashtable<>();
+                namingContext = new NamingContext(contextEnv, getName());
+                ContextAccessController.setSecurityToken(getName(), token);
+                ContextAccessController.setSecurityToken(container, token);
+                ContextBindings.bindContext(container, namingContext, token);
+                if( log.isDebugEnabled() ) {
+                    log.debug("Bound " + container );
+                }
+
+                // Configure write when read-only behaviour
+                namingContext.setExceptionOnFailedWrite(
+                        getExceptionOnFailedWrite());
+
+                // Setting the context in read/write mode
+                ContextAccessController.setWritable(getName(), token);
+
+                try {
+                    createNamingContext();
+                } catch (NamingException e) {
+                    logger.error
+                        (sm.getString("naming.namingContextCreationFailed", e));
+                }
+
+                namingResources.addPropertyChangeListener(this);
+
+                // Binding the naming context to the class loader
+                if (container instanceof Context) {
+                    // Setting the context in read only mode
+                    ContextAccessController.setReadOnly(getName());
+                    try {
+                        ContextBindings.bindClassLoader(container, token,
+                                ((Context) container).getLoader().getClassLoader());
+                    } catch (NamingException e) {
+                        logger.error(sm.getString("naming.bindFailed", e));
+                    }
+                }
+
+                if (container instanceof Server) {
+                    org.apache.naming.factory.ResourceLinkFactory.setGlobalContext
+                        (namingContext);
+                    try {
+                        ContextBindings.bindClassLoader(container, token,
+                                this.getClass().getClassLoader());
+                    } catch (NamingException e) {
+                        logger.error(sm.getString("naming.bindFailed", e));
+                    }
+                    if (container instanceof StandardServer) {
+                        ((StandardServer) container).setGlobalNamingContext
+                            (namingContext);
+                    }
+                }
+
+            } finally {
+                // Regardless of success, so that we can do cleanup on configure_stop
+                initialized = true;
+            }
+
+        } else if (Lifecycle.CONFIGURE_STOP_EVENT.equals(event.getType())) {
+
+            if (!initialized)
+                return;
+
+            try {
+                // Setting the context in read/write mode
+                ContextAccessController.setWritable(getName(), token);
+                ContextBindings.unbindContext(container, token);
+
+                if (container instanceof Context) {
+                    ContextBindings.unbindClassLoader(container, token,
+                            ((Context) container).getLoader().getClassLoader());
+                }
+
+                if (container instanceof Server) {
+                    namingResources.removePropertyChangeListener(this);
+                    ContextBindings.unbindClassLoader(container, token,
+                            this.getClass().getClassLoader());
+                }
+
+                ContextAccessController.unsetSecurityToken(getName(), token);
+                ContextAccessController.unsetSecurityToken(container, token);
+
+                // unregister mbeans.
+                if (!objectNames.isEmpty()) {
+                    Collection<ObjectName> names = objectNames.values();
+                    Registry registry = Registry.getRegistry(null, null);
+                    for (ObjectName objectName : names) {
+                        registry.unregisterComponent(objectName);
+                    }
+                }
+            } finally {
+                objectNames.clear();
+
+                namingContext = null;
+                envCtx = null;
+                compCtx = null;
+                initialized = false;
+            }
+
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a property change listener from this component.
+     *
+     * @param listener The listener to remove
+     */
+    public void removePropertyChangeListener(PropertyChangeListener listener) {
+
+        support.removePropertyChangeListener(listener);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Unbinds a naming context and a class loader.
+     *
+     * @param obj           Object bound to the required naming context
+     * @param token         Security token
+     * @param classLoader   The class loader bound to the naming context
+     */
+    public static void unbindClassLoader(Object obj, Object token,
+            ClassLoader classLoader) {
+        if (ContextAccessController.checkSecurityToken(obj, token)) {
+            Object o = clObjectBindings.get(classLoader);
+            if (o == null || !o.equals(obj)) {
+                return;
+            }
+            clBindings.remove(classLoader);
+            clObjectBindings.remove(classLoader);
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+    /**
+     * @return whether or not an attempt to modify the JNDI context will trigger
+     * an exception or if the request will be ignored.
+     */
+    public boolean getExceptionOnFailedWrite() {
+        return exceptionOnFailedWrite;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Binds a naming context to a class loader.
+     *
+     * @param obj           Object bound to the required naming context
+     * @param token         Security token
+     * @param classLoader   The class loader to bind to the naming context
+     *
+     * @throws NamingException If no naming context is bound to the provided
+     *         object
+     */
+    public static void bindClassLoader(Object obj, Object token,
+            ClassLoader classLoader) throws NamingException {
+        if (ContextAccessController.checkSecurityToken(obj, token)) {
+            Context context = objectBindings.get(obj);
+            if (context == null) {
+                throw new NamingException
+                        (sm.getString("contextBindings.unknownContext", obj));
+            }
+            clBindings.put(classLoader, context);
+            clObjectBindings.put(classLoader, obj);
+        }
+    }
+
+
+
+    /**
+     * Unbinds a naming context and a class loader.
+     *
+     * @param obj           Object bound to the required naming context
+     * @param token         Security token
+     * @param classLoader   The class loader bound to the naming context
+     */
+    public static void unbindClassLoader(Object obj, Object token,
+            ClassLoader classLoader) {
+        if (ContextAccessController.checkSecurityToken(obj, token)) {
+            Object o = clObjectBindings.get(classLoader);
+            if (o == null || !o.equals(obj)) {
+                return;
+            }
+            clBindings.remove(classLoader);
+            clObjectBindings.remove(classLoader);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return  the token necessary for operations on the associated JNDI naming
+     * context.
+     */
+    public Object getNamingToken();
+-----CSCI578-----
+
+    public void setExceptionOnFailedWrite(boolean exceptionOnFailedWrite) {
+        this.exceptionOnFailedWrite = exceptionOnFailedWrite;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the token necessary for operations on the associated JNDI naming
+     * context.
+     */
+    public Object getNamingToken();
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Set a security token for a context. Can be set only once.
+     *
+     * @param name Name of the context
+     * @param token Security token
+     */
+    public static void setSecurityToken(Object name, Object token) {
+        SecurityManager sm = System.getSecurityManager();
+        if (sm != null) {
+            sm.checkPermission(new RuntimePermission(
+                    ContextAccessController.class.getName()
+                            + ".setSecurityToken"));
+        }
+        if ((!securityTokens.containsKey(name)) && (token != null)) {
+            securityTokens.put(name, token);
+        }
+    }
+
+
+
+    /**
+     * Remove a security token for a context.
+     *
+     * @param name Name of the context
+     * @param token Security token
+     */
+    public static void unsetSecurityToken(Object name, Object token) {
+        if (checkSecurityToken(name, token)) {
+            securityTokens.remove(name);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a security token for a context.
+     *
+     * @param name Name of the context
+     * @param token Security token
+     */
+    public static void unsetSecurityToken(Object name, Object token) {
+        if (checkSecurityToken(name, token)) {
+            securityTokens.remove(name);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Unbinds an object and a naming context.
+     *
+     * @param obj   Object to unbind
+     * @param token Security token
+     */
+    public static void unbindContext(Object obj, Object token) {
+        if (ContextAccessController.checkSecurityToken(obj, token)) {
+            objectBindings.remove(obj);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a property change listener to this component.
+     *
+     * @param listener The listener to add
+     */
+    public void addPropertyChangeListener(PropertyChangeListener listener) {
+
+        support.addPropertyChangeListener(listener);
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Set the global context (note: can only be used once).
+     *
+     * @param newGlobalContext new global context value
+     */
+    public static void setGlobalContext(Context newGlobalContext) {
+        SecurityManager sm = System.getSecurityManager();
+        if (sm != null) {
+            sm.checkPermission(new RuntimePermission(
+                   ResourceLinkFactory.class.getName() + ".setGlobalContext"));
+        }
+        globalContext = newGlobalContext;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public static void setGlobalContext(Context newGlobalContext) {
+        ResourceLinkFactory.setGlobalContext(newGlobalContext);
+    }

@@ -1,0 +1,41 @@
+21
+    extends ValveBase {
+
+    /**
+     * Check for the broken MS WebDAV client and if detected issue a re-direct
+     * that hopefully will cause the non-broken client to be used.
+     */
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        String ua = request.getHeader("User-Agent");
+        if (ua != null && ua.contains("MiniRedir")) {
+            response.sendRedirect(buildRedirect(request));
+        } else {
+            getNext().invoke(request, response);
+        }
+    }
+
+    private String buildRedirect(Request request) {
+        StringBuffer location =
+            new StringBuffer(request.getRequestURL().length());
+        location.append(request.getScheme());
+        location.append("://");
+        location.append(request.getHost().getName());
+        location.append(':');
+        // If we include the port, even if it is 80, then MS clients will use
+        // a WebDAV client that works rather than the MiniRedir that has
+        // problems with BASIC authentication
+        location.append(request.getServerPort());
+        location.append(request.getRequestURI());
+        return location.toString();
+    }
+}
+
+    public int getServerPort() {
+        return serverPort;
+    }
+
+    public int getServerPort() {
+        return req.getServerPort();
+    }

@@ -1,0 +1,95 @@
+6
+-----CSCI578-----
+
+
+    public Servlet getServlet()
+        throws ServletException, IOException, FileNotFoundException
+    {
+        // DCL on 'reload' requires that 'reload' be volatile
+        // (this also forces a read memory barrier, ensuring the
+        // new servlet object is read consistently)
+        if (reload) {
+            synchronized (this) {
+                // Synchronizing on jsw enables simultaneous loading
+                // of different pages, but not the same page.
+                if (reload) {
+                    // This is to maintain the original protocol.
+                    destroy();
+
+                    final Servlet servlet;
+
+                    try {
+                        servletClass = ctxt.load();
+                        servlet = (Servlet) servletClass.newInstance();
+                        AnnotationProcessor annotationProcessor = (AnnotationProcessor) config.getServletContext().getAttribute(AnnotationProcessor.class.getName());
+                        if (annotationProcessor != null) {
+                           annotationProcessor.processAnnotations(servlet);
+                           annotationProcessor.postConstruct(servlet);
+                        }
+                    } catch (IllegalAccessException e) {
+                        throw new JasperException(e);
+                    } catch (InstantiationException e) {
+                        throw new JasperException(e);
+                    } catch (Exception e) {
+                        throw new JasperException(e);
+                    }
+
+                    servlet.init(config);
+
+                    if (!firstTime) {
+                        ctxt.getRuntimeContext().incrementJspReloadCount();
+                    }
+
+                    theServlet = servlet;
+                    reload = false;
+                    // Volatile 'reload' forces in order write of 'theServlet' and new servlet object
+                }
+            }
+        }
+        return theServlet;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Increments the JSP reload counter.
+     */
+    public synchronized void incrementJspReloadCount() {
+        jspReloadCount++;
+    }
+-----CSCI578-----
+
+    public void processAnnotations(Object instance)
+        throws IllegalAccessException, InvocationTargetException, NamingException;
+-----CSCI578-----
+
+    public void postConstruct(Object instance)
+        throws IllegalAccessException, InvocationTargetException;
+-----CSCI578-----
+
+
+    public void destroy() {
+        if (theServlet != null) {
+            try {
+                theServlet.destroy();
+            } catch (Throwable t) {
+                log.error(Localizer.getMessage("jsp.error.servlet.destroy.failed"), t);
+            }
+            AnnotationProcessor annotationProcessor = (AnnotationProcessor) config.getServletContext().getAttribute(AnnotationProcessor.class.getName());
+            if (annotationProcessor != null) {
+                try {
+                    annotationProcessor.preDestroy(theServlet);
+                } catch (Exception e) {
+                    // Log any exception, since it can't be passed along
+                    log.error(Localizer.getMessage("jsp.error.file.not.found",
+                           e.getMessage()), e);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public JspRuntimeContext getRuntimeContext() {
+        return rctxt;
+    }

@@ -1,0 +1,112 @@
+4
+    
+    // --------------------------------------------------- FilterConfig Methods
+
+
+    /**
+     * Return the name of the filter we are configuring.
+     */
+    public String getFilterName() {
+        return (filterDef.getFilterName());
+    }
+
+    /**
+     * Return the class of the filter we are configuring.
+     */
+    public String getFilterClass() {
+        return filterDef.getFilterClass();
+    }
+
+    // --------------------------------------------------------- Public Methods
+
+    public Map<String, String> getFilterInitParameterMap() {
+        return Collections.unmodifiableMap(filterDef.getParameterMap());
+    }
+
+
+    /**
+     * Return <code>true</code> if loading this filter is allowed.
+     */
+    protected boolean isFilterAllowed(Class filterClass) {
+
+        // Privileged webapps may load all servlets without restriction
+        if (context.getPrivileged()) {
+            return true;
+        }
+
+        Class clazz = filterClass;
+        while (clazz != null && !clazz.getName().equals("javax.servlet.Filter")) {
+            if ("restricted".equals(restrictedFilters.getProperty(clazz.getName()))) {
+                return (false);
+            }
+            clazz = clazz.getSuperclass();
+        }
+        
+        return (true);
+
+    }
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    private void registerJMX() {
+        String parentName = context.getName();
+        parentName = ("".equals(parentName)) ? "/" : parentName;
+
+        String hostName = context.getParent().getName();
+        hostName = (hostName == null) ? "DEFAULT" : hostName;
+
+        // domain == engine name
+        String domain = context.getParent().getParent().getName();
+
+        String webMod = "//" + hostName + parentName;
+        String onameStr = null;
+        if (context instanceof StandardContext) {
+            StandardContext standardContext = (StandardContext) context;
+            onameStr = domain + ":j2eeType=Filter,name=" +
+                 filterDef.getFilterName() + ",WebModule=" + webMod +
+                 ",J2EEApplication=" +
+                 standardContext.getJ2EEApplication() + ",J2EEServer=" +
+                 standardContext.getJ2EEServer();
+        } else {
+            onameStr = domain + ":j2eeType=Filter,name=" +
+                 filterDef.getFilterName() + ",WebModule=" + webMod;
+}
+        try {
+            oname = new ObjectName(onameStr);
+            Registry.getRegistry(null, null).registerComponent(this, oname,
+                    null);
+        } catch (Exception ex) {
+            log.info(sm.getString("applicationFilterConfig.jmxRegisterFail",
+                    getFilterClass(), getFilterName()), ex);
+        }
+    }
+    
+    private void unregisterJMX() {
+        // unregister this component
+        if (oname != null) {
+            try {
+                Registry.getRegistry(null, null).unregisterComponent(oname);
+                if (log.isDebugEnabled())
+                    log.debug(sm.getString(
+                            "applicationFilterConfig.jmxUnregister",
+                            getFilterClass(), getFilterName()));
+            } catch(Exception ex) {
+                log.error(sm.getString(
+                        "applicationFilterConfig.jmxUnregisterFail",
+                        getFilterClass(), getFilterName()), ex);
+            }
+        }
+
+    }
+
+
+    /**
+     * Return the ServletContext of our associated web application.
+     */
+    public ServletContext getServletContext() {
+
+        return (this.context.getServletContext());
+
+    }

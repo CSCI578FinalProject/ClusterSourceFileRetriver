@@ -1,0 +1,449 @@
+19
+-----CSCI578-----
+
+
+
+    @Override
+    public ServletRegistration.Dynamic addServlet(String servletName, String className) {
+        return addServlet(servletName, className, null);
+    }
+
+
+
+    @Override
+    public ServletRegistration.Dynamic addServlet(String servletName, Servlet servlet) {
+        return addServlet(servletName, null, servlet);
+    }
+
+
+
+    @Override
+    public ServletRegistration.Dynamic addServlet(String servletName,
+            Class<? extends Servlet> servletClass) {
+        return addServlet(servletName, servletClass.getName(), null);
+    }
+
+
+
+    private ServletRegistration.Dynamic addServlet(String servletName,
+            String servletClass, Servlet servlet) throws IllegalStateException {
+
+        if (servletName == null || servletName.equals("")) {
+            throw new IllegalArgumentException(sm.getString(
+                    "applicationContext.invalidServletName", servletName));
+        }
+
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            //TODO Spec breaking enhancement to ignore this restriction
+            throw new IllegalStateException(
+                    sm.getString("applicationContext.addServlet.ise",
+                            getContextPath()));
+        }
+
+        Wrapper wrapper = (Wrapper) context.findChild(servletName);
+
+        // Assume a 'complete' ServletRegistration is one that has a class and
+        // a name
+        if (wrapper == null) {
+            wrapper = context.createWrapper();
+            wrapper.setName(servletName);
+            context.addChild(wrapper);
+        } else {
+            if (wrapper.getName() != null &&
+                    wrapper.getServletClass() != null) {
+                if (wrapper.isOverridable()) {
+                    wrapper.setOverridable(false);
+                } else {
+                    return null;
+                }
+            }
+        }
+
+        if (servlet == null) {
+            wrapper.setServletClass(servletClass);
+        } else {
+            wrapper.setServletClass(servlet.getClass().getName());
+            wrapper.setServlet(servlet);
+        }
+
+        return context.dynamicServletAdded(wrapper);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Hook to register that we need to scan for security annotations.
+     * @param wrapper   The wrapper for the Servlet that was added
+     * @return the associated registration
+     */
+    public ServletRegistration.Dynamic dynamicServletAdded(Wrapper wrapper) {
+        Servlet s = wrapper.getServlet();
+        if (s != null && createdServlets.contains(s)) {
+            // Mark the wrapper to indicate annotations need to be scanned
+            wrapper.setServletSecurityAnnotationScanRequired(true);
+        }
+        return new ApplicationServletRegistration(wrapper, this);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the associated Servlet instance
+     *
+     * @param servlet The associated Servlet
+     */
+    public void setServlet(Servlet servlet);
+-----CSCI578-----
+
+
+
+    /**
+     * Add a child Container, only if the proposed child is an implementation
+     * of Wrapper.
+     *
+     * @param child Child container to be added
+     *
+     * @exception IllegalArgumentException if the proposed container is
+     *  not an implementation of Wrapper
+     */
+    @Override
+    public void addChild(Container child) {
+
+        // Global JspServlet
+        Wrapper oldJspServlet = null;
+
+        if (!(child instanceof Wrapper)) {
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.notWrapper"));
+        }
+
+        boolean isJspServlet = "jsp".equals(child.getName());
+
+        // Allow webapp to override JspServlet inherited from global web.xml.
+        if (isJspServlet) {
+            oldJspServlet = (Wrapper) findChild("jsp");
+            if (oldJspServlet != null) {
+                removeChild(oldJspServlet);
+            }
+        }
+
+        super.addChild(child);
+
+        if (isJspServlet && oldJspServlet != null) {
+            /*
+             * The webapp-specific JspServlet inherits all the mappings
+             * specified in the global web.xml, and may add additional ones.
+             */
+            String[] jspMappings = oldJspServlet.findMappings();
+            for (int i=0; jspMappings!=null && i<jspMappings.length; i++) {
+                addServletMapping(jspMappings[i], child.getName());
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * The set of classnames of LifecycleListeners that will be added
+     * to each newly created Wrapper by <code>createWrapper()</code>.
+     */
+    private String wrapperLifecycles[] = new String[0];
+
+
+    /**
+     * The set of classnames of ContainerListeners that will be added
+     * to each newly created Wrapper by <code>createWrapper()</code>.
+     */
+    private String wrapperListeners[] = new String[0];
+
+
+
+    /**
+     * Factory method to create and return a new Wrapper instance, of
+     * the Java implementation class appropriate for this Context
+     * implementation.  The constructor of the instantiated Wrapper
+     * will have been called, but no properties will have been set.
+     */
+    @Override
+    public Wrapper createWrapper() {
+
+        Wrapper wrapper = null;
+        if (wrapperClass != null) {
+            try {
+                wrapper = (Wrapper) wrapperClass.newInstance();
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                log.error("createWrapper", t);
+                return (null);
+            }
+        } else {
+            wrapper = new StandardWrapper();
+        }
+
+        synchronized (wrapperLifecyclesLock) {
+            for (int i = 0; i < wrapperLifecycles.length; i++) {
+                try {
+                    Class<?> clazz = Class.forName(wrapperLifecycles[i]);
+                    LifecycleListener listener =
+                        (LifecycleListener) clazz.newInstance();
+                    wrapper.addLifecycleListener(listener);
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    log.error("createWrapper", t);
+                    return (null);
+                }
+            }
+        }
+
+        synchronized (wrapperListenersLock) {
+            for (int i = 0; i < wrapperListeners.length; i++) {
+                try {
+                    Class<?> clazz = Class.forName(wrapperListeners[i]);
+                    ContainerListener listener =
+                      (ContainerListener) clazz.newInstance();
+                    wrapper.addContainerListener(listener);
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    log.error("createWrapper", t);
+                    return (null);
+                }
+            }
+        }
+
+        return (wrapper);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the associated Servlet instance.
+     */
+    public Servlet getServlet();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Add a mapping associated with the Wrapper.
+     *
+     * @param mapping The new wrapper mapping
+     */
+    public void addMapping(String mapping);
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new servlet mapping, replacing any existing mapping for
+     * the specified pattern.
+     *
+     * @param pattern URL pattern to be mapped
+     * @param name Name of the corresponding servlet to execute
+     *
+     * @exception IllegalArgumentException if the specified servlet name
+     *  is not known to this Context
+     */
+    @Override
+    public void addServletMapping(String pattern, String name) {
+        addServletMapping(pattern, name, false);
+    }
+
+
+
+    /**
+     * Add a new servlet mapping, replacing any existing mapping for
+     * the specified pattern.
+     *
+     * @param pattern URL pattern to be mapped
+     * @param name Name of the corresponding servlet to execute
+     * @param jspWildCard true if name identifies the JspServlet
+     * and pattern contains a wildcard; false otherwise
+     *
+     * @exception IllegalArgumentException if the specified servlet name
+     *  is not known to this Context
+     */
+    @Override
+    public void addServletMapping(String pattern, String name,
+                                  boolean jspWildCard) {
+        // Validate the proposed mapping
+        if (findChild(name) == null)
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.servletMap.name", name));
+        String decodedPattern = adjustURLPattern(UDecoder.URLDecode(pattern));
+        if (!validateURLPattern(decodedPattern))
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.servletMap.pattern", decodedPattern));
+
+        // Add this mapping to our registered set
+        synchronized (servletMappingsLock) {
+            String name2 = servletMappings.get(decodedPattern);
+            if (name2 != null) {
+                // Don't allow more than one servlet on the same pattern
+                Wrapper wrapper = (Wrapper) findChild(name2);
+                wrapper.removeMapping(decodedPattern);
+            }
+            servletMappings.put(decodedPattern, name);
+        }
+        Wrapper wrapper = (Wrapper) findChild(name);
+        wrapper.addMapping(decodedPattern);
+
+        fireContainerEvent("addServletMapping", decodedPattern);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public ServletRegistration.Dynamic addServlet(String servletName,
+            String className) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (ServletRegistration.Dynamic) doPrivileged(
+                    "addServlet", new Object[]{servletName, className});
+        } else {
+            return context.addServlet(servletName, className);
+        }
+    }
+
+
+
+    @Override
+    public ServletRegistration.Dynamic addServlet(String servletName,
+            Servlet servlet) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (ServletRegistration.Dynamic) doPrivileged("addServlet",
+                    new Class[]{String.class, Servlet.class},
+                    new Object[]{servletName, servlet});
+        } else {
+            return context.addServlet(servletName, servlet);
+        }
+    }
+
+
+
+    @Override
+    public ServletRegistration.Dynamic addServlet(String servletName,
+            Class<? extends Servlet> servletClass) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (ServletRegistration.Dynamic) doPrivileged("addServlet",
+                    new Class[]{String.class, Class.class},
+                    new Object[]{servletName, servletClass});
+        } else {
+            return context.addServlet(servletName, servletClass);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Is the Servlet overridable by a ServletContainerInitializer?
+     *
+     * @return <code>true</code> if the Servlet can be overridden in a ServletContainerInitializer
+     */
+    public boolean isOverridable();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Adjust the URL pattern to begin with a leading slash, if appropriate
+     * (i.e. we are running a servlet 2.2 application).  Otherwise, return
+     * the specified URL pattern unchanged.
+     *
+     * @param urlPattern The URL pattern to be adjusted (if needed)
+     *  and returned
+     * @return the URL pattern with a leading slash if needed
+     */
+    protected String adjustURLPattern(String urlPattern) {
+
+        if (urlPattern == null)
+            return (urlPattern);
+        if (urlPattern.startsWith("/") || urlPattern.startsWith("*."))
+            return (urlPattern);
+        if (!isServlet22())
+            return (urlPattern);
+        if(log.isDebugEnabled())
+            log.debug(sm.getString("standardContext.urlPattern.patternWarning",
+                         urlPattern));
+        return ("/" + urlPattern);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a mapping associated with the wrapper.
+     *
+     * @param mapping The pattern to remove
+     */
+    public void removeMapping(String mapping);
+-----CSCI578-----
+
+
+
+    @Override
+    public Set<String> addMapping(String... urlPatterns) {
+        if (urlPatterns == null) {
+            return Collections.emptySet();
+        }
+
+        Set<String> conflicts = new HashSet<>();
+
+        for (String urlPattern : urlPatterns) {
+            String wrapperName = context.findServletMapping(urlPattern);
+            if (wrapperName != null) {
+                Wrapper wrapper = (Wrapper) context.findChild(wrapperName);
+                if (wrapper.isOverridable()) {
+                    // Some Wrappers (from global and host web.xml) may be
+                    // overridden rather than generating a conflict
+                    context.removeServletMapping(urlPattern);
+                } else {
+                    conflicts.add(urlPattern);
+                }
+            }
+        }
+
+        if (!conflicts.isEmpty()) {
+            return conflicts;
+        }
+
+        for (String urlPattern : urlPatterns) {
+            context.addServletMapping(urlPattern, wrapper.getName());
+        }
+        return Collections.emptySet();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any servlet mapping for the specified pattern, if it exists;
+     * otherwise, no action is taken.
+     *
+     * @param pattern URL pattern of the mapping to remove
+     */
+    @Override
+    public void removeServletMapping(String pattern) {
+
+        String name = null;
+        synchronized (servletMappingsLock) {
+            name = servletMappings.remove(pattern);
+        }
+        Wrapper wrapper = (Wrapper) findChild(name);
+        if( wrapper != null ) {
+            wrapper.removeMapping(pattern);
+        }
+        fireContainerEvent("removeServletMapping", pattern);
+    }

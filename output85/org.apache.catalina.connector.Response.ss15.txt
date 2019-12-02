@@ -1,0 +1,192 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain the character set name to use with the given Locale. Note that
+     * different Contexts may have different mappings of Locale to character
+     * set.
+     *
+     * @param locale The locale for which the mapped character set should be
+     *               returned
+     *
+     * @return The name of the character set to use with the given Locale
+     */
+    public String getCharset(Locale locale);
+-----CSCI578-----
+
+
+    /**
+     * Called explicitly by user to set the Content-Language and the default
+     * encoding.
+     *
+     * @param locale The locale to use for this response
+     */
+    public void setLocale(Locale locale) {
+
+        if (locale == null) {
+            return;  // throw an exception?
+        }
+
+        // Save the locale for use by getLocale()
+        this.locale = locale;
+
+        // Set the contentLanguage for header output
+        contentLanguage = locale.getLanguage();
+        if ((contentLanguage != null) && (contentLanguage.length() > 0)) {
+            String country = locale.getCountry();
+            StringBuilder value = new StringBuilder(contentLanguage);
+            if ((country != null) && (country.length() > 0)) {
+                value.append('-');
+                value.append(country);
+            }
+            contentLanguage = value.toString();
+        }
+
+    }
+
+
+    /**
+     * Sets the content type.
+     *
+     * This method must preserve any response charset that may already have
+     * been set via a call to response.setContentType(), response.setLocale(),
+     * or response.setCharacterEncoding().
+     *
+     * @param type the content type
+     */
+    public void setContentType(String type) {
+
+        if (type == null) {
+            this.contentType = null;
+            return;
+        }
+
+        MediaType m = null;
+        try {
+             m = MediaType.parseMediaType(new StringReader(type));
+        } catch (IOException e) {
+            // Ignore - null test below handles this
+        }
+        if (m == null) {
+            // Invalid - Assume no charset and just pass through whatever
+            // the user provided.
+            this.contentType = type;
+            return;
+        }
+
+        this.contentType = m.toStringNoCharset();
+
+        String charsetValue = m.getCharset();
+
+        if (charsetValue != null) {
+            charsetValue = charsetValue.trim();
+            if (charsetValue.length() > 0) {
+                charsetSet = true;
+                this.characterEncoding = charsetValue;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Locale that is appropriate for this response, including
+     * setting the appropriate character encoding.
+     *
+     * @param locale The new locale
+     */
+    @Override
+    public void setLocale(Locale locale) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        // Ignore any call from an included servlet
+        if (included) {
+            return;
+        }
+
+        getCoyoteResponse().setLocale(locale);
+
+        // Ignore any call made after the getWriter has been invoked.
+        // The default should be used
+        if (usingWriter) {
+            return;
+        }
+
+        if (isCharacterEncodingSet) {
+            return;
+        }
+
+        String charset = getContext().getCharset(locale);
+        if (charset != null) {
+            getCoyoteResponse().setCharacterEncoding(charset);
+        }
+    }
+-----CSCI578-----
+
+
+    /*
+     * Overrides the name of the character encoding used in the body
+     * of the response. This method must be called prior to writing output
+     * using getWriter().
+     *
+     * @param charset String containing the name of the character encoding.
+     */
+    public void setCharacterEncoding(String charset) {
+
+        if (isCommitted())
+            return;
+        if (charset == null)
+            return;
+
+        characterEncoding = charset;
+        charsetSet=true;
+    }
+
+
+    /**
+     * Sets the content type.
+     *
+     * This method must preserve any response charset that may already have
+     * been set via a call to response.setContentType(), response.setLocale(),
+     * or response.setCharacterEncoding().
+     *
+     * @param type the content type
+     */
+    public void setContentType(String type) {
+
+        if (type == null) {
+            this.contentType = null;
+            return;
+        }
+
+        MediaType m = null;
+        try {
+             m = MediaType.parseMediaType(new StringReader(type));
+        } catch (IOException e) {
+            // Ignore - null test below handles this
+        }
+        if (m == null) {
+            // Invalid - Assume no charset and just pass through whatever
+            // the user provided.
+            this.contentType = type;
+            return;
+        }
+
+        this.contentType = m.toStringNoCharset();
+
+        String charsetValue = m.getCharset();
+
+        if (charsetValue != null) {
+            charsetValue = charsetValue.trim();
+            if (charsetValue.length() > 0) {
+                charsetSet = true;
+                this.characterEncoding = charsetValue;
+            }
+        }
+    }

@@ -1,0 +1,112 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setErrorHandler(ErrorHandler errorHandler) {
+        this.errorHandler = errorHandler;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Send a message to the destinations specified
+     * @param destination Member[] - destination.length > 1
+     * @param msg Serializable - the message to send
+     * @param options int - sender options, options can trigger guarantee levels and different interceptors to
+     * react to the message see class documentation for the <code>Channel</code> object.<br>
+     * @return UniqueId - the unique Id that was assigned to this message
+     * @throws ChannelException - if an error occurs processing the message
+     * @see org.apache.catalina.tribes.Channel
+     */
+    public UniqueId send(Member[] destination, Serializable msg, int options) throws ChannelException {
+        return send(destination,msg,options,null);
+    }
+
+
+    /**
+     *
+     * @param destination Member[] - destination.length > 1
+     * @param msg Serializable - the message to send
+     * @param options int - sender options, options can trigger guarantee levels and different interceptors to
+     * react to the message see class documentation for the <code>Channel</code> object.<br>
+     * @param handler - callback object for error handling and completion notification, used when a message is
+     * sent asynchronously using the <code>Channel.SEND_OPTIONS_ASYNCHRONOUS</code> flag enabled.
+     * @return UniqueId - the unique Id that was assigned to this message
+     * @throws ChannelException - if an error occurs processing the message
+     * @see org.apache.catalina.tribes.Channel
+     */
+    public UniqueId send(Member[] destination, Serializable msg, int options, ErrorHandler handler) throws ChannelException {
+        if ( msg == null ) throw new ChannelException("Cant send a NULL message");
+        XByteBuffer buffer = null;
+        try {
+            if ( destination == null || destination.length == 0) throw new ChannelException("No destination given");
+            ChannelData data = new ChannelData(true);//generates a unique Id
+            data.setAddress(getLocalMember(false));
+            data.setTimestamp(System.currentTimeMillis());
+            byte[] b = null;
+            if ( msg instanceof ByteMessage ){
+                b = ((ByteMessage)msg).getMessage();
+                options = options | SEND_OPTIONS_BYTE_MESSAGE;
+            } else {
+                b = XByteBuffer.serialize(msg);
+                options = options & (~SEND_OPTIONS_BYTE_MESSAGE);
+            }
+            data.setOptions(options);
+            //XByteBuffer buffer = new XByteBuffer(b.length+128,false);
+            buffer = BufferPool.getBufferPool().getBuffer(b.length+128, false);
+            buffer.append(b,0,b.length);
+            data.setMessage(buffer);
+            InterceptorPayload payload = null;
+            if ( handler != null ) {
+                payload = new InterceptorPayload();
+                payload.setErrorHandler(handler);
+            }
+            getFirstInterceptor().sendMessage(destination, data, payload);
+            if ( Logs.MESSAGES.isTraceEnabled() ) {
+                Logs.MESSAGES.trace("GroupChannel - Sent msg:" + new UniqueId(data.getUniqueId()) + " at " +new java.sql.Timestamp(System.currentTimeMillis())+ " to "+Arrays.toNameString(destination));
+                Logs.MESSAGES.trace("GroupChannel - Send Message:" + new UniqueId(data.getUniqueId()) + " is " +msg);
+            }
+
+            return new UniqueId(data.getUniqueId());
+        }catch ( Exception x ) {
+            if ( x instanceof ChannelException ) throw (ChannelException)x;
+            throw new ChannelException(x);
+        } finally {
+            if ( buffer != null ) BufferPool.getBufferPool().returnBuffer(buffer);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the message contents of this byte message
+     * @return byte[] - message contents, can be null
+     */
+    public byte[] getMessage() {
+        return message;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sends a <code>NoRpcChannelReply</code> message to a member<br>
+     * This method gets invoked by the channel if a RPC message comes in
+     * and no channel listener accepts the message. This avoids timeout
+     * @param msg RpcMessage
+     * @param destination Member - the destination for the reply
+     */
+    protected void sendNoRpcChannelReply(RpcMessage msg, Member destination) {
+        try {
+            //avoid circular loop
+            if ( msg instanceof RpcMessage.NoRpcChannelReply) return;
+            RpcMessage.NoRpcChannelReply reply = new RpcMessage.NoRpcChannelReply(msg.rpcId,msg.uuid);
+            send(new Member[]{destination},reply,Channel.SEND_OPTIONS_ASYNCHRONOUS);
+        } catch ( Exception x ) {
+            log.error("Unable to find rpc channel, failed to send NoRpcChannelReply.",x);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

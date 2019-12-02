@@ -1,0 +1,113 @@
+8
+-----CSCI578-----
+
+
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+
+        FunctionMapper fnMapper = ctx.getFunctionMapper();
+
+        // quickly validate again for this request
+        if (fnMapper == null) {
+            throw new ELException(MessageFactory.get("error.fnMapper.null"));
+        }
+        Method m = fnMapper.resolveFunction(this.prefix, this.localName);
+        if (m == null) {
+            throw new ELException(MessageFactory.get("error.fnMapper.method",
+                    this.getOutputName()));
+        }
+
+        Class[] paramTypes = m.getParameterTypes();
+        Object[] params = null;
+        Object result = null;
+        int inputParameterCount = this.jjtGetNumChildren();
+        int methodParameterCount = paramTypes.length;
+        if (inputParameterCount == 0 && methodParameterCount == 1 && m.isVarArgs()) {
+            params = new Object[] { null };
+        } else if (inputParameterCount > 0) {
+            params = new Object[methodParameterCount];
+            try {
+                for (int i = 0; i < methodParameterCount; i++) {
+                    if (m.isVarArgs() && i == methodParameterCount - 1) {
+                        if (inputParameterCount < methodParameterCount) {
+                            params[i] = new Object[] { null };
+                        } else if (inputParameterCount == methodParameterCount &&
+                                paramTypes[i].isArray()) {
+                            params[i] = this.jjtGetChild(i).getValue(ctx);
+                        } else {
+                            Object[] varargs =
+                                    new Object[inputParameterCount - methodParameterCount + 1];
+                            Class<?> target = paramTypes[i].getComponentType();
+                            for (int j = i; j < inputParameterCount; j++) {
+                                varargs[j-i] = this.jjtGetChild(j).getValue(ctx);
+                                varargs[j-i] = coerceToType(varargs[j-i], target);
+                            }
+                            params[i] = varargs;
+                        }
+                    } else {
+                        params[i] = this.jjtGetChild(i).getValue(ctx);
+                    }
+                    params[i] = coerceToType(params[i], paramTypes[i]);
+                }
+            } catch (ELException ele) {
+                throw new ELException(MessageFactory.get("error.function", this
+                        .getOutputName()), ele);
+            }
+        }
+        try {
+            result = m.invoke(null, params);
+        } catch (IllegalAccessException iae) {
+            throw new ELException(MessageFactory.get("error.function", this
+                    .getOutputName()), iae);
+        } catch (InvocationTargetException ite) {
+            throw new ELException(MessageFactory.get("error.function", this
+                    .getOutputName()), ite.getCause());
+        }
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getOutputName() {
+        if (this.prefix == null) {
+            return this.localName;
+        } else {
+            return this.prefix + ":" + this.localName;
+        }
+    }
+-----CSCI578-----
+
+
+    public FunctionMapper getFunctionMapper() {
+        return this.fnMapper;
+    }
+-----CSCI578-----
+
+
+    public Class getType(EvaluationContext ctx)
+            throws ELException {
+
+        FunctionMapper fnMapper = ctx.getFunctionMapper();
+
+        // quickly validate again for this request
+        if (fnMapper == null) {
+            throw new ELException(MessageFactory.get("error.fnMapper.null"));
+        }
+        Method m = fnMapper.resolveFunction(this.prefix, this.localName);
+        if (m == null) {
+            throw new ELException(MessageFactory.get("error.fnMapper.method",
+                    this.getOutputName()));
+        }
+        return m.getReturnType();
+    }
+-----CSCI578-----
+
+
+
+    public String toString()
+    {
+        return ELParserTreeConstants.jjtNodeName[id] + "[" + this.getOutputName() + "]";
+    }

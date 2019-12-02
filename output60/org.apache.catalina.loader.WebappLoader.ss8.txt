@@ -1,0 +1,866 @@
+40
+-----CSCI578-----
+
+
+
+    /**
+     * Return the clearReferencesStopTimerThreads flag for this Context.
+     */
+    public boolean getClearReferencesStopTimerThreads() {
+        return (this.clearReferencesStopTimerThreads);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Start this component, initializing our associated class loader.
+     *
+     * @exception LifecycleException if a lifecycle error occurs
+     */
+    public void start() throws LifecycleException {
+        // Validate and update our current component state
+        if( ! initialized ) init();
+        if (started)
+            throw new LifecycleException
+                (sm.getString("webappLoader.alreadyStarted"));
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("webappLoader.starting"));
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+        started = true;
+
+        if (container.getResources() == null) {
+            log.info("No resources for " + container);
+            return;
+        }
+        // Register a stream handler factory for the JNDI protocol
+        URLStreamHandlerFactory streamHandlerFactory =
+            new DirContextURLStreamHandlerFactory();
+        if (first) {
+            first = false;
+            try {
+                URL.setURLStreamHandlerFactory(streamHandlerFactory);
+            } catch (Exception e) {
+                // Log and continue anyway, this is not critical
+                log.error("Error registering jndi stream handler", e);
+            } catch (Throwable t) {
+                // This is likely a dual registration
+                log.info("Dual registration of jndi stream handler: " 
+                         + t.getMessage());
+            }
+        }
+
+        // Construct a class loader based on our current repositories list
+        try {
+
+            classLoader = createClassLoader();
+            classLoader.setResources(container.getResources());
+            classLoader.setDelegate(this.delegate);
+            classLoader.setSearchExternalFirst(searchExternalFirst);
+            if (container instanceof StandardContext) {
+                classLoader.setAntiJARLocking(
+                        ((StandardContext) container).getAntiJARLocking());
+                classLoader.setClearReferencesRmiTargets(
+                        ((StandardContext) container).getClearReferencesRmiTargets());
+                classLoader.setClearReferencesStopThreads(
+                        ((StandardContext) container).getClearReferencesStopThreads());
+                classLoader.setClearReferencesStopTimerThreads(
+                        ((StandardContext) container).getClearReferencesStopTimerThreads());
+                classLoader.setClearReferencesThreadLocals(
+                        ((StandardContext) container).getClearReferencesThreadLocals());
+                classLoader.setClearReferencesHttpClientKeepAliveThread(
+                        ((StandardContext) container).getClearReferencesHttpClientKeepAliveThread());
+            }
+
+            for (int i = 0; i < repositories.length; i++) {
+                classLoader.addRepository(repositories[i]);
+            }
+
+            // Configure our repositories
+            setRepositories();
+            setClassPath();
+
+            setPermissions();
+
+            if (classLoader instanceof Lifecycle)
+                ((Lifecycle) classLoader).start();
+
+            // Binding the Webapp class loader to the directory context
+            DirContextURLStreamHandler.bind
+                ((ClassLoader) classLoader, this.container.getResources());
+
+            StandardContext ctx=(StandardContext)container;
+            Engine eng=(Engine)ctx.getParent().getParent();
+            String path = ctx.getPath();
+            if (path.equals("")) {
+                path = "/";
+            }   
+            ObjectName cloname = new ObjectName
+                (ctx.getEngineName() + ":type=WebappClassLoader,path="
+                 + path + ",host=" + ctx.getParent().getName());
+            Registry.getRegistry(null, null)
+                .registerComponent(classLoader, cloname, null);
+
+        } catch (Throwable t) {
+            log.error( "LifecycleException ", t );
+            throw new LifecycleException("start: ", t);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public void setClearReferencesRmiTargets(boolean clearReferencesRmiTargets) {
+        this.clearReferencesRmiTargets = clearReferencesRmiTargets;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @param antiJARLocking The antiJARLocking to set.
+     */
+    public void setAntiJARLocking(boolean antiJARLocking) {
+        this.antiJARLocking = antiJARLocking;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the clearReferencesHttpClientKeepAliveThread flag for this
+     * Context.
+     */
+    public boolean getClearReferencesHttpClientKeepAliveThread() {
+        return (this.clearReferencesHttpClientKeepAliveThread);
+    }
+-----CSCI578-----
+
+
+
+    public boolean getClearReferencesRmiTargets() {
+        return this.clearReferencesRmiTargets;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the clearReferencesThreadLocals flag for this Context.
+     */
+    public boolean getClearReferencesThreadLocals() {
+
+        return (this.clearReferencesThreadLocals);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the antiJARLocking flag for this Context.
+     */
+    public boolean getAntiJARLocking() {
+
+        return (this.antiJARLocking);
+
+    }
+-----CSCI578-----
+
+
+
+     /**
+      * Set the clearReferencesHttpClientKeepAliveThread feature for this
+      * Context.
+      *
+      * @param clearReferencesHttpClientKeepAliveThread The new flag value
+      */
+     public void setClearReferencesHttpClientKeepAliveThread(
+             boolean clearReferencesHttpClientKeepAliveThread) {
+         this.clearReferencesHttpClientKeepAliveThread =
+             clearReferencesHttpClientKeepAliveThread;
+     }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the "delegate first" flag for this class loader.
+     *
+     * @param delegate The new "delegate first" flag
+     */
+    public void setDelegate(boolean delegate) {
+
+        this.delegate = delegate;
+
+    }
+-----CSCI578-----
+
+
+
+     /**
+      * Set the clearReferencesStopThreads feature for this Context.
+      *
+      * @param clearReferencesStopThreads The new flag value
+      */
+     public void setClearReferencesStopThreads(
+             boolean clearReferencesStopThreads) {
+         this.clearReferencesStopThreads = clearReferencesStopThreads;
+     }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------- Private Methods
+
+
+    /**
+     * Create associated classLoader.
+     */
+    private WebappClassLoader createClassLoader()
+        throws Exception {
+
+        Class clazz = Class.forName(loaderClass);
+        WebappClassLoader classLoader = null;
+
+        if (parentClassLoader == null) {
+            parentClassLoader = container.getParentClassLoader();
+        }
+        Class[] argTypes = { ClassLoader.class };
+        Object[] args = { parentClassLoader };
+        Constructor constr = clazz.getConstructor(argTypes);
+        classLoader = (WebappClassLoader) constr.newInstance(args);
+
+        return classLoader;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the clearReferencesStopThreads flag for this Context.
+     */
+    public boolean getClearReferencesStopThreads() {
+
+        return (this.clearReferencesStopThreads);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set associated resources.
+     */
+    public void setResources(DirContext resources) {
+
+        this.resources = resources;
+
+        if (resources instanceof ProxyDirContext) {
+            contextName = ((ProxyDirContext) resources).getContextName();
+        }
+    }
+-----CSCI578-----
+
+
+
+     /**
+      * Set the clearReferencesStopTimerThreads feature for this Context.
+      *
+      * @param clearReferencesStopTimerThreads The new flag value
+      */
+     public void setClearReferencesStopTimerThreads(
+             boolean clearReferencesStopTimerThreads) {
+         this.clearReferencesStopTimerThreads = clearReferencesStopTimerThreads;
+     }
+-----CSCI578-----
+
+
+
+     /**
+      * Set the clearReferencesThreadLocals feature for this Context.
+      *
+      * @param clearReferencesThreadLocals The new flag value
+      */
+     public void setClearReferencesThreadLocals(
+             boolean clearReferencesThreadLocals) {
+         this.clearReferencesThreadLocals = clearReferencesThreadLocals;
+     }
+-----CSCI578-----
+
+
+    public void init() {
+        initialized=true;
+
+        if( oname==null ) {
+            // not registered yet - standalone or API
+            if( container instanceof StandardContext) {
+                // Register ourself. The container must be a webapp
+                try {
+                    StandardContext ctx=(StandardContext)container;
+                    Engine eng=(Engine)ctx.getParent().getParent();
+                    String path = ctx.getPath();
+                    if (path.equals("")) {
+                        path = "/";
+                    }   
+                    oname=new ObjectName(ctx.getEngineName() + ":type=Loader,path=" +
+                                path + ",host=" + ctx.getParent().getName());
+                    Registry.getRegistry(null, null).registerComponent(this, oname, null);
+                    controller=oname;
+                } catch (Exception e) {
+                    log.error("Error registering loader", e );
+                }
+            }
+        }
+
+        if( container == null ) {
+            // JMX created the loader
+            // TODO
+
+        }
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Binds a directory context to a class loader.
+     */
+    public static void bind(DirContext dirContext) {
+        ClassLoader currentCL = 
+            Thread.currentThread().getContextClassLoader();
+        if (currentCL != null)
+            clBindings.put(currentCL, dirContext);
+    }
+
+    
+    
+    /**
+     * Unbinds a directory context to a class loader.
+     */
+    public static void unbind() {
+        ClassLoader currentCL = 
+            Thread.currentThread().getContextClassLoader();
+        if (currentCL != null)
+            clBindings.remove(currentCL);
+    }
+
+    
+    
+    /**
+     * Binds a directory context to a class loader.
+     */
+    public static void bind(ClassLoader cl, DirContext dirContext) {
+        clBindings.put(cl, dirContext);
+    }
+
+    
+    
+    /**
+     * Unbinds a directory context to a class loader.
+     */
+    public static void unbind(ClassLoader cl) {
+        clBindings.remove(cl);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a name string (suitable for use by humans) that describes this
+     * Container.  Within the set of child containers belonging to a particular
+     * parent, Container names must be unique.
+     */
+    public String getName();
+-----CSCI578-----
+    
+
+
+    /** Load descriptors. The source can be a File or URL or InputStream for the 
+     * descriptors file. In the case of File and URL, if the extension is ".ser"
+     * a serialized version will be loaded. 
+     * 
+     * This method should be used to explicitely load metadata - but this is not
+     * required in most cases. The registerComponent() method will find metadata
+     * in the same pacakge.
+     * 
+     * @param source
+     */ 
+    public void loadMetadata(Object source ) throws Exception {
+        loadDescriptors( null, source, null );
+    }
+
+
+    /** Register a bean by creating a modeler mbean and adding it to the 
+     * MBeanServer.
+     * 
+     * If metadata is not loaded, we'll look up and read a file named
+     * "mbeans-descriptors.ser" or "mbeans-descriptors.xml" in the same package
+     * or parent.
+     *
+     * If the bean is an instance of DynamicMBean. it's metadata will be converted
+     * to a model mbean and we'll wrap it - so modeler services will be supported
+     *
+     * If the metadata is still not found, introspection will be used to extract
+     * it automatically. 
+     * 
+     * If an mbean is already registered under this name, it'll be first
+     * unregistered.
+     * 
+     * If the component implements MBeanRegistration, the methods will be called.
+     * If the method has a method "setRegistry" that takes a RegistryMBean as
+     * parameter, it'll be called with the current registry.
+     * 
+     *
+     * @param bean Object to be registered
+     * @param oname Name used for registration
+     * @param type The type of the mbean, as declared in mbeans-descriptors. If
+     * null, the name of the class will be used. This can be used as a hint or
+     * by subclasses.
+     *
+     * @since 1.1
+     */ 
+    public void registerComponent(Object bean, String oname, String type)
+           throws Exception
+    {
+        registerComponent(bean, new ObjectName(oname), type);        
+    }
+    
+
+    /** Unregister a component. We'll first check if it is registered,
+     * and mask all errors. This is mostly a helper.
+     * 
+     * @param oname
+     * 
+     * @since 1.1
+     */ 
+    public void unregisterComponent( String oname ) {
+        try {
+            unregisterComponent(new ObjectName(oname));
+        } catch (MalformedObjectNameException e) {
+            log.info("Error creating object name " + e );
+        }
+    }
+
+
+    /** Unregister a component. This is just a helper that
+     * avoids exceptions by checking if the mbean is already registered
+     *
+     * @param oname
+     */
+    public void unregisterComponent( ObjectName oname ) {
+        try {
+            if( getMBeanServer().isRegistered(oname)) {
+                getMBeanServer().unregisterMBean(oname);
+            }
+        } catch( Throwable t ) {
+            log.error( "Error unregistering mbean ", t);
+        }
+    }
+
+
+    /** Register a component 
+     * XXX make it private 
+     * 
+     * @param bean
+     * @param oname
+     * @param type
+     * @throws Exception
+     */ 
+    public void registerComponent(Object bean, ObjectName oname, String type)
+           throws Exception
+    {
+        if( log.isDebugEnabled() ) {
+            log.debug( "Managed= "+ oname);
+        }
+
+        if( bean ==null ) {
+            log.error("Null component " + oname );
+            return;
+        }
+
+        try {
+            if( type==null ) {
+                type=bean.getClass().getName();
+            }
+
+            ManagedBean managed = findManagedBean(bean.getClass(), type);
+
+            // The real mbean is created and registered
+            DynamicMBean mbean = managed.createMBean(bean);
+
+            if(  getMBeanServer().isRegistered( oname )) {
+                if( log.isDebugEnabled()) {
+                    log.debug("Unregistering existing component " + oname );
+                }
+                getMBeanServer().unregisterMBean( oname );
+            }
+
+            getMBeanServer().registerMBean( mbean, oname);
+        } catch( Exception ex) {
+            log.error("Error registering " + oname, ex );
+            throw ex;
+        }
+    }
+
+
+    /** @deprecated - may still be used in code using pre-1.1 builds
+     */
+    public void registerComponent(Object bean, String domain, String type,
+                                  String name)
+            throws Exception
+    {
+        StringBuffer sb=new StringBuffer();
+        sb.append( domain ).append(":");
+        sb.append( name );
+        String nameStr=sb.toString();
+        ObjectName oname=new ObjectName( nameStr );
+        registerComponent(bean, oname, type );
+    }
+
+
+    
+
+    // should be removed
+    public void unregisterComponent( String domain, String name ) {
+        try {
+            ObjectName oname=new ObjectName( domain + ":" + name );
+
+            // XXX remove from our tables.
+            getMBeanServer().unregisterMBean( oname );
+        } catch( Throwable t ) {
+            log.error( "Error unregistering mbean ", t );
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the context path for this Context.
+     */
+    public String getPath() {
+
+        return (getName());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the parent class loader (if any) for web applications.
+     */
+    public ClassLoader getParentClassLoader();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Resources with which this Container is associated.  If there
+     * is no associated Resources object, return the Resources associated with
+     * our parent Container (if any); otherwise return <code>null</code>.
+     */
+    public DirContext getResources();
+-----CSCI578-----
+
+
+    public String getEngineName() {
+        if( engineName != null ) return engineName;
+        return domain;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------- Reloader Methods
+
+
+    /**
+     * Add a new repository to the set of places this ClassLoader can look for
+     * classes to be loaded.
+     *
+     * @param repository Name of a source of classes to be loaded, such as a
+     *  directory pathname, a JAR file pathname, or a ZIP file pathname
+     *
+     * @exception IllegalArgumentException if the specified repository is
+     *  invalid or does not exist
+     */
+    public void addRepository(String repository) {
+
+        // Ignore any of the standard repositories, as they are set up using
+        // either addJar or addRepository
+        if (repository.startsWith("/WEB-INF/lib")
+            || repository.startsWith("/WEB-INF/classes"))
+            return;
+
+        // Add this repository to our underlying class loader
+        try {
+            URL url = new URL(repository);
+            super.addURL(url);
+            hasExternalRepositories = true;
+            repositoryURLs = null;
+        } catch (MalformedURLException e) {
+            IllegalArgumentException iae = new IllegalArgumentException
+                ("Invalid repository: " + repository);
+            iae.initCause(e);
+            throw iae;
+        }
+
+    }
+
+
+
+    /**
+     * Add a new repository to the set of places this ClassLoader can look for
+     * classes to be loaded.
+     *
+     * @param repository Name of a source of classes to be loaded, such as a
+     *  directory pathname, a JAR file pathname, or a ZIP file pathname
+     *
+     * @exception IllegalArgumentException if the specified repository is
+     *  invalid or does not exist
+     */
+    synchronized void addRepository(String repository, File file) {
+
+        // Note : There should be only one (of course), but I think we should
+        // keep this a bit generic
+
+        if (repository == null)
+            return;
+
+        if (log.isDebugEnabled())
+            log.debug("addRepository(" + repository + ")");
+
+        int i;
+
+        // Add this repository to our internal list
+        String[] result = new String[repositories.length + 1];
+        for (i = 0; i < repositories.length; i++) {
+            result[i] = repositories[i];
+        }
+        result[repositories.length] = repository;
+        repositories = result;
+
+        // Add the file to the list
+        File[] result2 = new File[files.length + 1];
+        for (i = 0; i < files.length; i++) {
+            result2[i] = files[i];
+        }
+        result2[files.length] = file;
+        files = result2;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @param searchExternalFirst Whether external repositories should be searched first
+     */
+    public void setSearchExternalFirst(boolean searchExternalFirst) {
+        this.searchExternalFirst = searchExternalFirst;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return a String rendering of this object.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("ClusterSingleSignOn[");
+        if (container == null )
+            sb.append("Container is null");
+        else
+            sb.append(container.getName());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Return a String rendering of this object.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("ReplicationValve[");
+        if (container != null)
+            sb.append(container.getName());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the name of the cluster that this Server is currently configured
+     * to operate within.
+     * 
+     * @return The name of the cluster associated with this server
+     */
+    public String getClusterName() {
+        if(clusterName == null && container != null)
+            return container.getName() ;
+        return clusterName;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return a String rendering of this object.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("SingleSignOn[");
+        if (container == null )
+            sb.append("Container is null");
+        else
+            sb.append(container.getName());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the parent class loader (if any) for this web application.
+     * This call is meaningful only <strong>after</strong> a Loader has
+     * been configured.
+     */
+    public ClassLoader getParentClassLoader() {
+        if (parentClassLoader != null)
+            return (parentClassLoader);
+        if (parent != null) {
+            return (parent.getParentClassLoader());
+        }
+        return (ClassLoader.getSystemClassLoader());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+      * Return the resources DirContext object with which this Container is
+      * associated.  If there is no associated resources object, return the
+      * resources associated with our parent Container (if any); otherwise
+      * return <code>null</code>.
+     */
+    public DirContext getResources() {
+        if (resources != null)
+            return (resources);
+        if (parent != null)
+            return (parent.getResources());
+        return (null);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return a String representation of this component.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer();
+        if (getParent() != null) {
+            sb.append(getParent().toString());
+            sb.append(".");
+        }
+        sb.append("StandardContext[");
+        sb.append(getName());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Given a context path, get the config file name.
+     */
+    protected String getDefaultConfigFile() {
+        String basename = null;
+        String path = getPath();
+        if (path.equals("")) {
+            basename = "ROOT";
+        } else {
+            basename = path.substring(1).replace('/', '#');
+        }
+        return (basename + ".xml");
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param searchExternalFirst Whether external repositories should be searched first
+     */
+    public void setSearchExternalFirst(boolean searchExternalFirst) {
+        this.searchExternalFirst = searchExternalFirst;
+        if (classLoader != null) {
+            classLoader.setSearchExternalFirst(searchExternalFirst);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a String representation of this component.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("WebappLoader[");
+        if (container != null)
+            sb.append(container.getName());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a String rendering of this object.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("RequestDumperValve[");
+        if (container != null)
+            sb.append(container.getName());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a String rendering of this object.
+     */
+    public String toString() {
+        StringBuffer sb = new StringBuffer(this.getClass().getName());
+        sb.append("[");
+        if (container != null)
+            sb.append(container.getName());
+        sb.append("]");
+        return (sb.toString());
+    }

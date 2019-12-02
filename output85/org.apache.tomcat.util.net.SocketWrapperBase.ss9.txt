@@ -1,0 +1,267 @@
+12
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Transfers the data to the socket write buffer (writing that data to the
+     * socket if the buffer fills up using a blocking write) until all the data
+     * has been transferred and space remains in the socket write buffer.
+     *
+     * @param buf   The byte array containing the data to be written
+     * @param off   The offset within the byte array of the data to be written
+     * @param len   The length of the data to be written
+     *
+     * @throws IOException If an IO error occurs during the write
+     */
+    protected void writeBlocking(byte[] buf, int off, int len) throws IOException {
+        // Note: There is an implementation assumption that if the switch from
+        //       non-blocking to blocking has been made then any pending
+        //       non-blocking writes were flushed at the time the switch
+        //       occurred.
+
+        // Keep writing until all the data has been transferred to the socket
+        // write buffer and space remains in that buffer
+        socketBufferHandler.configureWriteBufferForWrite();
+        int thisTime = transfer(buf, off, len, socketBufferHandler.getWriteBuffer());
+        while (socketBufferHandler.getWriteBuffer().remaining() == 0) {
+            len = len - thisTime;
+            off = off + thisTime;
+            doWrite(true);
+            socketBufferHandler.configureWriteBufferForWrite();
+            thisTime = transfer(buf, off, len, socketBufferHandler.getWriteBuffer());
+        }
+    }
+-----CSCI578-----
+
+
+
+    protected void addToBuffers(byte[] buf, int offset, int length) {
+        ByteBufferHolder holder = bufferedWrites.peekLast();
+        if (holder==null || holder.isFlipped() || holder.getBuf().remaining()<length) {
+            ByteBuffer buffer = ByteBuffer.allocate(Math.max(bufferedWriteSize,length));
+            holder = new ByteBufferHolder(buffer,false);
+            bufferedWrites.add(holder);
+        }
+        holder.getBuf().put(buf,offset,length);
+    }
+-----CSCI578-----
+
+
+
+    public boolean isFlipped() {
+        return flipped.get();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Transfers the data to the socket write buffer (writing that data to the
+     * socket if the buffer fills up using a non-blocking write) until either
+     * all the data has been transferred and space remains in the socket write
+     * buffer or a non-blocking write leaves data in the socket write buffer.
+     *
+     * @param buf   The byte array containing the data to be written
+     * @param off   The offset within the byte array of the data to be written
+     * @param len   The length of the data to be written
+     *
+     * @throws IOException If an IO error occurs during the write
+     */
+    protected void writeNonBlocking(byte[] buf, int off, int len) throws IOException {
+        if (bufferedWrites.size() == 0 && socketBufferHandler.isWriteBufferWritable()) {
+            socketBufferHandler.configureWriteBufferForWrite();
+            int thisTime = transfer(buf, off, len, socketBufferHandler.getWriteBuffer());
+            len = len - thisTime;
+            while (!socketBufferHandler.isWriteBufferWritable()) {
+                off = off + thisTime;
+                doWrite(false);
+                if (len > 0 && socketBufferHandler.isWriteBufferWritable()) {
+                    socketBufferHandler.configureWriteBufferForWrite();
+                    thisTime = transfer(buf, off, len, socketBufferHandler.getWriteBuffer());
+                } else {
+                    // Didn't write any data in the last non-blocking write.
+                    // Therefore the write buffer will still be full. Nothing
+                    // else to do here. Exit the loop.
+                    break;
+                }
+                len = len - thisTime;
+            }
+        }
+
+        if (len > 0) {
+            // Remaining data must be buffered
+            addToBuffers(buf, off, len);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Writes the provided data to the socket, buffering any remaining data if
+     * used in non-blocking mode.
+     *
+     * @param block <code>true</code> if a blocking write should be used,
+     *                  otherwise a non-blocking write will be used
+     * @param buf   The byte array containing the data to be written
+     * @param off   The offset within the byte array of the data to be written
+     * @param len   The length of the data to be written
+     *
+     * @throws IOException If an IO error occurs during the write
+     */
+    public final void write(boolean block, byte[] buf, int off, int len) throws IOException {
+        if (len == 0 || buf == null || getSocket() == null) {
+            return;
+        }
+
+        // While the implementations for blocking and non-blocking writes are
+        // very similar they have been split into separate methods to allow
+        // sub-classes to override them individually. NIO2, for example,
+        // overrides the non-blocking write but not the blocking write.
+        if (block) {
+            writeBlocking(buf, off, len);
+        } else {
+            writeNonBlocking(buf, off, len);
+        }
+    }
+
+
+    /**
+     * Gather write. The completion handler will be called once some
+     * data has been written or an error occurred. If a CompletionCheck
+     * object has been provided, the completion handler will only be
+     * called if the callHandler method returned true. If no
+     * CompletionCheck object has been provided, the default NIO2
+     * behavior is used: the completion handler will be called, even
+     * if the write is incomplete and data remains in the buffers, or
+     * if the write completed inline.
+     *
+     * @param block true to block until any pending write is done, if the
+     *        timeout occurs and a write is still pending, a
+     *        WritePendingException will be thrown; false to
+     *        not block but any pending write operation will cause
+     *        a WritePendingException
+     * @param timeout timeout duration for the write
+     * @param unit units for the timeout duration
+     * @param attachment an object to attach to the I/O operation that will be
+     *        used when calling the completion handler
+     * @param check for the IO operation completion
+     * @param handler to call when the IO is complete
+     * @param srcs buffers
+     * @param <A> The attachment type
+     * @return the completion state (done, done inline, or still pending)
+     */
+    public final <A> CompletionState write(boolean block, long timeout, TimeUnit unit, A attachment,
+            CompletionCheck check, CompletionHandler<Long, ? super A> handler,
+            ByteBuffer... srcs) {
+        if (srcs == null) {
+            throw new IllegalArgumentException();
+        }
+        return write(srcs, 0, srcs.length, block, timeout, unit, attachment, check, handler);
+    }
+
+
+    /**
+     * Gather write. The completion handler will be called once some
+     * data has been written or an error occurred. If a CompletionCheck
+     * object has been provided, the completion handler will only be
+     * called if the callHandler method returned true. If no
+     * CompletionCheck object has been provided, the default NIO2
+     * behavior is used: the completion handler will be called, even
+     * if the write is incomplete and data remains in the buffers, or
+     * if the write completed inline.
+     *
+     * @param srcs buffers
+     * @param offset in the buffer array
+     * @param length in the buffer array
+     * @param block true to block until any pending write is done, if the
+     *        timeout occurs and a write is still pending, a
+     *        WritePendingException will be thrown; false to
+     *        not block but any pending write operation will cause
+     *        a WritePendingException
+     * @param timeout timeout duration for the write
+     * @param unit units for the timeout duration
+     * @param attachment an object to attach to the I/O operation that will be
+     *        used when calling the completion handler
+     * @param check for the IO operation completion
+     * @param handler to call when the IO is complete
+     * @param <A> The attachment type
+     * @return the completion state (done, done inline, or still pending)
+     */
+    public <A> CompletionState write(ByteBuffer[] srcs, int offset, int length,
+            boolean block, long timeout, TimeUnit unit, A attachment,
+            CompletionCheck check, CompletionHandler<Long, ? super A> handler) {
+        throw new UnsupportedOperationException();
+    }
+-----CSCI578-----
+
+
+
+    public ByteBuffer getWriteBuffer() {
+        return writeBuffer;
+    }
+-----CSCI578-----
+
+
+
+    public void configureWriteBufferForWrite() {
+        setWriteBufferConfiguredForWrite(true);
+    }
+-----CSCI578-----
+
+
+
+    private void setWriteBufferConfiguredForWrite(boolean writeBufferConfiguredForWrite) {
+        // NO-OP if buffer is already in correct state
+        if (this.writeBufferConfiguredForWrite != writeBufferConfiguredForWrite) {
+            if (writeBufferConfiguredForWrite) {
+                // Switching to write
+                int remaining = writeBuffer.remaining();
+                if (remaining == 0) {
+                    writeBuffer.clear();
+                } else {
+                    writeBuffer.compact();
+                    writeBuffer.position(remaining);
+                    writeBuffer.limit(writeBuffer.capacity());
+                }
+            } else {
+                // Switching to read
+                writeBuffer.flip();
+            }
+            this.writeBufferConfiguredForWrite = writeBufferConfiguredForWrite;
+        }
+    }
+-----CSCI578-----
+
+
+
+    public boolean isWriteBufferWritable() {
+        if (writeBufferConfiguredForWrite) {
+            return writeBuffer.hasRemaining();
+        } else {
+            return writeBuffer.remaining() == 0;
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Utility methods
+
+    protected static int transfer(byte[] from, int offset, int length, ByteBuffer to) {
+        int max = Math.min(length, to.remaining());
+        to.put(from, offset, max);
+        return max;
+    }
+
+
+    protected static void transfer(ByteBuffer from, ByteBuffer to) {
+        int max = Math.min(from.remaining(), to.remaining());
+        int fromLimit = from.limit();
+        from.limit(from.position() + max);
+        to.put(from);
+        from.limit(fromLimit);
+    }
+-----CSCI578-----

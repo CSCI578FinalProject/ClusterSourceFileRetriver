@@ -1,0 +1,190 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Rotate the log file if necessary.
+     */
+    public void rotate() {
+        if (rotatable) {
+            // Only do a logfile switch check once a second, max.
+            long systime = System.currentTimeMillis();
+            if ((systime - rotationLastChecked) > 1000) {
+                synchronized(this) {
+                    if ((systime - rotationLastChecked) > 1000) {
+                        rotationLastChecked = systime;
+
+                        String tsDate;
+                        // Check for a change of date
+                        tsDate = fileDateFormatter.format(new Date(systime));
+
+                        // If the date has changed, switch log files
+                        if (!dateStamp.equals(tsDate)) {
+                            close(true);
+                            dateStamp = tsDate;
+                            open();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    /**
+     * Rename the existing log file to something else. Then open the
+     * old log file name up once again. Intended to be called by a JMX
+     * agent.
+     *
+     * @param newFileName The file name to move the log file entry to
+     * @return true if a file was rotated with no error
+     */
+    public synchronized boolean rotate(String newFileName) {
+
+        if (currentLogFile != null) {
+            File holder = currentLogFile;
+            close(false);
+            try {
+                holder.renameTo(new File(newFileName));
+            } catch (Throwable e) {
+                ExceptionUtils.handleThrowable(e);
+                log.error(sm.getString("accessLogValve.rotateFail"), e);
+            }
+
+            /* Make sure date is correct */
+            dateStamp = fileDateFormatter.format(
+                    new Date(System.currentTimeMillis()));
+
+            open();
+            return true;
+        } else {
+            return false;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Log the specified message to the log file, switching files if the date
+     * has changed since the previous log call.
+     *
+     * @param message Message to be logged
+     */
+    @Override
+    public void log(CharArrayWriter message) {
+
+        rotate();
+
+        /* In case something external rotated the file instead */
+        if (checkExists) {
+            synchronized (this) {
+                if (currentLogFile != null && !currentLogFile.exists()) {
+                    try {
+                        close(false);
+                    } catch (Throwable e) {
+                        ExceptionUtils.handleThrowable(e);
+                        log.info(sm.getString("accessLogValve.closeFail"), e);
+                    }
+
+                    /* Make sure date is correct */
+                    dateStamp = fileDateFormatter.format(
+                            new Date(System.currentTimeMillis()));
+
+                    open();
+                }
+            }
+        }
+
+        // Log this message
+        try {
+            synchronized(this) {
+                if (writer != null) {
+                    message.writeTo(writer);
+                    writer.println("");
+                    if (!buffered) {
+                        writer.flush();
+                    }
+                }
+            }
+        } catch (IOException ioe) {
+            log.warn(sm.getString(
+                    "accessLogValve.writeFail", message.toString()), ioe);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Close the currently open log file (if any)
+     *
+     * @param rename Rename file to final name after closing
+     */
+    private synchronized void close(boolean rename) {
+        if (writer == null) {
+            return;
+        }
+        writer.flush();
+        writer.close();
+        if (rename && renameOnRotate) {
+            File newLogFile = getLogFile(true);
+            if (!newLogFile.exists()) {
+                try {
+                    if (!currentLogFile.renameTo(newLogFile)) {
+                        log.error(sm.getString("accessLogValve.renameFail", currentLogFile, newLogFile));
+                    }
+                } catch (Throwable e) {
+                    ExceptionUtils.handleThrowable(e);
+                    log.error(sm.getString("accessLogValve.renameFail", currentLogFile, newLogFile), e);
+                }
+            } else {
+                log.error(sm.getString("accessLogValve.alreadyExists", currentLogFile, newLogFile));
+            }
+        }
+        writer = null;
+        dateStamp = "";
+        currentLogFile = null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Open the new log file for the date specified by <code>dateStamp</code>.
+     */
+    protected synchronized void open() {
+        // Open the current log file
+        // If no rotate - no need for dateStamp in fileName
+        File pathname = getLogFile(rotatable && !renameOnRotate);
+
+        Charset charset = null;
+        if (encoding != null) {
+            try {
+                charset = B2CConverter.getCharset(encoding);
+            } catch (UnsupportedEncodingException ex) {
+                log.error(sm.getString(
+                        "accessLogValve.unsupportedEncoding", encoding), ex);
+            }
+        }
+        if (charset == null) {
+            charset = StandardCharsets.ISO_8859_1;
+        }
+
+        try {
+            writer = new PrintWriter(new BufferedWriter(new OutputStreamWriter(
+                    new FileOutputStream(pathname, true), charset), 128000),
+                    false);
+
+            currentLogFile = pathname;
+        } catch (IOException e) {
+            writer = null;
+            currentLogFile = null;
+            log.error(sm.getString("accessLogValve.openFail", pathname), e);
+        }
+    }
+-----CSCI578-----
+
+    }
+        super.open();

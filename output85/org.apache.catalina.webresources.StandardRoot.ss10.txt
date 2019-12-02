@@ -1,0 +1,24 @@
+2
+-----CSCI578-----
+
+
+    public void setObjectMaxSize(int objectMaxSize) {
+        if (objectMaxSize * 1024L > Integer.MAX_VALUE) {
+            log.warn(sm.getString("cache.objectMaxSizeTooBigBytes", Integer.valueOf(objectMaxSize)));
+            this.objectMaxSize = Integer.MAX_VALUE;
+        }
+        // Internally bytes, externally kilobytes
+        this.objectMaxSize = objectMaxSize * 1024;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setCacheObjectMaxSize(int cacheObjectMaxSize) {
+        cache.setObjectMaxSize(cacheObjectMaxSize);
+        // Don't enforce the limit when not running as attributes may get set in
+        // any order.
+        if (getState().isAvailable()) {
+            cache.enforceObjectMaxSizeLimit();
+        }
+    }

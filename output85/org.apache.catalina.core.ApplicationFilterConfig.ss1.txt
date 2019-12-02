@@ -1,0 +1,107 @@
+4
+-----CSCI578-----
+
+
+    private void initFilter() throws ServletException {
+        if (context instanceof StandardContext &&
+                context.getSwallowOutput()) {
+            try {
+                SystemLogHandler.startCapture();
+                filter.init(this);
+            } finally {
+                String capturedlog = SystemLogHandler.stopCapture();
+                if (capturedlog != null && capturedlog.length() > 0) {
+                    getServletContext().log(capturedlog);
+                }
+            }
+        } else {
+            filter.init(this);
+        }
+
+        // Expose filter via JMX
+        registerJMX();
+    }
+-----CSCI578-----
+
+
+    private void registerJMX() {
+        String parentName = context.getName();
+        if (!parentName.startsWith("/")) {
+            parentName = "/" + parentName;
+        }
+
+        String hostName = context.getParent().getName();
+        hostName = (hostName == null) ? "DEFAULT" : hostName;
+
+        // domain == engine name
+        String domain = context.getParent().getParent().getName();
+
+        String webMod = "//" + hostName + parentName;
+        String onameStr = null;
+        String filterName = filterDef.getFilterName();
+        if (Util.objectNameValueNeedsQuote(filterName)) {
+            filterName = ObjectName.quote(filterName);
+        }
+        if (context instanceof StandardContext) {
+            StandardContext standardContext = (StandardContext) context;
+            onameStr = domain + ":j2eeType=Filter,WebModule=" + webMod +
+                    ",name=" + filterName + ",J2EEApplication=" +
+                    standardContext.getJ2EEApplication() + ",J2EEServer=" +
+                    standardContext.getJ2EEServer();
+        } else {
+            onameStr = domain + ":j2eeType=Filter,name=" + filterName +
+                 ",WebModule=" + webMod;
+        }
+        try {
+            oname = new ObjectName(onameStr);
+            Registry.getRegistry(null, null).registerComponent(this, oname,
+                    null);
+        } catch (Exception ex) {
+            log.info(sm.getString("applicationFilterConfig.jmxRegisterFail",
+                    getFilterClass(), getFilterName()), ex);
+        }
+    }
+
+
+    private void unregisterJMX() {
+        // unregister this component
+        if (oname != null) {
+            try {
+                Registry.getRegistry(null, null).unregisterComponent(oname);
+                if (log.isDebugEnabled())
+                    log.debug(sm.getString(
+                            "applicationFilterConfig.jmxUnregister",
+                            getFilterClass(), getFilterName()));
+            } catch(Exception ex) {
+                log.error(sm.getString(
+                        "applicationFilterConfig.jmxUnregisterFail",
+                        getFilterClass(), getFilterName()), ex);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the ServletContext of our associated web application.
+     */
+    @Override
+    public ServletContext getServletContext() {
+
+        return this.context.getServletContext();
+
+    }
+-----CSCI578-----
+
+
+    public static boolean objectNameValueNeedsQuote(String input) {
+        for (int i = 0; i < input.length(); i++) {
+            char ch = input.charAt(i);
+            if (ch == ',' || ch == '=' || ch == ':' || ch == '*' || ch == '?') {
+                return true;
+            }
+        }
+        return false;
+    }

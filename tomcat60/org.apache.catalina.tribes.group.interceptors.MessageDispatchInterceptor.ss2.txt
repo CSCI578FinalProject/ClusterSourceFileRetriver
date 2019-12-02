@@ -1,0 +1,34 @@
+3
+    
+    public void stopQueue() {
+        run = false;
+        msgDispatchThread.interrupt();
+        queue.setEnabled(false);
+        setAndGetCurrentSize(0);
+    }
+    
+    public synchronized long setAndGetCurrentSize(long value) {
+        currentSize = value;
+        return value;
+    }
+    
+    public void stopQueue() {
+        run = false;
+        msgDispatchThread.interrupt();
+        queue.setEnabled(false);
+        setAndGetCurrentSize(0);
+    }
+
+    
+    public void stop(int svc) throws ChannelException {
+        //stop the thread
+        if ( run ) {
+            synchronized (this) {
+                if ( run && ((svc & Channel.SND_TX_SEQ)==Channel.SND_TX_SEQ)) {
+                    stopQueue();
+                }//end if
+            }//sync
+        }//end if
+
+        super.stop(svc);
+    }

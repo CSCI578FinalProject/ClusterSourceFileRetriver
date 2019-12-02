@@ -1,0 +1,32 @@
+2
+-----CSCI578-----
+
+
+
+    @Override
+    public Map<String, ? extends ServletRegistration> getServletRegistrations() {
+        Map<String, ApplicationServletRegistration> result = new HashMap<>();
+
+        Container[] wrappers = context.findChildren();
+        for (Container wrapper : wrappers) {
+            result.put(((Wrapper) wrapper).getName(),
+                    new ApplicationServletRegistration(
+                            (Wrapper) wrapper, context));
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public Map<String, ? extends ServletRegistration> getServletRegistrations() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Map<String, ? extends ServletRegistration>) doPrivileged(
+                    "getServletRegistrations", null);
+        } else {
+            return context.getServletRegistrations();
+        }
+    }

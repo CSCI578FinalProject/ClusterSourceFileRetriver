@@ -1,0 +1,83 @@
+17
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void run() {
+        try {
+            listen();
+        } catch (Exception x) {
+            log.error(sm.getString("bioReceiver.run.fail"), x);
+        }
+    }
+-----CSCI578-----
+
+
+
+    public synchronized void serviceSocket(Socket socket, ObjectReader reader) {
+        this.socket = socket;
+        this.reader = reader;
+    }
+-----CSCI578-----
+
+
+    public int available() {
+        return idle.size();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void listen() throws Exception {
+        if (doListen()) {
+            log.warn(sm.getString("bioReceiver.already.started"));
+            return;
+        }
+        setListen(true);
+
+        while ( doListen() ) {
+            Socket socket = null;
+            if ( getTaskPool().available() < 1 ) {
+                if ( log.isWarnEnabled() )
+                    log.warn(sm.getString("bioReceiver.threads.busy"));
+            }
+            BioReplicationTask task = (BioReplicationTask)getTaskPool().getRxTask();
+            if ( task == null ) continue; //should never happen
+            try {
+                socket = serverSocket.accept();
+            }catch ( Exception x ) {
+                if ( doListen() ) throw x;
+            }
+            if ( !doListen() ) {
+                task.setDoRun(false);
+                task.serviceSocket(null,null);
+                getExecutor().execute(task);
+                break; //regular shutdown
+            }
+            if ( socket == null ) continue;
+            socket.setReceiveBufferSize(getRxBufSize());
+            socket.setSendBufferSize(getTxBufSize());
+            socket.setTcpNoDelay(getTcpNoDelay());
+            socket.setKeepAlive(getSoKeepAlive());
+            socket.setOOBInline(getOoBInline());
+            socket.setReuseAddress(getSoReuseAddress());
+            socket.setSoLinger(getSoLingerOn(),getSoLingerTime());
+            socket.setSoTimeout(getTimeout());
+            ObjectReader reader = new ObjectReader(socket);
+            task.serviceSocket(socket,reader);
+            getExecutor().execute(task);
+        }//while
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

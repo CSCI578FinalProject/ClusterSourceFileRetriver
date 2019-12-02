@@ -1,0 +1,179 @@
+10
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // TODO RFC2965 fields also need to be passed
+    public static void appendCookieValue( StringBuffer headerBuf,
+                                          int version,
+                                          String name,
+                                          String value,
+                                          String path,
+                                          String domain,
+                                          String comment,
+                                          int maxAge,
+                                          boolean isSecure,
+                                          boolean isHttpOnly)
+    {
+        StringBuffer buf = new StringBuffer();
+        // Servlet implementation checks name
+        buf.append( name );
+        buf.append("=");
+        // Servlet implementation does not check anything else
+        
+        version = maybeQuote2(version, buf, value,true);
+
+        // Add version 1 specific information
+        if (version == 1) {
+            // Version=1 ... required
+            buf.append ("; Version=1");
+
+            // Comment=comment
+            if ( comment!=null ) {
+                buf.append ("; Comment=");
+                maybeQuote2(version, buf, comment);
+            }
+        }
+        
+        // Add domain information, if present
+        if (domain!=null) {
+            buf.append("; Domain=");
+            maybeQuote2(version, buf, domain);
+        }
+
+        // Max-Age=secs ... or use old "Expires" format
+        // TODO RFC2965 Discard
+        if (maxAge >= 0) {
+            if (version > 0) {
+                buf.append ("; Max-Age=");
+                buf.append (maxAge);
+            }
+            // IE6, IE7 and possibly other browsers don't understand Max-Age.
+            // They do understand Expires, even with V1 cookies!
+            if (version == 0 || ALWAYS_ADD_EXPIRES) {
+                // Wdy, DD-Mon-YY HH:MM:SS GMT ( Expires Netscape format )
+                buf.append ("; Expires=");
+                // To expire immediately we need to set the time in past
+                if (maxAge == 0)
+                    buf.append( ancientDate );
+                else
+                    OLD_COOKIE_FORMAT.get().format(
+                            new Date(System.currentTimeMillis() +
+                                    maxAge*1000L),
+                            buf, new FieldPosition(0));
+            }
+        }
+
+        // Path=path
+        if (path!=null) {
+            buf.append ("; Path=");
+            if (version==0) {
+                maybeQuote2(version, buf, path);
+            } else {
+                maybeQuote2(version, buf, path, ServerCookie.tspecials2NoSlash, false);
+            }
+        }
+
+        // Secure
+        if (isSecure) {
+          buf.append ("; Secure");
+        }
+        
+        // HttpOnly
+        if (isHttpOnly) {
+            buf.append("; HttpOnly");
+        }
+        headerBuf.append(buf);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public static boolean isToken2(String value) {
+        return isToken2(value,null);
+    }
+
+
+    public static boolean isToken2(String value, String literals) {
+        String tspecials2 = (literals==null?ServerCookie.tspecials2:literals);
+        if( value==null) return true;
+        int len = value.length();
+
+        for (int i = 0; i < len; i++) {
+            char c = value.charAt(i);
+            if (tspecials2.indexOf(c) != -1)
+                return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+    public static boolean containsCTL(String value, int version) {
+        if( value==null) return false;
+        int len = value.length();
+        for (int i = 0; i < len; i++) {
+            char c = value.charAt(i);
+            if (c < 0x20 || c >= 0x7f) {
+                if (c == 0x09)
+                    continue; //allow horizontal tabs
+                return true;
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+    /*
+     * Tests a string and returns true if the string counts as a
+     * reserved token in the Java language.
+     *
+     * @param value the <code>String</code> to be tested
+     *
+     * @return      <code>true</code> if the <code>String</code> is a reserved
+     *              token; <code>false</code> if it is not
+     */
+    public static boolean isToken(String value) {
+        return isToken(value,null);
+    }
+
+    
+    public static boolean isToken(String value, String literals) {
+        String tspecials = (literals==null?ServerCookie.tspecials:literals);
+        if( value==null) return true;
+        int len = value.length();
+
+        for (int i = 0; i < len; i++) {
+            char c = value.charAt(i);
+
+            if (tspecials.indexOf(c) != -1)
+                return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * @deprecated - Not used
+     */
+    public static boolean checkName( String name ) {
+        if (!isToken(name)
+                || name.equalsIgnoreCase("Comment")     // rfc2019
+                || name.equalsIgnoreCase("Discard")     // rfc2965
+                || name.equalsIgnoreCase("Domain")      // rfc2019
+                || name.equalsIgnoreCase("Expires")     // Netscape
+                || name.equalsIgnoreCase("Max-Age")     // rfc2019
+                || name.equalsIgnoreCase("Path")        // rfc2019
+                || name.equalsIgnoreCase("Secure")      // rfc2019
+                || name.equalsIgnoreCase("Version")     // rfc2019
+                // TODO remaining RFC2965 attributes
+            ) {
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----

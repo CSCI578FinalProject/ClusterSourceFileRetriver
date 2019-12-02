@@ -1,0 +1,68 @@
+2
+-----CSCI578-----
+
+
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called before any of the public
+     * methods of this component are utilized.  It should also send a
+     * LifecycleEvent of type START_EVENT to any registered listeners.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (started) {
+            if (log.isInfoEnabled()) {
+                log.info(sm.getString("standardService.start.started"));
+            }
+            return;
+        }
+        
+        if( ! initialized )
+            init(); 
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(BEFORE_START_EVENT, null);
+        if(log.isInfoEnabled())
+            log.info(sm.getString("standardService.start.name", this.name));
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+        started = true;
+
+        // Start our defined Container first
+        if (container != null) {
+            synchronized (container) {
+                if (container instanceof Lifecycle) {
+                    ((Lifecycle) container).start();
+                }
+            }
+        }
+
+        synchronized (executors) {
+            for ( int i=0; i<executors.size(); i++ ) {
+                executors.get(i).start();
+            }
+        }
+
+        // Start our defined Connectors second
+        synchronized (connectors) {
+            for (int i = 0; i < connectors.length; i++) {
+                try {
+                    ((Lifecycle) connectors[i]).start();
+                } catch (Exception e) {
+                    log.error(sm.getString(
+                            "standardService.connector.startFailed",
+                            connectors[i]), e);
+                }
+            }
+        }
+        
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(AFTER_START_EVENT, null);
+
+    }
+-----CSCI578-----

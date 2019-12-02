@@ -1,0 +1,148 @@
+8
+-----CSCI578-----
+
+    
+    
+   /**
+     * Create a new StandardContext.
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param path The context path for this Context
+     * @param docBase Document base directory (or WAR) for this Context
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createStandardContext(String parent, 
+                                        String path,
+                                        String docBase)
+        throws Exception {
+                                            
+        // XXX for backward compatibility. Remove it once supported by the admin
+        return 
+            createStandardContext(parent,path,docBase,false,false,false,false);                                  
+    }
+
+
+   /**
+     * Create a new StandardContext.
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param path The context path for this Context
+     * @param docBase Document base directory (or WAR) for this Context
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createStandardContext(String parent, 
+                                        String path,
+                                        String docBase,
+                                        boolean xmlValidation,
+                                        boolean xmlNamespaceAware,
+                                        boolean tldValidation,
+                                        boolean tldNamespaceAware)
+        throws Exception {
+
+        // Create a new StandardContext instance
+        StandardContext context = new StandardContext();
+        path = getPathStr(path);
+        context.setPath(path);
+        context.setDocBase(docBase);
+        context.setXmlValidation(xmlValidation);
+        context.setXmlNamespaceAware(xmlNamespaceAware);
+        context.setTldValidation(tldValidation);
+        context.setTldNamespaceAware(tldNamespaceAware);
+        
+        ContextConfig contextConfig = new ContextConfig();
+        context.addLifecycleListener(contextConfig);
+
+        // Add the new instance to its parent component
+        ObjectName pname = new ObjectName(parent);
+        ObjectName deployer = new ObjectName(pname.getDomain()+
+                                             ":type=Deployer,host="+
+                                             pname.getKeyProperty("host"));
+        if(mserver.isRegistered(deployer)) {
+            String contextPath = context.getPath();
+            mserver.invoke(deployer, "addServiced",
+                           new Object [] {contextPath},
+                           new String [] {"java.lang.String"});
+            String configPath = (String)mserver.getAttribute(deployer,
+                                                             "configBaseName");
+            String baseName = getConfigFile(contextPath);
+            File configFile = new File(new File(configPath), baseName+".xml");
+            context.setConfigFile(configFile.getAbsolutePath());
+            mserver.invoke(deployer, "manageApp",
+                           new Object[] {context},
+                           new String[] {"org.apache.catalina.Context"});
+            mserver.invoke(deployer, "removeServiced",
+                           new Object [] {contextPath},
+                           new String [] {"java.lang.String"});
+        } else {
+            log.warn("Deployer not found for "+pname.getKeyProperty("host"));
+            Service service = getService(pname);
+            Engine engine = (Engine) service.getContainer();
+            Host host = (Host) engine.findChild(pname.getKeyProperty("host"));
+            host.addChild(context);
+        }
+
+        // Return the corresponding MBean name
+        ObjectName oname = context.getJmxName();
+
+        return (oname.toString());
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Given a context path, get the config file name.
+     */
+    private String getConfigFile(String path) {
+        String basename = null;
+        if (path.equals("")) {
+            basename = "ROOT";
+        } else {
+            basename = path.substring(1).replace('/', '#');
+        }
+        return (basename);
+    }
+-----CSCI578-----
+
+
+
+    public void setTldValidation(boolean tldValidation){
+        this.tldValidation = tldValidation;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the path to a file to save this Context information.
+     *
+     * @param configFile The path to a file to save this Context information.
+     */
+    public void setConfigFile(String configFile) {
+
+        this.configFile = configFile;
+    }
+-----CSCI578-----
+
+
+
+    public void setTldNamespaceAware(boolean tldNamespaceAware){
+        // NO-OP;
+    }
+-----CSCI578-----
+
+
+
+    public void setXmlNamespaceAware(boolean webXmlNamespaceAware){
+        this.webXmlNamespaceAware= webXmlNamespaceAware;
+    }
+-----CSCI578-----
+
+
+
+    public void setXmlValidation(boolean webXmlValidation){
+        this.webXmlValidation = webXmlValidation;
+    }
+-----CSCI578-----

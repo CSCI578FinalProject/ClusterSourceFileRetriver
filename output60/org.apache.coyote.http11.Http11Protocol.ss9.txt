@@ -1,0 +1,202 @@
+18
+-----CSCI578-----
+
+
+    /** General mechanism to pass attributes from the
+     *  ServerConnector to the socket factory.
+     *
+     *  Note that the "prefered" mechanism is to
+     *  use bean setters and explicit methods, but
+     *  this allows easy configuration via server.xml
+     *  or simple Properties
+     */
+    public void setAttribute( String name, Object value ) {
+	if( name!=null && value !=null)
+	    attributes.put( name, value );
+    }
+-----CSCI578-----
+
+    abstract public ServerSocketFactory getServerSocketFactory();
+
+    abstract public ServerSocketFactory getServerSocketFactory(String sslProtocol);
+-----CSCI578-----
+
+
+    public static SSLImplementation getInstance() throws ClassNotFoundException
+    {
+	for(int i=0;i<implementations.length;i++){
+	    try {
+               SSLImplementation impl=
+		    getInstance(implementations[i]);
+		return impl;
+	    } catch (Exception e) {
+		if(logger.isTraceEnabled()) 
+		    logger.trace("Error creating " + implementations[i],e);
+	    }
+	}
+
+	// If we can't instantiate any of these
+	throw new ClassNotFoundException("Can't find any SSL implementation");
+    }
+
+
+    public static SSLImplementation getInstance(String className)
+	throws ClassNotFoundException
+    {
+	if(className==null) return getInstance();
+
+	try {
+	    // Workaround for the J2SE 1.4.x classloading problem (under Solaris).
+	    // Class.forName(..) fails without creating class using new.
+	    // This is an ugly workaround. 
+	    if( JSSEImplementationClass.equals(className) ) {
+		return new org.apache.tomcat.util.net.jsse.JSSEImplementation();
+	    }
+	    Class<?> clazz=Class.forName(className);
+	    return (SSLImplementation)clazz.newInstance();
+	} catch (Exception e){
+	    if(logger.isDebugEnabled())
+		logger.debug("Error loading SSL Implementation "
+			     +className, e);
+	    throw new ClassNotFoundException("Error loading SSL Implementation "
+				      +className+ " :" +e.toString());
+	}
+    }
+-----CSCI578-----
+
+
+
+    public void init() throws Exception {
+        endpoint.setName(getName());
+        endpoint.setHandler(cHandler);
+
+        // Verify the validity of the configured socket factory
+        try {
+            if (isSSLEnabled()) {
+                sslImplementation =
+                    SSLImplementation.getInstance(sslImplementationName);
+                socketFactory = sslImplementation.getServerSocketFactory(
+                        (String) getAttribute("sslProtocol"));
+                endpoint.setServerSocketFactory(socketFactory);
+            } else if (socketFactoryName != null) {
+                socketFactory = (ServerSocketFactory) Class.forName(socketFactoryName).newInstance();
+                endpoint.setServerSocketFactory(socketFactory);
+            }
+        } catch (Exception ex) {
+            log.error(sm.getString("http11protocol.socketfactory.initerror"),
+                      ex);
+            throw ex;
+        }
+
+        if (socketFactory!=null) {
+            Iterator<String> attE = attributes.keySet().iterator();
+            while( attE.hasNext() ) {
+                String key = attE.next();
+                Object v=attributes.get(key);
+                socketFactory.setAttribute(key, v);
+            }
+        }
+
+        try {
+            endpoint.init();
+        } catch (Exception ex) {
+            log.error(sm.getString("http11protocol.endpoint.initerror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled())
+            log.info(sm.getString("http11protocol.init", getName()));
+
+    }
+-----CSCI578-----
+
+    public void setServerSocketFactory(ServerSocketFactory factory) { this.serverSocketFactory = factory; }
+-----CSCI578-----
+
+    public void setName(String name) { this.name = name; }
+-----CSCI578-----
+
+    public void setHandler(Handler handler ) { this.handler = handler; }
+-----CSCI578-----
+
+    public boolean isSSLEnabled() { return SSLEnabled;}
+-----CSCI578-----
+
+
+    public Object getAttribute(String key) {
+        return attributes.get(key);
+    }
+-----CSCI578-----
+
+
+
+    /** Start the protocol
+     */
+    public void init() throws Exception {
+        endpoint.setName(getName());
+        endpoint.setHandler(cHandler);
+
+        try {
+            endpoint.init();
+        } catch (Exception ex) {
+            log.error(sm.getString("ajpprotocol.endpoint.initerror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled()) {
+            log.info(sm.getString("ajpprotocol.init", getName()));
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get a property
+     */
+    public String getProperty(String name) {
+        return (String)getAttribute(name);
+    }
+-----CSCI578-----
+
+
+    /*
+     * Note: All the following are JSSE/java.io specific attributes.
+     */
+
+    public String getKeystore() {
+        return (String) getAttribute("keystore");
+    }
+-----CSCI578-----
+
+
+    public String getKeypass() {
+        return (String) getAttribute("keypass");
+    }
+-----CSCI578-----
+
+
+    public String getKeytype() {
+        return (String) getAttribute("keystoreType");
+    }
+-----CSCI578-----
+
+
+    public String getClientauth() {
+        return (String) getAttribute("clientauth");
+    }
+-----CSCI578-----
+
+
+    public String getAlgorithm() {
+        return (String) getAttribute("algorithm");
+    }
+-----CSCI578-----
+
+
+    public String getCiphers() {
+        return (String) getAttribute("ciphers");
+    }
+-----CSCI578-----
+
+
+    public String getKeyAlias() {
+        return (String) getAttribute("keyAlias");
+    }

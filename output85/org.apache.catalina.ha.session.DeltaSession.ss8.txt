@@ -1,0 +1,107 @@
+7
+-----CSCI578-----
+
+
+   public boolean isNotifyListenersOnReplication();
+-----CSCI578-----
+
+
+    public ClassLoader[] getClassLoaders() {
+        if (manager instanceof ClusterManagerBase) {
+            return ((ClusterManagerBase)manager).getClassLoaders();
+        } else if (manager instanceof ManagerBase) {
+            ManagerBase mb = (ManagerBase)manager;
+            return ClusterManagerBase.getClassLoaders(mb.getContext());
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Applies a diff to an existing object.
+     * @param diff Serialized diff data
+     * @param offset Array offset
+     * @param length Array length
+     * @throws IOException IO error deserializing
+     */
+    @Override
+    public void applyDiff(byte[] diff, int offset, int length) throws IOException, ClassNotFoundException {
+        lock();
+        try (ObjectInputStream stream = ((ClusterManager) getManager()).getReplicationStream(diff, offset, length)) {
+            ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
+            try {
+                ClassLoader[] loaders = getClassLoaders();
+                if (loaders != null && loaders.length > 0)
+                    Thread.currentThread().setContextClassLoader(loaders[0]);
+                getDeltaRequest().readExternal(stream);
+                getDeltaRequest().execute(this, ((ClusterManager)getManager()).isNotifyListenersOnReplication());
+            } finally {
+                Thread.currentThread().setContextClassLoader(contextLoader);
+            }
+        } finally {
+            unlock();
+        }
+    }
+-----CSCI578-----
+
+
+   /**
+    * Open stream and use correct ClassLoader (Container), switching thread
+    * context class loader.
+    *
+    * @param data The data
+    * @return The object input stream
+    * @throws IOException An error occurred
+    */
+   public ReplicationStream getReplicationStream(byte[] data) throws IOException;
+
+
+   public ReplicationStream getReplicationStream(byte[] data, int offset, int length) throws IOException;
+-----CSCI578-----
+
+
+
+    public static ClassLoader[] getClassLoaders(Context context) {
+        ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+        Loader loader = context.getLoader();
+        ClassLoader classLoader = null;
+        if (loader != null) {
+            classLoader = loader.getClassLoader();
+        }
+        if (classLoader == null) {
+            classLoader = tccl;
+        }
+        if (classLoader == tccl) {
+            return new ClassLoader[] {classLoader};
+        } else {
+            return new ClassLoader[] {classLoader, tccl};
+        }
+    }
+
+
+
+    public ClassLoader[] getClassLoaders() {
+        return getClassLoaders(getContext());
+    }
+-----CSCI578-----
+
+
+    public DeltaRequest getDeltaRequest() {
+        if (deltaRequest == null) resetDeltaRequest();
+        return deltaRequest;
+    }
+-----CSCI578-----
+
+
+    // ----------------------------------------------------- ReplicatedMapEntry
+
+    /**
+     * Has the object changed since last replication
+     * and is not in a locked state
+     * @return boolean
+     */
+    @Override
+    public boolean isDirty() {
+        return getDeltaRequest().getSize()>0;
+    }

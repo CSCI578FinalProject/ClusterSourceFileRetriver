@@ -1,0 +1,41 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // loop forever waiting for work to do
+    @Override
+    public synchronized void run()
+    {
+        if ( socket == null ) return;
+        try {
+            drainSocket();
+        } catch ( Exception x ) {
+            log.error(sm.getString("bioReplicationTask.unable.service"), x);
+        }finally {
+            try {
+                socket.close();
+            }catch (Exception e) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("bioReplicationTask.socket.closeFailed"), e);
+                }
+            }
+            try {
+                reader.close();
+            }catch (Exception e) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("bioReplicationTask.reader.closeFailed"), e);
+                }
+            }
+            reader = null;
+            socket = null;
+        }
+        // done, ready for more, return to pool
+        if ( getTaskPool() != null ) getTaskPool().returnWorker (this);
+    }
+-----CSCI578-----
+
+
+    public void close() {
+        this.buffer = null;
+    }

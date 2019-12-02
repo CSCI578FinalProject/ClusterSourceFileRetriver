@@ -1,0 +1,197 @@
+17
+
+    // -------------------- Deprecated 1.0 methods  --------------------
+    
+    /**
+     * Factory method to create (if necessary) and return our
+     * <code>MBeanServer</code> instance.
+     *
+     * @since 1.0
+     * @deprecated Use the instance method
+     */
+    public static MBeanServer getServer() {
+        return Registry.getRegistry().getMBeanServer();
+    }
+
+    // -------------------- Helpers  --------------------
+
+    /** Get the type of an attribute of the object, from the metadata.
+     *
+     * @param oname
+     * @param attName
+     * @return null if metadata about the attribute is not found
+     * @since 1.1
+     */
+    public String getType( ObjectName oname, String attName )
+    {
+        String type=null;
+        MBeanInfo info=null;
+        try {
+            info=server.getMBeanInfo(oname);
+        } catch (Exception e) {
+            log.info( "Can't find metadata for object" + oname );
+            return null;
+        }
+
+        MBeanAttributeInfo attInfo[]=info.getAttributes();
+        for( int i=0; i<attInfo.length; i++ ) {
+            if( attName.equals(attInfo[i].getName())) {
+                type=attInfo[i].getType();
+                return type;
+            }
+        }
+        return null;
+    }
+    
+
+    /** EXPERIMENTAL Convert a string to object, based on type. Used by several
+     * components. We could provide some pluggability. It is here to keep
+     * things consistent and avoid duplication in other tasks 
+     * 
+     * @param type Fully qualified class name of the resulting value
+     * @param value String value to be converted
+     * @return Converted value
+     */ 
+    public Object convertValue(String type, String value)
+    {
+        Object objValue=value;
+        
+        if( type==null || "java.lang.String".equals( type )) {
+            // string is default
+            objValue=value;
+        } else if( "javax.management.ObjectName".equals( type ) ||
+                "ObjectName".equals( type )) {
+            try {
+                objValue=new ObjectName( value );
+            } catch (MalformedObjectNameException e) {
+                return null;
+            }
+        } else if( "java.lang.Integer".equals( type ) ||
+                "int".equals( type )) {
+            objValue=new Integer( value );
+        } else if( "java.lang.Long".equals( type ) ||
+                "long".equals( type )) {
+            objValue=new Long( value );
+        } else if( "java.lang.Boolean".equals( type ) ||
+                "boolean".equals( type )) {
+            objValue=new Boolean( value );
+        }
+        return objValue;
+    }
+
+    /** Get the first element child.
+     * @param parent lookup direct childs
+     * @param name name of the element. If null return the first element.
+     */
+    public static Node getChild( Node parent, String name ) {
+        if( parent==null ) return null;
+        Node first=parent.getFirstChild();
+        if( first==null ) return null;
+
+        for (Node node = first; node != null;
+             node = node.getNextSibling()) {
+            //System.out.println("getNode: " + name + " " + node.getNodeName());
+            if( node.getNodeType()!=Node.ELEMENT_NODE)
+                continue;
+            if( name != null &&
+                name.equals( node.getNodeName() ) ) {
+                return node;
+            }
+            if( name == null ) {
+                return node;
+            }
+        }
+        return null;
+    }
+    
+
+    /** Get the first child's content ( ie it's included TEXT node ).
+     */
+    public static String getChildContent( Node parent, String name ) {
+        Node first=parent.getFirstChild();
+        if( first==null ) return null;
+        for (Node node = first; node != null;
+             node = node.getNextSibling()) {
+            //System.out.println("getNode: " + name + " " + node.getNodeName());
+            if( name.equals( node.getNodeName() ) ) {
+                return getContent( node );
+            }
+        }
+        return null;
+    }
+
+    /** Get the first direct child with a given type
+     */
+    public static Node getChild( Node parent, int type ) {
+        Node n=parent.getFirstChild();
+        while( n!=null && type != n.getNodeType() ) {
+            n=n.getNextSibling();
+        }
+        if( n==null ) return null;
+        return n;
+    }
+
+    /** Get the next sibling with the same name and type
+     */
+    public static Node getNext( Node current ) {
+        String name=current.getNodeName();
+        int type=current.getNodeType();
+        return getNext( current, name, type);
+    }
+
+    /** Return the next sibling with a given name and type
+     */ 
+    public static Node getNext( Node current, String name, int type) {
+        Node first=current.getNextSibling();
+        if( first==null ) return null;
+
+        for (Node node = first; node != null;
+             node = node.getNextSibling()) {
+            
+            if( type >= 0 && node.getNodeType() != type ) continue;
+            //System.out.println("getNode: " + name + " " + node.getNodeName());
+            if( name==null )
+                return node;
+            if( name.equals( node.getNodeName() ) ) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    public static void setAttributes( Object o, Node parent)
+    {
+        NamedNodeMap attrs=parent.getAttributes();
+        if( attrs==null ) return;
+
+        for (int i=0; i<attrs.getLength(); i++ ) {
+            Node n=attrs.item(i);
+            String name=n.getNodeName();
+            String value=n.getNodeValue();
+
+            if( log.isTraceEnabled() )
+                log.trace("Attribute " + parent.getNodeName() + " " +
+                            name + "=" + value);
+            try {
+                IntrospectionUtils.setProperty(o, name, value);
+            } catch( Exception ex ) {
+                ex.printStackTrace();
+            }
+        }
+    }
+    
+
+    /** Get the first child's content ( ie it's included TEXT node ).
+     */
+    public static String getChildContent( Node parent, String name ) {
+        Node first=parent.getFirstChild();
+        if( first==null ) return null;
+        for (Node node = first; node != null;
+             node = node.getNextSibling()) {
+            //System.out.println("getNode: " + name + " " + node.getNodeName());
+            if( name.equals( node.getNodeName() ) ) {
+                return getContent( node );
+            }
+        }
+        return null;
+    }

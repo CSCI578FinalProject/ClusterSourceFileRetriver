@@ -1,0 +1,62 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Validates the option flags that each interceptor is using and reports
+     * an error if two interceptor share the same flag.
+     * @throws ChannelException Error with option flag
+     */
+    protected void checkOptionFlags() throws ChannelException {
+        StringBuilder conflicts = new StringBuilder();
+        ChannelInterceptor first = interceptors;
+        while ( first != null ) {
+            int flag = first.getOptionFlag();
+            if ( flag != 0 ) {
+                ChannelInterceptor next = first.getNext();
+                while ( next != null ) {
+                    int nflag = next.getOptionFlag();
+                    if (nflag!=0 && (((flag & nflag) == flag ) || ((flag & nflag) == nflag)) ) {
+                        conflicts.append("[");
+                        conflicts.append(first.getClass().getName());
+                        conflicts.append(":");
+                        conflicts.append(flag);
+                        conflicts.append(" == ");
+                        conflicts.append(next.getClass().getName());
+                        conflicts.append(":");
+                        conflicts.append(nflag);
+                        conflicts.append("] ");
+                    }//end if
+                    next = next.getNext();
+                }//while
+            }//end if
+            first = first.getNext();
+        }//while
+        if ( conflicts.length() > 0 ) throw new ChannelException(sm.getString("groupChannel.optionFlag.conflict",
+                conflicts.toString()));
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * An interceptor can react to a message based on a set bit on the
+     * message options. <br>
+     * When a message is sent, the options can be retrieved from ChannelMessage.getOptions()
+     * and if the bit is set, this interceptor will react to it.<br>
+     * A simple evaluation if an interceptor should react to the message would be:<br>
+     * <code>boolean react = (getOptionFlag() == (getOptionFlag() &amp; ChannelMessage.getOptions()));</code><br>
+     * The default option is 0, meaning there is no way for the application to trigger the
+     * interceptor. The interceptor itself will decide.<br>
+     * @return int
+     * @see ChannelMessage#getOptions()
+     */
+    public int getOptionFlag();
+
+
+    /**
+     * Sets the option flag
+     * @param flag int
+     * @see #getOptionFlag()
+     */
+    public void setOptionFlag(int flag);

@@ -1,0 +1,113 @@
+5
+-----CSCI578-----
+
+
+
+    @Override
+    public RequestDispatcher getRequestDispatcher(String path) {
+
+        // Validate the path argument
+        if (path == null)
+            return (null);
+        if (!path.startsWith("/"))
+            throw new IllegalArgumentException
+                (sm.getString
+                 ("applicationContext.requestDispatcher.iae", path));
+
+        // Get query string
+        String queryString = null;
+        String normalizedPath = path;
+        int pos = normalizedPath.indexOf('?');
+        if (pos >= 0) {
+            queryString = normalizedPath.substring(pos + 1);
+            normalizedPath = normalizedPath.substring(0, pos);
+        }
+
+        normalizedPath = RequestUtil.normalize(normalizedPath);
+        if (normalizedPath == null)
+            return (null);
+
+        pos = normalizedPath.length();
+
+        // Use the thread local URI and mapping data
+        DispatchData dd = dispatchData.get();
+        if (dd == null) {
+            dd = new DispatchData();
+            dispatchData.set(dd);
+        }
+
+        MessageBytes uriMB = dd.uriMB;
+        uriMB.recycle();
+
+        // Use the thread local mapping data
+        MappingData mappingData = dd.mappingData;
+
+        // Map the URI
+        CharChunk uriCC = uriMB.getCharChunk();
+        try {
+            uriCC.append(context.getPath(), 0, context.getPath().length());
+            /*
+             * Ignore any trailing path params (separated by ';') for mapping
+             * purposes
+             */
+            int semicolon = normalizedPath.indexOf(';');
+            if (pos >= 0 && semicolon > pos) {
+                semicolon = -1;
+            }
+            uriCC.append(normalizedPath, 0, semicolon > 0 ? semicolon : pos);
+            service.getMapper().map(context, uriMB, mappingData);
+            if (mappingData.wrapper == null) {
+                return (null);
+            }
+            /*
+             * Append any trailing path params (separated by ';') that were
+             * ignored for mapping purposes, so that they're reflected in the
+             * RequestDispatcher's requestURI
+             */
+            if (semicolon > 0) {
+                uriCC.append(normalizedPath, semicolon, pos - semicolon);
+            }
+        } catch (Exception e) {
+            // Should never happen
+            log(sm.getString("applicationContext.mapping.error"), e);
+            return (null);
+        }
+
+        Wrapper wrapper = mappingData.wrapper;
+        String wrapperPath = mappingData.wrapperPath.toString();
+        String pathInfo = mappingData.pathInfo.toString();
+
+        mappingData.recycle();
+
+        // Construct a RequestDispatcher to process this request
+        return new ApplicationDispatcher
+            (wrapper, uriCC.toString(), wrapperPath, pathInfo,
+             queryString, null);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public RequestDispatcher getRequestDispatcher(final String path) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (RequestDispatcher) doPrivileged("getRequestDispatcher",
+                                                    new Object[]{path});
+        } else {
+            return context.getRequestDispatcher(path);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the char chunk, representing the char[] and offset/length.
+     * Valid only if T_CHARS or after a conversion was made.
+     * @return the char chunk
+     */
+    public CharChunk getCharChunk() {
+        return charC;
+    }
+-----CSCI578-----

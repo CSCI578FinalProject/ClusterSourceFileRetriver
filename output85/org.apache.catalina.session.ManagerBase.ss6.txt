@@ -1,0 +1,76 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Updates the sessionMaxAliveTime attribute if the candidate value is
+     * larger than the current value.
+     *
+     * @param sessionAliveTime  The candidate value (in seconds) for the new
+     *                          sessionMaxAliveTime value.
+     */
+    public void updateSessionMaxAliveTime(int sessionAliveTime) {
+        if (sessionAliveTime > this.sessionMaxAliveTime) {
+            synchronized (sessionMaxAliveTimeUpdateLock) {
+                if (sessionAliveTime > this.sessionMaxAliveTime) {
+                    this.sessionMaxAliveTime = sessionAliveTime;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the creation time for this session, bypassing the session validity
+     * checks.
+     */
+    public long getCreationTimeInternal();
+-----CSCI578-----
+
+
+
+    @Override
+    public void remove(Session session) {
+        remove(session, false);
+    }
+
+
+
+    @Override
+    public void remove(Session session, boolean update) {
+        // If the session has expired - as opposed to just being removed from
+        // the manager because it is being persisted - update the expired stats
+        if (update) {
+            long timeNow = System.currentTimeMillis();
+            int timeAlive =
+                (int) (timeNow - session.getCreationTimeInternal())/1000;
+            updateSessionMaxAliveTime(timeAlive);
+            expiredSessions.incrementAndGet();
+            SessionTiming timing = new SessionTiming(timeNow, timeAlive);
+            synchronized (sessionExpirationTiming) {
+                sessionExpirationTiming.add(timing);
+                sessionExpirationTiming.poll();
+            }
+        }
+
+        if (session.getIdInternal() != null) {
+            sessions.remove(session.getIdInternal());
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Remove this Session from the active Sessions for this Manager,
+     * but not from the Store. (Used by the PersistentValve)
+     *
+     * @param session Session to be removed
+     */
+    @Override
+    public void removeSuper(Session session) {
+        super.remove(session, false);
+    }

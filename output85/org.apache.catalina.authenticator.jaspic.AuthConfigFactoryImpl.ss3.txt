@@ -1,0 +1,190 @@
+22
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    static void writeProviders(Providers providers, File configFile) {
+        File configFileOld = new File(configFile.getAbsolutePath() + ".old");
+        File configFileNew = new File(configFile.getAbsolutePath() + ".new");
+
+        // Remove left over temporary files if present
+        if (configFileOld.exists()) {
+            if (configFileOld.delete()) {
+                throw new SecurityException(sm.getString(
+                        "persistentProviderRegistrations.existsDeleteFail",
+                        configFileOld.getAbsolutePath()));
+            }
+        }
+        if (configFileNew.exists()) {
+            if (configFileNew.delete()) {
+                throw new SecurityException(sm.getString(
+                        "persistentProviderRegistrations.existsDeleteFail",
+                        configFileNew.getAbsolutePath()));
+            }
+        }
+
+        // Write out the providers to the temporary new file
+        try (OutputStream fos = new FileOutputStream(configFileNew);
+                Writer writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
+            writer.write(
+                    "<?xml version='1.0' encoding='utf-8'?>\n" +
+                    "<jaspic-providers\n" +
+                    "    xmlns=\"http://tomcat.apache.org/xml\"\n" +
+                    "    xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n" +
+                    "    xsi:schemaLocation=\"http://tomcat.apache.org/xml jaspic-providers.xsd\"\n" +
+                    "    version=\"1.0\">\n");
+            for (Provider provider : providers.providers) {
+                writer.write("  <provider className=\"");
+                writer.write(provider.getClassName());
+                writer.write("\" layer=\"");
+                writer.write(provider.getLayer());
+                writer.write("\" appContext=\"");
+                writer.write(provider.getAppContext());
+                if (provider.getDescription() != null) {
+                    writer.write("\" description=\"");
+                    writer.write(provider.getDescription());
+                }
+                writer.write("\">\n");
+                for (Entry<String,String> entry : provider.getProperties().entrySet()) {
+                    writer.write("    <property name=\"");
+                    writer.write(entry.getKey());
+                    writer.write("\" value=\"");
+                    writer.write(entry.getValue());
+                    writer.write("\"/>\n");
+                }
+                writer.write("  </provider>\n");
+            }
+            writer.write("</jaspic-providers>\n");
+        } catch (IOException e) {
+            configFileNew.delete();
+            throw new SecurityException(e);
+        }
+
+        // Move the current file out of the way
+        if (configFile.isFile()) {
+            if (!configFile.renameTo(configFileOld)) {
+                throw new SecurityException(sm.getString("persistentProviderRegistrations.moveFail",
+                        configFile.getAbsolutePath(), configFileOld.getAbsolutePath()));
+            }
+        }
+
+        // Move the new file into place
+        if (!configFileNew.renameTo(configFile)) {
+            throw new SecurityException(sm.getString("persistentProviderRegistrations.moveFail",
+                    configFileNew.getAbsolutePath(), configFile.getAbsolutePath()));
+        }
+
+        // Remove the old file
+        if (configFileOld.exists() && !configFileOld.delete()) {
+            log.warn(sm.getString("persistentProviderRegistrations.deleteFail",
+                    configFileOld.getAbsolutePath()));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void savePersistentRegistrations() {
+        synchronized (CONFIG_FILE_LOCK) {
+            Providers providers = new Providers();
+            for (Entry<String,RegistrationContextImpl> entry : registrations.entrySet()) {
+                if (entry.getValue().isPersistent()) {
+                    Provider provider = new Provider();
+                    provider.setAppContext(entry.getValue().getAppContext());
+                    provider.setClassName(entry.getValue().getProvider().getClass().getName());
+                    provider.setDescription(entry.getValue().getDescription());
+                    provider.setLayer(entry.getValue().getMessageLayer());
+                    for (Entry<String,String> property : entry.getValue().getProperties().entrySet()) {
+                        provider.addProperty(property.getKey(), property.getValue());
+                    }
+                    providers.addProvider(provider);
+                }
+            }
+            PersistentProviderRegistrations.writeProviders(providers, CONFIG_FILE);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String registerConfigProvider(String className,
+            @SuppressWarnings("rawtypes") Map properties, String layer, String appContext,
+            String description) {
+        String registrationID =
+                doRegisterConfigProvider(className, properties, layer, appContext, description);
+        savePersistentRegistrations();
+        return registrationID;
+    }
+
+
+
+    @Override
+    public String registerConfigProvider(AuthConfigProvider provider, String layer,
+            String appContext, String description) {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("authConfigFactoryImpl.registerInstance",
+                    provider.getClass().getName(), layer, appContext));
+        }
+        String registrationID = getRegistrarionID(layer, appContext);
+        registrations.put(registrationID,
+                new RegistrationContextImpl(layer, appContext, description, false, provider, null));
+        return registrationID;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private String getRegistrarionID(String layer, String appContext) {
+        return layer + ":" + appContext;
+    }
+-----CSCI578-----
+
+
+
+    @SuppressWarnings("unchecked")
+    private String doRegisterConfigProvider(String className,
+            @SuppressWarnings("rawtypes") Map properties, String layer, String appContext,
+            String description) {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("authConfigFactoryImpl.registerClass",
+                    className, layer, appContext));
+        }
+        Class<?> clazz;
+        AuthConfigProvider provider = null;
+        try {
+            clazz = Class.forName(className, true, Thread.currentThread().getContextClassLoader());
+        } catch (ClassNotFoundException e) {
+            // Ignore so the re-try below can proceed
+        }
+        try {
+            clazz = Class.forName(className);
+            Constructor<?> constructor = clazz.getConstructor(Map.class, AuthConfigFactory.class);
+            provider = (AuthConfigProvider) constructor.newInstance(properties, null);
+        } catch (ClassNotFoundException | NoSuchMethodException | InstantiationException |
+                IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+            throw new SecurityException(e);
+        }
+
+        String registrationID = getRegistrarionID(layer, appContext);
+        registrations.put(registrationID,
+                new RegistrationContextImpl(layer, appContext, description, true, provider, properties));
+        return registrationID;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

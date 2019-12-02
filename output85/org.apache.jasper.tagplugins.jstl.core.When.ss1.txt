@@ -1,0 +1,397 @@
+14
+-----CSCI578-----
+
+
+    /**
+     * Get the value of an attribute in the current tagplugin context.
+     * @param attr The attribute name
+     * @return the attribute value
+     */
+    Object getPluginAttribute(String attr);
+-----CSCI578-----
+
+
+    @Override
+    public void doTag(TagPluginContext ctxt) {
+        // Get the parent context to determine if this is the first <c:when>
+        TagPluginContext parentContext = ctxt.getParentContext();
+        if (parentContext == null) {
+            ctxt.dontUseTagPlugin();
+            return;
+        }
+
+        if ("true".equals(parentContext.getPluginAttribute("hasBeenHere"))) {
+            ctxt.generateJavaSource("} else if(");
+            // See comment below for the reason we generate the extra "}" here.
+        }
+        else {
+            ctxt.generateJavaSource("if(");
+            parentContext.setPluginAttribute("hasBeenHere", "true");
+        }
+        ctxt.generateAttribute("test");
+        ctxt.generateJavaSource("){");
+        ctxt.generateBody();
+
+        // We don't generate the closing "}" for the "if" here because there
+        // may be whitespaces in between <c:when>'s.  Instead we delay
+        // generating it until the next <c:when> or <c:otherwise> or
+        // <c:choose>
+    }
+-----CSCI578-----
+
+
+    /**
+     * Associate the attribute with a value in the current tagplugin context.
+     * The plugin attributes can be used for communication among tags that
+     * must work together as a group.  See &lt;c:when&gt; for an example.
+     * @param attr The attribute name
+     * @param value The attribute value
+     */
+    void setPluginAttribute(String attr, Object value);
+-----CSCI578-----
+
+
+    /**
+     * Generate Java source code scriptlet
+     * @param s the scriptlet (raw Java source)
+     */
+    void generateJavaSource(String s);
+-----CSCI578-----
+
+
+    /**
+     * Generate codes for the body of the custom tag
+     */
+    void generateBody();
+-----CSCI578-----
+
+
+    /**
+     * Abandon optimization for this tag handler, and instruct
+     * Jasper to generate the tag handler calls, as usual.
+     * Should be invoked if errors are detected, or when the tag body
+     * is deemed too complicated for optimization.
+     */
+    void dontUseTagPlugin();
+-----CSCI578-----
+
+
+    /**
+     * Generate codes to evaluate value of a attribute in the custom tag
+     * The codes is a Java expression.
+     * NOTE: Currently cannot handle attributes that are fragments.
+     * @param attribute The specified attribute
+     */
+    void generateAttribute(String attribute);
+-----CSCI578-----
+
+
+    /**
+     * Get the PluginContext for the parent of this custom tag.  NOTE:
+     * The operations available for PluginContext so obtained is limited
+     * to getPluginAttribute and setPluginAttribute, and queries (e.g.
+     * isScriptless().  There should be no calls to generate*().
+     * @return The pluginContext for the parent node.
+     *         null if the parent is not a custom tag, or if the pluginConxt
+     *         if not available (because useTagPlugin is false, e.g).
+     */
+    TagPluginContext getParentContext();
+-----CSCI578-----
+
+
+    @Override
+    public void doTag(TagPluginContext ctxt) {
+
+        // Not much to do here, much of the work will be done in the
+        // containing tags, <c:when> and <c:otherwise>.
+
+        ctxt.generateBody();
+        // See comments in When.java for the reason "}" is generated here.
+        ctxt.generateJavaSource("}");
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void doTag(TagPluginContext ctxt) {
+        boolean hasVar, hasVarStatus, hasBegin, hasEnd, hasStep;
+
+        //init the flags
+        hasVar = ctxt.isAttributeSpecified("var");
+        hasVarStatus = ctxt.isAttributeSpecified("varStatus");
+        hasBegin = ctxt.isAttributeSpecified("begin");
+        hasEnd = ctxt.isAttributeSpecified("end");
+        hasStep = ctxt.isAttributeSpecified("step");
+
+        if(hasVarStatus){
+            ctxt.dontUseTagPlugin();
+            return;
+        }
+
+        //define all the temp variables' names
+        String itemsName = ctxt.getTemporaryVariableName();
+        String delimsName = ctxt.getTemporaryVariableName();
+        String stName = ctxt.getTemporaryVariableName();
+        String beginName = ctxt.getTemporaryVariableName();
+        String endName  = ctxt.getTemporaryVariableName();
+        String stepName = ctxt.getTemporaryVariableName();
+        String index = ctxt.getTemporaryVariableName();
+        String temp  = ctxt.getTemporaryVariableName();
+        String tokensCountName = ctxt.getTemporaryVariableName();
+
+        //get the value of the "items" attribute
+        ctxt.generateJavaSource("String " + itemsName + " = (String)");
+        ctxt.generateAttribute("items");
+        ctxt.generateJavaSource(";");
+
+        //get the value of the "delim" attribute
+        ctxt.generateJavaSource("String " + delimsName + " = (String)");
+        ctxt.generateAttribute("delims");
+        ctxt.generateJavaSource(";");
+
+        //new a StringTokenizer Object according to the "items" and the "delim"
+        ctxt.generateJavaSource("java.util.StringTokenizer " + stName + " = " +
+                "new java.util.StringTokenizer(" + itemsName + ", " + delimsName + ");");
+
+        //if "begin" specified, move the token to the "begin" place
+        //and record the begin index. default begin place is 0.
+        ctxt.generateJavaSource("int " + tokensCountName + " = " + stName + ".countTokens();");
+        if(hasBegin){
+            ctxt.generateJavaSource("int " + beginName + " = "  );
+            ctxt.generateAttribute("begin");
+            ctxt.generateJavaSource(";");
+            ctxt.generateJavaSource("for(int " + index + " = 0; " + index + " < " + beginName + " && " + stName + ".hasMoreTokens(); " + index + "++, " + stName + ".nextToken()){}");
+        }else{
+            ctxt.generateJavaSource("int " + beginName + " = 0;");
+        }
+
+        //when "end" is specified, if the "end" is more than the last index,
+        //record the end place as the last index, otherwise, record it as "end";
+        //default end place is the last index
+        if(hasEnd){
+            ctxt.generateJavaSource("int " + endName + " = 0;"  );
+            ctxt.generateJavaSource("if((" + tokensCountName + " - 1) < ");
+            ctxt.generateAttribute("end");
+            ctxt.generateJavaSource("){");
+            ctxt.generateJavaSource("    " + endName + " = " + tokensCountName + " - 1;");
+            ctxt.generateJavaSource("}else{");
+            ctxt.generateJavaSource("    " + endName + " = ");
+            ctxt.generateAttribute("end");
+            ctxt.generateJavaSource(";}");
+        }else{
+            ctxt.generateJavaSource("int " + endName + " = " + tokensCountName + " - 1;");
+        }
+
+        //get the step value from "step" if specified.
+        //default step value is 1.
+        if(hasStep){
+            ctxt.generateJavaSource("int " + stepName + " = "  );
+            ctxt.generateAttribute("step");
+            ctxt.generateJavaSource(";");
+        }else{
+            ctxt.generateJavaSource("int " + stepName + " = 1;");
+        }
+
+        //the loop
+        ctxt.generateJavaSource("for(int " + index + " = " + beginName + "; " + index + " <= " + endName + "; " + index + "++){");
+        ctxt.generateJavaSource("    String " + temp + " = " + stName + ".nextToken();");
+        ctxt.generateJavaSource("    if(((" + index + " - " + beginName + ") % " + stepName + ") == 0){");
+        //if var specified, put the current token into the attribute "var" defines.
+        if(hasVar){
+            String strVar = ctxt.getConstantAttribute("var");
+            ctxt.generateJavaSource("        pageContext.setAttribute(\"" + strVar + "\", " + temp + ");");
+        }
+        ctxt.generateBody();
+        ctxt.generateJavaSource("    }");
+        ctxt.generateJavaSource("}");
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void doTag(TagPluginContext ctxt) {
+
+        // See When.java for the reason whey "}" is need at the beginng and
+        // not at the end.
+        ctxt.generateJavaSource("} else {");
+        ctxt.generateBody();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void doTag(TagPluginContext ctxt) {
+
+        //these two data member are to indicate
+        //whether the corresponding attribute is specified
+        boolean hasDefault=false, hasEscapeXml=false;
+        hasDefault = ctxt.isAttributeSpecified("default");
+        hasEscapeXml = ctxt.isAttributeSpecified("escapeXml");
+
+        //strValName, strEscapeXmlName & strDefName are two variables' name
+        //standing for value, escapeXml and default attribute
+        String strObjectName = ctxt.getTemporaryVariableName();
+        String strValName = ctxt.getTemporaryVariableName();
+        String strDefName = ctxt.getTemporaryVariableName();
+        String strEscapeXmlName = ctxt.getTemporaryVariableName();
+        String strSkipBodyName = ctxt.getTemporaryVariableName();
+
+        //according to the tag file, the value attribute is mandatory.
+        ctxt.generateImport("java.io.Reader");
+        ctxt.generateJavaSource("Object " + strObjectName + "=");
+        ctxt.generateAttribute("value");
+        ctxt.generateJavaSource(";");
+        ctxt.generateJavaSource("String " + strValName + "=null;");
+        ctxt.generateJavaSource("if(!(" + strObjectName +
+                " instanceof Reader) && "+ strObjectName + " != null){");
+        ctxt.generateJavaSource(
+                strValName + " = " + strObjectName + ".toString();");
+        ctxt.generateJavaSource("}");
+
+        //initiate the strDefName with null.
+        //if the default has been specified, then assign the value to it;
+        ctxt.generateJavaSource("String " + strDefName + " = null;");
+        if(hasDefault){
+            ctxt.generateJavaSource("if(");
+            ctxt.generateAttribute("default");
+            ctxt.generateJavaSource(" != null){");
+            ctxt.generateJavaSource(strDefName + " = (");
+            ctxt.generateAttribute("default");
+            ctxt.generateJavaSource(").toString();");
+            ctxt.generateJavaSource("}");
+        }
+
+        //initiate the strEscapeXmlName with true;
+        //if the escapeXml is specified, assign the value to it;
+        ctxt.generateJavaSource("boolean " + strEscapeXmlName + " = true;");
+        if(hasEscapeXml){
+            ctxt.generateJavaSource(strEscapeXmlName + " = ");
+            ctxt.generateAttribute("escapeXml");
+            ctxt.generateJavaSource(";");
+        }
+
+        //main part.
+        ctxt.generateJavaSource(
+                "boolean " + strSkipBodyName + " = " +
+                "org.apache.jasper.tagplugins.jstl.core.Out.output(out, " +
+                strObjectName + ", " + strValName + ", " + strDefName + ", " +
+                strEscapeXmlName + ");");
+        ctxt.generateJavaSource("if(!" + strSkipBodyName + ") {");
+        ctxt.generateBody();
+        ctxt.generateJavaSource("}");
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void doTag(TagPluginContext ctxt) {
+
+        //don't support the body content
+
+        //define names of all the temp variables
+        String nameName = ctxt.getTemporaryVariableName();
+        String valueName = ctxt.getTemporaryVariableName();
+        String urlName = ctxt.getTemporaryVariableName();
+        String encName = ctxt.getTemporaryVariableName();
+        String index = ctxt.getTemporaryVariableName();
+
+        //if the param tag has no parents, throw a exception
+        TagPluginContext parent = ctxt.getParentContext();
+        if(parent == null){
+            ctxt.generateJavaSource(" throw new JspTagExcption" +
+            "(\"&lt;param&gt; outside &lt;import&gt; or &lt;urlEncode&gt;\");");
+            return;
+        }
+
+        //get the url string before adding this param
+        ctxt.generateJavaSource("String " + urlName + " = " +
+        "(String)pageContext.getAttribute(\"url_without_param\");");
+
+        //get the value of "name"
+        ctxt.generateJavaSource("String " + nameName + " = ");
+        ctxt.generateAttribute("name");
+        ctxt.generateJavaSource(";");
+
+        //if the "name" is null then do nothing.
+        //else add such string "name=value" to the url.
+        //and the url should be encoded
+        ctxt.generateJavaSource("if(" + nameName + " != null && !" + nameName + ".equals(\"\")){");
+        ctxt.generateJavaSource("    String " + valueName + " = ");
+        ctxt.generateAttribute("value");
+        ctxt.generateJavaSource(";");
+        ctxt.generateJavaSource("    if(" + valueName + " == null) " + valueName + " = \"\";");
+        ctxt.generateJavaSource("    String " + encName + " = pageContext.getResponse().getCharacterEncoding();");
+        ctxt.generateJavaSource("    " + nameName + " = java.net.URLEncoder.encode(" + nameName + ", " + encName + ");");
+        ctxt.generateJavaSource("    " + valueName + " = java.net.URLEncoder.encode(" + valueName + ", " + encName + ");");
+        ctxt.generateJavaSource("    int " + index + ";");
+        ctxt.generateJavaSource("    " + index + " = " + urlName + ".indexOf(\'?\');");
+        //if the current param is the first one, add a "?" ahead of it
+        //else add a "&" ahead of it
+        ctxt.generateJavaSource("    if(" + index + " == -1){");
+        ctxt.generateJavaSource("        " + urlName + " = " + urlName + " + \"?\" + " + nameName + " + \"=\" + " + valueName + ";");
+        ctxt.generateJavaSource("    }else{");
+        ctxt.generateJavaSource("        " + urlName + " = " + urlName + " + \"&\" + " + nameName + " + \"=\" + " + valueName + ";");
+        ctxt.generateJavaSource("    }");
+        ctxt.generateJavaSource("    pageContext.setAttribute(\"url_without_param\"," + urlName + ");");
+        ctxt.generateJavaSource("}");
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void doTag(TagPluginContext ctxt) {
+
+        //flag for the existence of the "context"
+        boolean hasContext = ctxt.isAttributeSpecified("context");
+
+        //names of the temp variables
+        String urlName = ctxt.getTemporaryVariableName();
+        String contextName = ctxt.getTemporaryVariableName();
+        String baseUrlName = ctxt.getTemporaryVariableName();
+        String resultName = ctxt.getTemporaryVariableName();
+        String responseName = ctxt.getTemporaryVariableName();
+
+        //get context
+        ctxt.generateJavaSource("String " + contextName + " = null;");
+        if(hasContext){
+            ctxt.generateJavaSource(contextName + " = ");
+            ctxt.generateAttribute("context");
+            ctxt.generateJavaSource(";");
+        }
+
+        //get the url
+        ctxt.generateJavaSource("String " + urlName + " = ");
+        ctxt.generateAttribute("url");
+        ctxt.generateJavaSource(";");
+
+        //get the raw url according to "url" and "context"
+        ctxt.generateJavaSource("String " + baseUrlName + " = " +
+                "org.apache.jasper.tagplugins.jstl.Util.resolveUrl(" + urlName + ", " + contextName + ", pageContext);");
+        ctxt.generateJavaSource("pageContext.setAttribute" +
+                "(\"url_without_param\", " + baseUrlName + ");");
+
+        //add params
+        ctxt.generateBody();
+
+        ctxt.generateJavaSource("String " + resultName + " = " +
+        "(String)pageContext.getAttribute(\"url_without_param\");");
+        ctxt.generateJavaSource("pageContext.removeAttribute" +
+        "(\"url_without_param\");");
+
+        //get the response object
+        ctxt.generateJavaSource("HttpServletResponse " + responseName + " = " +
+        "((HttpServletResponse) pageContext.getResponse());");
+
+        //if the url is relative, encode it
+        ctxt.generateJavaSource("if(!org.apache.jasper.tagplugins.jstl.Util.isAbsoluteUrl(" + resultName + ")){");
+        ctxt.generateJavaSource("    " + resultName + " = "
+                + responseName + ".encodeRedirectURL(" + resultName + ");");
+        ctxt.generateJavaSource("}");
+
+        //do redirect
+        ctxt.generateJavaSource("try{");
+        ctxt.generateJavaSource("    " + responseName + ".sendRedirect(" + resultName + ");");
+        ctxt.generateJavaSource("}catch(java.io.IOException ex){");
+        ctxt.generateJavaSource("    throw new JspTagException(ex.toString(), ex);");
+        ctxt.generateJavaSource("}");
+    }

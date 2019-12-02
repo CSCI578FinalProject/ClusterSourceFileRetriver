@@ -1,0 +1,87 @@
+8
+-----CSCI578-----
+
+
+    protected TldScanner newTldScanner(ServletContext context, boolean namespaceAware,
+            boolean validate, boolean blockExternal) {
+        return new TldScanner(context, namespaceAware, validate, blockExternal);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void onStartup(Set<Class<?>> types, ServletContext context) throws ServletException {
+        if (log.isDebugEnabled()) {
+            log.debug(Localizer.getMessage(MSG + ".onStartup", context.getServletContextName()));
+        }
+
+        // Setup a simple default Instance Manager
+        if (context.getAttribute(InstanceManager.class.getName())==null) {
+            context.setAttribute(InstanceManager.class.getName(), new SimpleInstanceManager());
+        }
+
+        boolean validate = Boolean.parseBoolean(
+                context.getInitParameter(Constants.XML_VALIDATION_TLD_INIT_PARAM));
+        String blockExternalString = context.getInitParameter(
+                Constants.XML_BLOCK_EXTERNAL_INIT_PARAM);
+        boolean blockExternal;
+        if (blockExternalString == null) {
+            blockExternal = true;
+        } else {
+            blockExternal = Boolean.parseBoolean(blockExternalString);
+        }
+
+        // scan the application for TLDs
+        TldScanner scanner = newTldScanner(context, true, validate, blockExternal);
+        try {
+            scanner.scan();
+        } catch (IOException | SAXException e) {
+            throw new ServletException(e);
+        }
+
+        // add any listeners defined in TLDs
+        for (String listener : scanner.getListeners()) {
+            context.addListener(listener);
+        }
+
+        context.setAttribute(TldCache.SERVLET_CONTEXT_ATTRIBUTE_NAME,
+                new TldCache(context, scanner.getUriTldResourcePathMap(),
+                        scanner.getTldResourcePathTaglibXmlMap()));
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns a list of all listeners declared by scanned TLDs.
+     *
+     * @return a list of listener class names
+     */
+    public List<String> getListeners() {
+        return listeners;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the map of URI to TldResourcePath built by this scanner.
+     *
+     * @return the map of URI to TldResourcePath
+     */
+    public Map<String, TldResourcePath> getUriTldResourcePathMap() {
+        return uriTldResourcePathMap;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the map of TldResourcePath to parsed XML files built by this
+     * scanner.
+     *
+     * @return the map of TldResourcePath to parsed XML files
+     */
+    public Map<TldResourcePath,TaglibXml> getTldResourcePathTaglibXmlMap() {
+        return tldResourcePathTaglibXmlMap;
+    }
+-----CSCI578-----

@@ -1,0 +1,136 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Method getInvoke(String aname, Object[] params, String[] signature, BaseModelMBean bean, Object resource) 
+            throws MBeanException, ReflectionException {
+        Method method = null;
+        if (method == null) {
+            if (params == null)
+                params = new Object[0];
+            if (signature == null)
+                signature = new String[0];
+            if (params.length != signature.length)
+                throw new RuntimeOperationsException(
+                        new IllegalArgumentException(
+                                "Inconsistent arguments and signature"),
+                        "Inconsistent arguments and signature");
+
+            // Acquire the ModelMBeanOperationInfo information for
+            // the requested operation
+            OperationInfo opInfo = (OperationInfo)operations.get(aname);
+            if (opInfo == null)
+                throw new MBeanException(new ServiceNotFoundException(
+                        "Cannot find operation " + aname),
+                        "Cannot find operation " + aname);
+
+            // Prepare the signature required by Java reflection APIs
+            // FIXME - should we use the signature from opInfo?
+            Class types[] = new Class[signature.length];
+            for (int i = 0; i < signature.length; i++) {
+                types[i] = BaseModelMBean.getAttributeClass(signature[i]);
+            }
+
+            // Locate the method to be invoked, either in this MBean itself
+            // or in the corresponding managed resource
+            // FIXME - Accessible methods in superinterfaces?
+            Object object = null;
+            Exception exception = null;
+            try {
+                object = bean;
+                method = object.getClass().getMethod(aname, types);
+            } catch (NoSuchMethodException e) {
+                exception = e;
+                ;
+            }
+            try {
+                if ((method == null) && (resource != null)) {
+                    object = resource;
+                    method = object.getClass().getMethod(aname, types);
+                }
+            } catch (NoSuchMethodException e) {
+                exception = e;
+            }
+            if (method == null) {
+                throw new ReflectionException(exception, "Cannot find method "
+                        + aname + " with this signature");
+            }
+            // invokeAttMap.put(mkey, method);
+        }
+        return method;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Invoke a particular method on this MBean, and return any returned
+     * value.
+     *
+     * <p><strong>IMPLEMENTATION NOTE</strong> - This implementation will
+     * attempt to invoke this method on the MBean itself, or (if not
+     * available) on the managed resource object associated with this
+     * MBean.</p>
+     *
+     * @param name Name of the operation to be invoked
+     * @param params Array containing the method parameters of this operation
+     * @param signature Array containing the class names representing
+     *  the signature of this operation
+     *
+     * @exception MBeanException if the initializer of an object
+     *  throws an exception
+     * @exception ReflectioNException if a Java reflection exception
+     *  occurs when invoking a method
+     */
+    public Object invoke(String name, Object params[], String signature[])
+        throws MBeanException, ReflectionException 
+    {
+        if( (resource instanceof DynamicMBean) && 
+             ! ( resource instanceof BaseModelMBean )) {
+            return ((DynamicMBean)resource).invoke(name, params, signature);
+        }
+    
+        // Validate the input parameters
+        if (name == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Method name is null"),
+                 "Method name is null");
+
+        if( log.isDebugEnabled()) log.debug("Invoke " + name);
+	MethodKey mkey = new MethodKey(name, signature);
+        Method method= managedBean.getInvoke(name, params, signature, this, resource);
+        
+        // Invoke the selected method on the appropriate object
+        Object result = null;
+        try {
+            if( method.getDeclaringClass().isAssignableFrom( this.getClass()) ) {
+                result = method.invoke(this, params );
+            } else {
+                result = method.invoke(resource, params);
+            }
+        } catch (InvocationTargetException e) {
+            Throwable t = e.getTargetException();
+            log.error("Exception invoking method " + name , t );
+            if (t == null)
+                t = e;
+            if (t instanceof RuntimeException)
+                throw new RuntimeOperationsException
+                    ((RuntimeException) t, "Exception invoking method " + name);
+            else if (t instanceof Error)
+                throw new RuntimeErrorException
+                    ((Error) t, "Error invoking method " + name);
+            else
+                throw new MBeanException
+                    ((Exception)t, "Exception invoking method " + name);
+        } catch (Exception e) {
+            log.error("Exception invoking method " + name , e );
+            throw new MBeanException
+                (e, "Exception invoking method " + name);
+        }
+
+        // Return the results of this method invocation
+        // FIXME - should we validate the return type?
+        return (result);
+
+    }

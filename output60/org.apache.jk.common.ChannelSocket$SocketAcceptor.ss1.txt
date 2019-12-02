@@ -1,0 +1,88 @@
+7
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /** Accept incoming connections, dispatch to the thread pool
+     */
+    void acceptConnections() {
+        if( log.isDebugEnabled() )
+            log.debug("Accepting ajp connections on " + port);
+        while( running ) {
+	    try{
+                MsgContext ep=createMsgContext(packetSize);
+                ep.setSource(this);
+                ep.setWorkerEnv( wEnv );
+                this.accept(ep);
+
+                if( !running ) break;
+                
+                // Since this is a long-running connection, we don't care
+                // about the small GC
+                SocketConnection ajpConn=
+                    new SocketConnection(this, ep);
+                tp.runIt( ajpConn );
+	    }catch(Exception ex) {
+                if (running)
+                    log.warn("Exception executing accept" ,ex);
+	    }
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void accept( MsgContext ep ) throws IOException {
+        if( sSocket==null ) return;
+        synchronized(this) {
+            while(paused) {
+                try{ 
+                    wait();
+                } catch(InterruptedException ie) {
+                    //Ignore, since can't happen
+                }
+            }
+        }
+        Socket s=sSocket.accept();
+        ep.setNote( socketNote, s );
+        if(log.isDebugEnabled() )
+            log.debug("Accepted socket " + s );
+
+        try {
+            setSocketOptions(s);
+        } catch(SocketException sex) {
+            log.debug("Error initializing Socket Options", sex);
+        }
+        
+        requestCount++;
+
+        InputStream is=new BufferedInputStream(s.getInputStream());
+        OutputStream os;
+        if( bufferSize > 0 )
+            os = new BufferedOutputStream( s.getOutputStream(), bufferSize);
+        else
+            os = s.getOutputStream();
+        ep.setNote( isNote, is );
+        ep.setNote( osNote, os );
+        ep.setControl( tp );
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void setSocketOptions(Socket s) throws SocketException {
+        if( socketTimeout > 0 ) 
+            s.setSoTimeout( socketTimeout );
+        
+        s.setTcpNoDelay( tcpNoDelay ); // set socket tcpnodelay state
+
+        if( linger > 0 )
+            s.setSoLinger( true, linger);
+    }
+-----CSCI578-----
+
+
+    public void setControl(Object control) {
+        this.control = control;
+    }

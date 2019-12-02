@@ -1,0 +1,73 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Discard the output buffer.
+     */
+    @Override
+    public final void clear() throws IOException {
+        if ((bufferSize == 0) && (out != null))
+            // clear() is illegal after any unbuffered output (JSP.5.5)
+            throw new IllegalStateException(
+                    getLocalizeMessage("jsp.error.ise_on_clear"));
+        if (flushed)
+            throw new IOException(
+                    getLocalizeMessage("jsp.error.attempt_to_clear_flushed_buffer"));
+        ensureOpen();
+        nextChar = 0;
+    }
+-----CSCI578-----
+
+
+    private final String getAbsolutePathRelativeToContext(String relativeUrlPath) {
+        String path = relativeUrlPath;
+
+        if (!path.startsWith("/")) {
+            String uri = (String) request.getAttribute(
+                    RequestDispatcher.INCLUDE_SERVLET_PATH);
+            if (uri == null)
+                uri = ((HttpServletRequest) request).getServletPath();
+            String baseURI = uri.substring(0, uri.lastIndexOf('/'));
+            path = baseURI + '/' + path;
+        }
+
+        return path;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void doForward(String relativeUrlPath) throws ServletException,
+            IOException {
+
+        // JSP.4.5 If the buffer was flushed, throw IllegalStateException
+        try {
+            out.clear();
+            baseOut.clear();
+        } catch (IOException ex) {
+            IllegalStateException ise = new IllegalStateException(Localizer
+                    .getMessage("jsp.error.attempt_to_clear_flushed_buffer"));
+            ise.initCause(ex);
+            throw ise;
+        }
+
+        // Make sure that the response object is not the wrapper for include
+        while (response instanceof ServletResponseWrapperInclude) {
+            response = ((ServletResponseWrapperInclude) response).getResponse();
+        }
+
+        final String path = getAbsolutePathRelativeToContext(relativeUrlPath);
+        String includeUri = (String) request.getAttribute(
+                RequestDispatcher.INCLUDE_SERVLET_PATH);
+
+        if (includeUri != null)
+            request.removeAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH);
+        try {
+            context.getRequestDispatcher(path).forward(request, response);
+        } finally {
+            if (includeUri != null)
+                request.setAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH,
+                        includeUri);
+        }
+    }

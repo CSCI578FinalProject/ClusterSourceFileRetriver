@@ -1,0 +1,261 @@
+11
+-----CSCI578-----
+
+
+    /**
+     * Sub-classes wishing to perform additional initialization should override
+     * this method, ensuring that super.initInternal() is the first call in the
+     * overriding method.
+     */
+    @Override
+    protected void initInternal() throws LifecycleException {
+
+        // If oname is not null then registration has already happened via
+        // preRegister().
+        if (oname == null) {
+            mserver = Registry.getRegistry(null, null).getMBeanServer();
+
+            oname = register(this, getObjectNameKeyProperties());
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Not used - NOOP.
+     */
+    @Override
+    public final void postDeregister() {
+        // NOOP
+    }
+
+
+
+    /**
+     * Not used - NOOP.
+     */
+    @Override
+    public final void preDeregister() throws Exception {
+        // NOOP
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Factory method to create (if necessary) and return our
+     * <code>MBeanServer</code> instance.
+     * @return the MBean server
+     */
+    public synchronized MBeanServer getMBeanServer() {
+        if (server == null) {
+            long t1 = System.currentTimeMillis();
+            if (MBeanServerFactory.findMBeanServer(null).size() > 0) {
+                server = MBeanServerFactory.findMBeanServer(null).get(0);
+                if (log.isDebugEnabled()) {
+                    log.debug("Using existing MBeanServer " + (System.currentTimeMillis() - t1));
+                }
+            } else {
+                server = ManagementFactory.getPlatformMBeanServer();
+                if (log.isDebugEnabled()) {
+                    log.debug("Creating MBeanServer" + (System.currentTimeMillis() - t1));
+                }
+            }
+        }
+        return server;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Register a bean by creating a modeler mbean and adding it to the
+     * MBeanServer.
+     *
+     * If metadata is not loaded, we'll look up and read a file named
+     * "mbeans-descriptors.ser" or "mbeans-descriptors.xml" in the same package
+     * or parent.
+     *
+     * If the bean is an instance of DynamicMBean. it's metadata will be converted
+     * to a model mbean and we'll wrap it - so modeler services will be supported
+     *
+     * If the metadata is still not found, introspection will be used to extract
+     * it automatically.
+     *
+     * If an mbean is already registered under this name, it'll be first
+     * unregistered.
+     *
+     * If the component implements MBeanRegistration, the methods will be called.
+     * If the method has a method "setRegistry" that takes a RegistryMBean as
+     * parameter, it'll be called with the current registry.
+     *
+     *
+     * @param bean Object to be registered
+     * @param oname Name used for registration
+     * @param type The type of the mbean, as declared in mbeans-descriptors. If
+     * null, the name of the class will be used. This can be used as a hint or
+     * by subclasses.
+     * @throws Exception if a registration error occurred
+     * @since 1.1
+     */
+    @Override
+    public void registerComponent(Object bean, String oname, String type)
+           throws Exception
+    {
+        registerComponent(bean, new ObjectName(oname), type);
+    }
+
+
+    /**
+     * Unregister a component. We'll first check if it is registered,
+     * and mask all errors. This is mostly a helper.
+     *
+     * @param oname Name used for unregistration
+     *
+     * @since 1.1
+     */
+    @Override
+    public void unregisterComponent( String oname ) {
+        try {
+            unregisterComponent(new ObjectName(oname));
+        } catch (MalformedObjectNameException e) {
+            log.info("Error creating object name " + e );
+        }
+    }
+
+
+    /**
+     * Unregister a component. This is just a helper that
+     * avoids exceptions by checking if the mbean is already registered
+     *
+     * @param oname The bean name
+     */
+    public void unregisterComponent( ObjectName oname ) {
+        try {
+            if (oname != null && getMBeanServer().isRegistered(oname)) {
+                getMBeanServer().unregisterMBean(oname);
+            }
+        } catch (Throwable t) {
+            log.error("Error unregistering mbean", t);
+        }
+    }
+
+
+
+    /**
+     * Register a component
+     *
+     * @param bean The bean
+     * @param oname The object name
+     * @param type The registry type
+     * @throws Exception Error registering component
+     */
+    public void registerComponent(Object bean, ObjectName oname, String type)
+           throws Exception
+    {
+        if( log.isDebugEnabled() ) {
+            log.debug( "Managed= "+ oname);
+        }
+
+        if( bean ==null ) {
+            log.error("Null component " + oname );
+            return;
+        }
+
+        try {
+            if( type==null ) {
+                type=bean.getClass().getName();
+            }
+
+            ManagedBean managed = findManagedBean(null, bean.getClass(), type);
+
+            // The real mbean is created and registered
+            DynamicMBean mbean = managed.createMBean(bean);
+
+            if(  getMBeanServer().isRegistered( oname )) {
+                if( log.isDebugEnabled()) {
+                    log.debug("Unregistering existing component " + oname );
+                }
+                getMBeanServer().unregisterMBean( oname );
+            }
+
+            getMBeanServer().registerMBean( mbean, oname);
+        } catch( Exception ex) {
+            log.error("Error registering " + oname, ex );
+            throw ex;
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ public
+
+    @Override
+    protected void initInternal() throws LifecycleException {
+        super.initInternal();
+        if (clusterDeployer != null) {
+            StringBuilder name = new StringBuilder("type=Cluster");
+            Container container = getContainer();
+            if (container != null) {
+                name.append(container.getMBeanKeyProperties());
+            }
+            name.append(",component=Deployer");
+            onameClusterDeployer = register(clusterDeployer, name.toString());
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------- Public Methods
+
+    @Override
+    protected void initInternal() throws LifecycleException {
+        super.initInternal();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected void initInternal() throws LifecycleException {
+        super.initInternal();
+        containerLog = getContainer().getLogger();
+    }
+-----CSCI578-----
+
+
+
+    //-------------------------------------------------------------- Properties
+
+    /**
+     * Return the Container with which this Valve is associated, if any.
+     */
+    @Override
+    public Container getContainer() {
+        return container;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected void initInternal() throws LifecycleException {
+        super.initInternal();
+
+        uaPattern = Pattern.compile(crawlerUserAgents);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getDomainInternal() {
+        Container c = getContainer();
+        if (c == null) {
+            return null;
+        } else {
+            return c.getDomain();
+        }
+    }

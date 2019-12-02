@@ -1,0 +1,46 @@
+2
+-----CSCI578-----
+
+
+
+    public String getConfigSizeFmt() {
+        return configSizeFmt;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @see SSICommand
+     */
+    public long process(SSIMediator ssiMediator, String commandName,
+            String[] paramNames, String[] paramValues, PrintWriter writer) {
+        long lastModified = 0;
+        String configErrMsg = ssiMediator.getConfigErrMsg();
+        for (int i = 0; i < paramNames.length; i++) {
+            String paramName = paramNames[i];
+            String paramValue = paramValues[i];
+            String substitutedValue = ssiMediator
+                    .substituteVariables(paramValue);
+            try {
+                if (paramName.equalsIgnoreCase("file")
+                        || paramName.equalsIgnoreCase("virtual")) {
+                    boolean virtual = paramName.equalsIgnoreCase("virtual");
+                    lastModified = ssiMediator.getFileLastModified(
+                            substitutedValue, virtual);
+                    long size = ssiMediator.getFileSize(substitutedValue,
+                            virtual);
+                    String configSizeFmt = ssiMediator.getConfigSizeFmt();
+                    writer.write(formatSize(size, configSizeFmt));
+                } else {
+                    ssiMediator.log("#fsize--Invalid attribute: " + paramName);
+                    writer.write(configErrMsg);
+                }
+            } catch (IOException e) {
+                ssiMediator.log("#fsize--Couldn't get size for file: "
+                        + substitutedValue, e);
+                writer.write(configErrMsg);
+            }
+        }
+        return lastModified;
+    }

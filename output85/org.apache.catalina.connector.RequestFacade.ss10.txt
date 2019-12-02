@@ -1,0 +1,102 @@
+3
+-----CSCI578-----
+
+
+
+    @Override
+    public BufferedReader getReader() throws IOException {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getReader();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the servlet input stream for this Request.  The default
+     * implementation returns a servlet input stream created by
+     * <code>createInputStream()</code>.
+     *
+     * @exception IllegalStateException if <code>getReader()</code> has
+     *  already been called for this request
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public ServletInputStream getInputStream() throws IOException {
+
+        if (usingReader) {
+            throw new IllegalStateException
+                (sm.getString("coyoteRequest.getInputStream.ise"));
+        }
+
+        usingInputStream = true;
+        if (inputStream == null) {
+            inputStream = new CoyoteInputStream(inputBuffer);
+        }
+        return inputStream;
+
+    }
+
+
+
+    /**
+     * Read the Reader wrapping the input stream for this Request.  The
+     * default implementation wraps a <code>BufferedReader</code> around the
+     * servlet input stream returned by <code>createInputStream()</code>.
+     *
+     * @return a buffered reader for the request
+     * @exception IllegalStateException if <code>getInputStream()</code>
+     *  has already been called for this request
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public BufferedReader getReader() throws IOException {
+
+        if (usingInputStream) {
+            throw new IllegalStateException
+                (sm.getString("coyoteRequest.getReader.ise"));
+        }
+
+        usingReader = true;
+        inputBuffer.checkConverter();
+        if (reader == null) {
+            reader = new CoyoteReader(inputBuffer);
+        }
+        return reader;
+
+    }
+
+
+
+    /**
+     * Overrides the name of the character encoding used in the body of
+     * this request.  This method must be called prior to reading request
+     * parameters or reading input using <code>getReader()</code>.
+     *
+     * @param enc The character encoding to be used
+     *
+     * @exception UnsupportedEncodingException if the specified encoding
+     *  is not supported
+     *
+     * @since Servlet 2.3
+     */
+    @Override
+    public void setCharacterEncoding(String enc)
+        throws UnsupportedEncodingException {
+
+        if (usingReader) {
+            return;
+        }
+
+        // Confirm that the encoding name is valid
+        B2CConverter.getCharset(enc);
+
+        // Save the validated encoding
+        coyoteRequest.setCharacterEncoding(enc);
+    }
+-----CSCI578-----

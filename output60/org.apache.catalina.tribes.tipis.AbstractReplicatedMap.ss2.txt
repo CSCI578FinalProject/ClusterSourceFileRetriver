@@ -1,0 +1,107 @@
+9
+-----CSCI578-----
+
+
+
+    /**
+     * Copies all values from one map to this instance
+     * @param m Map
+     */
+    public void putAll(Map<? extends K, ? extends V> m) {
+        Iterator<?> i = m.entrySet().iterator();
+        while ( i.hasNext() ) {
+            @SuppressWarnings("unchecked")
+            Map.Entry<K,V> entry = (Map.Entry<K,V>) i.next();
+            put(entry.getKey(),entry.getValue());
+        }
+    }
+-----CSCI578-----
+
+
+    public V put(K key, V value) {
+        return put(key, value, true);
+    }
+
+
+    public V put(K key, V value, boolean notify) {
+        MapEntry<K,V> entry = new MapEntry<K,V>(key,value);
+        entry.setBackup(false);
+        entry.setProxy(false);
+        entry.setPrimary(channel.getLocalMember(false));
+
+        V old = null;
+
+        //make sure that any old values get removed
+        if ( containsKey(key) ) old = remove(key);
+        try {
+            if ( notify ) {
+                Member[] backup = publishEntryInfo(key, value);
+                entry.setBackupNodes(backup);
+            }
+        } catch (ChannelException x) {
+            log.error("Unable to replicate out data for a LazyReplicatedMap.put operation", x);
+        }
+        innerMap.put(key,entry);
+        return old;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns true if the key has an entry in the map.
+     * The entry can be a proxy or a backup entry, invoking <code>get(key)</code>
+     * will make this entry primary for the group
+     * @param key Object
+     * @return boolean
+     */
+    public boolean containsKey(Object key) {
+        return innerMap.containsKey(key);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected abstract Member[] publishEntryInfo(Object key, Object value) throws ChannelException;
+-----CSCI578-----
+
+
+//------------------------------------------------------------------------------
+//              METHODS TO OVERRIDE
+//------------------------------------------------------------------------------
+
+    /**
+     * Removes an object from this map, it will also remove it from
+     *
+     * @param key Object
+     * @return Object
+     */
+    public V remove(Object key) {
+        return remove(key,true);
+    }
+
+    public V remove(Object key, boolean notify) {
+        MapEntry<K,V> entry = innerMap.remove(key);
+
+        try {
+            if (getMapMembers().length > 0 && notify) {
+                MapMessage msg = new MapMessage(getMapContextName(), MapMessage.MSG_REMOVE, false, (Serializable) key, null, null, null,null);
+                getChannel().send(getMapMembers(), msg, getChannelSendOptions());
+            }
+        } catch ( ChannelException x ) {
+            log.error("Unable to replicate out data for a LazyReplicatedMap.remove operation",x);
+        }
+        return entry!=null?entry.getValue():null;
+    }
+-----CSCI578-----
+
+
+    public byte[] getMapContextName() {
+        return mapContextName;
+    }
+-----CSCI578-----
+
+
+    public int getChannelSendOptions() {
+        return channelSendOptions;
+    }

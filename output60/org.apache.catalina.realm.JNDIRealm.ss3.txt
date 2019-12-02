@@ -1,0 +1,82 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Create our directory context configuration.
+     *
+     * @return java.util.Hashtable the configuration for the directory context.
+     */
+    protected Hashtable<String,String> getDirectoryContextEnvironment() {
+
+        Hashtable<String,String> env = new Hashtable<String,String>();
+
+        // Configure our directory context environment.
+        if (containerLog.isDebugEnabled() && connectionAttempt == 0)
+            containerLog.debug("Connecting to URL " + connectionURL);
+        else if (containerLog.isDebugEnabled() && connectionAttempt > 0)
+            containerLog.debug("Connecting to URL " + alternateURL);
+        env.put(Context.INITIAL_CONTEXT_FACTORY, contextFactory);
+        if (connectionName != null)
+            env.put(Context.SECURITY_PRINCIPAL, connectionName);
+        if (connectionPassword != null)
+            env.put(Context.SECURITY_CREDENTIALS, connectionPassword);
+        if (connectionURL != null && connectionAttempt == 0)
+            env.put(Context.PROVIDER_URL, connectionURL);
+        else if (alternateURL != null && connectionAttempt > 0)
+            env.put(Context.PROVIDER_URL, alternateURL);
+        if (authentication != null)
+            env.put(Context.SECURITY_AUTHENTICATION, authentication);
+        if (protocol != null)
+            env.put(Context.SECURITY_PROTOCOL, protocol);
+        if (referrals != null)
+            env.put(Context.REFERRAL, referrals);
+        if (derefAliases != null)
+            env.put(JNDIRealm.DEREF_ALIASES, derefAliases);
+        if (connectionTimeout != null)
+        	env.put("com.sun.jndi.ldap.connect.timeout", connectionTimeout);
+
+        return env;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Open (if necessary) and return a connection to the configured
+     * directory server for this Realm.
+     *
+     * @exception NamingException if a directory server error occurs
+     */
+    protected DirContext open() throws NamingException {
+
+        // Do nothing if there is a directory server connection already open
+        if (context != null)
+            return (context);
+
+        try {
+
+            // Ensure that we have a directory context available
+            context = new InitialDirContext(getDirectoryContextEnvironment());
+
+        } catch (Exception e) {
+
+            connectionAttempt = 1;
+
+            // log the first exception.
+            containerLog.warn(sm.getString("jndiRealm.exception"), e);
+
+            // Try connecting to the alternate url.
+            context = new InitialDirContext(getDirectoryContextEnvironment());
+
+        } finally {
+
+            // reset it in case the connection times out.
+            // the primary may come back.
+            connectionAttempt = 0;
+
+        }
+
+        return (context);
+
+    }

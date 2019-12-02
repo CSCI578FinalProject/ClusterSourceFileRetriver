@@ -1,0 +1,168 @@
+14
+
+
+    /**
+     * <p>Register the specified DTD URL for the specified public identifier.
+     * This must be called before the first call to <code>parse()</code>.
+     * </p><p>
+     * <code>Digester</code> contains an internal <code>EntityResolver</code>
+     * implementation. This maps <code>PUBLICID</code>'s to URLs
+     * (from which the resource will be loaded). A common use case for this
+     * method is to register local URLs (possibly computed at runtime by a
+     * classloader) for DTDs. This allows the performance advantage of using
+     * a local version without having to ensure every <code>SYSTEM</code>
+     * URI on every processed xml document is local. This implementation provides
+     * only basic functionality. If more sophisticated features are required,
+     * using {@link #setEntityResolver} to set a custom resolver is recommended.
+     * </p><p>
+     * <strong>Note:</strong> This method will have no effect when a custom
+     * <code>EntityResolver</code> has been set. (Setting a custom
+     * <code>EntityResolver</code> overrides the internal implementation.)
+     * </p>
+     * @param publicId Public identifier of the DTD to be resolved
+     * @param entityURL The URL to use for reading this DTD
+     */
+    public void register(String publicId, String entityURL) {
+
+        if (log.isDebugEnabled()) {
+            log.debug("register('" + publicId + "', '" + entityURL + "'");
+        }
+        entityValidator.put(publicId, entityURL);
+
+    }
+
+    /**
+     * Add a "set next" rule for the specified parameters.
+     *
+     * @param pattern Element matching pattern
+     * @param methodName Method name to call on the parent element
+     * @see SetNextRule
+     */
+    public void addSetNext(String pattern, String methodName) {
+
+        addRule(pattern,
+                new SetNextRule(methodName));
+
+    }
+
+
+    /**
+     * Add a "set next" rule for the specified parameters.
+     *
+     * @param pattern Element matching pattern
+     * @param methodName Method name to call on the parent element
+     * @param paramType Java class name of the expected parameter type
+     *  (if you wish to use a primitive type, specify the corresponding
+     *  Java wrapper class instead, such as <code>java.lang.Boolean</code>
+     *  for a <code>boolean</code> parameter)
+     * @see SetNextRule
+     */
+    public void addSetNext(String pattern, String methodName,
+                           String paramType) {
+
+        addRule(pattern,
+                new SetNextRule(methodName, paramType));
+
+    }
+
+
+    /**
+     * Set the validating parser flag.  This must be called before
+     * <code>parse()</code> is called the first time.
+     *
+     * @param validating The new validating parser flag.
+     */
+    public void setValidating(boolean validating) {
+
+        this.validating = validating;
+
+    }
+
+
+    /**
+     * Push a new object onto the top of the object stack.
+     *
+     * @param object The new object
+     */
+    public void push(Object object) {
+
+        if (stack.size() == 0) {
+            root = object;
+        }
+        stack.push(object);
+
+    }
+
+    /**
+     * Pushes the given object onto the stack with the given name.
+     * If no stack already exists with the given name then one will be created.
+     *
+     * @param stackName the name of the stack onto which the object should be pushed
+     * @param value the Object to be pushed onto the named stack.
+     *
+     * @since 1.6
+     */
+    public void push(String stackName, Object value) {
+        ArrayStack namedStack = (ArrayStack) stacksByName.get(stackName);
+        if (namedStack == null) {
+            namedStack = new ArrayStack();
+            stacksByName.put(stackName, namedStack);
+        }
+        namedStack.push(value);
+    }
+
+
+    /**
+     * <p>Push a new object onto the top of the parameters stack.</p>
+     *
+     * <p>The parameters stack is used to store <code>CallMethodRule</code> parameters.
+     * See {@link #params}.</p>
+     *
+     * @param object The new object
+     */
+    public void pushParams(Object object) {
+        if (log.isTraceEnabled()) {
+            log.trace("Pushing params");
+        }
+        params.push(object);
+
+    }
+
+
+    /**
+     * Set the "namespace aware" flag for parsers we create.
+     *
+     * @param namespaceAware The new "namespace aware" flag
+     */
+    public void setNamespaceAware(boolean namespaceAware) {
+
+        this.namespaceAware = namespaceAware;
+
+    }
+
+
+    /**
+     * Returns the one-based position of the distance from the top that the
+     * specified object exists on this stack, where the top-most element is
+     * considered to be at distance <code>1</code>.  If the object is not
+     * present on the stack, return <code>-1</code> instead.  The
+     * <code>equals()</code> method is used to compare to the items
+     * in this stack.
+     *
+     * @param object  the object to be searched for
+     * @return the 1-based depth into the stack of the object, or -1 if not found
+     */
+    public int search(Object object) {
+        int i = size() - 1;        // Current index
+        int n = 1;                 // Current distance
+        while (i >= 0) {
+            Object current = get(i);
+            if ((object == null && current == null) ||
+                (object != null && object.equals(current))) {
+                return n;
+            }
+            i--;
+            n++;
+        }
+        return -1;
+    }

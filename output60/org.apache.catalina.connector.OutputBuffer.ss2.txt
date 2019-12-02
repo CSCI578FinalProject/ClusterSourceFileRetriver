@@ -1,0 +1,110 @@
+2
+-----CSCI578-----
+
+
+
+    private void writeBytes(byte b[], int off, int len) 
+        throws IOException {
+
+        if (closed)
+            return;
+
+        bb.append(b, off, len);
+        bytesWritten += len;
+
+        // if called from within flush(), then immediately flush
+        // remaining bytes
+        if (doFlush) {
+            bb.flushBuffer();
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public void write(byte b[], int off, int len) throws IOException {
+
+        if (suspended)
+            return;
+
+        writeBytes(b, off, len);
+
+    }
+
+
+
+    // ------------------------------------------------- Chars Handling Methods
+
+
+    public void write(int c)
+        throws IOException {
+
+        if (suspended)
+            return;
+
+        conv.convert((char) c);
+        conv.flushBuffer();
+        charsWritten++;
+        
+    }
+
+
+
+    public void write(char c[])
+        throws IOException {
+
+        if (suspended)
+            return;
+
+        write(c, 0, c.length);
+
+    }
+
+
+
+    public void write(char c[], int off, int len)
+        throws IOException {
+
+        if (suspended)
+            return;
+
+        conv.convert(c, off, len);
+        conv.flushBuffer();
+        charsWritten += len;
+
+    }
+
+
+
+    /**
+     * Append a string to the buffer
+     */
+    public void write(String s, int off, int len)
+        throws IOException {
+
+        if (suspended)
+            return;
+
+        charsWritten += len;
+        if (s == null)
+            s = "null";
+        conv.convert(s, off, len);
+        conv.flushBuffer();
+
+    }
+
+
+
+    public void write(String s)
+        throws IOException {
+
+        if (suspended)
+            return;
+
+        if (s == null)
+            s = "null";
+        conv.convert(s);
+        conv.flushBuffer();
+
+    }

@@ -1,0 +1,39 @@
+3
+-----CSCI578-----
+
+
+
+    public static void setTwoBytes(byte[] output, int firstByte, int value) {
+        output[firstByte] = (byte) ((value & 0xFF00) >> 8);
+        output[firstByte + 1] = (byte) (value & 0xFF);
+    }
+-----CSCI578-----
+
+
+    public int getId() {
+        return id;
+    }
+-----CSCI578-----
+
+
+
+    synchronized byte[] getSettingsFrameForPending() {
+        checkSend();
+        int payloadSize = pending.size() * 6;
+        byte[] result = new byte[9 + payloadSize];
+
+        ByteUtil.setThreeBytes(result, 0, payloadSize);
+        result[3] = FrameType.SETTINGS.getIdByte();
+        // No flags
+        // Stream is zero
+        // Payload
+        int pos = 9;
+        for (Map.Entry<Setting,Long> setting : pending.entrySet()) {
+            ByteUtil.setTwoBytes(result, pos, setting.getKey().getId());
+            pos += 2;
+            ByteUtil.setFourBytes(result, pos, setting.getValue().longValue());
+            pos += 4;
+        }
+        sendInProgress = true;
+        return result;
+    }

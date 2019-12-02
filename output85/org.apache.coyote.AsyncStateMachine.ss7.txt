@@ -1,0 +1,53 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * @return the Executor used by the underlying endpoint.
+     */
+    protected Executor getExecutor() {
+        return endpoint.getExecutor();
+    }
+-----CSCI578-----
+
+
+    public synchronized void asyncRun(Runnable runnable) {
+        if (state == AsyncState.STARTING || state ==  AsyncState.STARTED ||
+                state == AsyncState.READ_WRITE_OP) {
+            // Execute the runnable using a container thread from the
+            // Connector's thread pool. Use a wrapper to prevent a memory leak
+            ClassLoader oldCL;
+            if (Constants.IS_SECURITY_ENABLED) {
+                PrivilegedAction<ClassLoader> pa = new PrivilegedGetTccl();
+                oldCL = AccessController.doPrivileged(pa);
+            } else {
+                oldCL = Thread.currentThread().getContextClassLoader();
+            }
+            try {
+                if (Constants.IS_SECURITY_ENABLED) {
+                    PrivilegedAction<Void> pa = new PrivilegedSetTccl(
+                            this.getClass().getClassLoader());
+                    AccessController.doPrivileged(pa);
+                } else {
+                    Thread.currentThread().setContextClassLoader(
+                            this.getClass().getClassLoader());
+                }
+
+                processor.getExecutor().execute(runnable);
+            } finally {
+                if (Constants.IS_SECURITY_ENABLED) {
+                    PrivilegedAction<Void> pa = new PrivilegedSetTccl(
+                            oldCL);
+                    AccessController.doPrivileged(pa);
+                } else {
+                    Thread.currentThread().setContextClassLoader(oldCL);
+                }
+            }
+        } else {
+            throw new IllegalStateException(
+                    sm.getString("asyncStateMachine.invalidAsyncState",
+                            "asyncRun()", state));
+        }
+
+    }

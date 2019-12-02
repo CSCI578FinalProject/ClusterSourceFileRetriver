@@ -1,0 +1,101 @@
+4
+-----CSCI578-----
+
+
+    @Override
+    public boolean keepalive() {
+        boolean result = false;
+        for (Iterator<Entry<Member,NioSender>> i = nioSenders.entrySet().iterator(); i.hasNext();) {
+            Map.Entry<Member, NioSender> entry = i.next();
+            NioSender sender = entry.getValue();
+            if ( sender.keepalive() ) {
+                //nioSenders.remove(entry.getKey());
+                i.remove();
+                result = true;
+            } else {
+                try {
+                    sender.read();
+                }catch ( IOException x ) {
+                    sender.disconnect();
+                    sender.reset();
+                    //nioSenders.remove(entry.getKey());
+                    i.remove();
+                    result = true;
+                }catch ( Exception x ) {
+                    log.warn(sm.getString("parallelNioSender.error.keepalive", sender),x);
+                }
+            }
+        }
+        //clean up any cancelled keys
+        if ( result ) try { selector.selectNow(); }catch (Exception e){/*Ignore*/}
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * disconnect
+     *
+     * TODO Implement this org.apache.catalina.tribes.transport.IDataSender method
+     */
+    @Override
+    public void disconnect() {
+        try {
+            connecting = false;
+            setConnected(false);
+            if (socketChannel != null) {
+                try {
+                    try {
+                        socketChannel.socket().close();
+                    } catch (Exception x) {
+                        // Ignore
+                    }
+                    //error free close, all the way
+                    //try {socket.shutdownOutput();}catch ( Exception x){}
+                    //try {socket.shutdownInput();}catch ( Exception x){}
+                    //try {socket.close();}catch ( Exception x){}
+                    try {
+                        socketChannel.close();
+                    } catch (Exception x) {
+                        // Ignore
+                    }
+                } finally {
+                    socketChannel = null;
+                }
+            }
+            if (dataChannel != null) {
+                try {
+                    try {
+                        dataChannel.socket().close();
+                    } catch (Exception x) {
+                        // Ignore
+                    }
+                    //error free close, all the way
+                    //try {socket.shutdownOutput();}catch ( Exception x){}
+                    //try {socket.shutdownInput();}catch ( Exception x){}
+                    //try {socket.close();}catch ( Exception x){}
+                    try {
+                        dataChannel.close();
+                    } catch (Exception x) {
+                        // Ignore
+                    }
+                } finally {
+                    dataChannel = null;
+                }
+            }
+        } catch ( Exception x ) {
+            log.error(sm.getString("nioSender.unable.disconnect", x.getMessage()));
+            if ( log.isDebugEnabled() ) log.debug(sm.getString("nioSender.unable.disconnect", x.getMessage()),x);
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void remove(Member member) {
+        //disconnect senders
+        NioSender sender = nioSenders.remove(member);
+        if ( sender != null ) sender.disconnect();
+    }

@@ -1,0 +1,125 @@
+17
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    // ------------------------------------------------------------- Properties
+    
+    
+    /**
+     * Content accessor.
+     * 
+     * @return InputStream
+     */
+    public InputStream streamContent()
+        throws IOException {
+        if (binaryContent != null) {
+            return new ByteArrayInputStream(binaryContent);
+        }
+        return inputStream;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Retrieves the named object as a cache entry, without any exception.
+     * 
+     * @param name the name of the object to look up
+     * @return the cache entry bound to name
+     */
+    public CacheEntry lookupCache(String name) {
+        CacheEntry entry = cacheLookup(name);
+        if (entry == null) {
+            entry = new CacheEntry();
+            entry.name = name;
+            try {
+                Object object = dirContext.lookup(parseName(name));
+                if (object instanceof InputStream) {
+                    entry.resource = new Resource((InputStream) object);
+                } else if (object instanceof DirContext) {
+                    entry.context = (DirContext) object;
+                } else if (object instanceof Resource) {
+                    entry.resource = (Resource) object;
+                } else {
+                    entry.resource = new Resource(new ByteArrayInputStream
+                        (object.toString().getBytes()));
+                }
+                Attributes attributes = dirContext.getAttributes(parseName(name));
+                if (!(attributes instanceof ResourceAttributes)) {
+                    attributes = new ResourceAttributes(attributes);
+                }
+                entry.attributes = (ResourceAttributes) attributes;
+            } catch (NamingException e) {
+                entry.exists = false;
+            }
+        }
+        return entry;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Enumerates the names bound in the named context, along with the class 
+     * names of objects bound to them. The contents of any subcontexts are 
+     * not included.
+     * <p>
+     * If a binding is added to or removed from this context, its effect on 
+     * an enumeration previously returned is undefined.
+     * 
+     * @param name the name of the context to list
+     * @return an enumeration of the names and class names of the bindings in 
+     * this context. Each element of the enumeration is of type NameClassPair.
+     * @exception NamingException if a naming exception is encountered
+     */
+    public NamingEnumeration list(Name name)
+        throws NamingException {
+        return dirContext.list(parseName(name));
+    }
+
+
+
+    /**
+     * Enumerates the names bound in the named context, along with the class 
+     * names of objects bound to them.
+     * 
+     * @param name the name of the context to list
+     * @return an enumeration of the names and class names of the bindings in 
+     * this context. Each element of the enumeration is of type NameClassPair.
+     * @exception NamingException if a naming exception is encountered
+     */
+    public NamingEnumeration list(String name)
+        throws NamingException {
+        return dirContext.list(parseName(name));
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    
+    /**
+     * Return the canonical path of the resource, to possibly be used for 
+     * direct file serving. Implementations which support this should override
+     * it to return the file path.
+     * 
+     * @return The canonical path of the resource
+     */
+    public String getCanonicalPath() {
+        return null;
+    }

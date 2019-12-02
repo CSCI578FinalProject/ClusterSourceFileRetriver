@@ -1,0 +1,31 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    protected void processInputBuffer() throws IOException {
+        while (true) {
+            wsSession.updateLastActive();
+            if (state == State.NEW_FRAME) {
+                if (!processInitialHeader()) {
+                    break;
+                }
+                // If a close frame has been received, no further data should
+                // have seen
+                if (!open) {
+                    throw new IOException(sm.getString("wsFrame.closed"));
+                }
+            }
+            if (state == State.PARTIAL_HEADER) {
+                if (!processRemainingHeader()) {
+                    break;
+                }
+            }
+            if (state == State.DATA) {
+                if (!processData()) {
+                    break;
+                }
+            }
+        }
+    }

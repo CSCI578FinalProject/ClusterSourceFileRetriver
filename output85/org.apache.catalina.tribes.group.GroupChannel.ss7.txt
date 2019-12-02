@@ -1,0 +1,53 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Sends a heartbeat through the interceptor stack.<br>
+     * Invoke this method from the application on a periodic basis if
+     * you have turned off internal heartbeats <code>channel.setHeartbeat(false)</code>
+     */
+    @Override
+    public void heartbeat() {
+        super.heartbeat();
+        Iterator<MembershipListener> membershipListenerIterator = membershipListeners.iterator();
+        while ( membershipListenerIterator.hasNext() ) {
+            MembershipListener listener = membershipListenerIterator.next();
+            if ( listener instanceof Heartbeat ) ((Heartbeat)listener).heartbeat();
+        }
+        Iterator<ChannelListener> channelListenerIterator = channelListeners.iterator();
+        while ( channelListenerIterator.hasNext() ) {
+            ChannelListener listener = channelListenerIterator.next();
+            if ( listener instanceof Heartbeat ) ((Heartbeat)listener).heartbeat();
+        }
+
+    }
+
+
+    /**
+     * Enables or disables local heartbeat.
+     * if <code>setHeartbeat(true)</code> is invoked then the channel will start an internal
+     * thread to invoke <code>Channel.heartbeat()</code> every <code>getHeartbeatSleeptime</code> milliseconds
+     * @param heartbeat boolean
+     */
+    @Override
+    public void setHeartbeat(boolean heartbeat) {
+        this.heartbeat = heartbeat;
+    }
+
+
+    /**
+     * Returns the sleep time in milliseconds that the internal heartbeat will
+     * sleep in between invocations of <code>Channel.heartbeat()</code>
+     * @return long
+     */
+    public long getHeartbeatSleeptime() {
+        return heartbeatSleeptime;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Heartbeat invocation for resources cleanup etc
+     */
+    public void heartbeat();

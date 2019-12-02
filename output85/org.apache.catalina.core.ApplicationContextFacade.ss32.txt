@@ -1,0 +1,98 @@
+4
+-----CSCI578-----
+
+
+
+    @Override
+    @Deprecated
+    public Servlet getServlet(String name) {
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @deprecated As of Java Servlet API 2.1, with no direct replacement.
+     */
+    @Override
+    @Deprecated
+    public Servlet getServlet(String name)
+        throws ServletException {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                return (Servlet) invokeMethod(context, "getServlet",
+                                              new Object[]{name});
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                if (t instanceof ServletException) {
+                    throw (ServletException) t;
+                }
+                return null;
+            }
+        } else {
+            return context.getServlet(name);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Use reflection to invoke the requested method. Cache the method object
+     * to speed up the process
+     * @param appContext The AppliationContext object on which the method
+     *                   will be invoked
+     * @param methodName The method to call.
+     * @param params The arguments passed to the called method.
+     */
+    private Object invokeMethod(ApplicationContext appContext,
+                                final String methodName,
+                                Object[] params)
+        throws Throwable{
+
+        try{
+            Method method = objectCache.get(methodName);
+            if (method == null){
+                method = appContext.getClass()
+                    .getMethod(methodName, classCache.get(methodName));
+                objectCache.put(methodName, method);
+            }
+
+            return executeMethod(method,appContext,params);
+        } catch (Exception ex){
+            handleException(ex);
+            return null;
+        } finally {
+            params = null;
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     *
+     * Throw the real exception.
+     * @param ex The current exception
+     */
+    private void handleException(Exception ex)
+        throws Throwable {
+
+        Throwable realException;
+
+        if (ex instanceof PrivilegedActionException) {
+            ex = ((PrivilegedActionException) ex).getException();
+        }
+
+        if (ex instanceof InvocationTargetException) {
+            realException = ex.getCause();
+            if (realException == null) {
+                realException = ex;
+            }
+        } else {
+            realException = ex;
+        }
+
+        throw realException;
+    }

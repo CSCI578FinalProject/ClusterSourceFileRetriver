@@ -1,0 +1,84 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void start() throws LifecycleException {
+
+        // just add any jar/directory set in virtual classpath to the
+        // repositories list before calling start on the standard WebappLoader
+        StringTokenizer tkn = new StringTokenizer(virtualClasspath, ";");
+        Set<String> set = new LinkedHashSet<String>();
+        while (tkn.hasMoreTokens()) {
+            String token = tkn.nextToken().trim();
+
+            if (log.isDebugEnabled())
+                log.debug(sm.getString("virtualWebappLoader.token", token));
+
+            if (token.endsWith("*.jar")) {
+                // glob
+                token = token.substring(0, token.length() - "*.jar".length());
+
+                File directory = new File(token);
+                if (!directory.isDirectory()) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString(
+                                "virtualWebappLoader.token.notDirectory",
+                                directory.getAbsolutePath()));
+                    }
+                    continue;
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString(
+                            "virtualWebappLoader.token.glob.dir",
+                            directory.getAbsolutePath()));
+                }
+                String filenames[] = directory.list();
+                Arrays.sort(filenames);
+                for (int j = 0; j < filenames.length; j++) {
+                    String filename = filenames[j].toLowerCase(Locale.ENGLISH);
+                    if (!filename.endsWith(".jar"))
+                        continue;
+                    File file = new File(directory, filenames[j]);
+                    if (!file.isFile()) {
+                        if (log.isDebugEnabled()) {
+                            log.debug(sm.getString(
+                                    "virtualWebappLoader.token.notFile",
+                                    file.getAbsolutePath()));
+                        }
+                        continue;
+                    }
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString(
+                                "virtualWebappLoader.token.file",
+                                file.getAbsolutePath()));
+                    }
+                    set.add(file.toURI().toString());
+                }
+            } else {
+                // single file or directory
+                File file = new File(token);
+                if (!file.exists()) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString(
+                                "virtualWebappLoader.token.notExists",
+                                file.getAbsolutePath()));
+                    }
+                    continue;
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString(
+                            "virtualWebappLoader.token.file",
+                            file.getAbsolutePath()));
+                }
+                set.add(file.toURI().toString());
+            }
+        }
+
+        for (String repository: set) {
+            addRepository(repository);
+        }
+
+        super.start();
+    }

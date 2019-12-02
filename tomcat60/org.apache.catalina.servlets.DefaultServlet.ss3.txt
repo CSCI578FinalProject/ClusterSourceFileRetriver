@@ -1,0 +1,168 @@
+8
+    
+    
+    /**
+     * Get last modified time.
+     * 
+     * @return lastModified time value
+     */
+    public long getLastModified() {
+        if (lastModified != -1L)
+            return lastModified;
+        if (lastModifiedDate != null)
+            return lastModifiedDate.getTime();
+        if (attributes != null) {
+            Attribute attribute = attributes.get(LAST_MODIFIED);
+            if (attribute != null) {
+                try {
+                    Object value = attribute.get();
+                    if (value instanceof Long) {
+                        lastModified = ((Long) value).longValue();
+                    } else if (value instanceof Date) {
+                        lastModified = ((Date) value).getTime();
+                        lastModifiedDate = (Date) value;
+                    } else {
+                        String lastModifiedDateValue = value.toString();
+                        Date result = null;
+                        // Parsing the HTTP Date
+                        for (int i = 0; (result == null) && 
+                                 (i < formats.length); i++) {
+                            try {
+                                result = 
+                                    formats[i].parse(lastModifiedDateValue);
+                            } catch (ParseException e) {
+                                ;
+                            }
+                        }
+                        if (result != null) {
+                            lastModified = result.getTime();
+                            lastModifiedDate = result;
+                        }
+                    }
+                } catch (NamingException e) {
+                    ; // No value for the attribute
+                }
+            }
+        }
+        return lastModified;
+    }
+
+
+    /**
+     * Get lastModified date.
+     * 
+     * @return LastModified date value
+     */
+    public Date getLastModifiedDate() {
+        if (lastModifiedDate != null)
+            return lastModifiedDate;
+        if (lastModified != -1L) {
+            lastModifiedDate = new Date(lastModified);
+            return lastModifiedDate;
+        }
+        if (attributes != null) {
+            Attribute attribute = attributes.get(LAST_MODIFIED);
+            if (attribute != null) {
+                try {
+                    Object value = attribute.get();
+                    if (value instanceof Long) {
+                        lastModified = ((Long) value).longValue();
+                        lastModifiedDate = new Date(lastModified);
+                    } else if (value instanceof Date) {
+                        lastModified = ((Date) value).getTime();
+                        lastModifiedDate = (Date) value;
+                    } else {
+                        String lastModifiedDateValue = value.toString();
+                        Date result = null;
+                        // Parsing the HTTP Date
+                        for (int i = 0; (result == null) && 
+                                 (i < formats.length); i++) {
+                            try {
+                                result = 
+                                    formats[i].parse(lastModifiedDateValue);
+                            } catch (ParseException e) {
+                                ;
+                            }
+                        }
+                        if (result != null) {
+                            lastModified = result.getTime();
+                            lastModifiedDate = result;
+                        }
+                    }
+                } catch (NamingException e) {
+                    ; // No value for the attribute
+                }
+            }
+        }
+        return lastModifiedDate;
+    }
+    
+    
+    /**
+     * @return Returns the lastModifiedHttp.
+     */
+    public String getLastModifiedHttp() {
+        if (lastModifiedHttp != null)
+            return lastModifiedHttp;
+        Date modifiedDate = getLastModifiedDate();
+        if (modifiedDate == null) {
+            modifiedDate = getCreationDate();
+        }
+        if (modifiedDate == null) {
+            modifiedDate = new Date();
+        }
+        synchronized (format) {
+            lastModifiedHttp = format.format(modifiedDate);
+        }
+        return lastModifiedHttp;
+    }
+
+
+    /**
+     * Get ETag.
+     * 
+     * @return strong ETag if available, else weak ETag. 
+     */
+    public String getETag() {
+        String result = null;
+        if (attributes != null) {
+            Attribute attribute = attributes.get(ETAG);
+            if (attribute != null) {
+                try {
+                    result = attribute.get().toString();
+                } catch (NamingException e) {
+                    ; // No value for the attribute
+                }
+            }
+        }
+        if (result == null) {
+            if (strongETag != null) {
+                // The strong ETag must always be calculated by the resources
+                result = strongETag;
+            } else {
+                // The weakETag is contentLength + lastModified
+                if (weakETag == null) {
+                    long contentLength = getContentLength();
+                    long lastModified = getLastModified();
+                    if ((contentLength >= 0) || (lastModified >= 0)) {
+                        weakETag = "W/\"" + contentLength + "-" +
+                                   lastModified + "\"";
+                    }
+                }
+                result = weakETag;
+            }
+        } 
+        return result;
+    }
+
+
+    /**
+     * Get ETag.
+     * 
+     * @param strong Ignored
+     * @return strong ETag if available, else weak ETag.
+     * @deprecated
+     */
+    public String getETag(boolean strong) {
+        return getETag();
+    }

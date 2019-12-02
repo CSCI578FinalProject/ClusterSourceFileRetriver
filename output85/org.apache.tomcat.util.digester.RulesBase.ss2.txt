@@ -1,0 +1,170 @@
+5
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Register a new Rule instance matching the specified pattern.
+     *
+     * @param pattern Nesting pattern to be matched for this Rule
+     * @param rule Rule instance to be registered
+     */
+    @Override
+    public void add(String pattern, Rule rule) {
+        // to help users who accidently add '/' to the end of their patterns
+        int patternLength = pattern.length();
+        if (patternLength>1 && pattern.endsWith("/")) {
+            pattern = pattern.substring(0, patternLength-1);
+        }
+
+
+        List<Rule> list = cache.get(pattern);
+        if (list == null) {
+            list = new ArrayList<>();
+            cache.put(pattern, list);
+        }
+        list.add(rule);
+        rules.add(rule);
+        if (this.digester != null) {
+            rule.setDigester(this.digester);
+        }
+        if (this.namespaceURI != null) {
+            rule.setNamespaceURI(this.namespaceURI);
+        }
+
+    }
+
+
+
+    /**
+     * Return a List of all registered Rule instances that match the specified
+     * nesting pattern, or a zero-length List if there are no matches.  If more
+     * than one Rule instance matches, they <strong>must</strong> be returned
+     * in the order originally registered through the <code>add()</code>
+     * method.
+     *
+     * @param namespaceURI Namespace URI for which to select matching rules,
+     *  or <code>null</code> to match regardless of namespace URI
+     * @param pattern Nesting pattern to be matched
+     */
+    @Override
+    public List<Rule> match(String namespaceURI, String pattern) {
+
+        // List rulesList = (List) this.cache.get(pattern);
+        List<Rule> rulesList = lookup(namespaceURI, pattern);
+        if ((rulesList == null) || (rulesList.size() < 1)) {
+            // Find the longest key, ie more discriminant
+            String longKey = "";
+            Iterator<String> keys = this.cache.keySet().iterator();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                if (key.startsWith("*/")) {
+                    if (pattern.equals(key.substring(2)) ||
+                        pattern.endsWith(key.substring(1))) {
+                        if (key.length() > longKey.length()) {
+                            // rulesList = (List) this.cache.get(key);
+                            rulesList = lookup(namespaceURI, key);
+                            longKey = key;
+                        }
+                    }
+                }
+            }
+        }
+        if (rulesList == null) {
+            rulesList = new ArrayList<>();
+        }
+        return (rulesList);
+
+    }
+
+
+
+    /**
+     * Return a List of all registered Rule instances, or a zero-length List
+     * if there are no registered Rule instances.  If more than one Rule
+     * instance has been registered, they <strong>must</strong> be returned
+     * in the order originally registered through the <code>add()</code>
+     * method.
+     */
+    @Override
+    public List<Rule> rules() {
+
+        return (this.rules);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the namespace URI for which this Rule is relevant, if any.
+     *
+     * @param namespaceURI Namespace URI for which this Rule is relevant,
+     *  or <code>null</code> to match independent of namespace.
+     */
+    public void setNamespaceURI(String namespaceURI) {
+        this.namespaceURI = namespaceURI;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>Digester</code> with which this <code>Rule</code> is
+     * associated.
+     *
+     * @param digester The digester with which to associate this rule
+     */
+    public void setDigester(Digester digester) {
+        this.digester = digester;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the associated digester.
+     * If needed, this class loads the parameter classes from their names.
+     */
+    @Override
+    public void setDigester(Digester digester)
+    {
+        // call superclass
+        super.setDigester(digester);
+        // if necessary, load parameter classes
+        if (this.paramClassNames != null) {
+            this.paramTypes = new Class[paramClassNames.length];
+            for (int i = 0; i < this.paramClassNames.length; i++) {
+                try {
+                    this.paramTypes[i] =
+                            digester.getClassLoader().loadClass(this.paramClassNames[i]);
+                } catch (ClassNotFoundException e) {
+                    // use the digester log
+                    digester.getLogger().error("(CallMethodRule) Cannot load class " + this.paramClassNames[i], e);
+                    this.paramTypes[i] = null; // Will cause NPE later
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Digester instance with which this Rules instance is associated.
+     *
+     * @param digester The newly associated Digester instance
+     */
+    @Override
+    public void setDigester(Digester digester) {
+
+        this.digester = digester;
+        Iterator<Rule> items = rules.iterator();
+        while (items.hasNext()) {
+            Rule item = items.next();
+            item.setDigester(digester);
+        }
+
+    }

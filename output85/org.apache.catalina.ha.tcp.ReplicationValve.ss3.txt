@@ -1,0 +1,273 @@
+13
+-----CSCI578-----
+
+
+    /**
+     * Reset DeltaRequest from session
+     * @param session HttpSession from current request or cross context session
+     */
+    protected void resetDeltaRequest(Session session) {
+        if(log.isDebugEnabled()) {
+            log.debug(sm.getString("ReplicationValve.resetDeltaRequest" ,
+                session.getManager().getContext().getName() ));
+        }
+        ((DeltaSession)session).resetDeltaRequest();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Fix memory leak for long sessions with many changes, when no backup member exists!
+     * @param request current request after response is generated
+     * @param isCrossContext check crosscontext threadlocal
+     */
+    protected void resetReplicationRequest(Request request, boolean isCrossContext) {
+        Session contextSession = request.getSessionInternal(false);
+        if(contextSession instanceof DeltaSession){
+            resetDeltaRequest(contextSession);
+            ((DeltaSession)contextSession).setPrimarySession(true);
+        }
+        if(isCrossContext) {
+            List<DeltaSession> sessions = crossContextSessions.get();
+            if(sessions != null && sessions.size() >0) {
+                Iterator<DeltaSession> iter = sessions.iterator();
+                for(; iter.hasNext() ;) {
+                    Session session = iter.next();
+                    resetDeltaRequest(session);
+                    if(session instanceof DeltaSession) {
+                        ((DeltaSession)contextSession).setPrimarySession(true);
+                    }
+
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets whether this is the primary session or not.
+     *
+     * @param primarySession
+     *            Flag value
+     */
+    @Override
+    public void setPrimarySession(boolean primarySession) {
+        this.isPrimarySession = primarySession;
+    }
+-----CSCI578-----
+
+
+
+//=========================================================================
+// OVERRIDE THESE METHODS TO IMPLEMENT THE REPLICATION
+//=========================================================================
+    @Override
+    public void objectMadePrimary(Object key, Object value) {
+        if (value instanceof DeltaSession) {
+            DeltaSession session = (DeltaSession)value;
+            synchronized (session) {
+                session.access();
+                session.setPrimarySession(true);
+                session.endAccess();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Access to an existing object.
+     */
+    @Override
+    public void accessEntry() {
+        this.access();
+        this.setPrimarySession(false);
+        this.endAccess();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Send Cluster Replication Request
+     * @param request current request
+     * @param manager session manager
+     */
+    protected void sendSessionReplicationMessage(Request request,
+            ClusterManager manager) {
+        Session session = request.getSessionInternal(false);
+        if (session != null) {
+            String uri = request.getDecodedRequestURI();
+            // request without session change
+            if (!isRequestWithoutSessionChange(uri)) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("ReplicationValve.invoke.uri", uri));
+                }
+                sendMessage(session,manager);
+            } else
+                if(doStatistics()) {
+                    nrOfFilterRequests++;
+                }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Protected Methods
+
+    protected void sendReplicationMessage(Request request, long totalstart, boolean isCrossContext, ClusterManager clusterManager) {
+        //this happens after the request
+        long start = 0;
+        if(doStatistics()) {
+            start = System.currentTimeMillis();
+        }
+        try {
+            // send invalid sessions
+            // DeltaManager returns String[0]
+            if (!(clusterManager instanceof DeltaManager)) {
+                sendInvalidSessions(clusterManager);
+            }
+            // send replication
+            sendSessionReplicationMessage(request, clusterManager);
+            if(isCrossContext) {
+                sendCrossContextSession();
+            }
+        } catch (Exception x) {
+            // FIXME we have a lot of sends, but the trouble with one node stops the correct replication to other nodes!
+            log.error(sm.getString("ReplicationValve.send.failure"), x);
+        } finally {
+            // FIXME this stats update are not cheap!!
+            if(doStatistics()) {
+                updateStats(totalstart,start);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Send all changed cross context sessions to backups
+     */
+    protected void sendCrossContextSession() {
+        List<DeltaSession> sessions = crossContextSessions.get();
+        if(sessions != null && sessions.size() >0) {
+            for(Iterator<DeltaSession> iter = sessions.iterator(); iter.hasNext() ;) {
+                Session session = iter.next();
+                if(log.isDebugEnabled()) {
+                    log.debug(sm.getString("ReplicationValve.crossContext.sendDelta",
+                            session.getManager().getContext().getName() ));
+                }
+                sendMessage(session,(ClusterManager)session.getManager());
+                if(doStatistics()) {
+                    nrOfCrossContextSendRequests++;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+   /**
+    * Send message delta message from request session
+    * @param session current session
+    * @param manager session manager
+    */
+    protected void sendMessage(Session session,
+             ClusterManager manager) {
+        String id = session.getIdInternal();
+        if (id != null) {
+            send(manager, id);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * is request without possible session change
+     * @param uri The request uri
+     * @return True if no session change
+     */
+    protected boolean isRequestWithoutSessionChange(String uri) {
+        Pattern f = filter;
+        return f != null && f.matcher(uri).matches();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Protocol cluster replications stats
+     * @param requestTime Request time
+     * @param clusterTime Cluster time
+     */
+    protected  void updateStats(long requestTime, long clusterTime) {
+        // TODO: Async requests may trigger multiple replication requests. How,
+        //       if at all, should the stats handle this?
+        synchronized(this) {
+            lastSendTime=System.currentTimeMillis();
+            totalSendTime+=lastSendTime - clusterTime;
+            totalRequestTime+=lastSendTime - requestTime;
+            nrOfRequests++;
+        }
+        if(log.isInfoEnabled()) {
+            if ( (nrOfRequests % 100) == 0 ) {
+                 log.info(sm.getString("ReplicationValve.stats",
+                     new Object[]{
+                         Long.valueOf(totalRequestTime/nrOfRequests),
+                         Long.valueOf(totalSendTime/nrOfRequests),
+                         Long.valueOf(nrOfRequests),
+                         Long.valueOf(nrOfSendRequests),
+                         Long.valueOf(nrOfCrossContextSendRequests),
+                         Long.valueOf(nrOfFilterRequests),
+                         Long.valueOf(totalRequestTime),
+                         Long.valueOf(totalSendTime)}));
+             }
+        }
+    }
+-----CSCI578-----
+
+   /**
+    * returns true if this session is the primary session, if that is the
+    * case, the manager can expire it upon timeout.
+    * @return True if this session is primary
+    */
+   public boolean isPrimarySession();
+-----CSCI578-----
+
+
+
+    /**
+     * Mark Request that processed at primary node with attribute
+     * primaryIndicatorName
+     *
+     * @param request The Servlet request
+     * @throws IOException IO error finding session
+     */
+    protected void createPrimaryIndicator(Request request) throws IOException {
+        String id = request.getRequestedSessionId();
+        if ((id != null) && (id.length() > 0)) {
+            Manager manager = request.getContext().getManager();
+            Session session = manager.findSession(id);
+            if (session instanceof ClusterSession) {
+                ClusterSession cses = (ClusterSession) session;
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString(
+                            "ReplicationValve.session.indicator", request.getContext().getName(),id,
+                            primaryIndicatorName,
+                            Boolean.valueOf(cses.isPrimarySession())));
+                }
+                request.setAttribute(primaryIndicatorName, cses.isPrimarySession()?Boolean.TRUE:Boolean.FALSE);
+            } else {
+                if (log.isDebugEnabled()) {
+                    if (session != null) {
+                        log.debug(sm.getString(
+                                "ReplicationValve.session.found", request.getContext().getName(),id));
+                    } else {
+                        log.debug(sm.getString(
+                                "ReplicationValve.session.invalid", request.getContext().getName(),id));
+                    }
+                }
+            }
+        }
+    }

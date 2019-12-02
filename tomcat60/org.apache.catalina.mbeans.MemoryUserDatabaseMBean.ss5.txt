@@ -1,0 +1,71 @@
+5
+
+
+    /**
+     * Remove an existing group and destroy the corresponding MBean.
+     *
+     * @param groupname Group name to remove
+     */
+    public void removeGroup(String groupname) {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        Group group = database.findGroup(groupname);
+        if (group == null) {
+            return;
+        }
+        try {
+            MBeanUtils.destroyMBean(group);
+            database.removeGroup(group);
+        } catch (Exception e) {
+            IllegalArgumentException iae = new IllegalArgumentException
+                ("Exception destroying group [" + groupname + "] MBean");
+            iae.initCause(e);
+            throw iae;
+        }
+
+    }
+
+
+    // ------------------------------------------------------------- Operations
+
+
+    /**
+     * Add a new {@link Group} to those this user belongs to.
+     *
+     * @param groupname Group name of the new group
+     */
+    public void addGroup(String groupname) {
+
+        User user = (User) this.resource;
+        if (user == null) {
+            return;
+        }
+        Group group = user.getUserDatabase().findGroup(groupname);
+        if (group == null) {
+            throw new IllegalArgumentException
+                ("Invalid group name '" + groupname + "'");
+        }
+        user.addGroup(group);
+
+    }
+
+
+    /**
+     * Remove a {@link Group} from those this user belongs to.
+     *
+     * @param groupname Group name of the old group
+     */
+    public void removeGroup(String groupname) {
+
+        User user = (User) this.resource;
+        if (user == null) {
+            return;
+        }
+        Group group = user.getUserDatabase().findGroup(groupname);
+        if (group == null) {
+            throw new IllegalArgumentException
+                ("Invalid group name '" + groupname + "'");
+        }
+        user.removeGroup(group);
+
+    }

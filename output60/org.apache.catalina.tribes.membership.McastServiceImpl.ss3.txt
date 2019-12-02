@@ -1,0 +1,43 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Stops the service
+     * @throws IOException if the service fails to disconnect from the sockets
+     */
+    public synchronized boolean stop(int level) throws IOException {
+        boolean valid = false;
+        
+        if ( (level & Channel.MBR_RX_SEQ)==Channel.MBR_RX_SEQ ) {
+            valid = true;
+            doRunReceiver = false;
+            if ( receiver !=null ) receiver.interrupt();
+            receiver = null;
+        } 
+        if ( (level & Channel.MBR_TX_SEQ)==Channel.MBR_TX_SEQ ) {
+            valid = true;
+            doRunSender = false;
+            if ( sender != null )sender.interrupt();
+            sender = null;
+        } 
+        
+        if (!valid) {
+            throw new IllegalArgumentException("Invalid stop level. Only acceptable levels are Channel.MBR_RX_SEQ and Channel.MBR_TX_SEQ");
+        }
+        startLevel = (startLevel & (~level));
+        //we're shutting down, send a shutdown message and close the socket
+        if ( startLevel == 0 ) {
+            //send a stop message
+            member.setCommand(Member.SHUTDOWN_PAYLOAD);
+            member.getData(true, true);
+            send(false);
+            //leave mcast group
+            try {socket.leaveGroup(address);}catch ( Exception ignore){}
+            try {socket.close();}catch ( Exception ignore){}
+            serviceStartTime = Long.MAX_VALUE;
+        }
+        return (startLevel == 0);
+    }

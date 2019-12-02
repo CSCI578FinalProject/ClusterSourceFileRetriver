@@ -1,0 +1,139 @@
+7
+-----CSCI578-----
+
+
+
+   /**
+     * Create a new StandardContext.
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param path The context path for this Context
+     * @param docBase Document base directory (or WAR) for this Context
+     * @return the object name of the created context
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createStandardContext(String parent,
+                                        String path,
+                                        String docBase)
+        throws Exception {
+
+        return createStandardContext(parent, path, docBase, false, false);
+    }
+
+
+
+    /**
+     * Create a new StandardContext.
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param path The context path for this Context
+     * @param docBase Document base directory (or WAR) for this Context
+     * @param xmlValidation if XML descriptors should be validated
+     * @param xmlNamespaceAware if the XML processor should namespace aware
+     * @return the object name of the created context
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createStandardContext(String parent,
+                                        String path,
+                                        String docBase,
+                                        boolean xmlValidation,
+                                        boolean xmlNamespaceAware)
+        throws Exception {
+
+        // Create a new StandardContext instance
+        StandardContext context = new StandardContext();
+        path = getPathStr(path);
+        context.setPath(path);
+        context.setDocBase(docBase);
+        context.setXmlValidation(xmlValidation);
+        context.setXmlNamespaceAware(xmlNamespaceAware);
+
+        ContextConfig contextConfig = new ContextConfig();
+        context.addLifecycleListener(contextConfig);
+
+        // Add the new instance to its parent component
+        ObjectName pname = new ObjectName(parent);
+        ObjectName deployer = new ObjectName(pname.getDomain()+
+                                             ":type=Deployer,host="+
+                                             pname.getKeyProperty("host"));
+        if(mserver.isRegistered(deployer)) {
+            String contextName = context.getName();
+            mserver.invoke(deployer, "addServiced",
+                           new Object [] {contextName},
+                           new String [] {"java.lang.String"});
+            String configPath = (String)mserver.getAttribute(deployer,
+                                                             "configBaseName");
+            String baseName = context.getBaseName();
+            File configFile = new File(new File(configPath), baseName+".xml");
+            if (configFile.isFile()) {
+                context.setConfigFile(configFile.toURI().toURL());
+            }
+            mserver.invoke(deployer, "manageApp",
+                           new Object[] {context},
+                           new String[] {"org.apache.catalina.Context"});
+            mserver.invoke(deployer, "removeServiced",
+                           new Object [] {contextName},
+                           new String [] {"java.lang.String"});
+        } else {
+            log.warn("Deployer not found for "+pname.getKeyProperty("host"));
+            Service service = getService(pname);
+            Engine engine = service.getContainer();
+            Host host = (Host) engine.findChild(pname.getKeyProperty("host"));
+            host.addChild(context);
+        }
+
+        // Return the corresponding MBean name
+        return context.getObjectName().toString();
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setConfigFile(URL configFile) {
+        this.configFile = configFile;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setXmlNamespaceAware(boolean webXmlNamespaceAware) {
+        this.webXmlNamespaceAware = webXmlNamespaceAware;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setXmlValidation(boolean webXmlValidation) {
+        this.webXmlValidation = webXmlValidation;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the document root for this Context.  This can be an absolute
+     * pathname, a relative pathname, or a URL.
+     *
+     * @param docBase The new document root
+     */
+    @Override
+    public void setDocBase(String docBase) {
+
+        this.docBase = docBase;
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getBaseName() {
+        return new ContextName(path, webappVersion).getBaseName();
+    }
+-----CSCI578-----

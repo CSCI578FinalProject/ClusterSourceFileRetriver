@@ -1,0 +1,205 @@
+7
+-----CSCI578-----
+
+
+    /**
+     * Get a list of files that the current page has source dependency on.
+     * @return the map of dependent resources
+     */
+    public java.util.Map<String,Long> getDependants() {
+        try {
+            Object target;
+            if (isTagFile) {
+                if (reload) {
+                    tagHandlerClass = ctxt.load();
+                    reload = false;
+                }
+                target = tagHandlerClass.newInstance();
+            } else {
+                target = getServlet();
+            }
+            if (target instanceof JspSourceDependent) {
+                return ((JspSourceDependent) target).getDependants();
+            }
+        } catch (AbstractMethodError ame) {
+            // Almost certainly a pre Tomcat 7.0.17 compiled JSP using the old
+            // version of the interface. Force a re-compile.
+            return ALWAYS_OUTDATED_DEPENDENCIES;
+        } catch (Throwable ex) {
+            ExceptionUtils.handleThrowable(ex);
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * This is a protected method intended to be overridden by subclasses of
+     * Compiler. This is used by the compile method to do all the compilation.
+     * @return <code>true</code> if the source generation and compilation
+     *  should occur
+     */
+    public boolean isOutDated() {
+        return isOutDated(true);
+    }
+
+
+    /**
+     * Determine if a compilation is necessary by checking the time stamp of the
+     * JSP page with that of the corresponding .class or .java file. If the page
+     * has dependencies, the check is also extended to its dependents, and so
+     * on. This method can by overridden by a subclasses of Compiler.
+     *
+     * @param checkClass
+     *            If true, check against .class file, if false, check against
+     *            .java file.
+     * @return <code>true</code> if the source generation and compilation
+     *  should occur
+     */
+    public boolean isOutDated(boolean checkClass) {
+
+        if (jsw != null
+                && (ctxt.getOptions().getModificationTestInterval() > 0)) {
+
+            if (jsw.getLastModificationTest()
+                    + (ctxt.getOptions().getModificationTestInterval() * 1000) > System
+                    .currentTimeMillis()) {
+                return false;
+            }
+            jsw.setLastModificationTest(System.currentTimeMillis());
+        }
+
+        // Test the target file first. Unless there is an error checking the
+        // last modified time of the source (unlikely) the target is going to
+        // have to be checked anyway. If the target doesn't exist (likely during
+        // startup) this saves an unnecessary check of the source.
+        File targetFile;
+        if (checkClass) {
+            targetFile = new File(ctxt.getClassFileName());
+        } else {
+            targetFile = new File(ctxt.getServletJavaFileName());
+        }
+        if (!targetFile.exists()) {
+            return true;
+        }
+        long targetLastModified = targetFile.lastModified();
+        if (checkClass && jsw != null) {
+            jsw.setServletClassLastModifiedTime(targetLastModified);
+        }
+
+        Long jspRealLastModified = ctxt.getLastModified(ctxt.getJspFile());
+        if (jspRealLastModified.longValue() < 0) {
+            // Something went wrong - assume modification
+            return true;
+        }
+
+        if (targetLastModified != jspRealLastModified.longValue()) {
+            if (log.isDebugEnabled()) {
+                log.debug("Compiler: outdated: " + targetFile + " "
+                        + targetLastModified);
+            }
+            return true;
+        }
+
+        // determine if source dependent files (e.g. includes using include
+        // directives) have been changed.
+        if (jsw == null) {
+            return false;
+        }
+
+        Map<String,Long> depends = jsw.getDependants();
+        if (depends == null) {
+            return false;
+        }
+
+        Iterator<Entry<String,Long>> it = depends.entrySet().iterator();
+        while (it.hasNext()) {
+            Entry<String,Long> include = it.next();
+            try {
+                String key = include.getKey();
+                URL includeUrl;
+                long includeLastModified = 0;
+                if (key.startsWith("jar:jar:")) {
+                    // Assume we constructed this correctly
+                    int entryStart = key.lastIndexOf("!/");
+                    String entry = key.substring(entryStart + 2);
+                    try (Jar jar = JarFactory.newInstance(new URL(key.substring(4, entryStart)))) {
+                        includeLastModified = jar.getLastModified(entry);
+                    }
+                } else {
+                    if (key.startsWith("jar:") || key.startsWith("file:")) {
+                        includeUrl = new URL(key);
+                    } else {
+                        includeUrl = ctxt.getResource(include.getKey());
+                    }
+                    if (includeUrl == null) {
+                        return true;
+                    }
+                    URLConnection iuc = includeUrl.openConnection();
+                    if (iuc instanceof JarURLConnection) {
+                        includeLastModified =
+                            ((JarURLConnection) iuc).getJarEntry().getTime();
+                    } else {
+                        includeLastModified = iuc.getLastModified();
+                    }
+                    iuc.getInputStream().close();
+                }
+
+                if (includeLastModified != include.getValue().longValue()) {
+                    return true;
+                }
+            } catch (Exception e) {
+                if (log.isDebugEnabled())
+                    log.debug("Problem accessing resource. Treat as outdated.",
+                            e);
+                return true;
+            }
+        }
+
+        return false;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return modification test interval.
+     */
+    public int getModificationTestInterval();
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the lastModificationTest.
+     */
+    public long getLastModificationTest() {
+        return lastModificationTest;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Path of the JSP URI. Note that this is not a file name. This is
+     * the context rooted URI of the JSP file.
+     * @return the path to the JSP
+     */
+    public String getJspFile() {
+        return jspUri;
+    }
+-----CSCI578-----
+
+    /**
+     * @param lastModificationTest The lastModificationTest to set.
+     */
+    public void setLastModificationTest(long lastModificationTest) {
+        this.lastModificationTest = lastModificationTest;
+    }
+-----CSCI578-----
+
+
+   /**
+    * Returns a map of file names and last modified time where the current page
+    * has a source dependency on the file.
+    * @return the map of dependent resources
+    */
+    public Map<String,Long> getDependants();

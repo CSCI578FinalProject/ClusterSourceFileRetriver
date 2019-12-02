@@ -1,0 +1,52 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------------- FilterChain Methods
+
+    /**
+     * Invoke the next filter in this chain, passing the specified request
+     * and response.  If there are no more filters in this chain, invoke
+     * the <code>service()</code> method of the servlet itself.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet exception occurs
+     */
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response)
+        throws IOException, ServletException {
+
+        if( Globals.IS_SECURITY_ENABLED ) {
+            final ServletRequest req = request;
+            final ServletResponse res = response;
+            try {
+                java.security.AccessController.doPrivileged(
+                    new java.security.PrivilegedExceptionAction<Void>() {
+                        @Override
+                        public Void run()
+                            throws ServletException, IOException {
+                            internalDoFilter(req,res);
+                            return null;
+                        }
+                    }
+                );
+            } catch( PrivilegedActionException pe) {
+                Exception e = pe.getException();
+                if (e instanceof ServletException)
+                    throw (ServletException) e;
+                else if (e instanceof IOException)
+                    throw (IOException) e;
+                else if (e instanceof RuntimeException)
+                    throw (RuntimeException) e;
+                else
+                    throw new ServletException(e.getMessage(), e);
+            }
+        } else {
+            internalDoFilter(request,response);
+        }
+    }

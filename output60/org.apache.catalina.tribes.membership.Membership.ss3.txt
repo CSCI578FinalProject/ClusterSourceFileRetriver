@@ -1,0 +1,112 @@
+11
+-----CSCI578-----
+
+
+    public byte[] getPayload() {
+        return payload;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Notify the membership that this member has announced itself.
+     *
+     * @param member - the member that just pinged us
+     * @return - true if this member is new to the cluster, false otherwise.
+     * @return - false if this member is the local member or updated.
+     */
+    public synchronized boolean memberAlive(MemberImpl member) {
+        boolean result = false;
+        //ignore ourselves
+        if (  member.equals(local) ) return result;
+
+        //return true if the membership has changed
+        MbrEntry entry = (MbrEntry)map.get(member);
+        if ( entry == null ) {
+            entry = addMember(member);
+            result = true;
+       } else {
+            //update the member alive time
+            MemberImpl updateMember = entry.getMember() ;
+            if(updateMember.getMemberAliveTime() != member.getMemberAliveTime()) {
+                //update fields that can change
+                updateMember.setMemberAliveTime(member.getMemberAliveTime());
+                updateMember.setPayload(member.getPayload());
+                updateMember.setCommand(member.getCommand());
+                Arrays.sort(members, memberComparator);
+            }
+        }
+        entry.accessed();
+        return result;
+    }
+-----CSCI578-----
+
+
+    public void setMemberAliveTime(long time) {
+       memberAliveTime=time;
+    }
+-----CSCI578-----
+
+
+    public void setCommand(byte[] command) {
+        this.command = command!=null?command:new byte[0];
+        getData(true,true);
+    }
+-----CSCI578-----
+
+
+    public byte[] getCommand() {
+        return command;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Contains information on how long this member has been online.
+     * The result is the number of milli seconds this member has been
+     * broadcasting its membership to the cluster.
+     * @return nr of milliseconds since this member started.
+     */
+    public long getMemberAliveTime() {
+       return memberAliveTime;
+    }
+-----CSCI578-----
+-----CSCI578-----
+//messageReceived
+
+
+    public void memberAdded(Member member) {
+        if ( membership == null ) setupMembership();
+        boolean notify = false;
+        synchronized (membership) {
+            notify = Arrays.equals(domain,member.getDomain());
+            if ( notify ) notify = membership.memberAlive((MemberImpl)member);
+        }
+        if ( notify ) super.memberAdded(member);
+    }
+-----CSCI578-----
+//messageReceived
+    
+    
+    public void memberAdded(Member member) {
+        if ( membership == null ) setupMembership();
+        boolean notify = false;
+        synchronized (membership) {
+            if (removeSuspects.containsKey(member)) {
+                //previously marked suspect, system below picked up the member again
+                removeSuspects.remove(member);
+            } else if (membership.getMember( (MemberImpl) member) == null){
+                //if we add it here, then add it upwards too
+                //check to see if it is alive
+                if (memberAlive(member)) {
+                    membership.memberAlive( (MemberImpl) member);
+                    notify = true;
+                } else {
+                    addSuspects.put(member, new Long(System.currentTimeMillis()));
+                }
+            }
+        }
+        if ( notify ) super.memberAdded(member);
+    }
+-----CSCI578-----

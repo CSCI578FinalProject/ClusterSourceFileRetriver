@@ -1,0 +1,85 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Create a new JMX Connection with auth when username and password is set.
+     *
+     * @param url URL to be used for the JMX connection
+     *        (if specified, it is a complete URL so host and port will not
+     *        be used)
+     * @param host Host name of the JMX server
+     * @param port Port number for the JMX server
+     * @param username User name for the connection
+     * @param password Credentials corresponding to the specified user
+     * @throws MalformedURLException Invalid URL specified
+     * @throws IOException Other connection error
+     * @return the JMX connection
+     */
+    public static MBeanServerConnection createJMXConnection(String url,
+            String host, String port, String username, String password)
+            throws MalformedURLException, IOException {
+        String urlForJMX;
+        if (url != null)
+            urlForJMX = url;
+        else
+            urlForJMX = JMX_SERVICE_PREFIX + host + ":" + port
+                    + JMX_SERVICE_SUFFIX;
+        Map<String, String[]> environment = null;
+        if (username != null && password != null) {
+            String[] credentials = new String[2];
+            credentials[0] = username;
+            credentials[1] = password;
+            environment = new HashMap<>();
+            environment.put(JMXConnector.CREDENTIALS, credentials);
+        }
+        return JMXConnectorFactory.connect(new JMXServiceURL(urlForJMX),
+                environment).getMBeanServerConnection();
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get Current Connection from <em>ref</em> parameter or create a new one!
+     *
+     * @param project The Ant project
+     * @param url URL to be used for the JMX connection
+     *        (if specified, it is a complete URL so host and port will not
+     *        be used)
+     * @param host Host name of the JMX server
+     * @param port Port number for the JMX server
+     * @param username User name for the connection
+     * @param password Credentials corresponding to the specified user
+     * @param refId The Id of the reference to retrieve in the project
+     * @throws MalformedURLException Invalid URL specified
+     * @throws IOException Other connection error
+     * @return the JMX connection
+     */
+    @SuppressWarnings("null")
+    public static MBeanServerConnection accessJMXConnection(Project project,
+            String url, String host, String port, String username,
+            String password, String refId) throws MalformedURLException,
+            IOException {
+        MBeanServerConnection jmxServerConnection = null;
+        boolean isRef = project != null && refId != null && refId.length() > 0;
+        if (isRef) {
+            Object pref = project.getReference(refId);
+            try {
+                jmxServerConnection = (MBeanServerConnection) pref;
+            } catch (ClassCastException cce) {
+                project.log("wrong object reference " + refId + " - "
+                            + pref.getClass());
+                return null;
+            }
+        }
+        if (jmxServerConnection == null) {
+            jmxServerConnection = createJMXConnection(url, host, port,
+                    username, password);
+        }
+        if (isRef && jmxServerConnection != null) {
+            project.addReference(refId, jmxServerConnection);
+        }
+        return jmxServerConnection;
+    }
+-----CSCI578-----

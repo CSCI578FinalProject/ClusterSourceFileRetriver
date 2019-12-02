@@ -1,0 +1,286 @@
+8
+-----CSCI578-----
+
+
+
+    /**
+     * Render a list of security role names (and corresponding descriptions)
+     * from the <code>org.apache.catalina.UserDatabase</code> resource that is
+     * connected to the <code>users</code> resource reference.  Typically, this
+     * will be the global user database, but can be adjusted if you have
+     * different user databases for different virtual hosts.
+     *
+     * @param writer Writer to render to
+     */
+    protected void roles(PrintWriter writer) {
+
+        if (debug >= 1) {
+            log("roles:  List security roles from user database");
+        }
+
+        // Look up the UserDatabase instance we should use
+        UserDatabase database = null;
+        try {
+            InitialContext ic = new InitialContext();
+            database = (UserDatabase) ic.lookup("java:comp/env/users");
+        } catch (NamingException e) {
+            writer.println(sm.getString("managerServlet.userDatabaseError"));
+            log("java:comp/env/users", e);
+            return;
+        }
+        if (database == null) {
+            writer.println(sm.getString("managerServlet.userDatabaseMissing"));
+            return;
+        }
+
+        // Enumerate the available roles
+        writer.println(sm.getString("managerServlet.rolesList"));
+        Iterator roles = database.getRoles();
+        if (roles != null) {
+            while (roles.hasNext()) {
+                Role role = (Role) roles.next();
+                writer.print(role.getRolename());
+                writer.print(':');
+                if (role.getDescription() != null) {
+                    writer.print(role.getDescription());
+                }
+                writer.println();
+            }
+        }
+
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Return the description of this role.
+     */
+    public String getDescription();
+-----CSCI578-----
+
+    
+    
+    /**
+     * Store server configuration.
+     * 
+     * @param path Optional context path to save
+     */
+    protected synchronized void save(PrintWriter writer, String path) {
+
+        Server server = ServerFactory.getServer();
+
+        if (!(server instanceof StandardServer)) {
+            writer.println(sm.getString("managerServlet.saveFail", server));
+            return;
+        }
+
+        if ((path == null) || path.length() == 0 || !path.startsWith("/")) {
+            try {
+                ((StandardServer) server).storeConfig();
+                writer.println(sm.getString("managerServlet.saved"));
+            } catch (Exception e) {
+                log("managerServlet.storeConfig", e);
+                writer.println(sm.getString("managerServlet.exception",
+                                            e.toString()));
+                return;
+            }
+        } else {
+            String contextPath = path;
+            if (path.equals("/")) {
+                contextPath = "";
+            }
+            Context context = (Context) host.findChild(contextPath);
+            if (context == null) {
+                writer.println(sm.getString("managerServlet.noContext", path));
+                return;
+            }
+            try {
+                ((StandardServer) server).storeContext(context);
+                writer.println(sm.getString("managerServlet.savedContext", 
+                               path));
+            } catch (Exception e) {
+                log("managerServlet.save[" + path + "]", e);
+                writer.println(sm.getString("managerServlet.exception",
+                                            e.toString()));
+                return;
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write the configuration information for <code>Context</code>
+     * out to the specified configuration file.
+     *
+     * @exception javax.management.InstanceNotFoundException if the managed resource object
+     *  cannot be found
+     * @exception javax.management.MBeanException if the initializer of the object throws
+     *  an exception, or persistence is not supported
+     * @exception javax.management.RuntimeOperationsException if an exception is reported
+     *  by the persistence mechanism
+     */
+    public synchronized void storeContext(Context context) throws Exception {
+
+        ObjectName sname = null;
+        try {
+           sname = new ObjectName("Catalina:type=StoreConfig");
+           if(mserver.isRegistered(sname)) {
+               mserver.invoke(sname, "store",
+                   new Object[] {context},
+                   new String [] { "java.lang.String"});
+           } else
+               log.error("StoreConfig mbean not registered" + sname);
+        } catch (Throwable t) {
+            log.error(t);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write the configuration information for this entire <code>Server</code>
+     * out to the server.xml configuration file.
+     *
+     * @exception   javax.management.InstanceNotFoundException
+     *              if the managed resource object cannot be found
+     * @exception   javax.management.MBeanException
+     *              if the initializer of the object throws an exception, or
+     *              persistence is not supported
+     * @exception   javax.management.RuntimeOperationsException
+     *              if an exception is reported by the persistence mechanism
+     */
+    public synchronized void storeConfig() throws Exception {
+        ObjectName sname = new ObjectName("Catalina:type=StoreConfig");
+        mserver.invoke(sname, "storeConfig", null, null);
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+    // ------------------------------------------------------------- Operations
+
+
+    /**
+     * Write the configuration information for this entire <code>Server</code>
+     * out to the server.xml configuration file.
+     *
+     * @exception InstanceNotFoundException if the managed resource object
+     *  cannot be found
+     * @exception MBeanException if the initializer of the object throws
+     *  an exception, or persistence is not supported
+     * @exception RuntimeOperationsException if an exception is reported
+     *  by the persistence mechanism
+     */
+    public synchronized void store() throws InstanceNotFoundException,
+        MBeanException, RuntimeOperationsException {
+
+        Server server = ServerFactory.getServer();
+        if (server instanceof StandardServer) {
+            try {
+                ((StandardServer) server).storeConfig();
+            } catch (Exception e) {
+                throw new MBeanException(e, "Error updating conf/server.xml");
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Render a list of available global JNDI resources.
+     *
+     * @param type Fully qualified class name of the resource type of interest,
+     *  or <code>null</code> to list resources of all types
+     */
+    protected void resources(PrintWriter writer, String type) {
+
+        if (debug >= 1) {
+            if (type != null) {
+                log("resources:  Listing resources of type " + type);
+            } else {
+                log("resources:  Listing resources of all types");
+            }
+        }
+
+        // Is the global JNDI resources context available?
+        if (global == null) {
+            writer.println(sm.getString("managerServlet.noGlobal"));
+            return;
+        }
+
+        // Enumerate the global JNDI resources of the requested type
+        if (type != null) {
+            writer.println(sm.getString("managerServlet.resourcesType",
+                                        type));
+        } else {
+            writer.println(sm.getString("managerServlet.resourcesAll"));
+        }
+
+        Class clazz = null;
+        try {
+            if (type != null) {
+                clazz = Class.forName(type);
+            }
+        } catch (Throwable t) {
+            log("ManagerServlet.resources[" + type + "]", t);
+            writer.println(sm.getString("managerServlet.exception",
+                                        t.toString()));
+            return;
+        }
+
+        printResources(writer, "", global, type, clazz);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * List the resources of the given context.
+     */
+    protected void printResources(PrintWriter writer, String prefix,
+                                  javax.naming.Context namingContext,
+                                  String type, Class clazz) {
+
+        try {
+            NamingEnumeration items = namingContext.listBindings("");
+            while (items.hasMore()) {
+                Binding item = (Binding) items.next();
+                if (item.getObject() instanceof javax.naming.Context) {
+                    printResources
+                        (writer, prefix + item.getName() + "/",
+                         (javax.naming.Context) item.getObject(), type, clazz);
+                } else {
+                    if ((clazz != null) &&
+                        (!(clazz.isInstance(item.getObject())))) {
+                        continue;
+                    }
+                    writer.print(prefix + item.getName());
+                    writer.print(':');
+                    writer.print(item.getClassName());
+                    // Do we want a description if available?
+                    writer.println();
+                }
+            }
+        } catch (Throwable t) {
+            log("ManagerServlet.resources[" + type + "]", t);
+            writer.println(sm.getString("managerServlet.exception",
+                                        t.toString()));
+        }
+
+    }

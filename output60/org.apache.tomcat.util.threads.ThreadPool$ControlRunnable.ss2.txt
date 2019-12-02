@@ -1,0 +1,67 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /** This method will be executed in one of the pool's threads. The
+     *  thread will be returned to the pool.
+     */
+    public void runIt(Object thData[]);
+-----CSCI578-----
+
+
+    /**
+     * Inform the pool that the specific thread finish.
+     *
+     * Called by the ControlRunnable.run() when the runnable
+     * throws an exception.
+     */
+    protected synchronized void notifyThreadEnd(ControlRunnable c) {
+        currentThreadsBusy--;
+        currentThreadCount --;
+        notify();
+    }
+-----CSCI578-----
+
+    
+    public final void setThreadData(Object control, Object thData[] ) {
+        this.thData=thData;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the thread to the pool.
+     * Called by threads as they are becoming idel.
+     */
+    protected synchronized void returnController(ControlRunnable c) {
+
+        if(0 == currentThreadCount || stopThePool) {
+            c.terminate();
+            return;
+        }
+
+        // atomic
+        currentThreadsBusy--;
+
+        pool[currentThreadCount - currentThreadsBusy - 1] = c;
+        notify();
+    }
+-----CSCI578-----
+
+    
+    public final Object[] getThreadData(Object control ) {
+        return thData;
+    }
+-----CSCI578-----
+
+    // XXX use notes or a hashtable-like
+    // Important: ThreadData in JDK1.2 is implemented as a Hashtable( Thread -> object ),
+    // expensive.
+    
+    /** Called when this object is first loaded in the thread pool.
+     *  Important: all workers in a pool must be of the same type,
+     *  otherwise the mechanism becomes more complex.
+     */
+    public Object[] getInitData();

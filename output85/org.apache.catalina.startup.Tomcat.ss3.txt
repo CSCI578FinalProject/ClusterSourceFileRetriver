@@ -1,0 +1,216 @@
+14
+-----CSCI578-----
+
+
+    protected void initBaseDir() {
+        String catalinaHome = System.getProperty(Globals.CATALINA_HOME_PROP);
+        if (basedir == null) {
+            basedir = System.getProperty(Globals.CATALINA_BASE_PROP);
+        }
+        if (basedir == null) {
+            basedir = catalinaHome;
+        }
+        if (basedir == null) {
+            // Create a temp dir.
+            basedir = System.getProperty("user.dir") +
+                "/tomcat." + port;
+        }
+
+        File baseFile = new File(basedir);
+        baseFile.mkdirs();
+        try {
+            baseFile = baseFile.getCanonicalFile();
+        } catch (IOException e) {
+            baseFile = baseFile.getAbsoluteFile();
+        }
+        server.setCatalinaBase(baseFile);
+        System.setProperty(Globals.CATALINA_BASE_PROP, baseFile.getPath());
+        basedir = baseFile.getPath();
+
+        if (catalinaHome == null) {
+            server.setCatalinaHome(baseFile);
+        } else {
+            File homeFile = new File(catalinaHome);
+            homeFile.mkdirs();
+            try {
+                homeFile = homeFile.getCanonicalFile();
+            } catch (IOException e) {
+                homeFile = homeFile.getAbsoluteFile();
+            }
+            server.setCatalinaHome(homeFile);
+        }
+        System.setProperty(Globals.CATALINA_HOME_PROP,
+                server.getCatalinaHome().getPath());
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get the server object. You can add listeners and few more
+     * customizations. JNDI is disabled by default.
+     * @return The Server
+     */
+    public Server getServer() {
+
+        if (server != null) {
+            return server;
+        }
+
+        System.setProperty("catalina.useNaming", "false");
+
+        server = new StandardServer();
+
+        initBaseDir();
+
+        server.setPort( -1 );
+
+        service = new StandardService();
+        service.setName("Tomcat");
+        server.addService( service );
+        return server;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the port number we listen to for shutdown commands.
+     *
+     * @param port The new port number
+     */
+    public void setPort(int port);
+-----CSCI578-----
+
+
+
+    /**
+     * @return the configured home (binary) directory. Note that home and base
+     * may be the same (and are by default).
+     */
+    public File getCatalinaHome();
+-----CSCI578-----
+
+
+    /**
+     * Set the name of this Service.
+     *
+     * @param name The new service name
+     */
+    public void setName(String name);
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add a new Service to the set of defined Services.
+     *
+     * @param service The Service to be added
+     */
+    public void addService(Service service);
+-----CSCI578-----
+
+
+    /**
+     * Set the configured home (binary) directory. Note that home and base
+     * may be the same (and are by default).
+     *
+     * @param catalinaHome the configured home directory
+     */
+    public void setCatalinaHome(File catalinaHome);
+-----CSCI578-----
+
+
+    /**
+     * Set the configured base (instance) directory. Note that home and base
+     * may be the same (and are by default).
+     *
+     * @param catalinaBase the configured base directory
+     */
+    public void setCatalinaBase(File catalinaBase);
+-----CSCI578-----
+
+
+
+    /**
+     * Initialize the server.
+     *
+     * @throws LifecycleException Init error
+     */
+    public void init() throws LifecycleException {
+        getServer();
+        getConnector();
+        server.init();
+    }
+-----CSCI578-----
+
+
+    // ------- Extra customization -------
+    // You can tune individual tomcat objects, using internal APIs
+
+    /**
+     * Get the default http connector. You can set more
+     * parameters - the port is already initialized.
+     *
+     * Alternatively, you can construct a Connector and set any params,
+     * then call addConnector(Connector)
+     *
+     * @return A connector object that can be customized
+     */
+    public Connector getConnector() {
+        getServer();
+        if (connector != null) {
+            return connector;
+        }
+
+        // The same as in standard Tomcat configuration.
+        // This creates an APR HTTP connector if AprLifecycleListener has been
+        // configured (created) and Tomcat Native library is available.
+        // Otherwise it creates a NIO HTTP connector.
+        connector = new Connector("HTTP/1.1");
+        connector.setPort(port);
+        service.addConnector( connector );
+        return connector;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Stop the server.
+     *
+     * @throws LifecycleException Stop error
+     */
+    public void stop() throws LifecycleException {
+        getServer();
+        server.stop();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Destroy the server. This object cannot be used once this method has been
+     * called.
+     *
+     * @throws LifecycleException Destroy error
+     */
+    public void destroy() throws LifecycleException {
+        getServer();
+        server.destroy();
+        // Could null out objects here
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get the service object. Can be used to add more
+     * connectors and few other global settings.
+     * @return The service
+     */
+    public Service getService() {
+        getServer();
+        return service;
+    }

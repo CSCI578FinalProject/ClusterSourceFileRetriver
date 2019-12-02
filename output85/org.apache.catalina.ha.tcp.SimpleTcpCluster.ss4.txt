@@ -1,0 +1,289 @@
+21
+-----CSCI578-----
+
+
+    /**
+     * Stops the cluster deployer, the owning container will invoke this
+     * @throws LifecycleException Error stopping cluster deployer
+     */
+    public void stop() throws LifecycleException;
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * unregister all cluster valve to host or engine
+     */
+    protected void unregisterClusterValve() {
+        for (Iterator<Valve> iter = valves.iterator(); iter.hasNext();) {
+            ClusterValve valve = (ClusterValve) iter.next();
+            if (log.isDebugEnabled())
+                log.debug("Invoking removeValve on " + getContainer()
+                        + " with class=" + valve.getClass().getName());
+            if (valve != null) {
+                container.getPipeline().removeValve(valve);
+                valve.setCluster(null);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Start and stop sequences can be controlled by these constants
+     * This allows you to start separate components of the channel <br>
+     * DEFAULT - starts or stops all components in the channel
+     * @see #start(int)
+     * @see #stop(int)
+     */
+    public static final int DEFAULT = 15;
+
+
+    /**
+     * Start and stop sequences can be controlled by these constants
+     * This allows you to start separate components of the channel <br>
+     * SND_RX_SEQ - starts or stops the data receiver. Start means opening a server socket
+     * in case of a TCP implementation
+     * @see #start(int)
+     * @see #stop(int)
+     */
+    public static final int SND_RX_SEQ = 1;
+
+
+    /**
+     * Start and stop sequences can be controlled by these constants
+     * This allows you to start separate components of the channel <br>
+     * SND_TX_SEQ - starts or stops the data sender. This should not open any sockets,
+     * as sockets are opened on demand when a message is being sent
+     * @see #start(int)
+     * @see #stop(int)
+     */
+    public static final int SND_TX_SEQ = 2;
+
+
+    /**
+     * Start and stop sequences can be controlled by these constants
+     * This allows you to start separate components of the channel <br>
+     * MBR_RX_SEQ - starts or stops the membership listener. In a multicast implementation
+     * this will open a datagram socket and join a group and listen for membership messages
+     * members joining
+     * @see #start(int)
+     * @see #stop(int)
+     */
+    public static final int MBR_RX_SEQ = 4;
+
+
+    /**
+     * Start and stop sequences can be controlled by these constants
+     * This allows you to start separate components of the channel <br>
+     * MBR_TX_SEQ - starts or stops the membership broadcaster. In a multicast implementation
+     * this will open a datagram socket and join a group and broadcast the local member information
+     * @see #start(int)
+     * @see #stop(int)
+     */
+    public static final int MBR_TX_SEQ = 8;
+
+
+    /**
+     * Shuts down the channel. This can be called multiple times for individual services to shutdown
+     * The svc parameter can be the logical or value of any constants
+     * @param svc int value of <BR>
+     * DEFAULT - will shutdown all services <BR>
+     * MBR_RX_SEQ - stops the membership receiver <BR>
+     * MBR_TX_SEQ - stops the membership broadcaster <BR>
+     * SND_TX_SEQ - stops the replication transmitter<BR>
+     * SND_RX_SEQ - stops the replication receiver<BR>
+     * @throws ChannelException if a startup error occurs or the service is already stopped or an error occurs.
+     */
+    public void stop(int svc) throws ChannelException;
+-----CSCI578-----
+
+
+    /**
+     * Get the Container associated with our Cluster
+     *
+     * @return The Container associated with our Cluster
+     */
+    @Override
+    public Container getContainer() {
+        return (this.container);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Associates the cluster deployer with a cluster
+     * @param cluster CatalinaCluster
+     */
+    public void setCluster(CatalinaCluster cluster);
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Pipeline object that manages the Valves associated with
+     * this Container.
+     *
+     * @return The Pipeline
+     */
+    public Pipeline getPipeline();
+-----CSCI578-----
+
+
+    /**
+     * Associates the cluster deployer with a cluster
+     * @param cluster CatalinaCluster
+     */
+    public void setCluster(CatalinaCluster cluster);
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void unregisterMember(Member member) {
+        if (member == null) return;
+        ObjectName oname = memberOnameMap.remove(member);
+        if (oname != null) {
+            unregister(oname);
+        }
+    }
+-----CSCI578-----
+
+    /**
+     * remove a channel listener, listeners are removed based on Object.hashCode and Object.equals
+     * @param listener ChannelListener
+     * @see ChannelListener
+     */
+    public void removeChannelListener(ChannelListener listener);
+-----CSCI578-----
+
+
+    /**
+     * remove a membership listener, listeners are removed based on Object.hashCode and Object.equals
+     * @param listener MembershipListener
+     * @see MembershipListener
+     */
+    public void removeMembershipListener(MembershipListener listener);
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------------------- JMX
+
+    @Override
+    protected String getDomainInternal() {
+        Container container = getContainer();
+        if (container == null) {
+            return null;
+        }
+        return container.getDomain();
+    }
+-----CSCI578-----
+
+
+    @Override
+    protected String getObjectNameKeyProperties() {
+        StringBuilder name = new StringBuilder("type=Cluster");
+
+        Container container = getContainer();
+        if (container != null) {
+            name.append(container.getMBeanKeyProperties());
+        }
+
+        return name.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Remove an existing Valve.
+     *
+     * @param valveName MBean Name of the Valve to remove
+     *
+     * @exception MBeanException if a component cannot be removed
+     */
+    public void removeValve(String valveName) throws MBeanException{
+        Container container=null;
+        try {
+            container = (Container)getManagedResource();
+        } catch (InstanceNotFoundException e) {
+            throw new MBeanException(e);
+        } catch (RuntimeOperationsException e) {
+            throw new MBeanException(e);
+        } catch (InvalidTargetObjectTypeException e) {
+            throw new MBeanException(e);
+        }
+
+        ObjectName oname;
+        try {
+            oname = new ObjectName(valveName);
+        } catch (MalformedObjectNameException e) {
+            throw new MBeanException(e);
+        } catch (NullPointerException e) {
+            throw new MBeanException(e);
+        }
+
+        if(container != null){
+            Valve[] valves = container.getPipeline().getValves();
+            for (int i = 0; i < valves.length; i++) {
+                if (valves[i] instanceof JmxEnabled) {
+                    ObjectName voname =
+                            ((JmxEnabled) valves[i]).getObjectName();
+                    if (voname.equals(oname)) {
+                        container.getPipeline().removeValve(valves[i]);
+                    }
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove an existing Valve.
+     *
+     * @param name MBean Name of the component to remove
+     *
+     * @exception Exception if a component cannot be removed
+     */
+    public void removeValve(String name) throws Exception {
+
+        // Acquire a reference to the component to be removed
+        ObjectName oname = new ObjectName(name);
+        Container container = getParentContainerFromChild(oname);
+        Valve[] valves = container.getPipeline().getValves();
+        for (int i = 0; i < valves.length; i++) {
+            ObjectName voname = ((JmxEnabled) valves[i]).getObjectName();
+            if (voname.equals(oname)) {
+                container.getPipeline().removeValve(valves[i]);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain the JMX domain under which this container will be / has been
+     * registered.
+     *
+     * @return The JMX domain name
+     */
+    public String getDomain();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the name under which this component has been registered with JMX.
+     */
+    ObjectName getObjectName();
+-----CSCI578-----
+
+
+    @Override
+    public String getDomainInternal() {
+        return container.getDomain();
+    }

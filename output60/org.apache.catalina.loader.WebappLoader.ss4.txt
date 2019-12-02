@@ -1,0 +1,140 @@
+4
+-----CSCI578-----
+
+
+
+    /** 
+     * Classpath, as set in org.apache.catalina.jsp_classpath context
+     * property
+     *
+     * @return The classpath
+     */
+    public String getClasspath() {
+        return classpath;
+    }
+
+
+    // try to extract the classpath from a loader that is not URLClassLoader
+    private String getClasspath( ClassLoader loader ) {
+        try {
+            Method m=loader.getClass().getMethod("getClasspath", new Class[] {});
+            if( log.isTraceEnabled())
+                log.trace("getClasspath " + m );
+            if( m==null ) return null;
+            Object o=m.invoke( loader, new Object[] {} );
+            if( log.isDebugEnabled() )
+                log.debug("gotClasspath " + o);
+            if( o instanceof String )
+                return (String)o;
+            return null;
+        } catch( Exception ex ) {
+            if (log.isDebugEnabled())
+                log.debug("getClasspath ", ex);
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the compiler classpath.
+     */
+    public String getCompilerClasspath(){
+        return compilerClasspath;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Return the Java class loader to be used by this Container.
+     */
+    public ClassLoader getClassLoader() {
+
+        return ((ClassLoader) classLoader);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the appropriate context attribute for our class path.  This
+     * is required only because Jasper depends on it.
+     */
+    private void setClassPath() {
+
+        // Validate our current state information
+        if (!(container instanceof Context))
+            return;
+        ServletContext servletContext =
+            ((Context) container).getServletContext();
+        if (servletContext == null)
+            return;
+
+        if (container instanceof StandardContext) {
+            String baseClasspath = 
+                ((StandardContext) container).getCompilerClasspath();
+            if (baseClasspath != null) {
+                servletContext.setAttribute(Globals.CLASS_PATH_ATTR,
+                                            baseClasspath);
+                return;
+            }
+        }
+
+        StringBuffer classpath = new StringBuffer();
+
+        // Assemble the class path information from our class loader chain
+        ClassLoader loader = getClassLoader();
+        int layers = 0;
+        int n = 0;
+        while (loader != null) {
+            if (!(loader instanceof URLClassLoader)) {
+                String cp=getClasspath( loader );
+                if( cp==null ) {
+                    log.info( "Unknown loader " + loader + " " + loader.getClass());
+                    break;
+                } else {
+                    if (n > 0) 
+                        classpath.append(File.pathSeparator);
+                    classpath.append(cp);
+                    n++;
+                }
+                break;
+                //continue;
+            }
+            URL repositories[] =
+                ((URLClassLoader) loader).getURLs();
+            for (int i = 0; i < repositories.length; i++) {
+                String repository = repositories[i].toString();
+                if (repository.startsWith("file://"))
+                    repository = repository.substring(7);
+                else if (repository.startsWith("file:"))
+                    repository = repository.substring(5);
+                else if (repository.startsWith("jndi:"))
+                    repository =
+                        servletContext.getRealPath(repository.substring(5));
+                else
+                    continue;
+                if (repository == null)
+                    continue;
+                if (n > 0)
+                    classpath.append(File.pathSeparator);
+                classpath.append(repository);
+                n++;
+            }
+            loader = loader.getParent();
+            layers++;
+        }
+
+        this.classpath=classpath.toString();
+
+        // Store the assembled class path as a servlet context attribute
+        servletContext.setAttribute(Globals.CLASS_PATH_ATTR,
+                                    classpath.toString());
+
+    }

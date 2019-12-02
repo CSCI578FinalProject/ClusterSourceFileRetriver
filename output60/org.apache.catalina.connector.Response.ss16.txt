@@ -1,0 +1,50 @@
+1
+-----CSCI578-----
+
+
+    private boolean doIsEncodeable(Request hreq, Session session, 
+                                   String location) {
+        // Is this a valid absolute URL?
+        URL url = null;
+        try {
+            url = new URL(location);
+        } catch (MalformedURLException e) {
+            return (false);
+        }
+
+        // Does this URL match down to (and including) the context path?
+        if (!hreq.getScheme().equalsIgnoreCase(url.getProtocol()))
+            return (false);
+        if (!hreq.getServerName().equalsIgnoreCase(url.getHost()))
+            return (false);
+        int serverPort = hreq.getServerPort();
+        if (serverPort == -1) {
+            if ("https".equals(hreq.getScheme()))
+                serverPort = 443;
+            else
+                serverPort = 80;
+        }
+        int urlPort = url.getPort();
+        if (urlPort == -1) {
+            if ("https".equals(url.getProtocol()))
+                urlPort = 443;
+            else
+                urlPort = 80;
+        }
+        if (serverPort != urlPort)
+            return (false);
+
+        String contextPath = getContext().getPath();
+        if (contextPath != null) {
+            String file = url.getFile();
+            if ((file == null) || !file.startsWith(contextPath))
+                return (false);
+            String tok = ";" + Globals.SESSION_PARAMETER_NAME + "=" + session.getIdInternal();
+            if( file.indexOf(tok, contextPath.length()) >= 0 )
+                return (false);
+        }
+
+        // This URL belongs to our web application, so it is encodeable
+        return (true);
+
+    }

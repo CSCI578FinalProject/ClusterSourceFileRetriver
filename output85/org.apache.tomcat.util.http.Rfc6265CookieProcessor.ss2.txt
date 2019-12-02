@@ -1,0 +1,131 @@
+8
+-----CSCI578-----
+
+
+
+    @Override
+    public void parseCookieHeader(MimeHeaders headers,
+            ServerCookies serverCookies) {
+
+        if (headers == null) {
+            // nothing to process
+            return;
+        }
+
+        // process each "cookie" header
+        int pos = headers.findHeader("Cookie", 0);
+        while (pos >= 0) {
+            MessageBytes cookieValue = headers.getValue(pos);
+
+            if (cookieValue != null && !cookieValue.isNull() ) {
+                if (cookieValue.getType() != MessageBytes.T_BYTES ) {
+                    Exception e = new Exception();
+                    // TODO: Review this in light of HTTP/2
+                    log.debug("Cookies: Parsing cookie as String. Expected bytes.", e);
+                    cookieValue.toBytes();
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug("Cookies: Parsing b[]: " + cookieValue.toString());
+                }
+                ByteChunk bc = cookieValue.getByteChunk();
+
+                Cookie.parseCookie(bc.getBytes(), bc.getOffset(), bc.getLength(),
+                        serverCookies);
+            }
+
+            // search from the next position
+            pos = headers.findHeader("Cookie", ++pos);
+        }
+    }
+-----CSCI578-----
+
+
+    public int getOffset() {
+        return start;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Do a char-&gt;byte conversion.
+     */
+    public void toBytes() {
+        if (!byteC.isNull()) {
+            type=T_BYTES;
+            return;
+        }
+        toString();
+        type=T_BYTES;
+        Charset charset = byteC.getCharset();
+        ByteBuffer result = charset.encode(strValue);
+        byteC.setBytes(result.array(), result.arrayOffset(), result.limit());
+    }
+-----CSCI578-----
+
+
+    public boolean isNull() {
+        // should we check also hasStrValue ???
+        return byteC.isNull() && charC.isNull() && ! hasStrValue;
+        // bytes==null && strValue==null;
+    }
+-----CSCI578-----
+
+    /** getType() is T_STR if the the object used to create the MessageBytes
+        was a String */
+    public static final int T_STR  = 1;
+
+    /** getType() is T_STR if the the object used to create the MessageBytes
+        was a byte[] */
+    public static final int T_BYTES = 2;
+
+    /** getType() is T_STR if the the object used to create the MessageBytes
+        was a char[] */
+    public static final int T_CHARS = 3;
+
+
+    //----------------------------------------
+    /**
+     * Return the type of the original content. Can be
+     * T_STR, T_BYTES, T_CHARS or T_NULL
+     * @return the type
+     */
+    public int getType() {
+        return type;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Find the index of a header with the given name.
+     * @param name The header name
+     * @param starting Index on which to start looking
+     * @return the header index
+     */
+    public int findHeader( String name, int starting ) {
+        // We can use a hash - but it's not clear how much
+        // benefit you can get - there is an  overhead
+        // and the number of headers is small (4-5 ?)
+        // Another problem is that we'll pay the overhead
+        // of constructing the hashtable
+
+        // A custom search tree may be better
+        for (int i = starting; i < count; i++) {
+            if (headers[i].getName().equalsIgnoreCase(name)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+-----CSCI578-----
+
+
+    public boolean isNull() {
+        return ! isSet; // buff==null;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean isFinished() {
+        return input.getOffset() >= input.getEnd();
+    }

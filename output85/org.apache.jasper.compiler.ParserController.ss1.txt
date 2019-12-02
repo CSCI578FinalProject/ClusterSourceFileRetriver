@@ -1,0 +1,158 @@
+14
+-----CSCI578-----
+
+
+    /**
+     * Parses the JSP page or tag file with the given path name.
+     *
+     * @param inFileName The name of the JSP page or tag file to be parsed.
+     * @param parent The parent node (non-null when processing an include
+     * directive)
+     * @param jar  The JAR file from which to read the JSP page or tag file,
+     * or null if the JSP page or tag file is to be read from the filesystem
+     */
+    private Node.Nodes doParse(String inFileName, Node parent, Jar jar)
+            throws FileNotFoundException, JasperException, IOException {
+
+        Node.Nodes parsedPage = null;
+        isEncodingSpecifiedInProlog = false;
+        isBomPresent = false;
+        isDefaultPageEncoding = false;
+
+        String absFileName = resolveFileName(inFileName);
+        String jspConfigPageEnc = getJspConfigPageEncoding(absFileName);
+
+        // Figure out what type of JSP document and encoding type we are
+        // dealing with
+        determineSyntaxAndEncoding(absFileName, jar, jspConfigPageEnc);
+
+        if (parent != null) {
+            // Included resource, add to dependent list
+            if (jar == null) {
+                compiler.getPageInfo().addDependant(absFileName,
+                        ctxt.getLastModified(absFileName));
+            } else {
+                String entry = absFileName.substring(1);
+                compiler.getPageInfo().addDependant(jar.getURL(entry),
+                        Long.valueOf(jar.getLastModified(entry)));
+
+            }
+        }
+
+        if ((isXml && isEncodingSpecifiedInProlog) || isBomPresent) {
+            /*
+             * Make sure the encoding explicitly specified in the XML
+             * prolog (if any) matches that in the JSP config element
+             * (if any), treating "UTF-16", "UTF-16BE", and "UTF-16LE" as
+             * identical.
+             */
+            if (jspConfigPageEnc != null && !jspConfigPageEnc.equals(sourceEnc)
+                    && (!jspConfigPageEnc.startsWith("UTF-16")
+                            || !sourceEnc.startsWith("UTF-16"))) {
+                err.jspError("jsp.error.prolog_config_encoding_mismatch",
+                        sourceEnc, jspConfigPageEnc);
+            }
+        }
+
+        // Dispatch to the appropriate parser
+        if (isXml) {
+            // JSP document (XML syntax)
+            // InputStream for jspx page is created and properly closed in
+            // JspDocumentParser.
+            parsedPage = JspDocumentParser.parse(this, absFileName, jar, parent,
+                    isTagFile, directiveOnly, sourceEnc, jspConfigPageEnc,
+                    isEncodingSpecifiedInProlog, isBomPresent);
+        } else {
+            // Standard syntax
+            try (InputStreamReader inStreamReader = JspUtil.getReader(
+                    absFileName, sourceEnc, jar, ctxt, err, skip);) {
+                JspReader jspReader = new JspReader(ctxt, absFileName,
+                        inStreamReader, err);
+                parsedPage = Parser.parse(this, jspReader, parent, isTagFile,
+                        directiveOnly, jar, sourceEnc, jspConfigPageEnc,
+                        isDefaultPageEncoding, isBomPresent);
+            }
+        }
+
+        baseDirStack.pop();
+
+        return parsedPage;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /*
+     * Resolve the name of the file and update baseDirStack() to keep track of
+     * the current base directory for each included file.
+     * The 'root' file is always an 'absolute' path, so no need to put an
+     * initial value in the baseDirStack.
+     */
+    private String resolveFileName(String inFileName) {
+        String fileName = inFileName.replace('\\', '/');
+        boolean isAbsolute = fileName.startsWith("/");
+        fileName = isAbsolute ? fileName
+                : baseDirStack.peek() + fileName;
+        String baseDir =
+            fileName.substring(0, fileName.lastIndexOf('/') + 1);
+        baseDirStack.push(baseDir);
+        return fileName;
+    }
+-----CSCI578-----
+
+
+    public Collection<String> getIncludePrelude() {
+        return includePrelude;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /*
+     * Checks to see if the given URI is matched by a URL pattern specified in
+     * a jsp-property-group in web.xml, and if so, returns the value of the
+     * <page-encoding> element.
+     *
+     * @param absFileName The URI to match
+     *
+     * @return The value of the <page-encoding> attribute of the
+     * jsp-property-group with matching URL pattern
+     */
+    private String getJspConfigPageEncoding(String absFileName) {
+
+        JspConfig jspConfig = ctxt.getOptions().getJspConfig();
+        JspConfig.JspProperty jspProperty
+            = jspConfig.findJspProperty(absFileName);
+        return jspProperty.getPageEncoding();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Collection<String> getIncludeCoda() {
+        return includeCoda;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets a resource as a stream, relative to the meanings of this
+     * context's implementation.
+     * @param res the resource to look for
+     * @return a null if the resource cannot be found or represented
+     *         as an InputStream.
+     */
+    public java.io.InputStream getResourceAsStream(String res) {
+        return context.getResourceAsStream(canonicalURI(res));
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return JSP configuration information specified in web.xml.
+     */
+    public JspConfig getJspConfig();
+-----CSCI578-----

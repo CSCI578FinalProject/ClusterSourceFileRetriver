@@ -1,0 +1,62 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * <p>Look for a <em>precompilation request</em> as described in
+     * Section 8.4.2 of the JSP 1.2 Specification.  <strong>WARNING</strong> -
+     * we cannot use <code>request.getParameter()</code> for this, because
+     * that will trigger parsing all of the request parameters, and not give
+     * a servlet the opportunity to call
+     * <code>request.setCharacterEncoding()</code> first.</p>
+     *
+     * @param request The servlet request we are processing
+     *
+     * @exception ServletException if an invalid parameter value for the
+     *  <code>jsp_precompile</code> parameter name is specified
+     */
+    boolean preCompile(HttpServletRequest request) throws ServletException {
+
+        String queryString = request.getQueryString();
+        if (queryString == null) {
+            return false;
+        }
+        int start = queryString.indexOf(Constants.PRECOMPILE);
+        if (start < 0) {
+            return false;
+        }
+        queryString =
+            queryString.substring(start + Constants.PRECOMPILE.length());
+        if (queryString.length() == 0) {
+            return true;             // ?jsp_precompile
+        }
+        if (queryString.startsWith("&")) {
+            return true;             // ?jsp_precompile&foo=bar...
+        }
+        if (!queryString.startsWith("=")) {
+            return false;            // part of some other name or value
+        }
+        int limit = queryString.length();
+        int ampersand = queryString.indexOf('&');
+        if (ampersand > 0) {
+            limit = ampersand;
+        }
+        String value = queryString.substring(1, limit);
+        if (value.equals("true")) {
+            return true;             // ?jsp_precompile=true
+        } else if (value.equals("false")) {
+            // Spec says if jsp_precompile=false, the request should not
+            // be delivered to the JSP page; the easiest way to implement
+            // this is to set the flag to true, and precompile the page anyway.
+            // This still conforms to the spec, since it says the
+            // precompilation request can be ignored.
+            return true;             // ?jsp_precompile=false
+        } else {
+            throw new ServletException("Cannot have request parameter " +
+                                       Constants.PRECOMPILE + " set to " +
+                                       value);
+        }
+
+    }
+-----CSCI578-----

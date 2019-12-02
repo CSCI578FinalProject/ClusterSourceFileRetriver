@@ -1,0 +1,79 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Acknowledge the occurrence of the specified event.
+     *
+     * @param event LifecycleEvent that has occurred
+     */
+    public void lifecycleEvent(LifecycleEvent event);
+-----CSCI578-----
+
+
+
+    /**
+     * Notify all lifecycle event listeners that a particular event has
+     * occurred for this Container.  The default implementation performs
+     * this notification synchronously using the calling thread.
+     *
+     * @param type Event type
+     * @param data Event data
+     */
+    public void fireLifecycleEvent(String type, Object data) {
+
+        if (Lifecycle.INIT_EVENT.equals(type)) {
+            state = "INITIALIZED";
+        } else if (Lifecycle.BEFORE_START_EVENT.equals(type)) {
+            state = "STARTING_PREP";
+        } else if (Lifecycle.START_EVENT.equals(type)) {
+            state = "STARTING";
+        } else if (Lifecycle.AFTER_START_EVENT.equals(type)) {
+            state = "STARTED";
+        } else if (Lifecycle.BEFORE_STOP_EVENT.equals(type)) {
+            state = "STOPPING_PREP";
+        } else if (Lifecycle.STOP_EVENT.equals(type)) {
+            state = "STOPPING";
+        } else if (Lifecycle.AFTER_STOP_EVENT.equals(type)) {
+            state = "STOPPED";
+        } else if (Lifecycle.DESTROY_EVENT.equals(type)) {
+            state = "DESTROYED";
+        }
+        LifecycleEvent event = new LifecycleEvent(lifecycle, type, data);
+        LifecycleListener interested[] = listeners;
+        for (int i = 0; i < interested.length; i++)
+            interested[i].lifecycleEvent(event);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    public void stop() throws LifecycleException{
+        lifecycle.fireLifecycleEvent(BEFORE_STOP_EVENT, null);
+        lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+        if ( executor != null ) executor.shutdown();
+        executor = null;
+        submittedTasksCount = null;
+        lifecycle.fireLifecycleEvent(AFTER_STOP_EVENT, null);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gracefully terminate the active use of the public methods of this
+     * component.  This method should be the last one called on a given
+     * instance of this component.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that needs to be reported
+     */
+    public void stop() throws LifecycleException {
+        // Validate and update our current component state
+        if (!started) {
+            return;
+        }
+        lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+        started = false;
+    }

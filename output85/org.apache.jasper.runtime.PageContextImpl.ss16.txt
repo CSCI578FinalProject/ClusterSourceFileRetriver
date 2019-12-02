@@ -1,0 +1,44 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Proprietary method to evaluate EL expressions. XXX - This method should
+     * go away once the EL interpreter moves out of JSTL and into its own
+     * project. For now, this is necessary because the standard machinery is too
+     * slow.
+     *
+     * @param expression
+     *            The expression to be evaluated
+     * @param expectedType
+     *            The expected resulting type
+     * @param pageContext
+     *            The page context
+     * @param functionMap
+     *            Maps prefix and name to Method
+     * @return The result of the evaluation
+     * @throws ELException If an error occurs during the evaluation
+     */
+    public static Object proprietaryEvaluate(final String expression,
+            final Class<?> expectedType, final PageContext pageContext,
+            final ProtectedFunctionMapper functionMap)
+            throws ELException {
+        final ExpressionFactory exprFactory = jspf.getJspApplicationContext(pageContext.getServletContext()).getExpressionFactory();
+        ELContext ctx = pageContext.getELContext();
+        ELContextImpl ctxImpl;
+        if (ctx instanceof ELContextWrapper) {
+            ctxImpl = (ELContextImpl) ((ELContextWrapper) ctx).getWrappedELContext();
+        } else {
+            ctxImpl = (ELContextImpl) ctx;
+        }
+        ctxImpl.setFunctionMapper(functionMap);
+        ValueExpression ve = exprFactory.createValueExpression(ctx, expression, expectedType);
+        return ve.getValue(ctx);
+    }
+-----CSCI578-----
+
+
+    public void setFunctionMapper(FunctionMapper functionMapper) {
+        this.functionMapper = functionMapper;
+    }

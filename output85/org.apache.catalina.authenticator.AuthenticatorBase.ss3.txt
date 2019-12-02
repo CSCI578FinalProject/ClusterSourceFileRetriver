@@ -1,0 +1,377 @@
+14
+-----CSCI578-----
+
+
+
+    /**
+     * Perform access control based on the specified authorization constraint.
+     *
+     * @param request Request we are processing
+     * @param response Response we are creating
+     * @param constraint Security constraint we are enforcing
+     * @param context The Context to which client of this class is attached.
+     * @return <code>true</code> if this constraint is satisfied and processing
+     *         should continue, or <code>false</code> otherwise
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public boolean hasResourcePermission(Request request,
+                                         Response response,
+                                         SecurityConstraint [] constraint,
+                                         Context context)
+        throws IOException;
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Enforce the security restrictions in the web application deployment
+     * descriptor of our associated Context.
+     *
+     * @param request
+     *            Request to be processed
+     * @param response
+     *            Response to be processed
+     *
+     * @exception IOException
+     *                if an input/output error occurs
+     * @exception ServletException
+     *                if thrown by a processing element
+     */
+    @Override
+    public void invoke(Request request, Response response) throws IOException, ServletException {
+
+        if (log.isDebugEnabled()) {
+            log.debug("Security checking request " + request.getMethod() + " " +
+                    request.getRequestURI());
+        }
+
+        AuthConfigProvider jaspicProvider = getJaspicProvider();
+        MessageInfo messageInfo = null;
+        ServerAuthContext serverAuthContext = null;
+
+        // Have we got a cached authenticated Principal to record?
+        if (cache) {
+            Principal principal = request.getUserPrincipal();
+            if (principal == null) {
+                Session session = request.getSessionInternal(false);
+                if (session != null) {
+                    principal = session.getPrincipal();
+                    if (principal != null) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("We have cached auth type " + session.getAuthType() +
+                                    " for principal " + session.getPrincipal());
+                        }
+                        request.setAuthType(session.getAuthType());
+                        request.setUserPrincipal(principal);
+                    }
+                }
+            }
+        }
+
+        if (jaspicProvider != null) {
+            messageInfo = new MessageInfoImpl(request.getRequest(), response.getResponse(), true);
+            try {
+                ServerAuthConfig serverAuthConfig = jaspicProvider.getServerAuthConfig(
+                        "HttpServlet", jaspicAppContextID, new CallbackHandlerImpl());
+                String authContextID = serverAuthConfig.getAuthContextID(messageInfo);
+                serverAuthContext = serverAuthConfig.getAuthContext(authContextID, null, null);
+            } catch (AuthException e) {
+                log.warn(sm.getString("authenticator.jaspicServerAuthContextFail"), e);
+                response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                return;
+            }
+        }
+
+        // Special handling for form-based logins to deal with the case
+        // where the login form (and therefore the "j_security_check" URI
+        // to which it submits) might be outside the secured area
+        String contextPath = this.context.getPath();
+        String decodedRequestURI = request.getDecodedRequestURI();
+        if (decodedRequestURI.startsWith(contextPath) &&
+                decodedRequestURI.endsWith(Constants.FORM_ACTION)) {
+            if (!authenticate(request, response, serverAuthContext, messageInfo)) {
+                if (log.isDebugEnabled()) {
+                    log.debug(" Failed authenticate() test ??" + decodedRequestURI);
+                }
+                return;
+            }
+        }
+
+        // Special handling for form-based logins to deal with the case where
+        // a resource is protected for some HTTP methods but not protected for
+        // GET which is used after authentication when redirecting to the
+        // protected resource.
+        // TODO: This is similar to the FormAuthenticator.matchRequest() logic
+        // Is there a way to remove the duplication?
+        Session session = request.getSessionInternal(false);
+        if (session != null) {
+            SavedRequest savedRequest = (SavedRequest) session.getNote(Constants.FORM_REQUEST_NOTE);
+            if (savedRequest != null &&
+                    decodedRequestURI.equals(savedRequest.getDecodedRequestURI()) &&
+                    !authenticate(request, response)) {
+                if (log.isDebugEnabled()) {
+                    log.debug(" Failed authenticate() test");
+                }
+                /*
+                 * ASSERT: Authenticator already set the appropriate HTTP status
+                 * code, so we do not have to do anything special
+                 */
+                return;
+            }
+        }
+
+        // The Servlet may specify security constraints through annotations.
+        // Ensure that they have been processed before constraints are checked
+        Wrapper wrapper = request.getMappingData().wrapper;
+        if (wrapper != null) {
+            wrapper.servletSecurityAnnotationScan();
+        }
+
+        Realm realm = this.context.getRealm();
+        // Is this request URI subject to a security constraint?
+        SecurityConstraint[] constraints = realm.findSecurityConstraints(request, this.context);
+
+        if (constraints == null && !context.getPreemptiveAuthentication() &&
+                jaspicProvider == null) {
+            if (log.isDebugEnabled()) {
+                log.debug(" Not subject to any constraint");
+            }
+            getNext().invoke(request, response);
+            return;
+        }
+
+        // Make sure that constrained resources are not cached by web proxies
+        // or browsers as caching can provide a security hole
+        if (constraints != null && disableProxyCaching &&
+                !"POST".equalsIgnoreCase(request.getMethod())) {
+            if (securePagesWithPragma) {
+                // Note: These can cause problems with downloading files with IE
+                response.setHeader("Pragma", "No-cache");
+                response.setHeader("Cache-Control", "no-cache");
+            } else {
+                response.setHeader("Cache-Control", "private");
+            }
+            response.setHeader("Expires", DATE_ONE);
+        }
+
+        int i;
+        if (constraints != null) {
+            // Enforce any user data constraint for this security constraint
+            if (log.isDebugEnabled()) {
+                log.debug(" Calling hasUserDataPermission()");
+            }
+            if (!realm.hasUserDataPermission(request, response, constraints)) {
+                if (log.isDebugEnabled()) {
+                    log.debug(" Failed hasUserDataPermission() test");
+                }
+                /*
+                 * ASSERT: Authenticator already set the appropriate HTTP status
+                 * code, so we do not have to do anything special
+                 */
+                return;
+            }
+        }
+
+        // Since authenticate modifies the response on failure,
+        // we have to check for allow-from-all first.
+        boolean authRequired;
+        if (constraints == null) {
+            authRequired = false;
+        } else {
+            authRequired = true;
+            for (i = 0; i < constraints.length && authRequired; i++) {
+                if (!constraints[i].getAuthConstraint()) {
+                    authRequired = false;
+                    break;
+                } else if (!constraints[i].getAllRoles() &&
+                        !constraints[i].getAuthenticatedUsers()) {
+                    String[] roles = constraints[i].findAuthRoles();
+                    if (roles == null || roles.length == 0) {
+                        authRequired = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!authRequired && context.getPreemptiveAuthentication()) {
+            authRequired =
+                    request.getCoyoteRequest().getMimeHeaders().getValue("authorization") != null;
+        }
+
+        if (!authRequired && context.getPreemptiveAuthentication()
+                && HttpServletRequest.CLIENT_CERT_AUTH.equals(getAuthMethod())) {
+            X509Certificate[] certs = getRequestCertificates(request);
+            authRequired = certs != null && certs.length > 0;
+        }
+
+        if (!authRequired && jaspicProvider != null) {
+            authRequired = true;
+        }
+
+        if (authRequired) {
+            if (log.isDebugEnabled()) {
+                log.debug(" Calling authenticate()");
+            }
+            if (!authenticate(request, response, serverAuthContext, messageInfo)) {
+                if (log.isDebugEnabled()) {
+                    log.debug(" Failed authenticate() test");
+                }
+                /*
+                 * ASSERT: Authenticator already set the appropriate HTTP status
+                 * code, so we do not have to do anything special
+                 */
+                return;
+            }
+
+        }
+
+        if (constraints != null) {
+            if (log.isDebugEnabled()) {
+                log.debug(" Calling accessControl()");
+            }
+            if (!realm.hasResourcePermission(request, response, constraints, this.context)) {
+                if (log.isDebugEnabled()) {
+                    log.debug(" Failed accessControl() test");
+                }
+                /*
+                 * ASSERT: AccessControl method has already set the appropriate
+                 * HTTP status code, so we do not have to do anything special
+                 */
+                return;
+            }
+        }
+
+        // Any and all specified constraints have been satisfied
+        if (log.isDebugEnabled()) {
+            log.debug(" Successfully passed all security constraints");
+        }
+        getNext().invoke(request, response);
+
+        if (serverAuthContext != null && messageInfo != null) {
+            try {
+                serverAuthContext.secureResponse(messageInfo, null);
+                request.setRequest((HttpServletRequest) messageInfo.getRequestMessage());
+                response.setResponse((HttpServletResponse) messageInfo.getResponseMessage());
+            } catch (AuthException e) {
+                log.warn(sm.getString("authenticator.jaspicSecureResponseFail"), e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * @return the authentication type used to authenticate our cached
+     * Principal, if any.
+     */
+    public String getAuthType();
+-----CSCI578-----
+
+
+
+    /**
+     * Enforce any user data constraint required by the security constraint
+     * guarding this request URI.
+     *
+     * @param request Request we are processing
+     * @param response Response we are creating
+     * @param constraint Security constraint being checked
+     * @return <code>true</code> if this constraint
+     *         was not violated and processing should continue, or <code>false</code>
+     *         if we have created a response already.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public boolean hasUserDataPermission(Request request,
+                                         Response response,
+                                         SecurityConstraint []constraint)
+        throws IOException;
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ------------------------------------------------------ Protected Methods
+
+    /**
+     * Look for the X509 certificate chain in the Request under the key
+     * <code>javax.servlet.request.X509Certificate</code>. If not found, trigger
+     * extracting the certificate chain from the Coyote request.
+     *
+     * @param request
+     *            Request to be processed
+     *
+     * @return The X509 certificate chain if found, <code>null</code> otherwise.
+     */
+    protected X509Certificate[] getRequestCertificates(final Request request)
+            throws IllegalStateException {
+
+        X509Certificate certs[] =
+                (X509Certificate[]) request.getAttribute(Globals.CERTIFICATES_ATTR);
+
+        if ((certs == null) || (certs.length < 1)) {
+            try {
+                request.getCoyoteRequest().action(ActionCode.REQ_SSL_CERTIFICATE, null);
+                certs = (X509Certificate[]) request.getAttribute(Globals.CERTIFICATES_ATTR);
+            } catch (IllegalStateException ise) {
+                // Request body was too large for save buffer
+                // Return null which will trigger an auth failure
+            }
+        }
+
+        return certs;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private AuthConfigProvider getJaspicProvider() {
+        AuthConfigProvider provider = jaspicProvider;
+        if (provider == null) {
+            AuthConfigFactory factory = AuthConfigFactory.getFactory();
+            provider = factory.getConfigProvider("HttpServlet", jaspicAppContextID, this);
+            if (provider != null) {
+                jaspicProvider = provider;
+            }
+        }
+        return provider;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void logout(Request request) {
+        AuthConfigProvider provider = getJaspicProvider();
+        if (provider != null) {
+            MessageInfo messageInfo = new MessageInfoImpl(request, request.getResponse(), true);
+            Subject client = (Subject) request.getNote(Constants.REQ_JASPIC_SUBJECT_NOTE);
+            if (client == null) {
+                return;
+            }
+
+            ServerAuthContext serverAuthContext;
+            try {
+                ServerAuthConfig serverAuthConfig = provider.getServerAuthConfig("HttpServlet",
+                        jaspicAppContextID, new CallbackHandlerImpl());
+                String authContextID = serverAuthConfig.getAuthContextID(messageInfo);
+                serverAuthContext = serverAuthConfig.getAuthContext(authContextID, null, null);
+                serverAuthContext.cleanSubject(messageInfo, client);
+            } catch (AuthException e) {
+                log.debug(sm.getString("authenticator.jaspicCleanSubjectFail"), e);
+            }
+        }
+
+        register(request, request.getResponse(), null, null, null, null);
+    }

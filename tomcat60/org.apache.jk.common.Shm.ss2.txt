@@ -1,0 +1,361 @@
+31
+
+    public void dumpScoreboard(String fname) throws IOException {
+        if( apr==null ) return;
+        MsgContext mCtx=createMsgContext();
+        Msg msg=(Msg)mCtx.getMsg(0);
+        C2BConverter c2b=mCtx.getConverter();
+        msg.reset();
+
+        msg.appendByte( SHM_DUMP );
+
+        appendString( msg, fname, c2b);
+        
+        this.invoke( msg, mCtx );
+    }
+
+    /** Register a tomcat instance
+     *  XXX make it more flexible
+     */
+    public void registerTomcat(String host, int port, String unixDomain)
+        throws IOException
+    {
+        String instanceId=host+":" + port;
+
+        String slotName="TOMCAT:" + instanceId;
+        MsgContext mCtx=createMsgContext();
+        Msg msg=(Msg)mCtx.getMsg(0);
+        msg.reset();
+        C2BConverter c2b=mCtx.getConverter();
+        
+        msg.appendByte( SHM_WRITE_SLOT );
+        appendString( msg, slotName, c2b );
+
+        int channelCnt=1;
+        if( unixDomain != null ) channelCnt++;
+
+        // number of groups. 0 means the default lb.
+        msg.appendInt( groups.size() );
+        for( int i=0; i<groups.size(); i++ ) {
+            appendString( msg, (String)groups.elementAt( i ), c2b);
+            appendString( msg, instanceId, c2b);
+        }
+        
+        // number of channels for this instance
+        msg.appendInt( channelCnt );
+        
+        // The body:
+        appendString(msg, "channel.socket:" + host + ":" + port, c2b );
+        msg.appendInt( 1 );
+        appendString(msg, "tomcatId", c2b);
+        appendString(msg, instanceId, c2b);
+
+        if( unixDomain != null ) {
+            appendString(msg, "channel.apr:" + unixDomain, c2b );
+            msg.appendInt(1);
+            appendString(msg, "tomcatId", c2b);
+            appendString(msg, instanceId, c2b);
+        }
+
+        if (log.isDebugEnabled())
+            log.debug("Register " + instanceId );
+        this.invoke( msg, mCtx );
+    }
+    
+    public static void main( String args[] ) {
+        try {
+            Shm shm=new Shm();
+
+            if( args.length == 0 ||
+                ( "-?".equals(args[0]) ) ) {
+                shm.setHelp( true );
+                return;
+            }
+
+            IntrospectionUtils.processArgs( shm, args);
+            shm.execute();
+        } catch( Exception ex ) {
+            ex.printStackTrace();
+        }
+    }
+
+    /** Register a tomcat instance
+     *  XXX make it more flexible
+     */
+    public void registerTomcat(String host, int port, String unixDomain)
+        throws IOException
+    {
+        String instanceId=host+":" + port;
+
+        String slotName="TOMCAT:" + instanceId;
+        MsgContext mCtx=createMsgContext();
+        Msg msg=(Msg)mCtx.getMsg(0);
+        msg.reset();
+        C2BConverter c2b=mCtx.getConverter();
+        
+        msg.appendByte( SHM_WRITE_SLOT );
+        appendString( msg, slotName, c2b );
+
+        int channelCnt=1;
+        if( unixDomain != null ) channelCnt++;
+
+        // number of groups. 0 means the default lb.
+        msg.appendInt( groups.size() );
+        for( int i=0; i<groups.size(); i++ ) {
+            appendString( msg, (String)groups.elementAt( i ), c2b);
+            appendString( msg, instanceId, c2b);
+        }
+        
+        // number of channels for this instance
+        msg.appendInt( channelCnt );
+        
+        // The body:
+        appendString(msg, "channel.socket:" + host + ":" + port, c2b );
+        msg.appendInt( 1 );
+        appendString(msg, "tomcatId", c2b);
+        appendString(msg, instanceId, c2b);
+
+        if( unixDomain != null ) {
+            appendString(msg, "channel.apr:" + unixDomain, c2b );
+            msg.appendInt(1);
+            appendString(msg, "tomcatId", c2b);
+            appendString(msg, instanceId, c2b);
+        }
+
+        if (log.isDebugEnabled())
+            log.debug("Register " + instanceId );
+        this.invoke( msg, mCtx );
+    }
+
+    
+    public  int invoke(Msg msg, MsgContext ep )
+        throws IOException
+    {
+        if( apr==null ) return 0;
+        log.debug("ChannelShm.invoke: "  + ep );
+        super.nativeDispatch( msg, ep, JK_HANDLE_SHM_DISPATCH, 0 );
+        return 0;
+    }    
+
+    public void setHelp( boolean b ) {
+        if (log.isDebugEnabled()) {
+            log.debug("Usage: ");
+            log.debug("  Shm [OPTIONS]");
+            log.debug("");
+            log.debug("  -file SHM_FILE");
+            log.debug("  -group GROUP ( can be specified multiple times )");
+            log.debug("  -host HOST");
+            log.debug("  -port PORT");
+            log.debug("  -unixSocket UNIX_FILE");
+            //        log.debug("  -priority XXX");
+            //        log.debug("  -lbFactor XXX");
+        }
+        help=true;
+        return;
+    }
+
+    public void resetScoreboard() throws IOException {
+        if( apr==null ) return;
+        MsgContext mCtx=createMsgContext();
+        Msg msg=(Msg)mCtx.getMsg(0);
+        msg.reset();
+
+        msg.appendByte( SHM_RESET );
+        
+        this.invoke( msg, mCtx );
+    }
+    
+    public void execute() {
+        try {
+            if( help ) return;
+            initCli();
+            init();
+
+            if( reset ) {
+                resetScoreboard();
+            } else if( dumpFile!=null ) {
+                dumpScoreboard(dumpFile);
+            } else if( unregister ) {
+                unRegisterTomcat( host, port );
+            } else {
+                registerTomcat( host, port, unixSocket );
+            }
+        } catch (Exception ex ) {
+            log.error( "Error executing Shm", ex);
+        }
+    }
+
+    public void unRegisterTomcat(String host, int port)
+        throws IOException
+    {
+        String slotName="TOMCAT:" + host + ":" + port;
+        MsgContext mCtx=createMsgContext();
+        Msg msg=(Msg)mCtx.getMsg(0);
+        msg.reset();
+        C2BConverter c2b=mCtx.getConverter();
+        
+        msg.appendByte( SHM_WRITE_SLOT );
+        appendString( msg, slotName, c2b );
+
+        // number of channels for this instance
+        msg.appendInt( 0 );
+        msg.appendInt( 0 );
+        
+        if (log.isDebugEnabled())
+            log.debug("UnRegister " + slotName );
+        this.invoke( msg, mCtx );
+    }
+    
+    public void init() throws IOException {
+        super.initNative( "shm" );
+        if( apr==null ) return;
+        if( file==null ) {
+            log.error("No shm file, disabling shared memory");
+            apr=null;
+            return;
+        }
+
+        // Set properties and call init.
+        setNativeAttribute( "file", file );
+        if( size > 0 )
+            setNativeAttribute( "size", Integer.toString( size ) );
+        
+        initJkComponent();
+    }
+
+    public boolean isLoaded() {
+        if( ! initialized ) {
+            try {
+                init();
+            } catch( Throwable t ) {
+                log.info("Apr not loaded: " + t);
+            }
+        }
+        return ok;
+    }
+
+    
+    
+    /**
+     * Prepare this packet for accumulating a message from the container to
+     * the web server.  Set the write position to just after the header
+     * (but leave the length unwritten, because it is as yet unknown).
+     */
+    public abstract void reset();
+
+    /**
+     * For a packet to be sent to the web server, finish the process of
+     * accumulating data and write the length of the data payload into
+     * the header.  
+     */
+    public abstract void end();
+
+    public abstract  void appendInt( int val );
+
+    public abstract void appendByte( int val );
+	
+    public abstract void appendLongInt( int val );
+
+    /**
+     */
+    public abstract void appendBytes(MessageBytes mb) throws IOException;
+
+    public abstract void appendByteChunk(ByteChunk bc) throws IOException;
+    
+    /** 
+     * Copy a chunk of bytes into the packet, starting at the current
+     * write position.  The chunk of bytes is encoded with the length
+     * in two bytes first, then the data itself, and finally a
+     * terminating \0 (which is <B>not</B> included in the encoded
+     * length).
+     *
+     * @param b The array from which to copy bytes.
+     * @param off The offset into the array at which to start copying
+     * @param numBytes The number of bytes to copy.  
+     */
+    public abstract void appendBytes( byte b[], int off, int numBytes );
+
+    /**
+     * Read an integer from packet, and advance the read position past
+     * it.  Integers are encoded as two unsigned bytes with the
+     * high-order byte first, and, as far as I can tell, in
+     * little-endian order within each byte.  
+     */
+    public abstract int getInt();
+
+    public abstract int peekInt();
+
+    public abstract byte getByte();
+
+    public abstract byte peekByte();
+
+    public abstract void getBytes(MessageBytes mb);
+    
+    /**
+     * Copy a chunk of bytes from the packet into an array and advance
+     * the read position past the chunk.  See appendBytes() for details
+     * on the encoding.
+     *
+     * @return The number of bytes copied.
+     */
+    public abstract int getBytes(byte dest[]);
+
+    /**
+     * Read a 32 bits integer from packet, and advance the read position past
+     * it.  Integers are encoded as four unsigned bytes with the
+     * high-order byte first, and, as far as I can tell, in
+     * little-endian order within each byte.
+     */
+    public abstract int getLongInt();
+
+    public abstract int getHeaderLength();
+
+    public abstract int processHeader();
+
+    public abstract byte[] getBuffer();
+
+    public abstract int getLen();
+    
+    public abstract void dump(String msg);
+
+    /* -------------------- Utilities -------------------- */
+    // XXX Move to util package
+
+    public static String hexLine( byte buf[], int start, int len ) {
+        StringBuffer sb=new StringBuffer();
+        for( int i=start; i< start+16 ; i++ ) {
+            if( i < len + 4)
+                sb.append( hex( buf[i] ) + " ");
+            else
+                sb.append( "   " );
+        }
+        sb.append(" | ");
+        for( int i=start; i < start+16 && i < len + 4; i++ ) {
+            if( ! Character.isISOControl( (char)buf[i] ))
+                sb.append( new Character((char)buf[i]) );
+            else
+                sb.append( "." );
+        }
+        return sb.toString();
+    }
+
+    /** The context may store a number of messages ( buffers + marshalling )
+     */
+    public final Msg getMsg(int i) {
+        return msgs[i];
+    }
+
+    public final C2BConverter getConverter() {
+        return c2b;
+    }
+
+
+    /** Create a ThreadPool instance.
+     *
+     * @param jmx UNUSED 
+     * @return ThreadPool instance. If JMX support is requested, you need to
+     *   call register() in order to set a name.
+     */
+    public static ThreadPool createThreadPool(boolean jmx) {
+        return new ThreadPool();
+    }

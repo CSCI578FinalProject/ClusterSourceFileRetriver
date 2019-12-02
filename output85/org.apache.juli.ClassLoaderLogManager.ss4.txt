@@ -1,0 +1,176 @@
+10
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add the specified logger to the classloader local configuration.
+     *
+     * @param logger The logger to be added
+     */
+    @Override
+    public synchronized boolean addLogger(final Logger logger) {
+
+        final String loggerName = logger.getName();
+
+        ClassLoader classLoader =
+            Thread.currentThread().getContextClassLoader();
+        ClassLoaderLogInfo info = getClassLoaderInfo(classLoader);
+        if (info.loggers.containsKey(loggerName)) {
+            return false;
+        }
+        info.loggers.put(loggerName, logger);
+
+        // Apply initial level for new logger
+        final String levelString = getProperty(loggerName + ".level");
+        if (levelString != null) {
+            try {
+                AccessController.doPrivileged(new PrivilegedAction<Void>() {
+                    @Override
+                    public Void run() {
+                        logger.setLevel(Level.parse(levelString.trim()));
+                        return null;
+                    }
+                });
+            } catch (IllegalArgumentException e) {
+                // Leave level set to null
+            }
+        }
+
+        // Always instantiate parent loggers so that
+        // we can control log categories even during runtime
+        int dotIndex = loggerName.lastIndexOf('.');
+        if (dotIndex >= 0) {
+            final String parentName = loggerName.substring(0, dotIndex);
+            Logger.getLogger(parentName);
+        }
+
+        // Find associated node
+        LogNode node = info.rootNode.findNode(loggerName);
+        node.logger = logger;
+
+        // Set parent logger
+        Logger parentLogger = node.findParentLogger();
+        if (parentLogger != null) {
+            doSetParentLogger(logger, parentLogger);
+        }
+
+        // Tell children we are their new parent
+        node.setParentLogger(logger);
+
+        // Add associated handlers, if any are defined using the .handlers property.
+        // In this case, handlers of the parent logger(s) will not be used
+        String handlers = getProperty(loggerName + ".handlers");
+        if (handlers != null) {
+            logger.setUseParentHandlers(false);
+            StringTokenizer tok = new StringTokenizer(handlers, ",");
+            while (tok.hasMoreTokens()) {
+                String handlerName = (tok.nextToken().trim());
+                Handler handler = null;
+                ClassLoader current = classLoader;
+                while (current != null) {
+                    info = classLoaderLoggers.get(current);
+                    if (info != null) {
+                        handler = info.handlers.get(handlerName);
+                        if (handler != null) {
+                            break;
+                        }
+                    }
+                    current = current.getParent();
+                }
+                if (handler != null) {
+                    logger.addHandler(handler);
+                }
+            }
+        }
+
+        // Parse useParentHandlers to set if the logger should delegate to its parent.
+        // Unlike java.util.logging, the default is to not delegate if a list of handlers
+        // has been specified for the logger.
+        String useParentHandlersString = getProperty(loggerName + ".useParentHandlers");
+        if (Boolean.parseBoolean(useParentHandlersString)) {
+            logger.setUseParentHandlers(true);
+        }
+
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns a name for the logging system to use for the web application, if
+     * any, associated with the class loader.
+     *
+     * @return The name to use for the web application or null if none is
+     *         available.
+     */
+    String getWebappName();
+-----CSCI578-----
+
+
+    /**
+     * Returns a name for the logging system to use for the Host where the
+     * web application, if any, associated with the class loader is deployed.
+     *
+     * @return The name to use for the Host where the web application is
+     * deployed or null if none is available.
+     */
+    String getHostName();
+-----CSCI578-----
+
+
+    /**
+     * Returns a name for the logging system to use for the Service where the
+     * Host, if any, associated with the class loader is deployed.
+     *
+     * @return The name to use for the Service where the Host is deployed or
+     * null if none is available.
+     */
+    String getServiceName();
+-----CSCI578-----
+
+
+
+    /**
+     * System property replacement in the given string.
+     *
+     * @param str The original string
+     * @return the modified string
+     */
+    protected String replace(String str) {
+        String result = str;
+        int pos_start = str.indexOf("${");
+        if (pos_start >= 0) {
+            StringBuilder builder = new StringBuilder();
+            int pos_end = -1;
+            while (pos_start >= 0) {
+                builder.append(str, pos_end + 1, pos_start);
+                pos_end = str.indexOf('}', pos_start + 2);
+                if (pos_end < 0) {
+                    pos_end = pos_start - 1;
+                    break;
+                }
+                String propName = str.substring(pos_start + 2, pos_end);
+
+                String replacement = replaceWebApplicationProperties(propName);
+                if (replacement == null) {
+                    replacement = propName.length() > 0 ? System.getProperty(propName) : null;
+                }
+                if (replacement != null) {
+                    builder.append(replacement);
+                } else {
+                    builder.append(str, pos_start, pos_end + 1);
+                }
+                pos_start = str.indexOf("${", pos_end + 1);
+            }
+            builder.append(str, pos_end + 1, str.length());
+            result = builder.toString();
+        }

@@ -1,0 +1,110 @@
+12
+-----CSCI578-----
+
+
+    /**
+     * returns the payload associated with this member
+     * @return byte[]
+     */
+    public byte[] getPayload();
+-----CSCI578-----
+
+
+    public void setMemberAliveTime(long memberAliveTime);
+-----CSCI578-----
+
+
+    /**
+     * Notify the membership that this member has announced itself.
+     *
+     * @param member - the member that just pinged us
+     * @return - true if this member is new to the cluster, false otherwise.<br>
+     * - false if this member is the local member or updated.
+     */
+    public boolean memberAlive(Member member) {
+        // Ignore ourselves
+        if (member.equals(local)) {
+            return false;
+        }
+
+        boolean result = false;
+        synchronized (membersLock) {
+            MbrEntry entry = map.get(member);
+            if (entry == null) {
+                entry = addMember(member);
+                result = true;
+            } else {
+                // Update the member alive time
+                Member updateMember = entry.getMember();
+                if (updateMember.getMemberAliveTime() != member.getMemberAliveTime()) {
+                    // Update fields that can change
+                    updateMember.setMemberAliveTime(member.getMemberAliveTime());
+                    updateMember.setPayload(member.getPayload());
+                    updateMember.setCommand(member.getCommand());
+                    // Re-order. Can't sort in place since a call to
+                    // getMembers() may then receive an intermediate result.
+                    Member[] newMembers = members.clone();
+                    Arrays.sort(newMembers, memberComparator);
+                    members = newMembers;
+                }
+            }
+            entry.accessed();
+        }
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setPayload(byte[] payload);
+-----CSCI578-----
+
+
+    /**
+     * returns the command associated with this member
+     * @return byte[]
+     */
+    public byte[] getCommand();
+-----CSCI578-----
+
+
+    public void setCommand(byte[] command);
+-----CSCI578-----
+
+
+
+    /**
+     * Contains information on how long this member has been online.
+     * The result is the number of milli seconds this member has been
+     * broadcasting its membership to the group.
+     * @return nr of milliseconds since this member started.
+     */
+    public long getMemberAliveTime();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+//messageReceived
+
+
+    @Override
+    public void memberAdded(Member member) {
+        if ( membership == null ) setupMembership();
+        boolean notify = false;
+        synchronized (membership) {
+            if (removeSuspects.containsKey(member)) {
+                //previously marked suspect, system below picked up the member again
+                removeSuspects.remove(member);
+            } else if (membership.getMember(member) == null){
+                //if we add it here, then add it upwards too
+                //check to see if it is alive
+                if (memberAlive(member)) {
+                    membership.memberAlive(member);
+                    notify = true;
+                } else {
+                    addSuspects.put(member, Long.valueOf(System.currentTimeMillis()));
+                }
+            }
+        }
+        if ( notify ) super.memberAdded(member);
+    }
+-----CSCI578-----

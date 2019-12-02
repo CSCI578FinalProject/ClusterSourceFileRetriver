@@ -1,0 +1,82 @@
+6
+-----CSCI578-----
+
+    
+    /**
+     * create new Mbean and when set from ClassLoader Objectname
+     * @param jmxServerConnection
+     * @param name
+     * @return The value of the given named attribute
+     * @throws Exception
+     */
+    protected String jmxCreate(MBeanServerConnection jmxServerConnection,
+            String name) throws Exception {
+        String error = null;
+        Object argsA[] = null;
+        String sigA[] = null;
+        if (args != null) {
+           argsA = new Object[ args.size()];
+           sigA = new String[args.size()];
+           for( int i=0; i<args.size(); i++ ) {
+               Arg arg=(Arg)args.get(i);
+               if( arg.type==null) {
+                   arg.type="java.lang.String";
+                   sigA[i]=arg.getType();
+                   argsA[i]=arg.getValue();
+               } else {
+                   sigA[i]=arg.getType();
+                   argsA[i]=convertStringToType(arg.getValue(),arg.getType());
+               }                
+           }
+        }
+        if (classLoader != null && !"".equals(classLoader)) {
+            if (isEcho()) {
+                handleOutput("create MBean " + name + " from class "
+                        + className + " with classLoader " + classLoader);
+            }
+            if(args == null)
+                jmxServerConnection.createMBean(className, new ObjectName(name), new ObjectName(classLoader));
+            else
+                jmxServerConnection.createMBean(className, new ObjectName(name), new ObjectName(classLoader),argsA,sigA);
+                
+        } else {
+            if (isEcho()) {
+                handleOutput("create MBean " + name + " from class "
+                        + className);
+            }
+            if(args == null)
+                jmxServerConnection.createMBean(className, new ObjectName(name));
+            else
+                jmxServerConnection.createMBean(className, new ObjectName(name),argsA,sigA);
+        }
+        return error;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ------------------------------------------------------ protected Methods
+    
+    /**
+     * Execute the specified command, based on the configured properties. The
+     * input stream will be closed upon completion of this task, whether it was
+     * executed successfully or not.
+     * 
+     * @exception Exception
+     *                if an error occurs
+     */
+    public String jmxExecute(MBeanServerConnection jmxServerConnection)
+        throws Exception {
+
+        if (getName() == null) {
+            throw new BuildException("Must specify a 'name'");
+        }
+        if ((className == null)) {
+            throw new BuildException(
+                    "Must specify a 'className' for get");
+        }
+        return jmxCreate(jmxServerConnection, getName());
+     }
+-----CSCI578-----
+-----CSCI578-----

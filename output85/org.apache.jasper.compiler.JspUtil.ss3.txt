@@ -1,0 +1,111 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Checks if all mandatory attributes are present and if all attributes
+     * present have valid names. Checks attributes specified as XML-style
+     * attributes as well as attributes specified using the jsp:attribute
+     * standard action.
+     * @param typeOfTag The tag type
+     * @param n The corresponding node
+     * @param validAttributes The array with the valid attributes
+     * @param err Dispatcher for errors
+     * @throws JasperException An error occurred
+     */
+    public static void checkAttributes(String typeOfTag, Node n,
+            ValidAttribute[] validAttributes, ErrorDispatcher err)
+            throws JasperException {
+        Attributes attrs = n.getAttributes();
+        Mark start = n.getStart();
+        boolean valid = true;
+
+        // AttributesImpl.removeAttribute is broken, so we do this...
+        int tempLength = (attrs == null) ? 0 : attrs.getLength();
+        Vector<String> temp = new Vector<>(tempLength, 1);
+        for (int i = 0; i < tempLength; i++) {
+            @SuppressWarnings("null")  // If attrs==null, tempLength == 0
+            String qName = attrs.getQName(i);
+            if ((!qName.equals("xmlns")) && (!qName.startsWith("xmlns:"))) {
+                temp.addElement(qName);
+            }
+        }
+
+        // Add names of attributes specified using jsp:attribute
+        Node.Nodes tagBody = n.getBody();
+        if (tagBody != null) {
+            int numSubElements = tagBody.size();
+            for (int i = 0; i < numSubElements; i++) {
+                Node node = tagBody.getNode(i);
+                if (node instanceof Node.NamedAttribute) {
+                    String attrName = node.getAttributeValue("name");
+                    temp.addElement(attrName);
+                    // Check if this value appear in the attribute of the node
+                    if (n.getAttributeValue(attrName) != null) {
+                        err.jspError(n,
+                                "jsp.error.duplicate.name.jspattribute",
+                                attrName);
+                    }
+                } else {
+                    // Nothing can come before jsp:attribute, and only
+                    // jsp:body can come after it.
+                    break;
+                }
+            }
+        }
+
+        /*
+         * First check to see if all the mandatory attributes are present. If so
+         * only then proceed to see if the other attributes are valid for the
+         * particular tag.
+         */
+        String missingAttribute = null;
+
+        for (int i = 0; i < validAttributes.length; i++) {
+            int attrPos;
+            if (validAttributes[i].mandatory) {
+                attrPos = temp.indexOf(validAttributes[i].name);
+                if (attrPos != -1) {
+                    temp.remove(attrPos);
+                    valid = true;
+                } else {
+                    valid = false;
+                    missingAttribute = validAttributes[i].name;
+                    break;
+                }
+            }
+        }
+
+        // If mandatory attribute is missing then the exception is thrown
+        if (!valid) {
+            err.jspError(start, "jsp.error.mandatory.attribute", typeOfTag,
+                    missingAttribute);
+        }
+
+        // Check to see if there are any more attributes for the specified tag.
+        int attrLeftLength = temp.size();
+        if (attrLeftLength == 0) {
+            return;
+        }
+
+        // Now check to see if the rest of the attributes are valid too.
+        String attribute = null;
+
+        for (int j = 0; j < attrLeftLength; j++) {
+            valid = false;
+            attribute = temp.elementAt(j);
+            for (int i = 0; i < validAttributes.length; i++) {
+                if (attribute.equals(validAttributes[i].name)) {
+                    valid = true;
+                    break;
+                }
+            }
+            if (!valid) {
+                err.jspError(start, "jsp.error.invalid.attribute", typeOfTag,
+                        attribute);
+            }
+        }
+        // XXX *could* move EL-syntax validation here... (sb)
+    }

@@ -1,0 +1,63 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Set the entropy increaser value.
+     *
+     * @param entropy The new entropy increaser value
+     */
+    public void setEntropy(String entropy) {
+
+        this.entropy = entropy;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the entropy increaser value, or compute a semi-useful value
+     * if this String has not yet been set.
+     */
+    public String getEntropy() {
+
+        // Calculate a semi-useful value if this has not been set
+        if (this.entropy == null)
+            setEntropy(this.toString());
+
+        return (this.entropy);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the random number generator instance we should use for
+     * generating session identifiers.  If there is no such generator
+     * currently defined, construct and seed a new one.
+     */
+    protected synchronized Random getRandom() {
+
+        if (this.random == null) {
+            try {
+                Class clazz = Class.forName(randomClass);
+                this.random = (Random) clazz.newInstance();
+                long seed = System.currentTimeMillis();
+                char entropy[] = getEntropy().toCharArray();
+                for (int i = 0; i < entropy.length; i++) {
+                    long update = ((byte) entropy[i]) << ((i % 8) * 8);
+                    seed ^= update;
+                }
+                this.random.setSeed(seed);
+            } catch (Exception e) {
+                this.random = new java.util.Random();
+            }
+        }
+
+        return (this.random);
+
+    }
+-----CSCI578-----

@@ -1,0 +1,34 @@
+1
+-----CSCI578-----
+
+    /**
+     * @see SSICommand
+     */
+    public long process(SSIMediator ssiMediator, String commandName,
+            String[] paramNames, String[] paramValues, PrintWriter writer) {
+    	long lastModified = 0;
+        //any arguments should produce an error
+        if (paramNames.length > 0) {
+            String errorMessage = ssiMediator.getConfigErrMsg();
+            writer.write(errorMessage);
+        } else {
+            Collection variableNames = ssiMediator.getVariableNames();
+            Iterator iter = variableNames.iterator();
+            while (iter.hasNext()) {
+                String variableName = (String)iter.next();
+                String variableValue = ssiMediator
+                        .getVariableValue(variableName);
+                //This shouldn't happen, since all the variable names must
+                // have values
+                if (variableValue == null) {
+                    variableValue = "(none)";
+                }
+                writer.write(variableName);
+                writer.write('=');
+                writer.write(variableValue);
+                writer.write('\n');
+                lastModified = System.currentTimeMillis();
+            }
+        }
+        return lastModified;
+    }

@@ -1,0 +1,139 @@
+6
+-----CSCI578-----
+
+
+
+    /**
+     * Return a List of all registered Rule instances, or a zero-length List
+     * if there are no registered Rule instances.  If more than one Rule
+     * instance has been registered, they <strong>must</strong> be returned
+     * in the order originally registered through the <code>add()</code>
+     * method.
+     */
+    public List rules();
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification of the end of the document being reached.
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    public void endDocument() throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            if (getCount() > 1) {
+                saxLog.debug("endDocument():  " + getCount() +
+                             " elements left");
+            } else {
+                saxLog.debug("endDocument()");
+            }
+        }
+
+        while (getCount() > 1) {
+            pop();
+        }
+
+        // Fire "finish" events for all defined rules
+        Iterator rules = getRules().rules().iterator();
+        while (rules.hasNext()) {
+            Rule rule = (Rule) rules.next();
+            try {
+                rule.finish();
+            } catch (Exception e) {
+                log.error("Finish event threw exception", e);
+                throw createSAXException(e);
+            } catch (Error e) {
+                log.error("Finish event threw error", e);
+                throw e;
+            }
+        }
+
+        // Perform final cleanup
+        clear();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * This method is called after all parsing methods have been
+     * called, to allow Rules to remove temporary data.
+     */
+    public void finish() throws Exception {
+
+        ;	// The default implementation does nothing
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Pop the top object off of the stack, and return it.  If there are
+     * no objects on the stack, return <code>null</code>.
+     */
+    public Object pop() {
+
+        try {
+            return (stack.pop());
+        } catch (EmptyStackException e) {
+            log.warn("Empty stack (returning null)");
+            return (null);
+        }
+
+    }
+
+
+    /**
+     * <p>Pops (gets and removes) the top object from the stack with the given name.</p>
+     *
+     * <p><strong>Note:</strong> a stack is considered empty
+     * if no objects have been pushed onto it yet.</p>
+     *
+     * @param stackName the name of the stack from which the top value is to be popped
+     * @return the top <code>Object</code> on the stack or or null if the stack is either
+     * empty or has not been created yet
+     * @throws EmptyStackException if the named stack is empty
+     *
+     * @since 1.6
+     */
+    public Object pop(String stackName) {
+        Object result = null;
+        ArrayStack namedStack = (ArrayStack) stacksByName.get(stackName);
+        if (namedStack == null) {
+            if (log.isDebugEnabled()) {
+                log.debug("Stack '" + stackName + "' is empty");
+            }
+            throw new EmptyStackException();
+
+        } else {
+
+            result = namedStack.pop();
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process the end of this element.
+     */
+    public void end() throws Exception {
+        Object top = digester.pop();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Pop the Node off the top of the stack.
+     */
+    public void end() throws Exception {
+
+        Object top = digester.pop();
+
+    }

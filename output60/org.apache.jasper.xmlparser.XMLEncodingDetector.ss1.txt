@@ -1,0 +1,155 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * append
+     * 
+     * @param c 
+     */
+    public void append(char c) {
+        if (this.length + 1 > this.ch.length) {
+                    int newLength = this.ch.length*2;
+                    if (newLength < this.ch.length + DEFAULT_SIZE)
+                        newLength = this.ch.length + DEFAULT_SIZE;
+                    char[] newch = new char[newLength];
+                    System.arraycopy(this.ch, 0, newch, 0, this.length);
+                    this.ch = newch;
+        }
+        this.ch[this.length] = c;
+        this.length++;
+    }
+ // append(char)
+
+    /**
+     * append
+     * 
+     * @param s 
+     */
+    public void append(String s) {
+        int length = s.length();
+        if (this.length + length > this.ch.length) {
+            int newLength = this.ch.length*2;
+            if (newLength < this.length + length + DEFAULT_SIZE)
+                newLength = this.ch.length + length + DEFAULT_SIZE;
+            char[] newch = new char[newLength];            
+            System.arraycopy(this.ch, 0, newch, 0, this.length);
+            this.ch = newch;
+        }
+        s.getChars(0, length, this.ch, this.length);
+        this.length += length;
+    }
+ // append(String)
+
+    /**
+     * append
+     * 
+     * @param ch 
+     * @param offset 
+     * @param length 
+     */
+    public void append(char[] ch, int offset, int length) {
+        if (this.length + length > this.ch.length) {
+            char[] newch = new char[this.ch.length + length + DEFAULT_SIZE];
+            System.arraycopy(this.ch, 0, newch, 0, this.length);
+            this.ch = newch;
+        }
+        System.arraycopy(ch, offset, this.ch, this.length, length);
+        this.length += length;
+    }
+ // append(char[],int,int)
+
+    /**
+     * append
+     * 
+     * @param s 
+     */
+    public void append(XMLString s) {
+        append(s.ch, s.offset, s.length);
+    }
+-----CSCI578-----
+ // <init>(XMLString)
+
+    //
+    // Public methods
+    //
+
+    /**
+     * Initializes the contents of the XMLString structure with the
+     * specified values.
+     * 
+     * @param ch     The character array.
+     * @param offset The offset into the character array.
+     * @param length The length of characters from the offset.
+     */
+    public void setValues(char[] ch, int offset, int length) {
+        this.ch = ch;
+        this.offset = offset;
+        this.length = length;
+    }
+ // setValues(char[],int,int)
+
+    /**
+     * Initializes the contents of the XMLString structure with copies
+     * of the given string structure.
+     * <p>
+     * <strong>Note:</strong> This does not copy the character array;
+     * only the reference to the array is copied.
+     * 
+     * @param s
+     */
+    public void setValues(XMLString s) {
+        setValues(s.ch, s.offset, s.length);
+    }
+ // setValues(XMLString)
+
+    /** Resets all of the values to their defaults. */
+    public void clear() {
+        this.ch = null;
+        this.offset = 0;
+        this.length = -1;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Autodetects the encoding of the XML document supplied by the given
+     * input stream.
+     *
+     * Encoding autodetection is done according to the XML 1.0 specification,
+     * Appendix F.1: Detection Without External Encoding Information.
+     *
+     * @return Two-element array, where the first element (of type
+     * java.lang.String) contains the name of the (auto)detected encoding, and
+     * the second element (of type java.lang.Boolean) specifies whether the 
+     * encoding was specified using the 'encoding' attribute of an XML prolog
+     * (TRUE) or autodetected (FALSE).
+     */
+    public static Object[] getEncoding(String fname, JarFile jarFile,
+                                       JspCompilationContext ctxt,
+                                       ErrorDispatcher err)
+        throws IOException, JasperException
+    {
+        InputStream inStream = JspUtil.getInputStream(fname, jarFile, ctxt,
+                                                      err);
+        XMLEncodingDetector detector = new XMLEncodingDetector();
+        Object[] ret = detector.getEncoding(inStream, err);
+        inStream.close();
+
+        return ret;
+    }
+
+
+    private Object[] getEncoding(InputStream in, ErrorDispatcher err)
+        throws IOException, JasperException
+    {
+        this.stream = in;
+        this.err=err;
+        createInitialReader();
+        scanXMLDecl();
+	
+        return new Object[] { this.encoding,
+                              Boolean.valueOf(this.isEncodingSetInProlog),
+                              Boolean.valueOf(this.isBomPresent),
+                              Integer.valueOf(this.skip) };
+    }

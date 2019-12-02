@@ -1,0 +1,72 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * SSL_renegotiate
+     * @param ssl the SSL instance (SSL *)
+     * @return the operation status
+     */
+    public static native int renegotiate(long ssl);
+-----CSCI578-----
+
+
+    private synchronized void renegotiate() throws SSLException {
+        int code = SSL.renegotiate(ssl);
+        if (code <= 0) {
+            checkLastError();
+        }
+        handshakeFinished = false;
+        peerCerts = null;
+        x509PeerCerts = null;
+        currentHandshake = SSL.getHandshakeCount(ssl);
+        int code2 = SSL.doHandshake(ssl);
+        if (code2 <= 0) {
+            checkLastError();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * 0 - not accepted, 1 - accepted implicitly via wrap()/unwrap(), 2 -
+     * accepted explicitly via beginHandshake() call
+     */
+    private int accepted;
+
+
+    @Override
+    public synchronized void beginHandshake() throws SSLException {
+        if (engineClosed || destroyed) {
+            throw new SSLException(sm.getString("engine.engineClosed"));
+        }
+        switch (accepted) {
+            case 0:
+                handshake();
+                accepted = 2;
+                break;
+            case 1:
+                // A user did not start handshake by calling this method by him/herself,
+                // but handshake has been started already by wrap() or unwrap() implicitly.
+                // Because it's the user's first time to call this method, it is unfair to
+                // raise an exception.  From the user's standpoint, he or she never asked
+                // for renegotiation.
+
+                accepted = 2; // Next time this method is invoked by the user, we should raise an exception.
+                break;
+            case 2:
+                renegotiate();
+                break;
+            default:
+                throw new Error();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * SSL_do_handshake
+     * @param ssl the SSL instance (SSL *)
+     * @return the handshake status
+     */
+    public static native int doHandshake(long ssl);

@@ -1,0 +1,24 @@
+2
+-----CSCI578-----
+
+
+
+    /*
+     * startAsync() has been called but the container thread where this was
+     * called has not completed processing. To avoid various race conditions -
+     * including several related to error page handling - pause this
+     * non-container thread until the container thread has finished processing.
+     * The non-container thread will be paused until the container thread
+     * completes asyncPostProcess().
+     */
+    private synchronized void pauseNonContainerThread() {
+        while (!ContainerThreadMarker.isContainerThread() &&
+                state.getPauseNonContainerThread()) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
+                // TODO Log this?
+            }
+        }
+    }
+-----CSCI578-----

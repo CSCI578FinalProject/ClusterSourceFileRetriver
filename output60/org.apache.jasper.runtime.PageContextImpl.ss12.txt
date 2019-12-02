@@ -1,0 +1,48 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public int getAttributesScope(final String name) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return ((Integer) AccessController
+                    .doPrivileged(new PrivilegedAction() {
+                        public Object run() {
+                            return new Integer(doGetAttributeScope(name));
+                        }
+                    })).intValue();
+        } else {
+            return doGetAttributeScope(name);
+        }
+    }
+-----CSCI578-----
+
+
+    private int doGetAttributeScope(String name) {
+        if (attributes.get(name) != null)
+            return PAGE_SCOPE;
+
+        if (request.getAttribute(name) != null)
+            return REQUEST_SCOPE;
+
+        if (session != null) {
+            try {
+                if (session.getAttribute(name) != null)
+                    return SESSION_SCOPE;
+            } catch(IllegalStateException ise) {
+                // Session has been invalidated.
+                // Ignore and fall through to application scope.
+            }
+        }
+
+        if (context.getAttribute(name) != null)
+            return APPLICATION_SCOPE;
+
+        return 0;
+    }

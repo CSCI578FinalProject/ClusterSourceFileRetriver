@@ -1,0 +1,131 @@
+5
+-----CSCI578-----
+
+
+    /*
+     * Modifcation from watchDir war detected!
+     * 
+     * @see org.apache.catalina.ha.deploy.FileChangeListener#fileModified(java.io.File)
+     */
+    public void fileModified(File newWar) {
+        try {
+            File deployWar = new File(getDeployDir(), newWar.getName());
+            copy(newWar, deployWar);
+            String contextName = getContextName(deployWar);
+            if (log.isInfoEnabled())
+                log.info("Installing webapp[" + contextName + "] from "
+                        + deployWar.getAbsolutePath());
+            try {
+                remove(contextName, false);
+            } catch (Exception x) {
+                log.error("No removal", x);
+            }
+            install(contextName, deployWar.toURL());
+        } catch (Exception x) {
+            log.error("Unable to install WAR file", x);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Install a new web application, whose web application archive is at the
+     * specified URL, into this container and all the other members of the
+     * cluster with the specified context path. A context path of "" (the empty
+     * string) should be used for the root application for this container.
+     * Otherwise, the context path must start with a slash.
+     * <p>
+     * If this application is successfully installed locally, a ContainerEvent
+     * of type <code>INSTALL_EVENT</code> will be sent to all registered
+     * listeners, with the newly created <code>Context</code> as an argument.
+     * 
+     * @param contextPath
+     *            The context path to which this application should be installed
+     *            (must be unique)
+     * @param war
+     *            A URL of type "jar:" that points to a WAR file, or type
+     *            "file:" that points to an unpacked directory structure
+     *            containing the web application to be installed
+     * 
+     * @exception IllegalArgumentException
+     *                if the specified context path is malformed (it must be ""
+     *                or start with a slash)
+     * @exception IllegalStateException
+     *                if the specified context path is already attached to an
+     *                existing web application
+     * @exception IOException
+     *                if an input/output error was encountered during
+     *                installation
+     */
+    public void install(String contextPath, URL war) throws IOException {
+        Member[] members = getCluster().getMembers();
+        Member localMember = getCluster().getLocalMember();
+        FileMessageFactory factory = FileMessageFactory.getInstance(new File(
+                war.getFile()), false);
+        FileMessage msg = new FileMessage(localMember, war.getFile(),
+                contextPath);
+        if(log.isDebugEnabled())
+            log.debug("Send cluster war deployment [ path:"
+                    + contextPath + " war: " + war + " ] started.");
+        msg = factory.readMessage(msg);
+        while (msg != null) {
+            for (int i = 0; i < members.length; i++) {
+                if (log.isDebugEnabled())
+                    log.debug("Send cluster war fragment [ path: "
+                            + contextPath + " war: " + war + " to: " +  members[i] + " ]");
+                getCluster().send(msg, members[i]);
+            }
+            msg = factory.readMessage(msg);
+        }
+        if(log.isDebugEnabled())
+            log.debug("Send cluster war deployment [ path: "
+                    + contextPath + " war: " + war + " ] finished.");
+    }
+-----CSCI578-----
+
+
+    /**
+     * Copy a file to the specified temp directory.
+     * @param from copy from temp
+     * @param to   to host appBase directory
+     * @return true, copy successful
+     */
+    protected boolean copy(File from, File to) {
+        try {
+            if (!to.exists())
+                to.createNewFile();
+            java.io.FileInputStream is = new java.io.FileInputStream(from);
+            java.io.FileOutputStream os = new java.io.FileOutputStream(to,
+                    false);
+            byte[] buf = new byte[4096];
+            while (true) {
+                int len = is.read(buf);
+                if (len < 0)
+                    break;
+                os.write(buf, 0, len);
+            }
+            is.close();
+            os.close();
+        } catch (IOException e) {
+            log.error("Unable to copy file from:" + from + " to:" + to, e);
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Create a context path from war
+     * @param war War filename
+     * @return '/filename' or if war name is ROOT.war context name is empty string '' 
+     */
+    protected String getContextName(File war) {
+        String contextName = "/"
+        + war.getName().substring(0,
+                war.getName().lastIndexOf(".war"));
+        if("/ROOT".equals(contextName))
+            contextName= "" ;
+        return contextName ;
+    }

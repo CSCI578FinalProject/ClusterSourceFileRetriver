@@ -1,0 +1,80 @@
+6
+
+
+    /**
+     * Return the MIME type of the specified file, or <code>null</code> if
+     * the MIME type cannot be determined.
+     *
+     * @param file Filename for which to identify a MIME type
+     */
+    public String getMimeType(String file) {
+
+        if (file == null)
+            return (null);
+        int period = file.lastIndexOf(".");
+        if (period < 0)
+            return (null);
+        String extension = file.substring(period + 1);
+        if (extension.length() < 1)
+            return (null);
+        return (context.findMimeMapping(extension));
+
+    }
+
+
+    /**
+     * Internal implementation of getResourcesPath() logic.
+     *
+     * @param resources Directory context to search
+     * @param path Collection path
+     */
+    private Set getResourcePathsInternal(DirContext resources, String path) {
+
+        ResourceSet set = new ResourceSet();
+        try {
+            listCollectionPaths(set, resources, path);
+        } catch (NamingException e) {
+            return (null);
+        }
+        set.setLocked(true);
+        return (set);
+
+    }
+
+
+    /**
+     * List resource paths (recursively), and store all of them in the given
+     * Set.
+     */
+    private static void listCollectionPaths
+        (Set set, DirContext resources, String path)
+        throws NamingException {
+
+        Enumeration childPaths = resources.listBindings(path);
+        while (childPaths.hasMoreElements()) {
+            Binding binding = (Binding) childPaths.nextElement();
+            String name = binding.getName();
+            StringBuffer childPath = new StringBuffer(path);
+            if (!"/".equals(path) && !path.endsWith("/"))
+                childPath.append("/");
+            childPath.append(name);
+            Object object = binding.getObject();
+            if (object instanceof DirContext) {
+                childPath.append("/");
+            }
+            set.add(childPath.toString());
+        }
+
+    }
+
+
+    /**
+     * Set the locked state of this parameter map.
+     *
+     * @param locked The new locked state
+     */
+    public void setLocked(boolean locked) {
+
+        this.locked = locked;
+
+    }

@@ -1,0 +1,47 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Process given socket.
+     */
+    protected boolean processSocket(long socket) {
+        try {
+            if (executor == null) {
+                getWorkerThread().assign(socket);
+            } else {
+                executor.execute(new SocketProcessor(socket));
+            }
+        } catch (Throwable t) {
+            // This means we got an OOM or similar creating a thread, or that
+            // the pool and its queue are full
+            log.error(sm.getString("endpoint.process.fail"), t);
+            return false;
+        }
+        return true;
+    }
+
+
+
+    /**
+     * Process given socket for an event.
+     */
+    protected boolean processSocket(long socket, SocketStatus status) {
+        try {
+            if (executor == null) {
+                getWorkerThread().assign(socket, status);
+            } else {
+                executor.execute(new SocketEventProcessor(socket, status));
+            }
+        } catch (Throwable t) {
+            // This means we got an OOM or similar creating a thread, or that
+            // the pool and its queue are full
+            log.error(sm.getString("endpoint.process.fail"), t);
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,53 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Set the <code>Server</code> with which we are associated (if any).
+     *
+     * @param server The server that owns this Service
+     */
+    public void setServer(Server server);
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Server Methods
+
+
+    /**
+     * Add a new Service to the set of defined Services.
+     *
+     * @param service The Service to be added
+     */
+    public void addService(Service service) {
+
+        service.setServer(this);
+
+        synchronized (services) {
+            Service results[] = new Service[services.length + 1];
+            System.arraycopy(services, 0, results, 0, services.length);
+            results[services.length] = service;
+            services = results;
+
+            if (initialized) {
+                try {
+                    service.initialize();
+                } catch (LifecycleException e) {
+                    log.error(e);
+                }
+            }
+
+            if (started && (service instanceof Lifecycle)) {
+                try {
+                    ((Lifecycle) service).start();
+                } catch (LifecycleException e) {
+                    ;
+                }
+            }
+
+            // Report this property change to interested listeners
+            support.firePropertyChange("service", null, service);
+        }
+
+    }

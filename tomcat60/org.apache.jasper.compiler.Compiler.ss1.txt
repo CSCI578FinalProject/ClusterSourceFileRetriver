@@ -1,0 +1,74 @@
+9
+
+    /**
+     * Compile the servlet from .java file to .class file
+     */
+    protected abstract void generateClass(String[] smap)
+            throws FileNotFoundException, JasperException, Exception;
+
+    /**
+     * Compile the jsp file from the current engine context
+     */
+    public void compile() throws FileNotFoundException, JasperException,
+            Exception {
+        compile(true);
+    }
+
+    public void close() throws IOException {
+	writer.close();
+    }
+
+    public void setWriter(ServletWriter writer) {
+        this.writer = writer;
+    }
+
+    /**
+     * Where is the servlet being generated?
+     */
+    public ServletWriter getWriter() {
+        return writer;
+    }
+
+    public String getClassFileName() {
+        if (classFileName == null) {
+            classFileName = getOutputDir() + getServletClassName() + ".class";
+        }
+        return classFileName;
+    }
+
+    public void removeGeneratedClassFiles() {
+        try {
+            String classFileName = ctxt.getClassFileName();
+            if (classFileName != null) {
+                File classFile = new File(classFileName);
+                if (log.isDebugEnabled())
+                    log.debug("Deleting " + classFile);
+                if (classFile.exists()) {
+                    if (!classFile.delete()) {
+                        log.warn(Localizer.getMessage(
+                                "jsp.warning.compiler.classfile.delete.fail",
+                                classFile.getAbsolutePath()));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Remove as much as possible, log possible exceptions
+            log.warn(Localizer.getMessage("jsp.warning.compiler.classfile.delete.fail.unknown"),
+                     e);
+        }
+    }
+
+    /** ---------- Input/Output  ---------- */
+    
+    /**
+     * The output directory to generate code into.  The output directory
+     * is make up of the scratch directory, which is provide in Options,
+     * plus the directory derived from the package name.
+     */
+    public String getOutputDir() {
+	if (outputDir == null) {
+	    createOutputDir();
+	}
+
+        return outputDir;
+    }

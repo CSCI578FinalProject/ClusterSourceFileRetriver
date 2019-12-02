@@ -1,0 +1,119 @@
+8
+-----CSCI578-----
+
+
+
+    /**
+     * End request.
+     * 
+     * @throws IOException an undelying I/O error occured
+     */
+    public void endRequest()
+        throws IOException {
+
+        if (!committed) {
+
+            // Send the connector a request for commit. The connector should
+            // then validate the headers, send them (using sendHeader) and 
+            // set the filters accordingly.
+            response.action(ActionCode.ACTION_COMMIT, null);
+
+        }
+
+        if (finished)
+            return;
+
+        if (lastActiveFilter != -1)
+            activeFilters[lastActiveFilter].end();
+
+        flushBuffer();
+
+        finished = true;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add an input filter to the filter library.
+     */
+    public void addActiveFilter(InputFilter filter) {
+
+        if (lastActiveFilter == -1) {
+            filter.setBuffer(inputStreamInputBuffer);
+        } else {
+            for (int i = 0; i <= lastActiveFilter; i++) {
+                if (activeFilters[i] == filter)
+                    return;
+            }
+            filter.setBuffer(activeFilters[lastActiveFilter]);
+        }
+
+        activeFilters[++lastActiveFilter] = filter;
+
+        filter.setRequest(request);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Determine if we must drop the connection because of the HTTP status
+     * code.  Use the same list of codes as Apache/httpd.
+     */
+    protected boolean statusDropsConnection(int status) {
+        return status == 400 /* SC_BAD_REQUEST */ ||
+               status == 408 /* SC_REQUEST_TIMEOUT */ ||
+               status == 411 /* SC_LENGTH_REQUIRED */ ||
+               status == 413 /* SC_REQUEST_ENTITY_TOO_LARGE */ ||
+               status == 414 /* SC_REQUEST_URI_TOO_LARGE */ ||
+               status == 500 /* SC_INTERNAL_SERVER_ERROR */ ||
+               status == 503 /* SC_SERVICE_UNAVAILABLE */ ||
+               status == 501 /* SC_NOT_IMPLEMENTED */;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the swallow input flag.
+     */
+    public void setSwallowInput(boolean swallowInput) {
+        this.swallowInput = swallowInput;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Available bytes (note that due to encoding, this may not correspond )
+     */
+    public int available() {
+        int result = (lastValid - pos);
+        if ((result == 0) && (lastActiveFilter >= 0)) {
+            for (int i = 0; (result == 0) && (i <= lastActiveFilter); i++) {
+                result = activeFilters[i].available();
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get filters.
+     */
+    public InputFilter[] getFilters() {
+
+        return filterLibrary;
+
+    }
+-----CSCI578-----
+
+    public Poller getCometPoller() {
+        cometPollerRoundRobin = (cometPollerRoundRobin + 1) % cometPollers.length;
+        return cometPollers[cometPollerRoundRobin];
+    }

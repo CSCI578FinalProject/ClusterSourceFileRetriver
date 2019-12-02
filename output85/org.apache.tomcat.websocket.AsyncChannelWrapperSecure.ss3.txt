@@ -1,0 +1,44 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public Future<Integer> write(ByteBuffer src) {
+
+        WrapperFuture<Long,Void> inner = new WrapperFuture<>();
+
+        if (!writing.compareAndSet(false, true)) {
+            throw new IllegalStateException(sm.getString(
+                    "asyncChannelWrapperSecure.concurrentWrite"));
+        }
+
+        WriteTask writeTask =
+                new WriteTask(new ByteBuffer[] {src}, 0, 1, inner);
+
+        executor.execute(writeTask);
+
+        Future<Integer> future = new LongToIntegerFuture(inner);
+        return future;
+    }
+
+
+    @Override
+    public <B,A extends B> void write(ByteBuffer[] srcs, int offset, int length,
+            long timeout, TimeUnit unit, A attachment,
+            CompletionHandler<Long,B> handler) {
+
+        WrapperFuture<Long,B> future =
+                new WrapperFuture<>(handler, attachment);
+
+        if (!writing.compareAndSet(false, true)) {
+            throw new IllegalStateException(sm.getString(
+                    "asyncChannelWrapperSecure.concurrentWrite"));
+        }
+
+        WriteTask writeTask = new WriteTask(srcs, offset, length, future);
+
+        executor.execute(writeTask);
+    }
+-----CSCI578-----
+-----CSCI578-----

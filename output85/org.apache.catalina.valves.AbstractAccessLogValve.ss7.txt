@@ -1,0 +1,81 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * @return the enabled flag.
+     */
+    public boolean getEnabled() {
+        return enabled;
+    }
+-----CSCI578-----
+
+
+    // -------------------------------------------------------- Private Methods
+
+    /**
+     * This method returns a Date object that is accurate to within one second.
+     * If a thread calls this method to get a Date and it's been less than 1
+     * second since a new Date was created, this method simply gives out the
+     * same Date again so that the system doesn't spend time creating Date
+     * objects unnecessarily.
+     * @param systime The time
+     * @return the date object
+     */
+    private static Date getDate(long systime) {
+        Date date = localDate.get();
+        date.setTime(systime);
+        return date;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void log(Request request, Response response, long time) {
+        if (!getState().isAvailable() || !getEnabled() || logElements == null
+                || condition != null
+                && null != request.getRequest().getAttribute(condition)
+                || conditionIf != null
+                && null == request.getRequest().getAttribute(conditionIf)) {
+            return;
+        }
+
+        /**
+         * XXX This is a bit silly, but we want to have start and stop time and
+         * duration consistent. It would be better to keep start and stop
+         * simply in the request and/or response object and remove time
+         * (duration) from the interface.
+         */
+        long start = request.getCoyoteRequest().getStartTime();
+        Date date = getDate(start + time);
+
+        CharArrayWriter result = charArrayWriters.pop();
+        if (result == null) {
+            result = new CharArrayWriter(128);
+        }
+
+        for (int i = 0; i < logElements.length; i++) {
+            logElements[i].addElement(result, date, request, response, time);
+        }
+
+        log(result);
+
+        if (result.size() <= maxLogMessageBufferSize) {
+            result.reset();
+            charArrayWriters.push(result);
+        }
+    }
+
+
+    // -------------------------------------------------------- Protected Methods
+
+    /**
+     * Log the specified message.
+     *
+     * @param message Message to be logged. This object will be recycled by
+     *  the calling method.
+     */
+    protected abstract void log(CharArrayWriter message);
+-----CSCI578-----

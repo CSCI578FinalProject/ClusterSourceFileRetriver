@@ -1,0 +1,98 @@
+5
+-----CSCI578-----
+
+
+    public void stop() {
+        if (running) {
+            running = false;
+            unlockAccept();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Deallocate APR memory pools, and close server socket.
+     */
+    public void destroy() throws Exception {
+        if (running) {
+            stop();
+        }
+        if (serverSocket != null) {
+            try {
+                if (serverSocket != null)
+                    serverSocket.close();
+            } catch (Exception e) {
+                log.error(sm.getString("endpoint.err.close"), e);
+            }
+            serverSocket = null;
+        }
+        initialized = false ;
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Unlock the accept by using a local connection.
+     */
+    protected void unlockAccept() {
+        Socket s = null;
+        InetSocketAddress saddr = null;
+        try {
+            // Need to create a connection to unlock the accept();
+            if (address == null) {
+                saddr = new InetSocketAddress("localhost", getLocalPort());
+            } else {
+                saddr = new InetSocketAddress(address, getLocalPort());
+            }
+            s = new java.net.Socket();
+            s.setSoTimeout(soTimeout);
+            s.setSoLinger(true ,0);
+            if (log.isDebugEnabled()) {
+                log.debug("About to unlock socket for: " + saddr);
+            }
+            s.connect(saddr, unlockTimeout);
+            if (log.isDebugEnabled()) {
+                log.debug("Socket unlock completed for:"+saddr);
+            } 
+        } catch (Exception e) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("endpoint.debug.unlock",
+                        Integer.toString(getLocalPort())), e);
+            }
+        } finally {
+            if (s != null) {
+                try {
+                    s.close();
+                } catch (Exception e) {
+                    // Ignore
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Port in use.
+     */
+    @Override
+    public int getLocalPort() {
+        ServerSocket s = serverSocket;
+        if (s == null) {
+            return -1;
+        } else {
+            return s.getLocalPort();
+        }
+    }
+-----CSCI578-----
+
+
+    public void pause() {
+        if (running && !paused) {
+            paused = true;
+            unlockAccept();
+        }
+    }

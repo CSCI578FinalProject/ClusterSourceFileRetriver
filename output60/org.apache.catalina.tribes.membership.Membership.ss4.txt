@@ -1,0 +1,87 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /**
+     * Runs a refresh cycle and returns a list of members that has expired.
+     * This also removes the members from the membership, in such a way that
+     * getMembers() = getMembers() - expire()
+     * @param maxtime - the max time a member can remain unannounced before it is considered dead.
+     * @return the list of expired members
+     */
+    public synchronized MemberImpl[] expire(long maxtime) {
+        if(!hasMembers() )
+           return EMPTY_MEMBERS;
+       
+        ArrayList list = null;
+        Iterator i = map.values().iterator();
+        while(i.hasNext()) {
+            MbrEntry entry = (MbrEntry)i.next();
+            if( entry.hasExpired(maxtime) ) {
+                if(list == null) // only need a list when members are expired (smaller gc)
+                    list = new java.util.ArrayList();
+                list.add(entry.getMember());
+            }
+        }
+        
+        if(list != null) {
+            MemberImpl[] result = new MemberImpl[list.size()];
+            list.toArray(result);
+            for( int j=0; j<result.length; j++) {
+                removeMember(result[j]);
+            }
+            return result;
+        } else {
+            return EMPTY_MEMBERS ;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returning that service has members or not
+     */
+    public boolean hasMembers() {
+        return members.length > 0 ;
+    }
+-----CSCI578-----
+
+
+    public boolean hasMembers() {
+        if ( membership == null ) setupMembership();
+        return membership.hasMembers();
+    }
+-----CSCI578-----
+
+    
+    public Member[] getView() {
+        return (view != null && view.hasMembers()) ? view.getMembers() : new Member[0];
+    }
+-----CSCI578-----
+
+
+    /**
+     * has members
+     */
+    public boolean hasMembers() {
+        
+        return membership.hasMembers();
+    }
+-----CSCI578-----
+
+    
+    public boolean hasMembers() {
+        if ( membership == null ) setupMembership();
+        return membership.hasMembers();
+    }
+-----CSCI578-----
+
+
+    /**
+     * has members?
+     */
+    public boolean hasMembers() {
+       if ( impl == null || impl.membership == null ) return false;
+       return impl.membership.hasMembers();
+    }

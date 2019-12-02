@@ -1,0 +1,484 @@
+21
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Sets the encoding to be used to read and write web.xml files.
+     * 
+     * <p>
+     * If not specified, defaults to the platform default encoding.
+     * </p>
+     * 
+     * @param encoding
+     *            Encoding, e.g. "UTF-8".
+     */
+    public void setWebXmlEncoding(String encoding) {
+        webxmlEncoding = encoding;
+    }
+-----CSCI578-----
+
+
+    public void setBlockExternal( boolean b ) {
+        this.blockExternal = b;
+    }
+-----CSCI578-----
+
+
+    protected String nextFile() {
+        if (fullstop) argPos++;
+        if (argPos >= args.length) {
+            return null;
+        } else {
+            return args[argPos++];
+        }
+    }
+-----CSCI578-----
+
+    
+    public void setValidateXml( boolean b ) {
+        this.validateXml = b;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the compiler target VM.
+     * 
+     * @see Options#getCompilerTargetVM()
+     */
+    public void setCompilerTargetVM(String vm) {
+        compilerTargetVM = vm;
+    }
+-----CSCI578-----
+
+
+    public void setOutputDir( String s ) {
+        if( s!= null ) {
+            scratchDir = resolveFile(s).getAbsoluteFile();
+        } else {
+            scratchDir=null;
+        }
+    }
+-----CSCI578-----
+
+
+     /**
+      * Sets the compiler source VM.
+      * 
+      * @see Options#getCompilerSourceVM()
+      */
+    public void setCompilerSourceVM(String vm) {
+        compilerSourceVM = vm;
+    }
+-----CSCI578-----
+
+
+    // ==================== protected utility methods ====================
+
+    protected String nextArg() {
+        if ((argPos >= args.length)
+            || (fullstop = SWITCH_FULL_STOP.equals(args[argPos]))) {
+            return null;
+        } else {
+            return args[argPos++];
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Base dir for the webapp. Used to generate class names and resolve
+     * includes.
+     */
+    public void setUriroot( String s ) {
+        if( s==null ) {
+            uriRoot = s;
+            return;
+        }
+        try {
+            uriRoot = resolveFile(s).getCanonicalPath();
+        } catch( Exception ex ) {
+            uriRoot = s;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the encoding to use for
+     * java files.
+     *
+     * @param encodingName The name, e.g. "UTF-8"
+     */
+    public void setJavaEncoding(String encodingName) {
+        javaEncoding = encodingName;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Apply command-line arguments.
+     * 
+     * @param arg
+     *            The arguments
+     */
+    public void setArgs(String[] arg) throws JasperException {
+        args = arg;
+        String tok;
+
+        dieLevel = NO_DIE_LEVEL;
+        die = dieLevel;
+
+        while ((tok = nextArg()) != null) {
+            if (tok.equals(SWITCH_VERBOSE)) {
+                verbose = true;
+                showSuccess = true;
+                listErrors = true;
+            } else if (tok.equals(SWITCH_OUTPUT_DIR)) {
+                tok = nextArg();
+                setOutputDir( tok );
+            } else if (tok.equals(SWITCH_PACKAGE_NAME)) {
+                targetPackage = nextArg();
+            } else if (tok.equals(SWITCH_COMPILE)) {
+                compile=true;
+            } else if (tok.equals(SWITCH_CLASS_NAME)) {
+                targetClassName = nextArg();
+            } else if (tok.equals(SWITCH_URI_BASE)) {
+                uriBase=nextArg();
+            } else if (tok.equals(SWITCH_URI_ROOT)) {
+                setUriroot( nextArg());
+            } else if (tok.equals(SWITCH_FILE_WEBAPP)) {
+                setUriroot( nextArg());
+            } else if ( tok.equals( SHOW_SUCCESS ) ) {
+                showSuccess = true;
+            } else if ( tok.equals( LIST_ERRORS ) ) {
+                listErrors = true;
+            } else if (tok.equals(SWITCH_WEBAPP_INC)) {
+                webxmlFile = nextArg();
+                if (webxmlFile != null) {
+                    webxmlLevel = INC_WEBXML;
+                }
+            } else if (tok.equals(SWITCH_WEBAPP_XML)) {
+                webxmlFile = nextArg();
+                if (webxmlFile != null) {
+                    webxmlLevel = ALL_WEBXML;
+                }
+            } else if (tok.equals(SWITCH_WEBAPP_XML_ENCODING)) {
+                setWebXmlEncoding(nextArg());
+            } else if (tok.equals(SWITCH_ADD_WEBAPP_XML_MAPPINGS)) {
+                setAddWebXmlMappings(true);
+            } else if (tok.equals(SWITCH_MAPPED)) {
+                mappedFile = true;
+            } else if (tok.equals(SWITCH_XPOWERED_BY)) {
+                xpoweredBy = true;
+            } else if (tok.equals(SWITCH_TRIM_SPACES)) {
+                setTrimSpaces(true);
+            } else if (tok.equals(SWITCH_CACHE)) {
+                tok = nextArg();
+                if ("false".equals(tok)) {
+                    caching = false;
+                } else {
+                    caching = true;
+                }            
+            } else if (tok.equals(SWITCH_CLASSPATH)) {
+                setClassPath(nextArg());
+            } else if (tok.startsWith(SWITCH_DIE)) {
+                try {
+                    dieLevel = Integer.parseInt(
+                        tok.substring(SWITCH_DIE.length()));
+                } catch (NumberFormatException nfe) {
+                    dieLevel = DEFAULT_DIE_LEVEL;
+                }
+                die = dieLevel;
+            } else if (tok.equals(SWITCH_HELP)) {
+                helpNeeded = true;
+            } else if (tok.equals(SWITCH_POOLING)) {
+                tok = nextArg();
+                if ("false".equals(tok)) {
+                    poolingEnabled = false;
+                } else {
+                    poolingEnabled = true;
+                }
+            } else if (tok.equals(SWITCH_ENCODING)) {
+                setJavaEncoding(nextArg());
+            } else if (tok.equals(SWITCH_SOURCE)) {
+                setCompilerSourceVM(nextArg());
+            } else if (tok.equals(SWITCH_TARGET)) {
+                setCompilerTargetVM(nextArg());
+            } else if (tok.equals(SWITCH_SMAP)) {
+                smapSuppressed = false;
+            } else if (tok.equals(SWITCH_DUMP_SMAP)) {
+                smapDumped = true;
+            } else if (tok.equals(SWITCH_VALIDATE_TLD)) {
+                setValidateTld(true);
+            } else if (tok.equals(SWITCH_VALIDATE_XML)) {
+                setValidateXml(true);
+            } else if (tok.equals(SWITCH_BLOCK_EXTERNAL)) {
+                setBlockExternal(true);
+            } else if (tok.equals(SWITCH_NO_BLOCK_EXTERNAL)) {
+                setBlockExternal(false);
+            } else {
+                if (tok.startsWith("-")) {
+                    throw new JasperException("Unrecognized option: " + tok +
+                        ".  Use -help for help.");
+                }
+                if (!fullstop) {
+                    argPos--;
+                }
+                // Start treating the rest as JSP Pages
+                break;
+            }
+        }
+
+        // Add all extra arguments to the list of files
+        while( true ) {
+            String file = nextFile();
+            if( file==null ) {
+                break;
+            }
+            pages.add( file );
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the option to trim white spaces between directives or actions.
+     */
+    public void setTrimSpaces(boolean ts) {
+        this.trimSpaces = ts;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the classpath used while compiling the servlets generated from JSP
+     * files
+     */
+    public void setClassPath(String s) {
+        classPath=s;
+    }
+-----CSCI578-----
+
+
+    public void setValidateTld( boolean b ) {
+        this.validateTld = b;
+    }
+-----CSCI578-----
+
+
+    protected void completeWebXml() {
+        if (mapout != null) {
+            try {
+                servletout.writeTo(mapout);
+                mappingout.writeTo(mapout);
+                if (webxmlLevel >= ALL_WEBXML) {
+                    mapout.write(Localizer.getMessage("jspc.webxml.footer"));
+                } else if ((webxmlLevel >= INC_WEBXML) && !addWebXmlMappings) {
+                    mapout.write(Localizer.getMessage("jspc.webinc.footer"));
+                }
+                mapout.close();
+            } catch (IOException ioe) {
+                // noting to do if it fails since we are done with it
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    protected void initWebXml() {
+        try {
+            if (webxmlLevel >= INC_WEBXML) {
+                mapout = openWebxmlWriter(new File(webxmlFile));
+                servletout = new CharArrayWriter();
+                mappingout = new CharArrayWriter();
+            } else {
+                mapout = null;
+                servletout = null;
+                mappingout = null;
+            }
+            if (webxmlLevel >= ALL_WEBXML) {
+                mapout.write(Localizer.getMessage("jspc.webxml.header"));
+                mapout.flush();
+            } else if ((webxmlLevel>= INC_WEBXML) && !addWebXmlMappings) {
+                mapout.write(Localizer.getMessage("jspc.webinc.header"));
+                mapout.flush();
+            }
+        } catch (IOException ioe) {
+            mapout = null;
+            servletout = null;
+            mappingout = null;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Executes the compilation.
+     *
+     * @throws JasperException If an error occurs
+     */
+    @Override
+    public void execute() {
+        if(log.isDebugEnabled()) {
+            log.debug("execute() starting for " + pages.size() + " pages.");
+        }
+
+        try {
+            if (uriRoot == null) {
+                if( pages.size() == 0 ) {
+                    throw new JasperException(
+                        Localizer.getMessage("jsp.error.jspc.missingTarget"));
+                }
+                String firstJsp = (String) pages.get( 0 );
+                File firstJspF = new File( firstJsp );
+                if (!firstJspF.exists()) {
+                    throw new JasperException(
+                        Localizer.getMessage("jspc.error.fileDoesNotExist",
+                                             firstJsp));
+                }
+                locateUriRoot( firstJspF );
+            }
+
+            if (uriRoot == null) {
+                throw new JasperException(
+                    Localizer.getMessage("jsp.error.jspc.no_uriroot"));
+            }
+
+            if( context==null ) {
+                initServletContext();
+            }
+
+            // No explicit pages, we'll process all .jsp in the webapp
+            if (pages.size() == 0) {
+                scanFiles( new File( uriRoot ));
+            }
+
+            File uriRootF = new File(uriRoot);
+            if (!uriRootF.exists() || !uriRootF.isDirectory()) {
+                throw new JasperException(
+                    Localizer.getMessage("jsp.error.jspc.uriroot_not_dir"));
+            }
+
+            initWebXml();
+
+            Iterator iter = pages.iterator();
+            while (iter.hasNext()) {
+                String nextjsp = iter.next().toString();
+                File fjsp = new File(nextjsp);
+                if (!fjsp.isAbsolute()) {
+                    fjsp = new File(uriRootF, nextjsp);
+                }
+                if (!fjsp.exists()) {
+                    if (log.isWarnEnabled()) {
+                        log.warn
+                            (Localizer.getMessage
+                             ("jspc.error.fileDoesNotExist", fjsp.toString()));
+                    }
+                    continue;
+                }
+                String s = fjsp.getAbsolutePath();
+                if (s.startsWith(uriRoot)) {
+                    nextjsp = s.substring(uriRoot.length());
+                }
+                if (nextjsp.startsWith("." + File.separatorChar)) {
+                    nextjsp = nextjsp.substring(2);
+                }
+                processFile(nextjsp);
+            }
+
+            completeWebXml();
+
+            if (addWebXmlMappings) {
+                mergeIntoWebXml();
+            }
+
+        } catch (IOException ioe) {
+            throw new BuildException(ioe);
+
+        } catch (JasperException je) {
+            Throwable rootCause = je;
+            while (rootCause instanceof JasperException
+                    && ((JasperException) rootCause).getRootCause() != null) {
+                rootCause = ((JasperException) rootCause).getRootCause();
+            }
+            if (rootCause != je) {
+                rootCause.printStackTrace();
+            }
+            throw new BuildException(je);
+        } finally {
+            if (loader != null) {
+                LogFactory.release(loader);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    private Writer openWebxmlWriter(File file) throws IOException {
+        FileOutputStream fos = new FileOutputStream(file);
+        try {
+            return webxmlEncoding != null ? new OutputStreamWriter(fos,
+                    webxmlEncoding) : new OutputStreamWriter(fos);
+        } catch (IOException ex) {
+            fos.close();
+            throw ex;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Find the WEB-INF dir by looking up in the directory tree.
+     * This is used if no explicit docbase is set, but only files.
+     * XXX Maybe we should require the docbase.
+     */
+    protected void locateUriRoot( File f ) {
+        String tUriBase = uriBase;
+        if (tUriBase == null) {
+            tUriBase = "/";
+        }
+        try {
+            if (f.exists()) {
+                f = new File(f.getAbsolutePath());
+                while (f != null) {
+                    File g = new File(f, "WEB-INF");
+                    if (g.exists() && g.isDirectory()) {
+                        uriRoot = f.getCanonicalPath();
+                        uriBase = tUriBase;
+                        if (log.isInfoEnabled()) {
+                            log.info(Localizer.getMessage(
+                                        "jspc.implicit.uriRoot",
+                                        uriRoot));
+                        }
+                        break;
+                    }
+                    if (f.exists() && f.isDirectory()) {
+                        tUriBase = "/" + f.getName() + "/" + tUriBase;
+                    }
+
+                    String fParent = f.getParent();
+                    if (fParent == null) {
+                        break;
+                    } else {
+                        f = new File(fParent);
+                    }
+
+                    // If there is no acceptible candidate, uriRoot will
+                    // remain null to indicate to the CompilerContext to
+                    // use the current working/user dir.
+                }
+
+                if (uriRoot != null) {
+                    File froot = new File(uriRoot);
+                    uriRoot = froot.getCanonicalPath();
+                }
+            }
+        } catch (IOException ioe) {
+            // since this is an optional default and a null value
+            // for uriRoot has a non-error meaning, we can just
+            // pass straight through
+        }
+    }

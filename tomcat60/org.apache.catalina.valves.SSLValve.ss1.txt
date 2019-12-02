@@ -1,0 +1,61 @@
+9
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        /* mod_header converts the '\n' into ' ' so we have to rebuild the client certificate */
+        String strcert0 = mygetHeader(request, "ssl_client_cert");
+        if (strcert0 != null && strcert0.length()>28) {
+            String strcert1 = strcert0.replace(' ', '\n');
+            String strcert2 = strcert1.substring(28, strcert1.length()-26);
+            String strcert3 = "-----BEGIN CERTIFICATE-----\n";
+            String strcert4 = strcert3.concat(strcert2);
+            String strcerts = strcert4.concat("\n-----END CERTIFICATE-----\n");
+            // ByteArrayInputStream bais = new ByteArrayInputStream(strcerts.getBytes("UTF-8"));
+            ByteArrayInputStream bais = new ByteArrayInputStream(strcerts.getBytes());
+            X509Certificate jsseCerts[] = null;
+            String providerName = (String) request.getConnector().getProperty(
+                    "clientCertProvider");
+            try {
+                CertificateFactory cf;
+                if (providerName == null) {
+                    cf = CertificateFactory.getInstance("X.509");
+                } else {
+                    cf = CertificateFactory.getInstance("X.509", providerName);
+                }
+                X509Certificate cert = (X509Certificate) cf.generateCertificate(bais);
+                jsseCerts = new X509Certificate[1];
+                jsseCerts[0] = cert;
+            } catch (java.security.cert.CertificateException e) {
+                log.warn(sm.getString("sslValve.certError", strcerts), e);
+            } catch (NoSuchProviderException e) {
+                log.error(sm.getString(
+                        "sslValve.invalidProvider", providerName), e);
+
+            }
+            request.setAttribute("javax.servlet.request.X509Certificate", jsseCerts);
+        }
+        strcert0 = mygetHeader(request, "ssl_cipher");
+        if (strcert0 != null) {
+            request.setAttribute("javax.servlet.request.cipher_suite", strcert0);
+        }
+        strcert0 = mygetHeader(request, "ssl_session_id");
+        if (strcert0 != null) {
+            request.setAttribute("javax.servlet.request.ssl_session", strcert0);
+        }
+        strcert0 = mygetHeader(request, "ssl_cipher_usekeysize");
+        if (strcert0 != null) {
+            request.setAttribute("javax.servlet.request.key_size",
+                    Integer.valueOf(strcert0));
+        }
+        getNext().invoke(request, response);
+    }
+ */
+    public String mygetHeader(Request request, String header) {
+        String strcert0 = request.getHeader(header);
+        if (strcert0 == null)
+            return null;
+        /* mod_header writes "(null)" when the ssl variable is no filled */
+        if ("(null)".equals(strcert0))
+            return null;
+        return strcert0;
+    } 

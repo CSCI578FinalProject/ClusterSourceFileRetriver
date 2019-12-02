@@ -1,0 +1,36 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Sets the last-modified time of the servlet class file associated with
+     * this JspServletWrapper.
+     *
+     * @param lastModified Last-modified time of servlet class
+     */
+    public void setServletClassLastModifiedTime(long lastModified) {
+        // DCL requires servletClassLastModifiedTime be volatile
+        // to force read and write barriers on access/set
+        // (and to get atomic write of long)
+        if (this.servletClassLastModifiedTime < lastModified) {
+            synchronized (this) {
+                if (this.servletClassLastModifiedTime < lastModified) {
+                    this.servletClassLastModifiedTime = lastModified;
+                    reload = true;
+                    // Really need to unload the old class but can't do that. Do
+                    // the next best thing which is throw away the JspLoader so
+                    // a new loader will be created which will load the new
+                    // class.
+                    // TODO Are there inefficiencies between reload and the
+                    //      isOutDated() check?
+                    ctxt.clearJspLoader();
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public void clearJspLoader() {
+        jspLoader = null;
+    }

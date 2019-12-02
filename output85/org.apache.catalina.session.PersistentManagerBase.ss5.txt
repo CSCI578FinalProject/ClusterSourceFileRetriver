@@ -1,0 +1,41 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Write the provided session to the Store without modifying
+     * the copy in memory or triggering passivation events. Does
+     * nothing if the session is invalid or past its expiration.
+     * @param session The session that should be written
+     * @throws IOException an IO error occurred
+     */
+    protected void writeSession(Session session) throws IOException {
+
+        if (store == null || !session.isValid()) {
+            return;
+        }
+
+        try {
+            if (SecurityUtil.isPackageProtectionEnabled()){
+                try{
+                    AccessController.doPrivileged(new PrivilegedStoreSave(session));
+                }catch(PrivilegedActionException ex){
+                    Exception exception = ex.getException();
+                    if (exception instanceof IOException) {
+                        throw (IOException) exception;
+                    }
+                    log.error("Exception in the Store during writeSession: "
+                              + exception, exception);
+                }
+            } else {
+                 store.save(session);
+            }
+        } catch (IOException e) {
+            log.error(sm.getString
+                ("persistentManager.serializeError", session.getIdInternal(), e));
+            throw e;
+        }
+
+    }

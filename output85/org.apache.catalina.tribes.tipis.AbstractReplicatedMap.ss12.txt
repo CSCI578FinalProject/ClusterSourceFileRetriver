@@ -1,0 +1,167 @@
+10
+-----CSCI578-----
+
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public void messageReceived(Serializable msg, Member sender) {
+        if (! (msg instanceof MapMessage)) return;
+
+        MapMessage mapmsg = (MapMessage) msg;
+        if ( log.isTraceEnabled() ) {
+            log.trace("Map["+mapname+"] received message:"+mapmsg);
+        }
+
+        try {
+            mapmsg.deserialize(getExternalLoaders());
+        } catch (IOException x) {
+            log.error(sm.getString("abstractReplicatedMap.unable.deserialize.MapMessage"), x);
+            return;
+        } catch (ClassNotFoundException x) {
+            log.error(sm.getString("abstractReplicatedMap.unable.deserialize.MapMessage"), x);
+            return;
+        }
+        if ( log.isTraceEnabled() )
+            log.trace("Map message received from:"+sender.getName()+" msg:"+mapmsg);
+        if (mapmsg.getMsgType() == MapMessage.MSG_START) {
+            mapMemberAdded(mapmsg.getPrimary());
+        }
+
+        if (mapmsg.getMsgType() == MapMessage.MSG_STOP) {
+            memberDisappeared(mapmsg.getPrimary());
+        }
+
+        if (mapmsg.getMsgType() == MapMessage.MSG_PROXY) {
+            MapEntry<K,V> entry = innerMap.get(mapmsg.getKey());
+            if ( entry==null ) {
+                entry = new MapEntry<>((K) mapmsg.getKey(), (V) mapmsg.getValue());
+                MapEntry<K,V> old = innerMap.putIfAbsent(entry.getKey(), entry);
+                if (old != null) {
+                    entry = old;
+                }
+            }
+            entry.setProxy(true);
+            entry.setBackup(false);
+            entry.setCopy(false);
+            entry.setBackupNodes(mapmsg.getBackupNodes());
+            entry.setPrimary(mapmsg.getPrimary());
+        }
+
+        if (mapmsg.getMsgType() == MapMessage.MSG_REMOVE) {
+            innerMap.remove(mapmsg.getKey());
+        }
+
+        if (mapmsg.getMsgType() == MapMessage.MSG_BACKUP || mapmsg.getMsgType() == MapMessage.MSG_COPY) {
+            MapEntry<K,V> entry = innerMap.get(mapmsg.getKey());
+            if (entry == null) {
+                entry = new MapEntry<>((K) mapmsg.getKey(), (V) mapmsg.getValue());
+                entry.setBackup(mapmsg.getMsgType() == MapMessage.MSG_BACKUP);
+                entry.setProxy(false);
+                entry.setCopy(mapmsg.getMsgType() == MapMessage.MSG_COPY);
+                entry.setBackupNodes(mapmsg.getBackupNodes());
+                entry.setPrimary(mapmsg.getPrimary());
+                if (mapmsg.getValue() instanceof ReplicatedMapEntry ) {
+                    ((ReplicatedMapEntry)mapmsg.getValue()).setOwner(getMapOwner());
+                }
+            } else {
+                entry.setBackup(mapmsg.getMsgType() == MapMessage.MSG_BACKUP);
+                entry.setProxy(false);
+                entry.setCopy(mapmsg.getMsgType() == MapMessage.MSG_COPY);
+                entry.setBackupNodes(mapmsg.getBackupNodes());
+                entry.setPrimary(mapmsg.getPrimary());
+                if (entry.getValue() instanceof ReplicatedMapEntry) {
+                    ReplicatedMapEntry diff = (ReplicatedMapEntry) entry.getValue();
+                    if (mapmsg.isDiff()) {
+                        diff.lock();
+                        try {
+                            diff.applyDiff(mapmsg.getDiffValue(), 0, mapmsg.getDiffValue().length);
+                        } catch (Exception x) {
+                            log.error(sm.getString("abstractReplicatedMap.unableApply.diff", entry.getKey()), x);
+                        } finally {
+                            diff.unlock();
+                        }
+                    } else {
+                        if ( mapmsg.getValue()!=null ) {
+                            if (mapmsg.getValue() instanceof ReplicatedMapEntry) {
+                                ReplicatedMapEntry re = (ReplicatedMapEntry)mapmsg.getValue();
+                                re.setOwner(getMapOwner());
+                                entry.setValue((V) re);
+                            } else {
+                                entry.setValue((V) mapmsg.getValue());
+                            }
+                        } else {
+                            ((ReplicatedMapEntry)entry.getValue()).setOwner(getMapOwner());
+                        }
+                    } //end if
+                } else if  (mapmsg.getValue() instanceof ReplicatedMapEntry) {
+                    ReplicatedMapEntry re = (ReplicatedMapEntry)mapmsg.getValue();
+                    re.setOwner(getMapOwner());
+                    entry.setValue((V) re);
+                } else {
+                    if ( mapmsg.getValue()!=null ) entry.setValue((V) mapmsg.getValue());
+                } //end if
+            } //end if
+            innerMap.put(entry.getKey(), entry);
+        } //end if
+
+        if (mapmsg.getMsgType() == MapMessage.MSG_ACCESS) {
+            MapEntry<K, V> entry = innerMap.get(mapmsg.getKey());
+            if (entry != null) {
+                entry.setBackupNodes(mapmsg.getBackupNodes());
+                entry.setPrimary(mapmsg.getPrimary());
+                if (entry.getValue() instanceof ReplicatedMapEntry) {
+                    ((ReplicatedMapEntry) entry.getValue()).accessEntry();
+                }
+            }
+        }
+
+        if (mapmsg.getMsgType() == MapMessage.MSG_NOTIFY_MAPMEMBER) {
+            MapEntry<K, V> entry = innerMap.get(mapmsg.getKey());
+            if (entry != null) {
+                entry.setBackupNodes(mapmsg.getBackupNodes());
+                entry.setPrimary(mapmsg.getPrimary());
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Access to an existing object.
+     */
+    public void accessEntry();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Applies a diff to an existing object.
+     * @param diff Serialized diff data
+     * @param offset Array offset
+     * @param length Array length
+     * @throws IOException IO error deserializing
+     * @throws ClassNotFoundException Serialization error
+     */
+    public void applyDiff(byte[] diff, int offset, int length) throws IOException, ClassNotFoundException;
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public MapOwner getMapOwner() {
+        return mapOwner;
+    }
+-----CSCI578-----
+
+
+    /**
+     * This method is called after the object has been
+     * created on a remote map. On this method,
+     * the object can initialize itself for any data that wasn't
+     *
+     * @param owner Object
+     */
+    public void setOwner(Object owner);

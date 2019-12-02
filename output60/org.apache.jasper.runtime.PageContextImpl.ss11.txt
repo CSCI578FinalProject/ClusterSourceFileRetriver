@@ -1,0 +1,124 @@
+6
+-----CSCI578-----
+
+    
+    /** Package-level access
+     */
+    void recycle() {
+        flushed = false;
+        closed = false;
+        out = null;
+        nextChar = 0;
+        response = null;
+    }
+-----CSCI578-----
+
+
+    public void release() {
+        out = baseOut;
+        try {
+            if (isIncluded) {
+                ((JspWriterImpl) out).flushBuffer();
+                // push it into the including jspWriter
+            } else {
+                // Old code:
+                // out.flush();
+                // Do not flush the buffer even if we're not included (i.e.
+                // we are the main page. The servlet will flush it and close
+                // the stream.
+                ((JspWriterImpl) out).flushBuffer();
+            }
+        } catch (IOException ex) {
+            IllegalStateException ise = new IllegalStateException(Localizer.getMessage("jsp.error.flush"), ex);
+            throw ise;
+        } finally {
+            servlet = null;
+            config = null;
+            context = null;
+            applicationContext = null;
+            elContext = null;
+            errorPageURL = null;
+            request = null;
+            response = null;
+            depth = -1;
+            baseOut.recycle();
+            session = null;
+            attributes.clear();
+            for (BodyContentImpl body: outs) {
+                body.recycle();
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /**
+     * Clear the contents of the buffer. If the buffer has been already
+     * been flushed then the clear operation shall throw an IOException
+     * to signal the fact that some data has already been irrevocably 
+     * written to the client response stream.
+     *
+     * @throws IOException If an I/O error occurs
+     */
+    public void clear() throws IOException {
+        if (writer != null) {
+            throw new IOException();
+        } else {
+            nextChar = 0;
+            if (LIMIT_BUFFER && (cb.length > Constants.DEFAULT_TAG_BUFFER_SIZE)) {
+                cb = new char[Constants.DEFAULT_TAG_BUFFER_SIZE];
+                bufferSize = cb.length;
+            }
+        }
+    }
+
+    
+    /**
+     * Clears the current contents of the buffer. Unlike clear(), this
+     * mehtod will not throw an IOException if the buffer has already been
+     * flushed. It merely clears the current content of the buffer and
+     * returns.
+     *
+     * @throws IOException If an I/O error occurs
+     */
+    public void clearBuffer() throws IOException {
+        if (writer == null) {
+            this.clear();
+        }
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Flush the output buffer to the underlying character stream, without
+     * flushing the stream itself.  This method is non-private only so that it
+     * may be invoked by PrintStream.
+     */
+    protected final void flushBuffer() throws IOException {
+        if (bufferSize == 0)
+            return;
+        flushed = true;
+        ensureOpen();
+        if (nextChar == 0)
+            return;
+        initOut();
+        out.write(cb, 0, nextChar);
+        nextChar = 0;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Clears the current contents of the buffer. Unlike clear(), this
+     * mehtod will not throw an IOException if the buffer has already been
+     * flushed. It merely clears the current content of the buffer and
+     * returns.
+     *
+     * @throws IOException If an I/O error occurs
+     */
+    public void clearBuffer() throws IOException {
+        if (writer == null) {
+            this.clear();
+        }
+    }

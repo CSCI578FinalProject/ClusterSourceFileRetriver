@@ -1,0 +1,76 @@
+6
+-----CSCI578-----
+
+    protected abstract Log getLog();
+-----CSCI578-----
+
+    protected abstract Set<String> getImplementedCiphers();
+-----CSCI578-----
+
+
+    protected abstract Set<String> getImplementedProtocols();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    static <T> List<T> getEnabled(String name, Log log, boolean warnOnSkip, Collection<T> configured,
+            Collection<T> implemented) {
+
+        List<T> enabled = new ArrayList<>();
+
+        if (implemented.size() == 0) {
+            // Unable to determine the list of available protocols. This will
+            // have been logged previously.
+            // Use the configuredProtocols and hope they work. If not, an error
+            // will be generated when the list is used. Not ideal but no more
+            // can be done at this point.
+            enabled.addAll(configured);
+        } else {
+            enabled.addAll(configured);
+            enabled.retainAll(implemented);
+
+            if (enabled.isEmpty()) {
+                // Don't use the defaults in this case. They may be less secure
+                // than the configuration the user intended.
+                // Force the failure of the connector
+                throw new IllegalArgumentException(
+                        sm.getString("sslUtilBase.noneSupported", name, configured));
+            }
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("sslUtilBase.active", name, enabled));
+            }
+            if (log.isDebugEnabled() || warnOnSkip) {
+                if (enabled.size() != configured.size()) {
+                    List<T> skipped = new ArrayList<>();
+                    skipped.addAll(configured);
+                    skipped.removeAll(enabled);
+                    String msg = sm.getString("sslUtilBase.skipped", name, skipped);
+                    if (warnOnSkip) {
+                        log.warn(msg);
+                    } else {
+                        log.debug(msg);
+                    }
+                }
+            }
+        }
+
+        return enabled;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain the list of JSSE cipher names for the current configuration.
+     * Ciphers included in the configuration but not supported by JSSE will be
+     * excluded from this list.
+     *
+     * @return A list of the JSSE cipher names
+     */
+    public List<String> getJsseCipherNames() {
+        if (jsseCipherNames == null) {
+            jsseCipherNames = OpenSSLCipherConfigurationParser.convertForJSSE(getCipherList());
+        }
+        return jsseCipherNames;
+    }

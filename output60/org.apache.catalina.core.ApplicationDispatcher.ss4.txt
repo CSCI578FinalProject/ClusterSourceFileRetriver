@@ -1,0 +1,104 @@
+1
+-----CSCI578-----
+
+
+
+    /**
+     * Unwrap the request if we have wrapped it.
+     */
+    private void unwrapRequest(State state) {
+
+        if (state.wrapRequest == null)
+            return;
+
+        ServletRequest previous = null;
+        ServletRequest current = state.outerRequest;
+        while (current != null) {
+
+            // If we run into the container request we are done
+            if ((current instanceof Request)
+                || (current instanceof RequestFacade))
+                break;
+
+            // Remove the current request if it is our wrapper
+            if (current == state.wrapRequest) {
+                ServletRequest next =
+                  ((ServletRequestWrapper) current).getRequest();
+                if (previous == null)
+                    state.outerRequest = next;
+                else
+                    ((ServletRequestWrapper) previous).setRequest(next);
+                break;
+            }
+
+            // Advance to the next request in the chain
+            previous = current;
+            current = ((ServletRequestWrapper) current).getRequest();
+
+        }
+
+    }
+
+
+
+    /**
+     * Create and return a request wrapper that has been inserted in the
+     * appropriate spot in the request chain.
+     */
+    private ServletRequest wrapRequest(State state) {
+
+        // Locate the request we should insert in front of
+        ServletRequest previous = null;
+        ServletRequest current = state.outerRequest;
+        while (current != null) {
+            if(state.hrequest == null && (current instanceof HttpServletRequest))
+                state.hrequest = (HttpServletRequest)current;
+            if ("org.apache.catalina.servlets.InvokerHttpRequest".
+                equals(current.getClass().getName()))
+                break; // KLUDGE - Make nested RD.forward() using invoker work
+            if (!(current instanceof ServletRequestWrapper))
+                break;
+            if (current instanceof ApplicationHttpRequest)
+                break;
+            if (current instanceof ApplicationRequest)
+                break;
+            if (current instanceof Request)
+                break;
+            previous = current;
+            current = ((ServletRequestWrapper) current).getRequest();
+        }
+
+        // Instantiate a new wrapper at this point and insert it in the chain
+        ServletRequest wrapper = null;
+        if ((current instanceof ApplicationHttpRequest) ||
+            (current instanceof Request) ||
+            (current instanceof HttpServletRequest)) {
+            // Compute a crossContext flag
+            HttpServletRequest hcurrent = (HttpServletRequest) current;
+            boolean crossContext = false;
+            if ((state.outerRequest instanceof ApplicationHttpRequest) ||
+                (state.outerRequest instanceof Request) ||
+                (state.outerRequest instanceof HttpServletRequest)) {
+                HttpServletRequest houterRequest = 
+                    (HttpServletRequest) state.outerRequest;
+                Object contextPath = houterRequest.getAttribute
+                    (Globals.INCLUDE_CONTEXT_PATH_ATTR);
+                if (contextPath == null) {
+                    // Forward
+                    contextPath = houterRequest.getContextPath();
+                }
+                crossContext = !(context.getPath().equals(contextPath));
+            }
+            wrapper = new ApplicationHttpRequest
+                (hcurrent, context, crossContext);
+        } else {
+            wrapper = new ApplicationRequest(current);
+        }
+        if (previous == null)
+            state.outerRequest = wrapper;
+        else
+            ((ServletRequestWrapper) previous).setRequest(wrapper);
+        state.wrapRequest = wrapper;
+        return (wrapper);
+
+    }

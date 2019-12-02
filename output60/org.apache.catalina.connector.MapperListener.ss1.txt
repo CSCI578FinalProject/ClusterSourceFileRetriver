@@ -1,0 +1,63 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------- Container Listener methods
+
+    public void containerEvent(ContainerEvent event) {
+
+        if (event.getType() == Host.ADD_ALIAS_EVENT) {
+            mapper.addHostAlias(((Host) event.getSource()).getName(),
+                    event.getData().toString());
+        } else if (event.getType() == Host.REMOVE_ALIAS_EVENT) {
+            mapper.removeHostAlias(event.getData().toString());
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Add an alias to an existing host.
+     * @param name  The name of the host
+     * @param alias The alias to add
+     */
+    public synchronized void addHostAlias(String name, String alias) {
+        int pos = find(hosts, name);
+        if (pos < 0) {
+            // Should not be adding an alias for a host that doesn't exist but
+            // just in case...
+            return;
+        }
+        Host realHost = hosts[pos];
+        
+        Host[] newHosts = new Host[hosts.length + 1];
+        Host newHost = new Host();
+        newHost.name = alias;
+        newHost.contextList = realHost.contextList;
+        newHost.object = realHost.object;
+        if (insertMap(hosts, newHosts, newHost)) {
+            hosts = newHosts;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Remove a host alias
+     * @param alias The alias to remove
+     */
+    public synchronized void removeHostAlias(String alias) {
+        // Find and remove the alias
+        int pos = find(hosts, alias);
+        if (pos < 0) {
+            return;
+        }
+        Host[] newHosts = new Host[hosts.length - 1];
+        if (removeMap(hosts, newHosts, alias)) {
+            hosts = newHosts;
+        }
+
+    }
+-----CSCI578-----

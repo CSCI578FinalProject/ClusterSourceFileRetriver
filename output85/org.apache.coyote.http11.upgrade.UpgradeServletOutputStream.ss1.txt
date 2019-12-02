@@ -1,0 +1,58 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Must hold writeLock to call this method.
+     */
+    private void writeInternal(byte[] b, int off, int len) throws IOException {
+        if (listener == null) {
+            // Simple case - blocking IO
+            socketWrapper.write(true, b, off, len);
+        } else {
+            socketWrapper.write(false, b, off, len);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void write(int b) throws IOException {
+        synchronized (writeLock) {
+            preWriteChecks();
+            writeInternal(new byte[] { (byte) b }, 0, 1);
+        }
+    }
+
+
+
+    @Override
+    public void write(byte[] b, int off, int len) throws IOException {
+        synchronized (writeLock) {
+            preWriteChecks();
+            writeInternal(b, off, len);
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void preWriteChecks() {
+        if (listener != null && !socketWrapper.canWrite()) {
+            throw new IllegalStateException(sm.getString("upgrade.sos.write.ise"));
+        }
+        if (closed) {
+            throw new IllegalStateException(sm.getString("upgrade.sos.write.closed"));
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void flush() throws IOException {
+        preWriteChecks();
+        flushInternal(listener == null, true);
+    }

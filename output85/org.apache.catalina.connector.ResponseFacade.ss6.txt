@@ -1,0 +1,71 @@
+6
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean containsHeader(String name) {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        return response.containsHeader(name);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Has the specified header been set already in this response?
+     *
+     * @param name Name of the header to check
+     * @return <code>true</code> if the header has been set
+     */
+    @Override
+    public boolean containsHeader(String name) {
+        // Need special handling for Content-Type and Content-Length due to
+        // special handling of these in coyoteResponse
+        char cc=name.charAt(0);
+        if(cc=='C' || cc=='c') {
+            if(name.equalsIgnoreCase("Content-Type")) {
+                // Will return null if this has not been set
+                return (getCoyoteResponse().getContentType() != null);
+            }
+            if(name.equalsIgnoreCase("Content-Length")) {
+                // -1 means not known and is not sent to client
+                return (getCoyoteResponse().getContentLengthLong() != -1);
+            }
+        }
+
+        return getCoyoteResponse().containsHeader(name);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // bad shortcut - it'll convert to string ( too early probably,
+    // encoding is guessed very late )
+    public String getHeader(String name) {
+        MessageBytes mh = getValue(name);
+        return mh != null ? mh.toString() : null;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------- HttpResponse Methods
+
+
+    @Override
+    public String getHeader(String name) {
+        return getCoyoteResponse().getMimeHeaders().getHeader(name);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String getHeader(String name) {
+        return response.getHeader(name);
+    }

@@ -1,0 +1,82 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Initialize this servlet.
+     */
+    @Override
+    public void init() throws ServletException {
+
+        // Ensure that our ContainerServlet properties have been set
+        if ((wrapper == null) || (context == null))
+            throw new UnavailableException(
+                    sm.getString("managerServlet.noWrapper"));
+
+        // Set our properties from the initialization parameters
+        String value = null;
+        try {
+            value = getServletConfig().getInitParameter("debug");
+            debug = Integer.parseInt(value);
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+        }
+
+        // Acquire global JNDI resources if available
+        Server server = ((Engine)host.getParent()).getService().getServer();
+        if (server != null) {
+            global = server.getGlobalNamingContext();
+        }
+
+        // Calculate the directory into which we will be deploying applications
+        versioned = (File) getServletContext().getAttribute
+            (ServletContext.TEMPDIR);
+
+        configBase = new File(context.getCatalinaBase(), "conf");
+        Container container = context;
+        Container host = null;
+        Container engine = null;
+        while (container != null) {
+            if (container instanceof Host)
+                host = container;
+            if (container instanceof Engine)
+                engine = container;
+            container = container.getParent();
+        }
+        if (engine != null) {
+            configBase = new File(configBase, engine.getName());
+        }
+        if (host != null) {
+            configBase = new File(configBase, host.getName());
+        }
+        // Note: The directory must exist for this to work.
+
+        // Log debugging messages as necessary
+        if (debug >= 1) {
+            log("init: Associated with Deployer '" +
+                oname + "'");
+            if (global != null) {
+                log("init: Global resources are available");
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * @see javax.servlet.GenericServlet#init()
+     */
+    @Override
+    public void init() throws ServletException {
+        super.init();
+
+        // Set our properties from the initialization parameters
+        String value = null;
+        value = getServletConfig().getInitParameter("showProxySessions");
+        showProxySessions = Boolean.parseBoolean(value);
+    }
+-----CSCI578-----

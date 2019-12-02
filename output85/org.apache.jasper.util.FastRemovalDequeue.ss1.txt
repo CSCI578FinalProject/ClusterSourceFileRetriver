@@ -1,0 +1,79 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Removes the first element of the list and returns its content.
+     *
+     * @return the content of the first element of the list.
+     **/
+    public synchronized T unpush() {
+        T content = null;
+        if (first != null) {
+            Entry element = first;
+            first = first.getNext();
+            content = element.getContent();
+            if (first == null) {
+                last =null;
+            } else {
+                first.setPrevious(null);
+            }
+            size--;
+            element.invalidate();
+        }
+        return content;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Adds an object to the end of the list and returns the entry created for
+     * said object. The entry can later be reused for moving the entry.
+     *
+     * @param object the object to append to the end of the list.
+     * @return an entry for use when the object should be moved.
+     * */
+    public synchronized Entry unpop(final T object) {
+        Entry entry = new Entry(object);
+        if (size >= maxSize) {
+            entry.setReplaced(unpush());
+        }
+        if (first == null) {
+            first = last = entry;
+        } else {
+            last.setNext(entry);
+            entry.setPrevious(last);
+            last = entry;
+        }
+        size++;
+
+        return entry;
+    }
+
+
+    /**
+     * Moves the element to the back.
+     *
+     * Could also be implemented as remove() and
+     * unpop(), but explicitly coding might be a bit faster.
+     *
+     * @param element the entry to move to the back.
+     * */
+    public synchronized void moveLast(final Entry element) {
+        if (element.getValid() &&
+            element.getNext() != null) {
+            Entry next = element.getNext();
+            Entry prev = element.getPrevious();
+            next.setPrevious(prev);
+            if (prev != null) {
+                prev.setNext(next);
+            } else {
+                first = next;
+            }
+            last.setNext(element);
+            element.setPrevious(last);
+            element.setNext(null);
+            last = element;
+        }
+    }
+-----CSCI578-----

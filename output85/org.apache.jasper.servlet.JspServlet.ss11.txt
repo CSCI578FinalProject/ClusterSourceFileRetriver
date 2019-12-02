@@ -1,0 +1,32 @@
+2
+-----CSCI578-----
+
+
+
+    private void handleMissingResource(HttpServletRequest request,
+            HttpServletResponse response, String jspUri)
+            throws ServletException, IOException {
+
+        String includeRequestUri =
+            (String)request.getAttribute(RequestDispatcher.INCLUDE_REQUEST_URI);
+
+        if (includeRequestUri != null) {
+            // This file was included. Throw an exception as
+            // a response.sendError() will be ignored
+            String msg =
+                Localizer.getMessage("jsp.error.file.not.found",jspUri);
+            // Strictly, filtering this is an application
+            // responsibility but just in case...
+            throw new ServletException(SecurityUtil.filter(msg));
+        } else {
+            try {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                        request.getRequestURI());
+            } catch (IllegalStateException ise) {
+                log.error(Localizer.getMessage("jsp.error.file.not.found",
+                        jspUri));
+            }
+        }
+        return;
+    }
+-----CSCI578-----

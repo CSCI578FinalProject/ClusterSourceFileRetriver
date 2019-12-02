@@ -1,0 +1,36 @@
+5
+
+
+    // ------------------------------------------------------- Private Methods
+
+
+   /**
+     * Returns an attributes list which contains all the attributes
+     * passed in, with any text of form "${xxx}" in an attribute value
+     * replaced by the appropriate value from the system property.
+     */
+    private Attributes updateAttributes(Attributes list) {
+
+        if (list.getLength() == 0) {
+            return list;
+        }
+
+        AttributesImpl newAttrs = new AttributesImpl(list);
+        int nAttributes = newAttrs.getLength();
+        for (int i = 0; i < nAttributes; ++i) {
+            String value = newAttrs.getValue(i);
+            try {
+                String newValue =
+                    IntrospectionUtils.replaceProperties(value, null, source);
+                if (value != newValue) {
+                    newAttrs.setValue(i, newValue);
+                }
+            }
+            catch (Exception e) {
+                // ignore - let the attribute have its original value
+            }
+        }
+
+        return newAttrs;
+
+    }

@@ -1,0 +1,43 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * @param host The host in which the context will be deployed
+     * @param contextPath The context mapping to use, "" for root context.
+     * @param dir Base directory for the context, for static files.
+     *  Must exist, relative to the server home
+     * @return the deployed context
+     * @see #addContext(String, String)
+     */
+    public Context addContext(Host host, String contextPath, String dir) {
+        return addContext(host, contextPath, contextPath, dir);
+    }
+
+
+    /**
+     * @param host The host in which the context will be deployed
+     * @param contextPath The context mapping to use, "" for root context.
+     * @param contextName The context name
+     * @param dir Base directory for the context, for static files.
+     *  Must exist, relative to the server home
+     * @return the deployed context
+     * @see #addContext(String, String)
+     */
+    public Context addContext(Host host, String contextPath, String contextName,
+            String dir) {
+        silence(host, contextName);
+        Context ctx = createContext(host, contextPath);
+        ctx.setName(contextName);
+        ctx.setPath(contextPath);
+        ctx.setDocBase(dir);
+        ctx.addLifecycleListener(new FixContextListener());
+
+        if (host == null) {
+            getHost().addChild(ctx);
+        } else {
+            host.addChild(ctx);
+        }
+        return ctx;
+    }
+-----CSCI578-----

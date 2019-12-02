@@ -1,0 +1,57 @@
+4
+-----CSCI578-----
+
+    
+    /**
+     * 
+     * @param msg Serializable
+     * @return Serializable - null if no reply should be sent
+     */
+    public Serializable replyRequest(Serializable msg, Member sender);
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    public void messageReceived(Serializable msg, Member sender) {
+        RpcMessage rmsg = (RpcMessage)msg;
+        RpcCollectorKey key = new RpcCollectorKey(rmsg.uuid);
+        if ( rmsg.reply ) {
+            RpcCollector collector = (RpcCollector)responseMap.get(key);
+            if (collector == null) {
+                callback.leftOver(rmsg.message, sender);
+            } else {
+                synchronized (collector) {
+                    //make sure it hasn't been removed
+                    if ( responseMap.containsKey(key) ) {
+                        if ( (rmsg instanceof RpcMessage.NoRpcChannelReply) ) 
+                            collector.destcnt--;
+                        else 
+                            collector.addResponse(rmsg.message, sender);
+                        if (collector.isComplete()) collector.notifyAll();
+                    } else {
+                        if (! (rmsg instanceof RpcMessage.NoRpcChannelReply) ) 
+                            callback.leftOver(rmsg.message, sender);
+                    }
+                }//synchronized
+            }//end if
+        } else{
+            Serializable reply = callback.replyRequest(rmsg.message,sender);
+            rmsg.reply = true;
+            rmsg.message = reply;
+            try {
+                channel.send(new Member[] {sender}, rmsg,0);
+            }catch ( Exception x )  {
+                log.error("Unable to send back reply in RpcChannel.",x);
+            }
+        }//end if
+    }
+-----CSCI578-----
+
+    
+    /**
+     * If the reply has already been sent to the requesting thread,
+     * the rpc callback can handle any data that comes in after the fact.
+     * @param msg Serializable
+     * @param sender Member
+     */
+    public void leftOver(Serializable msg, Member sender);

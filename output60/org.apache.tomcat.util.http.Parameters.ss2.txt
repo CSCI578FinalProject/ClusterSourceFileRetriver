@@ -1,0 +1,610 @@
+31
+-----CSCI578-----
+
+
+
+    public void processParameters( byte bytes[], int start, int len ) {
+        processParameters(bytes, start, len, getCharset(encoding));
+    }
+
+
+    private void processParameters(byte bytes[], int start, int len,
+                                  Charset charset) {
+
+        if(log.isDebugEnabled()) {
+            try {
+                log.debug(sm.getString("parameters.bytes",
+                        new String(bytes, start, len, DEFAULT_CHARSET.name())));
+            } catch (UnsupportedEncodingException uee) {
+                // Not possible. All JVMs must support ISO-8859-1
+            }
+        }
+
+        int decodeFailCount = 0;
+
+        int pos = start;
+        int end = start + len;
+
+        while(pos < end) {
+            parameterCount ++;
+
+            if (limit > -1 && parameterCount > limit) {
+                setParseFailedReason(FailReason.TOO_MANY_PARAMETERS);
+                UserDataHelper.Mode logMode = maxParamCountLog.getNextMode();
+                if (logMode != null) {
+                    String message = sm.getString("parameters.maxCountFail",
+                            Integer.valueOf(limit));
+                    switch (logMode) {
+                        case INFO_THEN_DEBUG:
+                            message += sm.getString(
+                                    "parameters.maxCountFail.fallToDebug");
+                            //$FALL-THROUGH$
+                        case INFO:
+                            log.info(message);
+                            break;
+                        case DEBUG:
+                            log.debug(message);
+                    }
+                }
+                break;
+            }
+            int nameStart = pos;
+            int nameEnd = -1;
+            int valueStart = -1;
+            int valueEnd = -1;
+
+            boolean parsingName = true;
+            boolean decodeName = false;
+            boolean decodeValue = false;
+            boolean parameterComplete = false;
+
+            do {
+                switch(bytes[pos]) {
+                    case '=':
+                        if (parsingName) {
+                            // Name finished. Value starts from next character
+                            nameEnd = pos;
+                            parsingName = false;
+                            valueStart = ++pos;
+                        } else {
+                            // Equals character in value
+                            pos++;
+                        }
+                        break;
+                    case '&':
+                        if (parsingName) {
+                            // Name finished. No value.
+                            nameEnd = pos;
+                        } else {
+                            // Value finished
+                            valueEnd  = pos;
+                        }
+                        parameterComplete = true;
+                        pos++;
+                        break;
+                    case '%':
+                    case '+':
+                        // Decoding required
+                        if (parsingName) {
+                            decodeName = true;
+                        } else {
+                            decodeValue = true;
+                        }
+                        pos ++;
+                        break;
+                    default:
+                        pos ++;
+                        break;
+                }
+            } while (!parameterComplete && pos < end);
+
+            if (pos == end) {
+                if (nameEnd == -1) {
+                    nameEnd = pos;
+                } else if (valueStart > -1 && valueEnd == -1){
+                    valueEnd = pos;
+                }
+            }
+
+            if (log.isDebugEnabled() && valueStart == -1) {
+                try {
+                    log.debug(sm.getString("parameters.noequal",
+                            Integer.valueOf(nameStart),
+                            Integer.valueOf(nameEnd),
+                            new String(bytes, nameStart, nameEnd-nameStart,
+                                    DEFAULT_CHARSET.name())));
+                } catch (UnsupportedEncodingException uee) {
+                    // Not possible. All JVMs must support ISO-8859-1
+                }
+            }
+
+            if (nameEnd <= nameStart ) {
+                if (valueStart == -1) {
+                    // &&
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("parameters.emptyChunk"));
+                    }
+                    // Do not flag as error
+                    continue;
+                }
+                // &=foo&
+                UserDataHelper.Mode logMode = userDataLog.getNextMode();
+                if (logMode != null) {
+                    String extract = null;
+                    if (valueEnd > nameStart) {
+                        try {
+                            extract = new String(bytes, nameStart,
+                                    valueEnd - nameStart,
+                                    DEFAULT_CHARSET.name());
+                        } catch (UnsupportedEncodingException uee) {
+                            // Not possible. All JVMs must support ISO-8859-1
+                        }
+                    } else {
+                        extract = "";
+                    }
+                    String message = sm.getString("parameters.invalidChunk",
+                            Integer.valueOf(nameStart),
+                            Integer.valueOf(valueEnd), extract);
+                    switch (logMode) {
+                        case INFO_THEN_DEBUG:
+                            message += sm.getString("parameters.fallToDebug");
+                            //$FALL-THROUGH$
+                        case INFO:
+                            log.info(message);
+                            break;
+                        case DEBUG:
+                            log.debug(message);
+                    }
+                }
+                setParseFailedReason(FailReason.NO_NAME);
+                continue;
+                // invalid chunk - it's better to ignore
+            }
+
+            tmpName.setBytes(bytes, nameStart, nameEnd - nameStart);
+            if (valueStart >= 0) {
+                tmpValue.setBytes(bytes, valueStart, valueEnd - valueStart);
+            } else {
+                tmpValue.setBytes(bytes, 0, 0);
+            }
+
+            // Take copies as if anything goes wrong originals will be
+            // corrupted. This means original values can be logged.
+            // For performance - only done for debug
+            if (log.isDebugEnabled()) {
+                try {
+                    origName.append(bytes, nameStart, nameEnd - nameStart);
+                    if (valueStart >= 0) {
+                        origValue.append(bytes, valueStart, valueEnd - valueStart);
+                    } else {
+                        origValue.append(bytes, 0, 0);
+                    }
+                } catch (IOException ioe) {
+                    // Should never happen...
+                    log.error(sm.getString("parameters.copyFail"), ioe);
+                }
+            }
+
+            try {
+                String name;
+                String value;
+
+                if (decodeName) {
+                    urlDecode(tmpName);
+                }
+                tmpName.setCharset(charset);
+                name = tmpName.toString();
+
+                if (valueStart >= 0) {
+                    if (decodeValue) {
+                        urlDecode(tmpValue);
+                    }
+                    tmpValue.setCharset(charset);
+                    value = tmpValue.toString();
+                } else {
+                    value = "";
+                }
+
+                addParam(name, value);
+            } catch (IOException e) {
+                setParseFailedReason(FailReason.URL_DECODING);
+                decodeFailCount++;
+                if (decodeFailCount == 1 || log.isDebugEnabled()) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("parameters.decodeFail.debug",
+                                origName.toString(), origValue.toString()), e);
+                    } else if (log.isInfoEnabled()) {
+                        UserDataHelper.Mode logMode = userDataLog.getNextMode();
+                        if (logMode != null) {
+                            String message = sm.getString(
+                                    "parameters.decodeFail.info",
+                                    tmpName.toString(), tmpValue.toString());
+                            switch (logMode) {
+                                case INFO_THEN_DEBUG:
+                                    message += sm.getString("parameters.fallToDebug");
+                                    //$FALL-THROUGH$
+                                case INFO:
+                                    log.info(message);
+                                    break;
+                                case DEBUG:
+                                    log.debug(message);
+                            }
+                        }
+                    }
+                }
+            }
+
+            tmpName.recycle();
+            tmpValue.recycle();
+            // Only recycle copies if we used them
+            if (log.isDebugEnabled()) {
+                origName.recycle();
+                origValue.recycle();
+            }
+        }
+
+        if (decodeFailCount > 1 && !log.isDebugEnabled()) {
+            UserDataHelper.Mode logMode = userDataLog.getNextMode();
+            if (logMode != null) {
+                String message = sm.getString(
+                        "parameters.multipleDecodingFail",
+                        Integer.valueOf(decodeFailCount));
+                switch (logMode) {
+                    case INFO_THEN_DEBUG:
+                        message += sm.getString("parameters.fallToDebug");
+                        //$FALL-THROUGH$
+                    case INFO:
+                        log.info(message);
+                        break;
+                    case DEBUG:
+                        log.debug(message);
+                }
+            }
+        }
+    }
+
+
+    public void processParameters( MessageBytes data, String encoding ) {
+        if( data==null || data.isNull() || data.getLength() <= 0 ) return;
+
+        if( data.getType() != MessageBytes.T_BYTES ) {
+            data.toBytes();
+        }
+        ByteChunk bc=data.getByteChunk();
+        processParameters( bc.getBytes(), bc.getOffset(),
+                           bc.getLength(), getCharset(encoding));
+    }
+-----CSCI578-----
+
+
+
+    private void addParam( String key, String value ) {
+        if( key==null ) return;
+        ArrayList<String> values = paramHashValues.get(key);
+        if (values == null) {
+            values = new ArrayList<String>(1);
+            paramHashValues.put(key, values);
+        }
+        values.add(value);
+    }
+-----CSCI578-----
+
+
+    private void urlDecode(ByteChunk bc)
+        throws IOException {
+        if( urlDec==null ) {
+            urlDec=new UDecoder();
+        }
+        urlDec.convert(bc);
+    }
+-----CSCI578-----
+
+
+    private Charset getCharset(String encoding) {
+        if (encoding == null) {
+            return DEFAULT_CHARSET;
+        }
+        try {
+            return B2CConverter.getCharset(encoding);
+        } catch (UnsupportedEncodingException e) {
+            return DEFAULT_CHARSET;
+        }
+    }
+-----CSCI578-----
+
+
+    /** Do a char-&gt;byte conversion.
+     */
+    public void toBytes() {
+        if (!byteC.isNull()) {
+            type=T_BYTES;
+            return;
+        }
+        toString();
+        type=T_BYTES;
+        Charset charset = byteC.getCharset();
+        ByteBuffer result = charset.encode(strValue);
+        byteC.setBytes(result.array(), result.arrayOffset(), result.limit());
+    }
+-----CSCI578-----
+
+
+    public int getOffset() {
+        return start;
+    }
+-----CSCI578-----
+
+    
+    // -------------------- Conversion and getters --------------------
+
+    public String toString() {
+        if (null == buff) {
+            return null;
+        } else if (end-start == 0) {
+            return "";
+        }
+        return StringCache.toString(this);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the message bytes to the specified subarray of bytes.
+     * 
+     * @param b the ascii bytes
+     * @param off the start offset of the bytes
+     * @param len the length of the bytes
+     */
+    public void setBytes(byte[] b, int off, int len) {
+        buff = b;
+        start = off;
+        end = start+ len;
+        isSet=true;
+    }
+-----CSCI578-----
+
+    /** getType() is T_STR if the the object used to create the MessageBytes
+        was a String */
+    public static final int T_STR  = 1;
+
+    /** getType() is T_BYTES if the the object used to create the MessageBytes
+        was a byte[] */
+    public static final int T_BYTES = 2;
+
+    /** getType() is T_CHARS if the the object used to create the MessageBytes
+        was a char[] */
+    public static final int T_CHARS = 3;
+
+
+    //----------------------------------------
+    /** Return the type of the original content. Can be
+     *  T_STR, T_BYTES, T_CHARS or T_NULL
+     */
+    public int getType() {
+	return type;
+    }
+-----CSCI578-----
+
+
+    public static Charset getCharset(String enc)
+            throws UnsupportedEncodingException {
+
+        // Encoding names should all be ASCII
+        String lowerCaseEnc = enc.toLowerCase(Locale.US);
+        
+        Charset charset = encodingToCharsetCache.get(lowerCaseEnc);
+
+        if (charset == null) {
+            // Pre-population of the cache means this must be invalid
+            throw new UnsupportedEncodingException(enc);
+        }
+        return charset;
+    }
+-----CSCI578-----
+
+
+    public void setParseFailedReason(FailReason failReason) {
+        if (this.parseFailedReason == null) {
+            this.parseFailedReason = failReason;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Returns the length of the original buffer.
+     * Note that the length in bytes may be different from the length
+     * in chars.
+     */
+    public int getLength() {
+	if(type==T_BYTES)
+	    return byteC.getLength();
+	if(type==T_CHARS) {
+	    return charC.getLength();
+	}
+	if(type==T_STR)
+	    return strValue.length();
+	toString();
+	if( strValue==null ) return 0;
+	return strValue.length();
+    }
+-----CSCI578-----
+
+
+    public boolean isNull() {
+        return ! isSet; // buff==null;
+    }
+-----CSCI578-----
+
+
+    public void setCharset(Charset charset) {
+        this.charset = charset;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Fills the given ByteChunk with the buffered request body.
+     */
+    public int doRead(ByteChunk chunk, Request request) throws IOException {
+        if (hasRead || buffered.getLength() <= 0) {
+            return -1;
+        } else {
+            chunk.setBytes(buffered.getBytes(), buffered.getStart(),
+                           buffered.getLength());
+            hasRead = true;
+        }
+        return chunk.getLength();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    // --------------------------------------------------- OutputBuffer Methods
+
+
+    /**
+     * Write some bytes.
+     * 
+     * @return number of bytes written by the filter
+     */
+    public int doWrite(ByteChunk chunk, Response res)
+        throws IOException {
+
+        int result = chunk.getLength();
+
+        if (result <= 0) {
+            return 0;
+        }
+
+        // Calculate chunk header
+        int pos = 7;
+        int current = result;
+        while (current > 0) {
+            int digit = current % 16;
+            current = current / 16;
+            chunkLength[pos--] = HexUtils.HEX[digit];
+        }
+        chunkHeader.setBytes(chunkLength, pos + 1, 9 - pos);
+        buffer.doWrite(chunkHeader, res);
+
+        buffer.doWrite(chunk, res);
+
+        chunkHeader.setBytes(chunkLength, 8, 2);
+        buffer.doWrite(chunkHeader, res);
+
+        return result;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------------- InputBuffer Methods
+
+
+    /**
+     * Read bytes.
+     * 
+     * @return If the filter does request length control, this value is
+     * significant; it should be the number of bytes consumed from the buffer,
+     * up until the end of the current request body, or the buffer length, 
+     * whichever is greater. If the filter does not do request body length
+     * control, the returned value should be -1.
+     */
+    public int doRead(ByteChunk chunk, Request req)
+        throws IOException {
+
+        int result = -1;
+
+        if (contentLength >= 0) {
+            if (remaining > 0) {
+                int nRead = buffer.doRead(chunk, req);
+                if (nRead > remaining) {
+                    // The chunk is longer than the number of bytes remaining
+                    // in the body; changing the chunk length to the number
+                    // of bytes remaining
+                    chunk.setBytes(chunk.getBytes(), chunk.getStart(), 
+                                   (int) remaining);
+                    result = (int) remaining;
+                } else {
+                    result = nRead;
+                }
+                if (nRead > 0) {
+                    remaining = remaining - nRead;
+                }
+            } else {
+                // No more bytes left to be read : return -1 and clear the 
+                // buffer
+                chunk.recycle();
+                result = -1;
+            }
+        }
+
+        return result;
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------- OutputBuffer Methods
+
+
+    /**
+     * Write some bytes.
+     * 
+     * @return number of bytes written by the filter
+     */
+    public int doWrite(ByteChunk chunk, Response res)
+        throws IOException {
+
+        int result = -1;
+
+        if (contentLength >= 0) {
+            if (remaining > 0) {
+                result = chunk.getLength();
+                if (result > remaining) {
+                    // The chunk is longer than the number of bytes remaining
+                    // in the body; changing the chunk length to the number
+                    // of bytes remaining
+                    chunk.setBytes(chunk.getBytes(), chunk.getStart(), 
+                                   (int) remaining);
+                    result = (int) remaining;
+                    remaining = 0;
+                } else {
+                    remaining = remaining - result;
+                }
+                buffer.doWrite(chunk, res);
+            } else {
+                // No more bytes left to be written : return -1 and clear the 
+                // buffer
+                chunk.recycle();
+                result = -1;
+            }
+        } else {
+            // If no content length was set, just write the bytes
+            buffer.doWrite(chunk, res);
+            result = chunk.getLength();
+        }
+
+        return result;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

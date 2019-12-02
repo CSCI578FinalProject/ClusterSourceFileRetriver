@@ -1,0 +1,135 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    /**
+     * Get last modified time.
+     * 
+     * @return lastModified time value
+     */
+    public long getLastModified() {
+        if (lastModified != -1L)
+            return lastModified;
+        if (lastModifiedDate != null)
+            return lastModifiedDate.getTime();
+        if (attributes != null) {
+            Attribute attribute = attributes.get(LAST_MODIFIED);
+            if (attribute != null) {
+                try {
+                    Object value = attribute.get();
+                    if (value instanceof Long) {
+                        lastModified = ((Long) value).longValue();
+                    } else if (value instanceof Date) {
+                        lastModified = ((Date) value).getTime();
+                        lastModifiedDate = (Date) value;
+                    } else {
+                        String lastModifiedDateValue = value.toString();
+                        Date result = null;
+                        // Parsing the HTTP Date
+                        for (int i = 0; (result == null) && 
+                                 (i < formats.length); i++) {
+                            try {
+                                result = 
+                                    formats[i].parse(lastModifiedDateValue);
+                            } catch (ParseException e) {
+                                ;
+                            }
+                        }
+                        if (result != null) {
+                            lastModified = result.getTime();
+                            lastModifiedDate = result;
+                        }
+                    }
+                } catch (NamingException e) {
+                    ; // No value for the attribute
+                }
+            }
+        }
+        return lastModified;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get ETag.
+     * 
+     * @return strong ETag if available, else weak ETag. 
+     */
+    public String getETag() {
+        String result = null;
+        if (attributes != null) {
+            Attribute attribute = attributes.get(ETAG);
+            if (attribute != null) {
+                try {
+                    result = attribute.get().toString();
+                } catch (NamingException e) {
+                    ; // No value for the attribute
+                }
+            }
+        }
+        if (result == null) {
+            if (strongETag != null) {
+                // The strong ETag must always be calculated by the resources
+                result = strongETag;
+            } else {
+                // The weakETag is contentLength + lastModified
+                if (weakETag == null) {
+                    long contentLength = getContentLength();
+                    long lastModified = getLastModified();
+                    if ((contentLength >= 0) || (lastModified >= 0)) {
+                        weakETag = "W/\"" + contentLength + "-" +
+                                   lastModified + "\"";
+                    }
+                }
+                result = weakETag;
+            }
+        } 
+        return result;
+    }
+
+
+
+    /**
+     * Get ETag.
+     * 
+     * @param strong Ignored
+     * @return strong ETag if available, else weak ETag.
+     * @deprecated
+     */
+    public String getETag(boolean strong) {
+        return getETag();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Check if the conditions specified in the optional If headers are
+     * satisfied.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     * @param resourceAttributes The resource information
+     * @return boolean true if the resource meets all the specified conditions,
+     * and false if any of the conditions is not satisfied, in which case
+     * request processing is stopped
+     */
+    protected boolean checkIfHeaders(HttpServletRequest request,
+                                     HttpServletResponse response,
+                                     ResourceAttributes resourceAttributes)
+        throws IOException {
+
+        if (!super.checkIfHeaders(request, response, resourceAttributes))
+            return false;
+
+        // TODO : Checking the WebDAV If header
+        return true;
+
+    }

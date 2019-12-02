@@ -1,0 +1,86 @@
+4
+-----CSCI578-----
+
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Find potential memory leaks caused by web application reload.
+     *
+     * @param statusLine Print a status line
+     * @param writer The output writer
+     * @param smClient StringManager for the client's locale
+     */
+    protected void findleaks(boolean statusLine, PrintWriter writer,
+            StringManager smClient) {
+
+        if (!(host instanceof StandardHost)) {
+            writer.println(smClient.getString("managerServlet.findleaksFail"));
+            return;
+        }
+
+        String[] results =
+            ((StandardHost) host).findReloadedContextMemoryLeaks();
+
+        if (results.length > 0) {
+            if (statusLine) {
+                writer.println(
+                        smClient.getString("managerServlet.findleaksList"));
+            }
+            for (String result : results) {
+                if ("".equals(result)) {
+                    result = "/";
+                }
+                writer.println(result);
+            }
+        } else if (statusLine) {
+            writer.println(smClient.getString("managerServlet.findleaksNone"));
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Attempt to identify the contexts that have a class loader memory leak.
+     * This is usually triggered on context reload. Note: This method attempts
+     * to force a full garbage collection. This should be used with extreme
+     * caution on a production system.
+     *
+     * @return a list of possibly leaking contexts
+     */
+    public String[] findReloadedContextMemoryLeaks() {
+
+        System.gc();
+
+        List<String> result = new ArrayList<>();
+
+        for (Map.Entry<ClassLoader, String> entry :
+                childClassLoaders.entrySet()) {
+            ClassLoader cl = entry.getKey();
+            if (cl instanceof WebappClassLoaderBase) {
+                if (!((WebappClassLoaderBase) cl).getState().isAvailable()) {
+                    result.add(entry.getValue());
+                }
+            }
+        }
+
+        return result.toArray(new String[result.size()]);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain the current state of the source component.
+     *
+     * @return The current state of the source component.
+     */
+    @Override
+    public LifecycleState getState() {
+        return state;
+    }
+-----CSCI578-----

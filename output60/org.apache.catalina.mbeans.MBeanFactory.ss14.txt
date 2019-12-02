@@ -1,0 +1,431 @@
+23
+-----CSCI578-----
+
+
+    /**
+     * Create a new Connector
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param address The IP address on which to bind
+     * @param port TCP port number to listen on
+     * @param isAjp Create a AJP/1.3 Connector
+     * @param isSSL Create a secure Connector
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    private String createConnector(String parent, String address, int port, boolean isAjp, boolean isSSL)
+        throws Exception {
+        Connector retobj = new Connector();
+        if ((address!=null) && (address.length()>0)) {
+            retobj.setProperty("address", address);
+        }
+        // Set port number
+        retobj.setPort(port);
+        // Set the protocol
+        retobj.setProtocol(isAjp ? "AJP/1.3" : "HTTP/1.1");
+        // Set SSL
+        retobj.setSecure(isSSL);
+        retobj.setScheme(isSSL ? "https" : "http");
+        // Add the new instance to its parent component
+        // FIX ME - addConnector will fail
+        ObjectName pname = new ObjectName(parent);
+        Service service = getService(pname);
+        service.addConnector(retobj);
+        
+        // Return the corresponding MBean name
+        ObjectName coname = retobj.getObjectName();
+        
+        return (coname.toString());
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add a new Connector to the set of defined Connectors, and associate it
+     * with this Service's Container.
+     *
+     * @param connector The Connector to be added
+     */
+    public void addConnector(Connector connector);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the port number on which we listen for requests.
+     *
+     * @param port The new port number
+     */
+    public void setPort(int port) {
+
+        this.port = port;
+        setProperty("port", String.valueOf(port));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set a configured property.
+     */
+    public boolean setProperty(String name, String value) {
+        String repl = name;
+        if (replacements.get(name) != null) {
+            repl = (String) replacements.get(name);
+        }
+        return IntrospectionUtils.setProperty(protocolHandler, repl, value);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the secure connection flag that will be assigned to requests
+     * received through this connector.
+     *
+     * @param secure The new secure connection flag
+     */
+    public void setSecure(boolean secure) {
+
+        this.secure = secure;
+        setProperty("secure", Boolean.toString(secure));
+    }
+-----CSCI578-----
+
+
+    public ObjectName getObjectName() {
+        return oname;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the scheme that will be assigned to requests received through
+     * this connector.
+     *
+     * @param scheme The new scheme
+     */
+    public void setScheme(String scheme) {
+
+        this.scheme = scheme;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set a configured property.
+     */
+    public void setAttribute(String name, Object value) {
+        setProperty(name, String.valueOf(value));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the allowTrace flag, to disable or enable the TRACE HTTP method.
+     *
+     * @param allowTrace The new allowTrace flag
+     */
+    public void setAllowTrace(boolean allowTrace) {
+
+        this.allowTrace = allowTrace;
+        setProperty("allowTrace", String.valueOf(allowTrace));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the "empty session path" flag.
+     *
+     * @param emptySessionPath The new "empty session path" flag value
+     */
+    public void setEmptySessionPath(boolean emptySessionPath) {
+
+        this.emptySessionPath = emptySessionPath;
+        setProperty("emptySessionPath", String.valueOf(emptySessionPath));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the "enable DNS lookups" flag.
+     *
+     * @param enableLookups The new "enable DNS lookups" flag value
+     */
+    public void setEnableLookups(boolean enableLookups) {
+
+        this.enableLookups = enableLookups;
+        setProperty("enableLookups", String.valueOf(enableLookups));
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the maximum number of headers in a request that are allowed by the
+     * container. A value of less than 0 means no limit.
+     *
+     * @param maxHeaderCount The new setting
+     */
+    public void setMaxHeaderCount(int maxHeaderCount) {
+        setProperty("maxHeaderCount", String.valueOf(maxHeaderCount));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the maximum size of a POST which will be saved by the container
+     * during authentication.
+     *
+     * @param maxSavePostSize The new maximum size in bytes of a POST which will
+     * be saved by the container during authentication.
+     */
+    public void setMaxSavePostSize(int maxSavePostSize) {
+
+        this.maxSavePostSize = maxSavePostSize;
+        setProperty("maxSavePostSize", String.valueOf(maxSavePostSize));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the proxy server port for this Connector.
+     *
+     * @param proxyPort The new proxy server port
+     */
+    public void setProxyPort(int proxyPort) {
+
+        this.proxyPort = proxyPort;
+        setProperty("proxyPort", String.valueOf(proxyPort));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the redirect port number.
+     *
+     * @param redirectPort The redirect port number (non-SSL to SSL)
+     */
+    public void setRedirectPort(int redirectPort) {
+
+        this.redirectPort = redirectPort;
+        setProperty("redirectPort", String.valueOf(redirectPort));
+
+    }
+-----CSCI578-----
+
+
+
+     /**
+      * Set if the entity body encoding should be used for the URI.
+      *
+      * @param useBodyEncodingForURI The new value for the flag.
+      */
+     public void setUseBodyEncodingForURI(boolean useBodyEncodingForURI) {
+
+         this.useBodyEncodingForURI = useBodyEncodingForURI;
+         setProperty
+             ("useBodyEncodingForURI", String.valueOf(useBodyEncodingForURI));
+
+     }
+-----CSCI578-----
+
+
+
+    /**
+     * Enables or disables the generation of an X-Powered-By header (with value
+     * Servlet/2.5) for all servlet-generated responses returned by this
+     * Connector.
+     *
+     * @param xpoweredBy true if generation of X-Powered-By response header is
+     * to be enabled, false otherwise
+     */
+    public void setXpoweredBy(boolean xpoweredBy) {
+        this.xpoweredBy = xpoweredBy;
+        setProperty("xpoweredBy", String.valueOf(xpoweredBy));
+    }
+-----CSCI578-----
+
+
+    /**
+     * Enable the use of IP-based virtual hosting.
+     *
+     * @param useIPVHosts <code>true</code> if Hosts are identified by IP,
+     *                    <code>false/code> if Hosts are identified by name.
+     */
+    public void setUseIPVHosts(boolean useIPVHosts) {
+        this.useIPVHosts = useIPVHosts;
+        setProperty("useIPVHosts", String.valueOf(useIPVHosts));
+    }
+-----CSCI578-----
+
+
+    public ObjectName[] getConnectorNames() {
+        ObjectName results[] = new ObjectName[connectors.length];
+        for (int i=0; i<results.length; i++) {
+            results[i] = connectors[i].getObjectName();
+        }
+        return results;
+    }
+-----CSCI578-----
+
+        
+
+    /**
+     * Create a new AjpConnector
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param address The IP address on which to bind
+     * @param port TCP port number to listen on
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createAjpConnector(String parent, String address, int port)
+        throws Exception {
+
+        return createConnector(parent, address, port, true, false);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create a new HttpConnector
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param address The IP address on which to bind
+     * @param port TCP port number to listen on
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createHttpConnector(String parent, String address, int port)
+        throws Exception {
+	return createConnector(parent, address, port, false, false);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create a new HttpsConnector
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param address The IP address on which to bind
+     * @param port TCP port number to listen on
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createHttpsConnector(String parent, String address, int port)
+        throws Exception {
+        return createConnector(parent, address, port, false, true);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create, configure, and return a new TCP/IP socket connector
+     * based on the specified properties.
+     *
+     * @param address InetAddress to bind to, or <code>null</code> if the
+     * connector is supposed to bind to all addresses on this server
+     * @param port Port number to listen to
+     * @param secure true if the generated connector is supposed to be
+     * SSL-enabled, and false otherwise
+     */
+    public Connector createConnector(InetAddress address, int port,
+                                     boolean secure) {
+	return createConnector(address != null? address.toString() : null,
+			       port, secure);
+    }
+
+
+    public Connector createConnector(String address, int port,
+                                     boolean secure) {
+        String protocol = "http";
+        if (secure) {
+            protocol = "https";
+        }
+
+        return createConnector(address, port, protocol);
+    }
+
+
+
+    public Connector createConnector(InetAddress address, int port,
+                                     String protocol) {
+	return createConnector(address != null? address.toString() : null,
+			       port, protocol);
+    }
+
+
+    public Connector createConnector(String address, int port,
+				     String protocol) {
+
+        Connector connector = null;
+
+	if (address != null) {
+	    /*
+	     * InetAddress.toString() returns a string of the form
+	     * "<hostname>/<literal_IP>". Get the latter part, so that the
+	     * address can be parsed (back) into an InetAddress using
+	     * InetAddress.getByName().
+	     */
+	    int index = address.indexOf('/');
+	    if (index != -1) {
+		address = address.substring(index + 1);
+	    }
+	}
+
+	if (log.isDebugEnabled()) {
+            log.debug("Creating connector for address='" +
+		      ((address == null) ? "ALL" : address) +
+		      "' port='" + port + "' protocol='" + protocol + "'");
+	}
+
+        try {
+
+            if (protocol.equals("ajp")) {
+                connector = new Connector("org.apache.jk.server.JkCoyoteHandler");
+            } else if (protocol.equals("memory")) {
+                connector = new Connector("org.apache.coyote.memory.MemoryProtocolHandler");
+            } else if (protocol.equals("http")) {
+                connector = new Connector();
+            } else if (protocol.equals("https")) {
+                connector = new Connector();
+                connector.setScheme("https");
+                connector.setSecure(true);
+                connector.setProperty("SSLEnabled","true");
+                // FIXME !!!! SET SSL PROPERTIES
+            } else {
+                connector = new Connector(protocol);
+            }
+
+            if (address != null) {
+                IntrospectionUtils.setProperty(connector, "address", 
+                                               "" + address);
+            }
+            IntrospectionUtils.setProperty(connector, "port", "" + port);
+
+        } catch (Exception e) {
+            log.error("Couldn't create connector.");
+        } 
+
+        return (connector);
+
+    }

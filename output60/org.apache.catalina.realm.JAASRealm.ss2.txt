@@ -1,0 +1,74 @@
+3
+-----CSCI578-----
+
+     
+     /**
+      * Parses a comma-delimited list of class names, and store the class names
+      * in the provided List. Each class must implement
+      * <code>java.security.Principal</code>.
+      * 
+      * @param classNamesString a comma-delimited list of fully qualified class names.
+      * @param classNamesList the list in which the class names will be stored.
+      *        The list is cleared before being populated. 
+      */
+     protected void parseClassNames(String classNamesString, List<String> classNamesList) {
+         classNamesList.clear();
+         if (classNamesString == null) return;
+
+         ClassLoader loader = this.getClass().getClassLoader();
+         if (isUseContextClassLoader())
+             loader = Thread.currentThread().getContextClassLoader();
+
+         String[] classNames = classNamesString.split("[ ]*,[ ]*");
+         for (int i=0; i<classNames.length; i++) {
+             if (classNames[i].length()==0) continue;        
+             try {
+                 Class principalClass = Class.forName(classNames[i], false,
+                         loader);
+                 if (Principal.class.isAssignableFrom(principalClass)) {
+                     classNamesList.add(classNames[i]);
+                 } else {
+                     log.error("Class "+classNames[i]+" is not implementing "+
+                               "java.security.Principal! Class not added.");
+                 }
+             } catch (ClassNotFoundException e) {
+                 log.error("Class "+classNames[i]+" not found! Class not added.");
+             }
+         }
+     }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Lifecycle Methods
+
+
+    /**
+     *
+     * Prepare for active use of the public methods of this <code>Component</code>.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents it from being started
+     */
+    public void start() throws LifecycleException {
+
+        // Perform normal superclass initialization
+        super.start();
+
+        // These need to be called after loading configuration, in case
+        // useContextClassLoader appears after them in xml config
+        parseClassNames(userClassNames, userClasses);
+        parseClassNames(roleClassNames, roleClasses);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns whether to use the context or default ClassLoader.
+     * True means to use the context ClassLoader.
+     *
+     * @return The value of useContextClassLoader
+     */
+    public boolean isUseContextClassLoader() {
+	return useContextClassLoader;
+    }

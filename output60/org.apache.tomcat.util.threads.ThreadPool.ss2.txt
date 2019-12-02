@@ -1,0 +1,61 @@
+2
+-----CSCI578-----
+
+
+    public synchronized void start() {
+	stopThePool=false;
+        currentThreadCount  = 0;
+        currentThreadsBusy  = 0;
+
+        adjustLimits();
+
+        pool = new ControlRunnable[maxThreads];
+
+        openThreads(minSpareThreads);
+        if (maxSpareThreads < maxThreads) {
+            monitor = new MonitorRunnable(this);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * Checks for problematic configuration and fix it.
+     * The fix provides reasonable settings for a single CPU
+     * with medium load.
+     */
+    protected void adjustLimits() {
+        if(maxThreads <= 0) {
+            maxThreads = MAX_THREADS;
+        } else if (maxThreads < MAX_THREADS_MIN) {
+            log.warn(sm.getString("threadpool.max_threads_too_low",
+                                  new Integer(maxThreads),
+                                  new Integer(MAX_THREADS_MIN)));
+            maxThreads = MAX_THREADS_MIN;
+        }
+
+        if(maxSpareThreads >= maxThreads) {
+            maxSpareThreads = maxThreads;
+        }
+
+        if(maxSpareThreads <= 0) {
+            if(1 == maxThreads) {
+                maxSpareThreads = 1;
+            } else {
+                maxSpareThreads = maxThreads/2;
+            }
+        }
+
+        if(minSpareThreads >  maxSpareThreads) {
+            minSpareThreads =  maxSpareThreads;
+        }
+
+        if(minSpareThreads <= 0) {
+            if(1 == maxSpareThreads) {
+                minSpareThreads = 1;
+            } else {
+                minSpareThreads = maxSpareThreads/2;
+            }
+        }
+    }

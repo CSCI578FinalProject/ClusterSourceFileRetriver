@@ -1,0 +1,317 @@
+10
+-----CSCI578-----
+
+
+    private void writeHuffmanEncodableName(ByteBuffer target, String headerName) {
+        if (hpackHeaderFunction.shouldUseHuffman(headerName)) {
+            if(HPackHuffman.encode(target, headerName, true)) {
+                return;
+            }
+        }
+        target.put((byte) 0); //to use encodeInteger we need to place the first byte in the buffer.
+        Hpack.encodeInteger(target, headerName.length(), 7);
+        for (int j = 0; j < headerName.length(); ++j) {
+            target.put(Hpack.toLower((byte) headerName.charAt(j)));
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void runEvictionIfRequired() {
+
+        while (currentTableSize > maxTableSize) {
+            TableEntry next = evictionQueue.poll();
+            if (next == null) {
+                return;
+            }
+            currentTableSize -= next.size;
+            List<TableEntry> list = dynamicTable.get(next.name);
+            list.remove(next);
+            if (list.isEmpty()) {
+                dynamicTable.remove(next.name);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    private void handleTableSizeChange(ByteBuffer target) {
+        if (newMaxHeaderSize == -1) {
+            return;
+        }
+        if (minNewMaxHeaderSize != newMaxHeaderSize) {
+            target.put((byte) (1 << 5));
+            Hpack.encodeInteger(target, minNewMaxHeaderSize, 5);
+        }
+        target.put((byte) (1 << 5));
+        Hpack.encodeInteger(target, newMaxHeaderSize, 5);
+        maxTableSize = newMaxHeaderSize;
+        runEvictionIfRequired();
+        newMaxHeaderSize = -1;
+        minNewMaxHeaderSize = -1;
+    }
+-----CSCI578-----
+
+
+
+    static byte toLower(byte b) {
+        if (b >= 'A' && b <= 'Z') {
+            return (byte) (b + LOWER_DIFF);
+        }
+        return b;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Encodes an integer in the HPACK prefix format.
+     * <p/>
+     * This method assumes that the buffer has already had the first 8-n bits filled.
+     * As such it will modify the last byte that is already present in the buffer, and
+     * potentially add more if required
+     *
+     * @param source The buffer that contains the integer
+     * @param value  The integer to encode
+     * @param n      The encoding prefix length
+     */
+    static void encodeInteger(ByteBuffer source, int value, int n) {
+        int twoNminus1 = PREFIX_TABLE[n];
+        int pos = source.position() - 1;
+        if (value < twoNminus1) {
+            source.put(pos, (byte) (source.get(pos) | value));
+        } else {
+            source.put(pos, (byte) (source.get(pos) | twoNminus1));
+            value = value - twoNminus1;
+            while (value >= 128) {
+                source.put((byte) (value % 128 + 128));
+                value = value / 128;
+            }
+            source.put((byte) value);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Encodes the headers into a buffer.
+     *
+     * @param headers The headers to encode
+     * @param target  The buffer to which to write the encoded headers
+     *
+     * @return The state of the encoding process
+     */
+    public State encode(MimeHeaders headers, ByteBuffer target) {
+        int it = headersIterator;
+        if (headersIterator == -1) {
+            handleTableSizeChange(target);
+            //new headers map
+            it = 0;
+            currentHeaders = headers;
+        } else {
+            if (headers != currentHeaders) {
+                throw new IllegalStateException();
+            }
+        }
+        while (it < currentHeaders.size()) {
+            // FIXME: Review lowercase policy
+            String headerName = headers.getName(it).toString().toLowerCase(Locale.US);
+            boolean skip = false;
+            if (firstPass) {
+                if (headerName.charAt(0) != ':') {
+                    skip = true;
+                }
+            } else {
+                if (headerName.charAt(0) == ':') {
+                    skip = true;
+                }
+            }
+            if (!skip) {
+                    String val = headers.getValue(it).toString();
+
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("hpackEncoder.encodeHeader", headerName, val));
+                    }
+                    TableEntry tableEntry = findInTable(headerName, val);
+
+                    // We use 11 to make sure we have enough room for the
+                    // variable length integers
+                    int required = 11 + headerName.length() + 1 + val.length();
+
+                    if (target.remaining() < required) {
+                        this.headersIterator = it;
+                        return State.UNDERFLOW;
+                    }
+                    // Only index if it will fit
+                    boolean canIndex = hpackHeaderFunction.shouldUseIndexing(headerName, val) &&
+                            (headerName.length() + val.length() + 32) < maxTableSize;
+                    if (tableEntry == null && canIndex) {
+                        //add the entry to the dynamic table
+                        target.put((byte) (1 << 6));
+                        writeHuffmanEncodableName(target, headerName);
+                        writeHuffmanEncodableValue(target, headerName, val);
+                        addToDynamicTable(headerName, val);
+                    } else if (tableEntry == null) {
+                        //literal never indexed
+                        target.put((byte) (1 << 4));
+                        writeHuffmanEncodableName(target, headerName);
+                        writeHuffmanEncodableValue(target, headerName, val);
+                    } else {
+                        //so we know something is already in the table
+                        if (val.equals(tableEntry.value)) {
+                            //the whole thing is in the table
+                            target.put((byte) (1 << 7));
+                            Hpack.encodeInteger(target, tableEntry.getPosition(), 7);
+                        } else {
+                            if (canIndex) {
+                                //add the entry to the dynamic table
+                                target.put((byte) (1 << 6));
+                                Hpack.encodeInteger(target, tableEntry.getPosition(), 6);
+                                writeHuffmanEncodableValue(target, headerName, val);
+                                addToDynamicTable(headerName, val);
+
+                            } else {
+                                target.put((byte) (1 << 4));
+                                Hpack.encodeInteger(target, tableEntry.getPosition(), 4);
+                                writeHuffmanEncodableValue(target, headerName, val);
+                            }
+                        }
+                    }
+
+            }
+            if (++it == currentHeaders.size() && firstPass) {
+                firstPass = false;
+                it = 0;
+            }
+        }
+        headersIterator = -1;
+        firstPass = true;
+        return State.COMPLETE;
+    }
+-----CSCI578-----
+
+
+    private TableEntry findInTable(String headerName, String value) {
+        TableEntry[] staticTable = ENCODING_STATIC_TABLE.get(headerName);
+        if (staticTable != null) {
+            for (TableEntry st : staticTable) {
+                if (st.value != null && st.value.equals(value)) { //todo: some form of lookup?
+                    return st;
+                }
+            }
+        }
+        List<TableEntry> dynamic = dynamicTable.get(headerName);
+        if (dynamic != null) {
+            for (TableEntry st : dynamic) {
+                if (st.value.equals(value)) { //todo: some form of lookup?
+                    return st;
+                }
+            }
+        }
+        if (staticTable != null) {
+            return staticTable[0];
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Encodes the given string into the buffer. If there is not enough space in
+     * the buffer, or the encoded version is bigger than the original it will
+     * return false and not modify the buffers position.
+     *
+     * @param buffer   The buffer to encode into
+     * @param toEncode The string to encode
+     * @param forceLowercase If the string should be encoded in lower case
+     * @return true if encoding succeeded
+     */
+    public static boolean encode(ByteBuffer buffer, String toEncode, boolean forceLowercase) {
+        if (buffer.remaining() <= toEncode.length()) {
+            return false;
+        }
+        int start = buffer.position();
+        //this sucks, but we need to put the length first
+        //and we don't really have any option but to calculate it in advance to make sure we have left enough room
+        //so we end up iterating twice
+        int length = 0;
+        for (int i = 0; i < toEncode.length(); ++i) {
+            byte c = (byte) toEncode.charAt(i);
+            if(forceLowercase) {
+                c = Hpack.toLower(c);
+            }
+            HuffmanCode code = HUFFMAN_CODES[c];
+            length += code.length;
+        }
+        int byteLength = length / 8 + (length % 8 == 0 ? 0 : 1);
+
+        buffer.put((byte) (1 << 7));
+        Hpack.encodeInteger(buffer, byteLength, 7);
+
+
+        int bytePos = 0;
+        byte currentBufferByte = 0;
+        for (int i = 0; i < toEncode.length(); ++i) {
+            byte c = (byte) toEncode.charAt(i);
+            if(forceLowercase) {
+                c = Hpack.toLower(c);
+            }
+            HuffmanCode code = HUFFMAN_CODES[c];
+            if (code.length + bytePos <= 8) {
+                //it fits in the current byte
+                currentBufferByte |= ((code.value & 0xFF) << 8 - (code.length + bytePos));
+                bytePos += code.length;
+            } else {
+                //it does not fit, it may need up to 4 bytes
+                int val = code.value;
+                int rem = code.length;
+                while (rem > 0) {
+                    if (!buffer.hasRemaining()) {
+                        buffer.position(start);
+                        return false;
+                    }
+                    int remainingInByte = 8 - bytePos;
+                    if (rem > remainingInByte) {
+                        currentBufferByte |= (val >> (rem - remainingInByte));
+                    } else {
+                        currentBufferByte |= (val << (remainingInByte - rem));
+                    }
+                    if (rem > remainingInByte) {
+                        buffer.put(currentBufferByte);
+                        currentBufferByte = 0;
+                        bytePos = 0;
+                    } else {
+                        bytePos = rem;
+                    }
+                    rem -= remainingInByte;
+                }
+            }
+            if (bytePos == 8) {
+                if (!buffer.hasRemaining()) {
+                    buffer.position(start);
+                    return false;
+                }
+                buffer.put(currentBufferByte);
+                currentBufferByte = 0;
+                bytePos = 0;
+            }
+            if (buffer.position() - start > toEncode.length()) {
+                //the encoded version is longer than the original
+                //just return false
+                buffer.position(start);
+                return false;
+            }
+        }
+        if (bytePos > 0) {
+            //add the EOS bytes if we have not finished on a single byte
+            if (!buffer.hasRemaining()) {
+                buffer.position(start);
+                return false;
+            }
+            buffer.put((byte) (currentBufferByte | ((0xFF) >> bytePos)));
+        }
+        return true;
+    }

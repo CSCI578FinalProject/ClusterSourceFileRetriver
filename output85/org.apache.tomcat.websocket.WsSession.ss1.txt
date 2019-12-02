@@ -1,0 +1,258 @@
+14
+-----CSCI578-----
+
+
+
+    @SuppressWarnings("unchecked")
+    private void doAddMessageHandler(Class<?> target, MessageHandler listener) {
+        checkState();
+
+        // Message handlers that require decoders may map to text messages,
+        // binary messages, both or neither.
+
+        // The frame processing code expects binary message handlers to
+        // accept ByteBuffer
+
+        // Use the POJO message handler wrappers as they are designed to wrap
+        // arbitrary objects with MessageHandlers and can wrap MessageHandlers
+        // just as easily.
+
+        Set<MessageHandlerResult> mhResults =
+                Util.getMessageHandlers(target, listener, endpointConfig, this);
+
+        for (MessageHandlerResult mhResult : mhResults) {
+            switch (mhResult.getType()) {
+                case TEXT: {
+                    if (textMessageHandler != null) {
+                        throw new IllegalStateException(
+                                sm.getString("wsSession.duplicateHandlerText"));
+                    }
+                    textMessageHandler = mhResult.getHandler();
+                    break;
+                }
+                case BINARY: {
+                    if (binaryMessageHandler != null) {
+                        throw new IllegalStateException(
+                                sm.getString("wsSession.duplicateHandlerBinary"));
+                    }
+                    binaryMessageHandler = mhResult.getHandler();
+                    break;
+                }
+                case PONG: {
+                    if (pongMessageHandler != null) {
+                        throw new IllegalStateException(
+                                sm.getString("wsSession.duplicateHandlerPong"));
+                    }
+                    MessageHandler handler = mhResult.getHandler();
+                    if (handler instanceof MessageHandler.Whole<?>) {
+                        pongMessageHandler =
+                                (MessageHandler.Whole<PongMessage>) handler;
+                    } else {
+                        throw new IllegalStateException(
+                                sm.getString("wsSession.invalidHandlerTypePong"));
+                    }
+
+                    break;
+                }
+                default: {
+                    throw new IllegalArgumentException(sm.getString(
+                            "wsSession.unknownHandlerType", listener,
+                            mhResult.getType()));
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    private static Method getOnMessageMethod(MessageHandler listener) {
+        try {
+            return listener.getClass().getMethod("onMessage", Object.class);
+        } catch (NoSuchMethodException | SecurityException e) {
+            throw new IllegalArgumentException(
+                    sm.getString("util.invalidMessageHandler"), e);
+        }
+    }
+-----CSCI578-----
+
+
+
+    public MessageHandlerResultType getType() {
+        return type;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void addMessageHandler(MessageHandler listener) {
+        Class<?> target = Util.getMessageType(listener);
+        doAddMessageHandler(target, listener);
+    }
+
+
+
+    @Override
+    public <T> void addMessageHandler(Class<T> clazz, Partial<T> handler)
+            throws IllegalStateException {
+        doAddMessageHandler(clazz, handler);
+    }
+
+
+
+    @Override
+    public <T> void addMessageHandler(Class<T> clazz, Whole<T> handler)
+            throws IllegalStateException {
+        doAddMessageHandler(clazz, handler);
+    }
+-----CSCI578-----
+
+
+    private static Method getOnMessagePartialMethod(MessageHandler listener) {
+        try {
+            return listener.getClass().getMethod("onMessage", Object.class, Boolean.TYPE);
+        } catch (NoSuchMethodException | SecurityException e) {
+            throw new IllegalArgumentException(
+                    sm.getString("util.invalidMessageHandler"), e);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    static Set<MessageHandlerResult> getMessageHandlers(Class<?> target,
+            MessageHandler listener, EndpointConfig endpointConfig,
+            Session session) {
+
+        // Will never be more than 2 types
+        Set<MessageHandlerResult> results = new HashSet<>(2);
+
+        // Simple cases - handlers already accepts one of the types expected by
+        // the frame handling code
+        if (String.class.isAssignableFrom(target)) {
+            MessageHandlerResult result =
+                    new MessageHandlerResult(listener,
+                            MessageHandlerResultType.TEXT);
+            results.add(result);
+        } else if (ByteBuffer.class.isAssignableFrom(target)) {
+            MessageHandlerResult result =
+                    new MessageHandlerResult(listener,
+                            MessageHandlerResultType.BINARY);
+            results.add(result);
+        } else if (PongMessage.class.isAssignableFrom(target)) {
+            MessageHandlerResult result =
+                    new MessageHandlerResult(listener,
+                            MessageHandlerResultType.PONG);
+            results.add(result);
+        // Handler needs wrapping and optional decoder to convert it to one of
+        // the types expected by the frame handling code
+        } else if (byte[].class.isAssignableFrom(target)) {
+            boolean whole = MessageHandler.Whole.class.isAssignableFrom(listener.getClass());
+            MessageHandlerResult result = new MessageHandlerResult(
+                    whole ? new PojoMessageHandlerWholeBinary(listener,
+                                    getOnMessageMethod(listener), session,
+                                    endpointConfig, matchDecoders(target, endpointConfig, true),
+                                    new Object[1], 0, true, -1, false, -1) :
+                            new PojoMessageHandlerPartialBinary(listener,
+                                    getOnMessagePartialMethod(listener), session,
+                                    new Object[2], 0, true, 1, -1, -1),
+                    MessageHandlerResultType.BINARY);
+            results.add(result);
+        } else if (InputStream.class.isAssignableFrom(target)) {
+            MessageHandlerResult result = new MessageHandlerResult(
+                    new PojoMessageHandlerWholeBinary(listener,
+                            getOnMessageMethod(listener), session,
+                            endpointConfig, matchDecoders(target, endpointConfig, true),
+                            new Object[1], 0, true, -1, true, -1),
+                    MessageHandlerResultType.BINARY);
+            results.add(result);
+        } else if (Reader.class.isAssignableFrom(target)) {
+            MessageHandlerResult result = new MessageHandlerResult(
+                    new PojoMessageHandlerWholeText(listener,
+                            getOnMessageMethod(listener), session,
+                            endpointConfig, matchDecoders(target, endpointConfig, false),
+                            new Object[1], 0, true, -1, -1),
+                    MessageHandlerResultType.TEXT);
+            results.add(result);
+        } else {
+            // Handler needs wrapping and requires decoder to convert it to one
+            // of the types expected by the frame handling code
+            DecoderMatch decoderMatch = matchDecoders(target, endpointConfig);
+            Method m = getOnMessageMethod(listener);
+            if (decoderMatch.getBinaryDecoders().size() > 0) {
+                MessageHandlerResult result = new MessageHandlerResult(
+                        new PojoMessageHandlerWholeBinary(listener, m, session,
+                                endpointConfig,
+                                decoderMatch.getBinaryDecoders(), new Object[1],
+                                0, false, -1, false, -1),
+                                MessageHandlerResultType.BINARY);
+                results.add(result);
+            }
+            if (decoderMatch.getTextDecoders().size() > 0) {
+                MessageHandlerResult result = new MessageHandlerResult(
+                        new PojoMessageHandlerWholeText(listener, m, session,
+                                endpointConfig,
+                                decoderMatch.getTextDecoders(), new Object[1],
+                                0, false, -1, -1),
+                                MessageHandlerResultType.TEXT);
+                results.add(result);
+            }
+        }
+
+        if (results.size() == 0) {
+            throw new IllegalArgumentException(
+                    sm.getString("wsSession.unknownHandler", listener, target));
+        }
+
+        return results;
+    }
+-----CSCI578-----
+
+
+
+    public MessageHandler getHandler() {
+        return handler;
+    }
+-----CSCI578-----
+
+
+
+    static Class<?> getMessageType(MessageHandler listener) {
+        return Util.getGenericType(MessageHandler.class,
+                listener.getClass()).getClazz();
+    }
+-----CSCI578-----
+
+
+    private static List<Class<? extends Decoder>> matchDecoders(Class<?> target,
+            EndpointConfig endpointConfig, boolean binary) {
+        DecoderMatch decoderMatch = matchDecoders(target, endpointConfig);
+        if (binary) {
+            if (decoderMatch.getBinaryDecoders().size() > 0) {
+                return decoderMatch.getBinaryDecoders();
+            }
+        } else if (decoderMatch.getTextDecoders().size() > 0) {
+            return decoderMatch.getTextDecoders();
+        }
+        return null;
+    }
+
+
+    private static DecoderMatch matchDecoders(Class<?> target,
+            EndpointConfig endpointConfig) {
+        DecoderMatch decoderMatch;
+        try {
+            List<Class<? extends Decoder>> decoders =
+                    endpointConfig.getDecoders();
+            List<DecoderEntry> decoderEntries = getDecoders(decoders);
+            decoderMatch = new DecoderMatch(target, decoderEntries);
+        } catch (DeploymentException e) {
+            throw new IllegalArgumentException(e);
+        }
+        return decoderMatch;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

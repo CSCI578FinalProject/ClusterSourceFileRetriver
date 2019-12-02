@@ -1,0 +1,95 @@
+6
+-----CSCI578-----
+
+
+
+    /**
+     * Init the protocol.
+     */
+    public void init()
+        throws Exception;
+-----CSCI578-----
+
+
+    /**
+     * The adapter, used to call the connector.
+     */
+    public void setAdapter(Adapter adapter);
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Initialize this connector (create ServerSocket here!)
+     */
+    public void initialize()
+        throws LifecycleException
+    {
+        if (initialized) {
+            if(log.isInfoEnabled())
+                log.info(sm.getString("coyoteConnector.alreadyInitialized"));
+           return;
+        }
+
+        this.initialized = true;
+
+        if( oname == null && (container instanceof StandardEngine)) {
+            try {
+                // we are loaded directly, via API - and no name was given to us
+                StandardEngine cb=(StandardEngine)container;
+                oname = createObjectName(cb.getName(), "Connector");
+                Registry.getRegistry(null, null)
+                    .registerComponent(this, oname, null);
+                controller=oname;
+            } catch (Exception e) {
+                log.error( "Error registering connector ", e);
+            }
+            if(log.isDebugEnabled())
+                log.debug("Creating name for connector " + oname);
+        }
+
+        // Initializa adapter
+        adapter = new CoyoteAdapter(this);
+        protocolHandler.setAdapter(adapter);
+
+        // Make sure parseBodyMethodsSet has a default
+        if( null == parseBodyMethodsSet )
+            setParseBodyMethods(getParseBodyMethods());
+
+        IntrospectionUtils.setProperty(protocolHandler, "jkHome",
+                                       System.getProperty("catalina.base"));
+
+        try {
+            protocolHandler.init();
+        } catch (Exception e) {
+            throw new LifecycleException
+                (sm.getString
+                 ("coyoteConnector.protocolHandlerInitializationFailed", e));
+        }
+    }
+-----CSCI578-----
+
+
+    public void setParseBodyMethods(String methods) {
+
+        HashSet<String> methodSet = new HashSet<String>();
+
+        if( null != methods )
+            methodSet.addAll(Arrays.asList(methods.split("\\s*,\\s*")));
+
+        if( methodSet.contains("TRACE") )
+            throw new IllegalArgumentException(sm.getString("coyoteConnector.parseBodyMethodNoTrace"));
+
+        this.parseBodyMethods = methods;
+        this.parseBodyMethodsSet = methodSet;
+
+    }
+-----CSCI578-----
+
+
+
+    public String getParseBodyMethods() {
+
+        return this.parseBodyMethods;
+
+    }

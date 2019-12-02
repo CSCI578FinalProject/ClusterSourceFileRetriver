@@ -1,0 +1,58 @@
+2
+-----CSCI578-----
+
+
+
+    private Principal getPrincipal() {
+        // If the Principal is cached in the session JASPIC may simply return it
+        if (principal instanceof GenericPrincipal) {
+            return principal;
+        }
+        String name = this.name;
+        if (name == null && principal != null) {
+            name = principal.getName();
+        }
+        if (name == null) {
+            return null;
+        }
+        List<String> roles;
+        if (groups == null || groups.length == 0) {
+            roles = Collections.emptyList();
+        } else {
+            roles = Arrays.asList(groups);
+        }
+
+        return new GenericPrincipal(name, null, roles, principal);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks != null) {
+            // Need to combine data from multiple callbacks so use this to hold
+            // the data
+            // Process the callbacks
+            for (Callback callback : callbacks) {
+                if (callback instanceof CallerPrincipalCallback) {
+                    CallerPrincipalCallback cpc = (CallerPrincipalCallback) callback;
+                    name = cpc.getName();
+                    principal = cpc.getPrincipal();
+                    subject = cpc.getSubject();
+                } else if (callback instanceof GroupPrincipalCallback) {
+                    GroupPrincipalCallback gpc = (GroupPrincipalCallback) callback;
+                    groups = gpc.getGroups();
+                } else {
+                    log.error(sm.getString("callbackHandlerImpl.jaspicCallbackMissing",
+                            callback.getClass().getName()));
+                }
+            }
+
+            // Create the GenericPrincipal
+            Principal gp = getPrincipal();
+            if (subject != null && gp != null) {
+                subject.getPrivateCredentials().add(gp);
+            }
+        }
+    }

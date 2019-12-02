@@ -1,0 +1,97 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * This method is called by the received thread when a SessionMessage has
+     * been received from one of the other nodes in the cluster.
+     * @param msg - the message received
+     * @param sender - the sender of the message, this is used if we receive a
+     *                 EVT_GET_ALL_SESSION message, so that we only reply to
+     *                 the requesting node
+     */
+    protected void messageReceived( SessionMessage msg, Member sender ) {
+        try  {
+            if(log.isInfoEnabled()) {
+                log.debug("Received SessionMessage of type="+msg.getEventTypeString());
+                log.debug("Received SessionMessage sender="+sender);
+            }
+            switch ( msg.getEventType() ) {
+                case SessionMessage.EVT_GET_ALL_SESSIONS: {
+                    //get a list of all the session from this manager
+                    Object[] sessions = findSessions();
+                    java.io.ByteArrayOutputStream bout = new java.io.ByteArrayOutputStream();
+                    java.io.ObjectOutputStream oout = new java.io.ObjectOutputStream(bout);
+                    oout.writeInt(sessions.length);
+                    for (int i=0; i<sessions.length; i++){
+                        ReplicatedSession ses = (ReplicatedSession)sessions[i];
+                        oout.writeUTF(ses.getIdInternal());
+                        byte[] data = writeSession(ses);
+                        oout.writeObject(data);
+                    }//for
+                    //don't send a message if we don't have to
+                    oout.flush();
+                    oout.close();
+                    byte[] data = bout.toByteArray();
+                    SessionMessage newmsg = new SessionMessageImpl(name,
+                        SessionMessage.EVT_ALL_SESSION_DATA,
+                        data, "SESSION-STATE","SESSION-STATE-"+getName());
+                    cluster.send(newmsg, sender);
+                    break;
+                }
+                case SessionMessage.EVT_ALL_SESSION_DATA: {
+                    java.io.ByteArrayInputStream bin =
+                        new java.io.ByteArrayInputStream(msg.getSession());
+                    java.io.ObjectInputStream oin = new java.io.ObjectInputStream(bin);
+                    int size = oin.readInt();
+                    for ( int i=0; i<size; i++) {
+                        String id = oin.readUTF();
+                        byte[] data = (byte[])oin.readObject();
+                        Session session = readSession(data,id);
+                    }//for
+                    stateTransferred=true;
+                    break;
+                }
+                case SessionMessage.EVT_SESSION_CREATED: {
+                    Session session = this.readSession(msg.getSession(),msg.getSessionID());
+                    if ( log.isDebugEnabled() ) {
+                        log.debug("Received replicated session=" + session +
+                            " isValid=" + session.isValid());
+                    }
+                    break;
+                }
+                case SessionMessage.EVT_SESSION_EXPIRED: {
+                    Session session = findSession(msg.getSessionID());
+                    if ( session != null ) {
+                        session.expire();
+                        this.remove(session);
+                    }//end if
+                    break;
+                }
+                case SessionMessage.EVT_SESSION_ACCESSED :{
+                    Session session = findSession(msg.getSessionID());
+                    if ( session != null ) {
+                        session.access();
+                        session.endAccess();
+                    }
+                    break;
+                }
+                default:  {
+                    //we didn't recognize the message type, do nothing
+                    break;
+                }
+            }//switch
+        }
+        catch ( Exception x )
+        {
+            log.error("Unable to receive message through TCP channel",x);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+ 
+    /**
+     * @return the serialized data for the session
+     */
+    public byte[] getSession();

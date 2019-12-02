@@ -1,0 +1,130 @@
+6
+-----CSCI578-----
+
+
+    public Method getSetter(String aname, BaseModelMBean bean, Object resource) 
+            throws AttributeNotFoundException, MBeanException, ReflectionException {
+        // Cache may be needed for getters, but it is a really bad idea for setters, this is far 
+        // less frequent.
+        Method m=null;//(Method)setAttMap.get( name );
+
+        if( m==null ) {
+            AttributeInfo attrInfo = (AttributeInfo)attributes.get(aname);
+            if (attrInfo == null)
+                throw new AttributeNotFoundException(" Cannot find attribute " + aname);
+
+            // Look up the actual operation to be used
+            String setMethod = attrInfo.getSetMethod();
+            if (setMethod == null)
+                throw new AttributeNotFoundException("Cannot find attribute " + aname + " set method name");
+
+            String argType=attrInfo.getType();
+
+            Class signature[] = new Class[] { BaseModelMBean.getAttributeClass( argType ) };
+
+            Object object = null;
+            NoSuchMethodException exception = null;
+            try {
+                object = bean;
+                m = object.getClass().getMethod(setMethod, signature);
+            } catch (NoSuchMethodException e) {
+                exception = e;;
+            }
+            if( m== null && resource != null ) {
+                try {
+                    object = resource;
+                    m = object.getClass().getMethod(setMethod, signature);
+                    exception=null;
+                } catch (NoSuchMethodException e) {
+                    exception = e;
+                }
+            }
+            if( exception != null )
+                throw new ReflectionException(exception,
+                                              "Cannot find setter method " + setMethod +
+                        " " + resource);
+            //setAttMap.put( name, m );
+        }
+
+        return m;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * The name of the property setter method, if non-standard.
+     */
+    public String getSetMethod() {
+        if( setMethod == null )
+            setMethod = getMethodName(getName(), false, false);
+        return (this.setMethod);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Create and return the name of a default property getter or setter
+     * method, according to the specified values.
+     *
+     * @param name Name of the property itself
+     * @param getter Do we want a get method (versus a set method)?
+     * @param is If returning a getter, do we want the "is" form?
+     */
+    private String getMethodName(String name, boolean getter, boolean is) {
+
+        StringBuffer sb = new StringBuffer();
+        if (getter) {
+            if (is)
+                sb.append("is");
+            else
+                sb.append("get");
+        } else
+            sb.append("set");
+        sb.append(Character.toUpperCase(name.charAt(0)));
+        sb.append(name.substring(1));
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    static Class getAttributeClass(String signature)
+        throws ReflectionException
+    {
+        if (signature.equals(Boolean.TYPE.getName()))
+            return Boolean.TYPE;
+        else if (signature.equals(Byte.TYPE.getName()))
+            return Byte.TYPE;
+        else if (signature.equals(Character.TYPE.getName()))
+            return Character.TYPE;
+        else if (signature.equals(Double.TYPE.getName()))
+            return Double.TYPE;
+        else if (signature.equals(Float.TYPE.getName()))
+            return Float.TYPE;
+        else if (signature.equals(Integer.TYPE.getName()))
+            return Integer.TYPE;
+        else if (signature.equals(Long.TYPE.getName()))
+            return Long.TYPE;
+        else if (signature.equals(Short.TYPE.getName()))
+            return Short.TYPE;
+        else {
+            try {
+                ClassLoader cl=Thread.currentThread().getContextClassLoader();
+                if( cl!=null )
+                    return cl.loadClass(signature); 
+            } catch( ClassNotFoundException e ) {
+            }
+            try {
+                return Class.forName(signature);
+            } catch (ClassNotFoundException e) {
+                throw new ReflectionException
+                    (e, "Cannot find Class for " + signature);
+            }
+        }
+    }

@@ -1,0 +1,47 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Pause the endpoint, which will make it stop accepting new sockets.
+     */
+    public void pause() {
+        if (running && !paused) {
+            paused = true;
+            unlockAccept();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Unlock the server socket accept using a bugus connection.
+     */
+    protected void unlockAccept() {
+        java.net.Socket s = null;
+        try {
+            // Need to create a connection to unlock the accept();
+            if (address == null) {
+                s = new java.net.Socket(InetAddress.getByName("localhost").getHostAddress(), port);
+            } else {
+                s = new java.net.Socket(address, port);
+                // setting soLinger to a small value will help shutdown the
+                // connection quicker
+                s.setSoLinger(true, 0);
+            }
+        } catch(Exception e) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("endpoint.debug.unlock", "" + port), e);
+            }
+        } finally {
+            if (s != null) {
+                try {
+                    s.close();
+                } catch (Exception e) {
+                    // Ignore
+                }
+            }
+        }
+    }

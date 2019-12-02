@@ -1,0 +1,64 @@
+3
+
+
+    /**
+     * Parse date with given formatters.
+     */
+    private static final Long internalParseDate
+        (String value, DateFormat[] formats) {
+        Date date = null;
+        for (int i = 0; (date == null) && (i < formats.length); i++) {
+            try {
+                date = formats[i].parse(value);
+            } catch (ParseException e) {
+                ;
+            }
+        }
+        if (date == null) {
+            return null;
+        }
+        return new Long(date.getTime());
+    }
+
+
+    /**
+     * Try to parse the given date as a HTTP date.
+     */
+    public static final long parseDate(String value, 
+                                       DateFormat[] threadLocalformats) {
+
+        Long cachedDate = parseCache.get(value);
+        if (cachedDate != null)
+            return cachedDate.longValue();
+
+        Long date = null;
+        if (threadLocalformats != null) {
+            date = internalParseDate(value, threadLocalformats);
+            updateParseCache(value, date);
+        } else {
+            synchronized (parseCache) {
+                date = internalParseDate(value, formats);
+                updateParseCache(value, date);
+            }
+        }
+        if (date == null) {
+            return (-1L);
+        } else {
+            return date.longValue();
+        }
+
+    }
+
+
+    /**
+     * Update cache.
+     */
+    private static void updateParseCache(String key, Long value) {
+        if (value == null) {
+            return;
+        }
+        if (parseCache.size() > CACHE_SIZE) {
+            parseCache.clear();
+        }
+        parseCache.put(key, value);
+    }

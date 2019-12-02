@@ -1,0 +1,32 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public int available() throws IOException {
+        
+        if (SecurityUtil.isPackageProtectionEnabled()){
+            try{
+                Integer result = 
+                    (Integer)AccessController.doPrivileged(
+                        new PrivilegedExceptionAction(){
+
+                            public Object run() throws IOException{
+                                Integer integer = new Integer(ib.available());
+                                return integer;
+                            }
+
+                });
+                return result.intValue();
+            } catch(PrivilegedActionException pae){
+                Exception e = pae.getException();
+                if (e instanceof IOException){
+                    throw (IOException)e;
+                } else {
+                    throw new RuntimeException(e.getMessage());
+                }
+            }
+        } else {
+           return ib.available();
+        }    
+    }

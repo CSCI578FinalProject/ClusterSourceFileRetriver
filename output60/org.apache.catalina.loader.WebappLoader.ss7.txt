@@ -1,0 +1,122 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Have one or more classes or resources been modified so that a reload
+     * is appropriate?
+     */
+    public boolean modified() {
+
+        if (log.isDebugEnabled())
+            log.debug("modified()");
+
+        // Checking for modified loaded resources
+        int length = paths.length;
+
+        // A rare race condition can occur in the updates of the two arrays
+        // It's totally ok if the latest class added is not checked (it will
+        // be checked the next time
+        int length2 = lastModifiedDates.length;
+        if (length > length2)
+            length = length2;
+
+        for (int i = 0; i < length; i++) {
+            try {
+                long lastModified =
+                    ((ResourceAttributes) resources.getAttributes(paths[i]))
+                    .getLastModified();
+                if (lastModified != lastModifiedDates[i]) {
+                    if( log.isDebugEnabled() )
+                        log.debug("  Resource '" + paths[i]
+                                  + "' was modified; Date is now: "
+                                  + new java.util.Date(lastModified) + " Was: "
+                                  + new java.util.Date(lastModifiedDates[i]));
+                    return (true);
+                }
+            } catch (NamingException e) {
+                log.error("    Resource '" + paths[i] + "' is missing");
+                return (true);
+            }
+        }
+
+        length = jarNames.length;
+
+        // Check if JARs have been added or removed
+        if (getJarPath() != null) {
+
+            try {
+                NamingEnumeration enumeration = resources.listBindings(getJarPath());
+                int i = 0;
+                while (enumeration.hasMoreElements() && (i < length)) {
+                    NameClassPair ncPair = (NameClassPair) enumeration.nextElement();
+                    String name = ncPair.getName();
+                    // Ignore non JARs present in the lib folder
+                    if (!name.endsWith(".jar"))
+                        continue;
+                    if (!name.equals(jarNames[i])) {
+                        // Missing JAR
+                        log.info("    Additional JARs have been added : '"
+                                 + name + "'");
+                        return (true);
+                    }
+                    i++;
+                }
+                if (enumeration.hasMoreElements()) {
+                    while (enumeration.hasMoreElements()) {
+                        NameClassPair ncPair =
+                            (NameClassPair) enumeration.nextElement();
+                        String name = ncPair.getName();
+                        // Additional non-JAR files are allowed
+                        if (name.endsWith(".jar")) {
+                            // There was more JARs
+                            log.info("    Additional JARs have been added");
+                            return (true);
+                        }
+                    }
+                } else if (i < jarNames.length) {
+                    // There was less JARs
+                    log.info("    Additional JARs have been added");
+                    return (true);
+                }
+            } catch (NamingException e) {
+                if (log.isDebugEnabled())
+                    log.debug("    Failed tracking modifications of '"
+                        + getJarPath() + "'");
+            } catch (ClassCastException e) {
+                log.error("    Failed tracking modifications of '"
+                          + getJarPath() + "' : " + e.getMessage());
+            }
+
+        }
+
+        // No classes have been modified
+        return (false);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Has the internal repository associated with this Loader been modified,
+     * such that the loaded classes should be reloaded?
+     */
+    public boolean modified() {
+
+        return (classLoader.modified());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the JAR path.
+     */
+    public String getJarPath() {
+
+        return this.jarPath;
+
+    }

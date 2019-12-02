@@ -1,0 +1,176 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Perform access control based on the specified authorization constraint.
+     * Return <code>true</code> if this constraint is satisfied and processing
+     * should continue, or <code>false</code> otherwise.
+     *
+     * @param request Request we are processing
+     * @param response Response we are creating
+     * @param constraints Security constraint we are enforcing
+     * @param context The Context to which client of this class is attached.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public boolean hasResourcePermission(Request request,
+                                         Response response,
+                                         SecurityConstraint []constraints,
+                                         Context context)
+        throws IOException {
+
+        if (constraints == null || constraints.length == 0)
+            return true;
+
+        // Which user principal have we already authenticated?
+        Principal principal = request.getPrincipal();
+        boolean status = false;
+        boolean denyfromall = false;
+        for(int i=0; i < constraints.length; i++) {
+            SecurityConstraint constraint = constraints[i];
+
+            String roles[];
+            if (constraint.getAllRoles()) {
+                // * means all roles defined in web.xml
+                roles = request.getContext().findSecurityRoles();
+            } else {
+                roles = constraint.findAuthRoles();
+            }
+
+            if (roles == null)
+                roles = new String[0];
+
+            if (log.isDebugEnabled())
+                log.debug("  Checking roles " + principal);
+
+            if (constraint.getAuthenticatedUsers() && principal != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Passing all authenticated users");
+                }
+                status = true;
+            } else if (roles.length == 0 && !constraint.getAllRoles() &&
+                    !constraint.getAuthenticatedUsers()) {
+                if(constraint.getAuthConstraint()) {
+                    if( log.isDebugEnabled() )
+                        log.debug("No roles");
+                    status = false; // No listed roles means no access at all
+                    denyfromall = true;
+                    break;
+                }
+
+                if(log.isDebugEnabled())
+                    log.debug("Passing all access");
+                status = true;
+            } else if (principal == null) {
+                if (log.isDebugEnabled())
+                    log.debug("  No user authenticated, cannot grant access");
+            } else {
+                for (int j = 0; j < roles.length; j++) {
+                    if (hasRole(null, principal, roles[j])) {
+                        status = true;
+                        if( log.isDebugEnabled() )
+                            log.debug( "Role found:  " + roles[j]);
+                    }
+                    else if( log.isDebugEnabled() )
+                        log.debug( "No role found:  " + roles[j]);
+                }
+            }
+        }
+
+        if (!denyfromall && allRolesMode != AllRolesMode.STRICT_MODE &&
+                !status && principal != null) {
+            if (log.isDebugEnabled()) {
+                log.debug("Checking for all roles mode: " + allRolesMode);
+            }
+            // Check for an all roles(role-name="*")
+            for (int i = 0; i < constraints.length; i++) {
+                SecurityConstraint constraint = constraints[i];
+                String roles[];
+                // If the all roles mode exists, sets
+                if (constraint.getAllRoles()) {
+                    if (allRolesMode == AllRolesMode.AUTH_ONLY_MODE) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Granting access for role-name=*, auth-only");
+                        }
+                        status = true;
+                        break;
+                    }
+
+                    // For AllRolesMode.STRICT_AUTH_ONLY_MODE there must be zero roles
+                    roles = request.getContext().findSecurityRoles();
+                    if (roles.length == 0 && allRolesMode == AllRolesMode.STRICT_AUTH_ONLY_MODE) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Granting access for role-name=*, strict auth-only");
+                        }
+                        status = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Return a "Forbidden" message denying access to this resource
+        if(!status) {
+            response.sendError
+                (HttpServletResponse.SC_FORBIDDEN,
+                 sm.getString("realmBase.forbidden"));
+        }
+        return status;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the principal that has been authenticated for this Request.
+     */
+    public Principal getPrincipal() {
+        return userPrincipal;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the authorization constraint present flag for this security
+     * constraint.
+     * @return <code>true</code> if this needs authorization
+     */
+    public boolean getAuthConstraint() {
+
+        return this.authConstraint;
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Was the "all roles" wildcard included in this authentication
+     * constraint?
+     * @return <code>true</code> if all roles
+     */
+    public boolean getAllRoles() {
+
+        return this.allRoles;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Was the "all authenticated users" wildcard included in this
+     * authentication constraint?
+     * @return <code>true</code> if all authenticated users
+     */
+    public boolean getAuthenticatedUsers() {
+        return this.authenticatedUsers;
+    }

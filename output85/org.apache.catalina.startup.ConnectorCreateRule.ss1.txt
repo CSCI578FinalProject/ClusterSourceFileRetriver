@@ -1,0 +1,111 @@
+6
+-----CSCI578-----
+
+
+    private static void setExecutor(Connector con, Executor ex) throws Exception {
+        Method m = IntrospectionUtils.findMethod(con.getProtocolHandler().getClass(),"setExecutor",new Class[] {java.util.concurrent.Executor.class});
+        if (m!=null) {
+            m.invoke(con.getProtocolHandler(), new Object[] {ex});
+        }else {
+            log.warn(sm.getString("connector.noSetExecutor", con));
+        }
+    }
+-----CSCI578-----
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the beginning of this element.
+     *
+     * @param namespace the namespace URI of the matching element, or an
+     *   empty string if the parser is not namespace aware or the element has
+     *   no namespace
+     * @param name the local name if the parser is namespace aware, or just
+     *   the element name otherwise
+     * @param attributes The attribute list for this element
+     */
+    @Override
+    public void begin(String namespace, String name, Attributes attributes)
+            throws Exception {
+        Service svc = (Service)digester.peek();
+        Executor ex = null;
+        if ( attributes.getValue("executor")!=null ) {
+            ex = svc.getExecutor(attributes.getValue("executor"));
+        }
+        Connector con = new Connector(attributes.getValue("protocol"));
+        if (ex != null) {
+            setExecutor(con, ex);
+        }
+        String sslImplementationName = attributes.getValue("sslImplementationName");
+        if (sslImplementationName != null) {
+            setSSLImplementationName(con, sslImplementationName);
+        }
+        digester.push(con);
+    }
+-----CSCI578-----
+
+
+    private static void setSSLImplementationName(Connector con, String sslImplementationName) throws Exception {
+        Method m = IntrospectionUtils.findMethod(con.getProtocolHandler().getClass(),"setSslImplementationName",new Class[] {String.class});
+        if (m != null) {
+            m.invoke(con.getProtocolHandler(), new Object[] {sslImplementationName});
+        } else {
+            log.warn(sm.getString("connector.noSetSSLImplementationName", con));
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the protocol handler associated with the connector.
+     */
+    public ProtocolHandler getProtocolHandler() {
+
+        return (this.protocolHandler);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Retrieves executor by name, null if not found
+     * @param name String
+     * @return Executor
+     */
+    public Executor getExecutor(String name);
+-----CSCI578-----
+
+
+    @SuppressWarnings("null") // Neither params nor methodParams can be null
+                              // when comparing their lengths
+    public static Method findMethod(Class<?> c, String name,
+            Class<?> params[]) {
+        Method methods[] = findMethods(c);
+        if (methods == null)
+            return null;
+        for (int i = 0; i < methods.length; i++) {
+            if (methods[i].getName().equals(name)) {
+                Class<?> methodParams[] = methods[i].getParameterTypes();
+                if (methodParams == null)
+                    if (params == null || params.length == 0)
+                        return methods[i];
+                if (params == null)
+                    if (methodParams == null || methodParams.length == 0)
+                        return methods[i];
+                if (params.length != methodParams.length)
+                    continue;
+                boolean found = true;
+                for (int j = 0; j < params.length; j++) {
+                    if (params[j] != methodParams[j]) {
+                        found = false;
+                        break;
+                    }
+                }
+                if (found)
+                    return methods[i];
+            }
+        }
+        return null;
+    }

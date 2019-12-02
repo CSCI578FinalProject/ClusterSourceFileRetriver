@@ -1,0 +1,261 @@
+15
+-----CSCI578-----
+
+
+
+    final boolean isClosed() {
+        return closed;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------- Implemented Processor methods
+
+    @Override
+    public final SocketState dispatch(SocketEvent status) {
+        if (status == SocketEvent.OPEN_READ) {
+            upgradeServletInputStream.onDataAvailable();
+        } else if (status == SocketEvent.OPEN_WRITE) {
+            upgradeServletOutputStream.onWritePossible();
+        } else if (status == SocketEvent.STOP) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("upgradeProcessor.stop"));
+            }
+            try {
+                upgradeServletInputStream.close();
+            } catch (IOException ioe) {
+                log.debug(sm.getString("upgradeProcessor.isCloseFail", ioe));
+            }
+            try {
+                upgradeServletOutputStream.close();
+            } catch (IOException ioe) {
+                log.debug(sm.getString("upgradeProcessor.osCloseFail", ioe));
+            }
+            return SocketState.CLOSED;
+        } else {
+            // Unexpected state
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("upgradeProcessor.unexpectedState"));
+            }
+            return SocketState.CLOSED;
+        }
+        if (upgradeServletInputStream.isClosed() &&
+                upgradeServletOutputStream.isClosed()) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("upgradeProcessor.requiredClose",
+                        Boolean.valueOf(upgradeServletInputStream.isClosed()),
+                        Boolean.valueOf(upgradeServletOutputStream.isClosed())));
+            }
+            return SocketState.CLOSED;
+        }
+        return SocketState.UPGRADED;
+    }
+-----CSCI578-----
+
+
+
+    final void onDataAvailable() {
+        if (listener == null) {
+            return;
+        }
+        ready = Boolean.TRUE;
+        ClassLoader oldCL = processor.getUpgradeToken().getContextBind().bind(false, null);
+        try {
+            if (!eof) {
+                listener.onDataAvailable();
+            }
+            if (eof) {
+                listener.onAllDataRead();
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            onError(t);
+        } finally {
+            processor.getUpgradeToken().getContextBind().unbind(false, oldCL);
+        }
+    }
+-----CSCI578-----
+
+
+
+    final boolean isClosed() {
+        return closed;
+    }
+-----CSCI578-----
+
+
+    // Used to ensure that isReady() and onWritePossible() have a consistent
+    // view of buffer and registered.
+    private final Object registeredLock = new Object();
+
+
+
+    final void onWritePossible() {
+        try {
+            if (flushing) {
+                flushInternal(false, true);
+                if (flushing) {
+                    return;
+                }
+            } else {
+                // This may fill the write buffer in which case the
+                // isReadyForWrite() call below will re-register the socket for
+                // write
+                flushInternal(false, false);
+            }
+        } catch (IOException ioe) {
+            onError(ioe);
+            return;
+        }
+
+        // Make sure isReady() and onWritePossible() have a consistent view
+        // of buffer and fireListener when determining if the listener
+        // should fire
+        boolean fire = false;
+        synchronized (registeredLock) {
+            if (socketWrapper.isReadyForWrite()) {
+                registered = false;
+                fire = true;
+            } else {
+                registered = true;
+            }
+        }
+
+        if (fire) {
+            ClassLoader oldCL = processor.getUpgradeToken().getContextBind().bind(false, null);
+            try {
+                listener.onWritePossible();
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                onError(t);
+            } finally {
+                processor.getUpgradeToken().getContextBind().unbind(false, oldCL);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public final ContextBind getContextBind() {
+        return contextBind;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+
+    @Override
+    public void close() throws IOException {
+        eof = true;
+        closed = true;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void close() throws IOException {
+        if (closed) {
+            return;
+        }
+        closed = true;
+        flushInternal((listener == null), false);
+    }
+-----CSCI578-----
+
+
+
+    private final void onError(Throwable t) {
+        if (listener == null) {
+            return;
+        }
+        ClassLoader oldCL = processor.getUpgradeToken().getContextBind().bind(false, null);
+        try {
+            listener.onError(t);
+        } catch (Throwable t2) {
+            ExceptionUtils.handleThrowable(t2);
+            log.warn(sm.getString("upgrade.sis.onErrorFail"), t2);
+        } finally {
+            processor.getUpgradeToken().getContextBind().unbind(false, oldCL);
+        }
+        try {
+            close();
+        } catch (IOException ioe) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("upgrade.sis.errorCloseFail"), ioe);
+            }
+        }
+        ready = Boolean.FALSE;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public UpgradeToken getUpgradeToken() {
+        return upgradeToken;
+    }
+-----CSCI578-----
+
+
+
+    private void flushInternal(boolean block, boolean updateFlushing) throws IOException {
+        try {
+            synchronized (writeLock) {
+                if (updateFlushing) {
+                    flushing = socketWrapper.flush(block);
+                    if (flushing) {
+                        socketWrapper.registerWriteInterest();
+                    }
+                } else {
+                    socketWrapper.flush(block);
+                }
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            onError(t);
+            if (t instanceof IOException) {
+                throw (IOException) t;
+            } else {
+                throw new IOException(t);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    private final void onError(Throwable t) {
+        if (listener == null) {
+            return;
+        }
+        ClassLoader oldCL = processor.getUpgradeToken().getContextBind().bind(false, null);
+        try {
+            listener.onError(t);
+        } catch (Throwable t2) {
+            ExceptionUtils.handleThrowable(t2);
+            log.warn(sm.getString("upgrade.sos.onErrorFail"), t2);
+        } finally {
+            processor.getUpgradeToken().getContextBind().unbind(false, oldCL);
+        }
+        try {
+            close();
+        } catch (IOException ioe) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("upgrade.sos.errorCloseFail"), ioe);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------- AutoCloseable methods
+
+    @Override
+    public void close() throws Exception {
+        upgradeServletInputStream.close();
+        upgradeServletOutputStream.close();
+    }

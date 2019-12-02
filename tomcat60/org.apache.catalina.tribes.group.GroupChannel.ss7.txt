@@ -1,0 +1,55 @@
+2
+    /**
+     * Flag to determine if the channel manages its own heartbeat
+     * If set to true, the channel will start a local thread for the heart beat.
+     */
+    protected boolean heartbeat = true;
+    /**
+     * If <code>heartbeat == true</code> then how often do we want this
+     * heartbeat to run. default is one minute
+     */
+    protected long heartbeatSleeptime = 5*1000;//every 5 seconds
+
+    /**
+     * Internal heartbeat thread
+     */
+    protected HeartbeatThread hbthread = null;
+
+    /**
+     * Sends a heartbeat through the interceptor stack.<br>
+     * Invoke this method from the application on a periodic basis if
+     * you have turned off internal heartbeats <code>channel.setHeartbeat(false)</code>
+     */
+    public void heartbeat() {
+        super.heartbeat();
+        Iterator i = membershipListeners.iterator();
+        while ( i.hasNext() ) {
+            Object o = i.next();
+            if ( o instanceof Heartbeat ) ((Heartbeat)o).heartbeat();
+        }
+        i = channelListeners.iterator();
+        while ( i.hasNext() ) {
+            Object o = i.next();
+            if ( o instanceof Heartbeat ) ((Heartbeat)o).heartbeat();
+        }
+
+    }
+
+    /**
+     * Configure local heartbeat sleep time<br>
+     * Only used when <code>getHeartbeat()==true</code>
+     * @param heartbeatSleeptime long - time in milliseconds to sleep between heartbeats
+     */
+    public void setHeartbeatSleeptime(long heartbeatSleeptime) {
+        this.heartbeatSleeptime = heartbeatSleeptime;
+    }
+
+    /**
+     * Enables or disables local heartbeat.
+     * if <code>setHeartbeat(true)</code> is invoked then the channel will start an internal
+     * thread to invoke <code>Channel.heartbeat()</code> every <code>getHeartbeatSleeptime</code> milliseconds
+     * @param heartbeat boolean
+     */
+    public void setHeartbeat(boolean heartbeat) {
+        this.heartbeat = heartbeat;
+    }

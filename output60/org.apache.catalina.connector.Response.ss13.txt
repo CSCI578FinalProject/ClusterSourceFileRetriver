@@ -1,0 +1,89 @@
+4
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Return <code>true</code> if the specified URL should be encoded with
+     * a session identifier.  This will be true if all of the following
+     * conditions are met:
+     * <ul>
+     * <li>The request we are responding to asked for a valid session
+     * <li>The requested session ID was not received via a cookie
+     * <li>The specified URL points back to somewhere within the web
+     *     application that is responding to this request
+     * <li>If URL rewriting hasn't been disabled for this context
+     * </ul>
+     *
+     * @param location Absolute URL to be validated
+     */
+    protected boolean isEncodeable(final String location) {
+        if (getContext().isDisableURLRewriting())
+            return (false);
+        if (location == null)
+            return (false);
+
+        // Is this an intra-document reference?
+        if (location.startsWith("#"))
+            return (false);
+
+        // Are we in a valid session that is not using cookies?
+        final Request hreq = request;
+        final Session session = hreq.getSessionInternal(false);
+        if (session == null)
+            return (false);
+        if (hreq.isRequestedSessionIdFromCookie())
+            return (false);
+        
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return ((Boolean)
+                AccessController.doPrivileged(new PrivilegedAction() {
+
+                public Object run(){
+                    return new Boolean(doIsEncodeable(hreq, session, location));
+                }
+            })).booleanValue();
+        } else {
+            return doIsEncodeable(hreq, session, location);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    /**
+     * Is URL rewriting disabled?
+     * URL rewriting is an optional component of the servlet 2.5 specification.
+     * However if set to true this will be non-compliant with the specification
+     * as the specification requires that there <b>must</b> be a way to retain
+     * sessions if the client doesn't allow session cookies.
+     * 
+     * @return true If URL rewriting is disabled.
+     * 
+     * @see <a href="http://jcp.org/aboutJava/communityprocess/mrel/jsr154/index2.html">Servlet
+     *      2.5 Specification. Sections SRV.7.1.3 and SRV.7.1.4</a>
+     * @see javax.servlet.http.HttpServletResponse#encodeURL(String) encodeURL
+     * @see javax.servlet.http.HttpServletResponse#encodeRedirectURL(String)
+     *      encodeRedirectURL
+     */
+    public boolean isDisableURLRewriting();
+-----CSCI578-----
+
+
+
+    /**
+     * Return <code>true</code> if the session identifier included in this
+     * request came from a cookie.
+     */
+    public boolean isRequestedSessionIdFromCookie() {
+
+        if (requestedSessionId != null)
+            return (requestedSessionCookie);
+        else
+            return (false);
+
+    }

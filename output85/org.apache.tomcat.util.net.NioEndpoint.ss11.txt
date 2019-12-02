@@ -1,0 +1,265 @@
+34
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void closeSocket(SocketChannel socket) {
+        try {
+            socket.socket().close();
+        } catch (IOException ioe)  {
+            if (log.isDebugEnabled()) {
+                log.debug("", ioe);
+            }
+        }
+        try {
+            socket.close();
+        } catch (IOException ioe) {
+            if (log.isDebugEnabled()) {
+                log.debug("", ioe);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setPoller(Poller poller) {
+        this.poller = poller;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    /**
+     * Return an available poller in true round robin fashion.
+     *
+     * @return The next poller in sequence
+     */
+    public Poller getPoller0() {
+        int idx = Math.abs(pollerRotater.incrementAndGet()) % pollers.length;
+        return pollers[idx];
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Process the specified connection.
+     * @param socket The socket channel
+     * @return <code>true</code> if the socket was correctly configured
+     *  and processing may continue, <code>false</code> if the socket needs to be
+     *  close immediately
+     */
+    protected boolean setSocketOptions(SocketChannel socket) {
+        // Process the connection
+        try {
+            //disable blocking, APR style, we are gonna be polling it
+            socket.configureBlocking(false);
+            Socket sock = socket.socket();
+            socketProperties.setProperties(sock);
+
+            NioChannel channel = nioChannels.pop();
+            if (channel == null) {
+                SocketBufferHandler bufhandler = new SocketBufferHandler(
+                        socketProperties.getAppReadBufSize(),
+                        socketProperties.getAppWriteBufSize(),
+                        socketProperties.getDirectBuffer());
+                if (isSSLEnabled()) {
+                    channel = new SecureNioChannel(socket, bufhandler, selectorPool, this);
+                } else {
+                    channel = new NioChannel(socket, bufhandler);
+                }
+            } else {
+                channel.setIOChannel(socket);
+                channel.reset();
+            }
+            getPoller0().register(channel);
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            try {
+                log.error("",t);
+            } catch (Throwable tt) {
+                ExceptionUtils.handleThrowable(t);
+            }
+            // Tell to close the socket
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    void setSocketWrapper(SocketWrapperBase<NioChannel> socket) {
+        this.socket = socket;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setIOChannel(SocketChannel IOChannel) {
+        this.sc = IOChannel;
+    }
+-----CSCI578-----
+
+
+    @SuppressWarnings("unchecked")
+    public synchronized T pop() {
+        if (index == -1) {
+            return null;
+        }
+        T result = (T) stack[index];
+        stack[index--] = null;
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setProperties(Socket socket) throws SocketException{
+        if (rxBufSize != null)
+            socket.setReceiveBufferSize(rxBufSize.intValue());
+        if (txBufSize != null)
+            socket.setSendBufferSize(txBufSize.intValue());
+        if (ooBInline !=null)
+            socket.setOOBInline(ooBInline.booleanValue());
+        if (soKeepAlive != null)
+            socket.setKeepAlive(soKeepAlive.booleanValue());
+        if (performanceConnectionTime != null && performanceLatency != null &&
+                performanceBandwidth != null)
+            socket.setPerformancePreferences(
+                    performanceConnectionTime.intValue(),
+                    performanceLatency.intValue(),
+                    performanceBandwidth.intValue());
+        if (soReuseAddress != null)
+            socket.setReuseAddress(soReuseAddress.booleanValue());
+        if (soLingerOn != null && soLingerTime != null)
+            socket.setSoLinger(soLingerOn.booleanValue(),
+                    soLingerTime.intValue());
+        if (soTimeout != null && soTimeout.intValue() >= 0)
+            socket.setSoTimeout(soTimeout.intValue());
+        if (tcpNoDelay != null)
+            socket.setTcpNoDelay(tcpNoDelay.booleanValue());
+    }
+
+
+    public void setProperties(ServerSocket socket) throws SocketException{
+        if (rxBufSize != null)
+            socket.setReceiveBufferSize(rxBufSize.intValue());
+        if (performanceConnectionTime != null && performanceLatency != null &&
+                performanceBandwidth != null)
+            socket.setPerformancePreferences(
+                    performanceConnectionTime.intValue(),
+                    performanceLatency.intValue(),
+                    performanceBandwidth.intValue());
+        if (soReuseAddress != null)
+            socket.setReuseAddress(soReuseAddress.booleanValue());
+        if (soTimeout != null && soTimeout.intValue() >= 0)
+            socket.setSoTimeout(soTimeout.intValue());
+    }
+
+
+    public void setProperties(AsynchronousSocketChannel socket) throws IOException {
+        if (rxBufSize != null)
+            socket.setOption(StandardSocketOptions.SO_RCVBUF, rxBufSize);
+        if (txBufSize != null)
+            socket.setOption(StandardSocketOptions.SO_SNDBUF, txBufSize);
+        if (soKeepAlive != null)
+            socket.setOption(StandardSocketOptions.SO_KEEPALIVE, soKeepAlive);
+        if (soReuseAddress != null)
+            socket.setOption(StandardSocketOptions.SO_REUSEADDR, soReuseAddress);
+        if (soLingerOn != null && soLingerOn.booleanValue() && soLingerTime != null)
+            socket.setOption(StandardSocketOptions.SO_LINGER, soLingerTime);
+        if (tcpNoDelay != null)
+            socket.setOption(StandardSocketOptions.TCP_NODELAY, tcpNoDelay);
+    }
+
+
+    public void setProperties(AsynchronousServerSocketChannel socket) throws IOException {
+        if (rxBufSize != null)
+            socket.setOption(StandardSocketOptions.SO_RCVBUF, rxBufSize);
+        if (soReuseAddress != null)
+            socket.setOption(StandardSocketOptions.SO_REUSEADDR, soReuseAddress);
+    }
+-----CSCI578-----
+
+
+    public int getAppReadBufSize() {
+        return appReadBufSize;
+    }
+-----CSCI578-----
+
+
+    public int getAppWriteBufSize() {
+        return appWriteBufSize;
+    }
+-----CSCI578-----
+
+
+    public boolean getDirectBuffer() {
+        return directBuffer;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Reset the channel
+     *
+     * @throws IOException If a problem was encountered resetting the channel
+     */
+    public void reset() throws IOException {
+        bufHandler.reset();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean getDirectSslBuffer() {
+        return directSslBuffer;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void free() {
+        super.free();
+        if (endpoint.getSocketProperties().getDirectSslBuffer()) {
+            ByteBufferUtils.cleanDirectBuffer(netInBuffer);
+            ByteBufferUtils.cleanDirectBuffer(netOutBuffer);
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void reset() throws IOException {
+        super.reset();
+        sslEngine = null;
+        sniComplete = false;
+        handshakeComplete = false;
+        closed = false;
+        closing = false;
+        netInBuffer.clear();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void free() {
+        super.free();
+        if (endpoint.getSocketProperties().getDirectSslBuffer()) {
+            ByteBufferUtils.cleanDirectBuffer(netInBuffer);
+            ByteBufferUtils.cleanDirectBuffer(netOutBuffer);
+        }
+    }

@@ -1,0 +1,17 @@
+1
+-----CSCI578-----
+
+    // Start at -1 so the 'add 2' logic in closeIdleStreams() works
+    private volatile int maxActiveRemoteStreamId = -1;
+
+
+
+    private void closeIdleStreams(int newMaxActiveRemoteStreamId) throws Http2Exception {
+        for (int i = maxActiveRemoteStreamId + 2; i < newMaxActiveRemoteStreamId; i += 2) {
+            Stream stream = getStream(i, false);
+            if (stream != null) {
+                stream.closeIfIdle();
+            }
+        }
+        maxActiveRemoteStreamId = newMaxActiveRemoteStreamId;
+    }

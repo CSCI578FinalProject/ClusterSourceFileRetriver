@@ -1,0 +1,106 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Extract the desired request property, and pass it (along with the
+     * specified request and response objects) to the protected
+     * <code>process()</code> method to perform the actual filtering.
+     * This method must be implemented by a concrete subclass.
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be created
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    public abstract void invoke(Request request, Response response)
+        throws IOException, ServletException;
+
+
+
+    /**
+     * Perform the filtering that has been configured for this Valve, matching
+     * against the specified request property.
+     *
+     * @param property The request property on which to filter
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be processed
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    protected void process(String property,
+                           Request request, Response response)
+        throws IOException, ServletException {
+
+        if (isAllowed(property)) {
+            getNext().invoke(request, response);
+            return;
+        }
+
+        // Deny this request
+        denyRequest(request, response);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Reject the request that was denied by this valve.
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be processed
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    protected void denyRequest(Request request, Response response)
+            throws IOException, ServletException {
+        response.sendError(denyStatus);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Perform the test implemented by this Valve, matching against the
+     * specified request property value. This method is public so that it can be
+     * called through JMX, e.g. to test whether certain IP address is allowed or
+     * denied by the valve configuration.
+     *
+     * @param property
+     *            The request property value on which to filter
+     */
+    public boolean isAllowed(String property) {
+        // Use local copies for thread safety
+        Pattern[] denies = this.denies;
+        Pattern[] allows = this.allows;
+
+        // Check the deny patterns, if any
+        for (int i = 0; i < denies.length; i++) {
+            if (denies[i].matcher(property).matches()) {
+                return false;
+            }
+        }
+
+        // Check the allow patterns, if any
+        for (int i = 0; i < allows.length; i++) {
+            if (allows[i].matcher(property).matches()) {
+                return true;
+            }
+        }
+
+        // Allow if denies specified but not allows
+        if ((denies.length > 0) && (allows.length == 0)) {
+            return true;
+        }
+
+        // Deny this request
+        return false;
+    }

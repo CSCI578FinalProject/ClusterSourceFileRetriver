@@ -1,0 +1,103 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Initialize this servlet.
+     */
+    public void init() throws ServletException {
+
+        // Ensure that our ContainerServlet properties have been set
+        if ((wrapper == null) || (context == null))
+            throw new UnavailableException
+                (sm.getString("managerServlet.noWrapper"));
+
+        // Verify that we were not accessed using the invoker servlet
+        String servletName = getServletConfig().getServletName();
+        if (servletName == null)
+            servletName = "";
+        if (servletName.startsWith("org.apache.catalina.INVOKER."))
+            throw new UnavailableException
+                (sm.getString("managerServlet.cannotInvoke"));
+
+        // Set our properties from the initialization parameters
+        String value = null;
+        try {
+            value = getServletConfig().getInitParameter("debug");
+            debug = Integer.parseInt(value);
+        } catch (Throwable t) {
+            ;
+        }
+
+        // Acquire global JNDI resources if available
+        Server server = ServerFactory.getServer();
+        if ((server != null) && (server instanceof StandardServer)) {
+            global = ((StandardServer) server).getGlobalNamingContext();
+        }
+
+        // Calculate the directory into which we will be deploying applications
+        versioned = (File) getServletContext().getAttribute
+            ("javax.servlet.context.tempdir");
+
+        // Identify the appBase of the owning Host of this Context
+        // (if any)
+        String appBase = ((Host) context.getParent()).getAppBase();
+        deployed = new File(appBase);
+        if (!deployed.isAbsolute()) {
+            deployed = new File(System.getProperty("catalina.base"),
+                                appBase);
+        }
+        configBase = new File(System.getProperty("catalina.base"), "conf");
+        Container container = context;
+        Container host = null;
+        Container engine = null;
+        while (container != null) {
+            if (container instanceof Host)
+                host = container;
+            if (container instanceof Engine)
+                engine = container;
+            container = container.getParent();
+        }
+        if (engine != null) {
+            configBase = new File(configBase, engine.getName());
+        }
+        if (host != null) {
+            configBase = new File(configBase, host.getName());
+        }
+        // Note: The directory must exist for this to work.
+
+        // Log debugging messages as necessary
+        if (debug >= 1) {
+            log("init: Associated with Deployer '" +
+                oname + "'");
+            if (global != null) {
+                log("init: Global resources are available");
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+   
+    
+    /**
+     * @see javax.servlet.GenericServlet#init()
+     */
+    public void init() throws ServletException {
+        super.init();
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Return the global naming resources context.
+     */
+    public javax.naming.Context getGlobalNamingContext() {
+
+        return (this.globalNamingContext);
+
+    }

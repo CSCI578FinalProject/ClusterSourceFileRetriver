@@ -1,0 +1,81 @@
+5
+-----CSCI578-----
+
+
+   /**
+    * When the manager expires session not tied to a request.
+    * The cluster will periodically ask for a list of sessions
+    * that should expire and that should be sent across the wire.
+    * @return String[] The invalidated sessions
+    */
+   public String[] getInvalidatedSessions();
+-----CSCI578-----
+
+
+    /**
+     * check for session invalidations
+     * @param manager Associated manager
+     */
+    protected void sendInvalidSessions(ClusterManager manager) {
+        String[] invalidIds=manager.getInvalidatedSessions();
+        if ( invalidIds.length > 0 ) {
+            for ( int i=0;i<invalidIds.length; i++ ) {
+                try {
+                    send(manager,invalidIds[i]);
+                } catch ( Exception x ) {
+                    log.error(sm.getString("ReplicationValve.send.invalid.failure",invalidIds[i]),x);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+   /**
+    * When the request has been completed, the replication valve
+    * will notify the manager, and the manager will decide whether
+    * any replication is needed or not.
+    * If there is a need for replication, the manager will
+    * create a session message and that will be replicated.
+    * The cluster determines where it gets sent.
+    * @param sessionId - the sessionId that just completed.
+    * @return a SessionMessage to be sent.
+    */
+   public ClusterMessage requestCompleted(String sessionId);
+-----CSCI578-----
+
+
+    /**
+     * send manager requestCompleted message to cluster
+     * @param manager SessionManager
+     * @param sessionId sessionid from the manager
+     * @see DeltaManager#requestCompleted(String)
+     * @see SimpleTcpCluster#send(ClusterMessage)
+     */
+    protected void send(ClusterManager manager, String sessionId) {
+        ClusterMessage msg = manager.requestCompleted(sessionId);
+        if (msg != null && cluster != null) {
+            cluster.send(msg);
+            if(doStatistics()) {
+                nrOfSendRequests++;
+            }
+        }
+    }
+-----CSCI578-----
+
+    // ----------------------------------------------------- Instance Variables
+
+    /**
+     * Sends a message to all the members in the cluster
+     * @param msg ClusterMessage
+     */
+    public void send(ClusterMessage msg);
+
+
+    /**
+     * Sends a message to a specific member in the cluster.
+     *
+     * @param msg ClusterMessage
+     * @param dest Member
+     */
+    public void send(ClusterMessage msg, Member dest);

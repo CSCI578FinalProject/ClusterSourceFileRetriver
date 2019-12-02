@@ -1,0 +1,250 @@
+17
+-----CSCI578-----
+
+
+
+    /**
+     * Create a new StandardHost.
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param name Unique name of this Host
+     * @param appBase Application base directory name
+     * @param autoDeploy Should we auto deploy?
+     * @param deployOnStartup Deploy on server startup?
+     * @param deployXML Should we deploy Context XML config files property?
+     * @param unpackWARs Should we unpack WARs when auto deploying?
+     * @param xmlNamespaceAware Should we turn on/off XML namespace awareness?
+     * @param xmlValidation Should we turn on/off XML validation?        
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createStandardHost(String parent, String name,
+                                     String appBase,
+                                     boolean autoDeploy,
+                                     boolean deployOnStartup,
+                                     boolean deployXML,                                       
+                                     boolean unpackWARs,
+                                     boolean xmlNamespaceAware,
+                                     boolean xmlValidation)
+        throws Exception {
+
+        // Create a new StandardHost instance
+        StandardHost host = new StandardHost();
+        host.setName(name);
+        host.setAppBase(appBase);
+        host.setAutoDeploy(autoDeploy);
+        host.setDeployOnStartup(deployOnStartup);
+        host.setDeployXML(deployXML);
+        host.setUnpackWARs(unpackWARs);
+        host.setXmlNamespaceAware(xmlNamespaceAware);
+        host.setXmlValidation(xmlValidation);
+	
+        // add HostConfig for active reloading
+        HostConfig hostConfig = new HostConfig();
+        host.addLifecycleListener(hostConfig);
+
+        // Add the new instance to its parent component
+        ObjectName pname = new ObjectName(parent);
+        Service service = getService(pname);
+        Engine engine = (Engine) service.getContainer();
+        engine.addChild(host);
+
+        // Return the corresponding MBean name
+        return (host.getObjectName().toString());
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the canonical, fully qualified, name of the virtual host
+     * this Container represents.
+     *
+     * @param name Virtual host name
+     *
+     * @exception IllegalArgumentException if name is null
+     */
+    public void setName(String name) {
+
+        if (name == null)
+            throw new IllegalArgumentException
+                (sm.getString("standardHost.nullName"));
+
+        name = name.toLowerCase();      // Internally all names are lower case
+
+        String oldName = this.name;
+        this.name = name;
+        support.firePropertyChange("name", oldName, this.name);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the auto deploy flag value for this host.
+     * 
+     * @param autoDeploy The new auto deploy flag
+     */
+    public void setAutoDeploy(boolean autoDeploy) {
+
+        boolean oldAutoDeploy = this.autoDeploy;
+        this.autoDeploy = autoDeploy;
+        support.firePropertyChange("autoDeploy", oldAutoDeploy, 
+                                   this.autoDeploy);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the application root for this Host.  This can be an absolute
+     * pathname, a relative pathname, or a URL.
+     *
+     * @param appBase The new application root
+     */
+    public void setAppBase(String appBase) {
+
+        String oldAppBase = this.appBase;
+        this.appBase = appBase;
+        support.firePropertyChange("appBase", oldAppBase, this.appBase);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the deploy on startup flag value for this host.
+     * 
+     * @param deployOnStartup The new deploy on startup flag
+     */
+    public void setDeployOnStartup(boolean deployOnStartup) {
+
+        boolean oldDeployOnStartup = this.deployOnStartup;
+        this.deployOnStartup = deployOnStartup;
+        support.firePropertyChange("deployOnStartup", oldDeployOnStartup, 
+                                   this.deployOnStartup);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Deploy XML Context config files flag mutator.
+     */
+    public void setDeployXML(boolean deployXML) {
+
+        this.deployXML = deployXML;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Unpack WARs flag mutator.
+     */
+    public void setUnpackWARs(boolean unpackWARs) {
+
+        this.unpackWARs = unpackWARs;
+
+    }
+-----CSCI578-----
+
+
+
+    public void setXmlNamespaceAware(boolean xmlNamespaceAware){
+        this.xmlNamespaceAware=xmlNamespaceAware;
+    }
+-----CSCI578-----
+
+
+    
+    public void setXmlValidation(boolean xmlValidation){
+        this.xmlValidation = xmlValidation;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the live deploy flag value for this host.
+     * 
+     * @param liveDeploy The new live deploy flag
+     */
+    public void setLiveDeploy(boolean liveDeploy) {
+        setAutoDeploy(liveDeploy);
+    }
+-----CSCI578-----
+
+    
+    public ObjectName preRegister(MBeanServer server, ObjectName oname ) 
+        throws Exception
+    {
+        ObjectName res=super.preRegister(server, oname);
+        String name=oname.getKeyProperty("host");
+        if( name != null )
+            setName( name );
+        return res;        
+    }
+-----CSCI578-----
+
+
+    public ObjectName preRegister(MBeanServer server,
+                                  ObjectName name) throws Exception {
+        oname=name;
+        mserver=server;
+        if (name == null ){
+            return null;
+        }
+
+        domain=name.getDomain();
+
+        type=name.getKeyProperty("type");
+        if( type==null ) {
+            type=name.getKeyProperty("j2eeType");
+        }
+
+        String j2eeApp=name.getKeyProperty("J2EEApplication");
+        String j2eeServer=name.getKeyProperty("J2EEServer");
+        if( j2eeApp==null ) {
+            j2eeApp="none";
+        }
+        if( j2eeServer==null ) {
+            j2eeServer="none";
+        }
+        suffix=",J2EEApplication=" + j2eeApp + ",J2EEServer=" + j2eeServer;
+        return name;
+    }
+-----CSCI578-----
+
+
+    /** There are 2 cases:
+     *   1.The context is created and registered by internal APIS
+     *   2. The context is created by JMX, and it'll self-register.
+     *
+     * @param server The server
+     * @param name The object name
+     * @return ObjectName The name of the object
+     * @throws Exception If an error occurs
+     */
+    public ObjectName preRegister(MBeanServer server,
+                                  ObjectName name)
+            throws Exception
+    {
+        if( oname != null ) {
+            //log.info( "Already registered " + oname + " " + name);
+            // Temporary - /admin uses the old names
+            return name;
+        }
+        ObjectName result=super.preRegister(server,name);
+        return name;
+    }

@@ -1,0 +1,133 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Create and initialize the JNDI naming context.
+     */
+    private void createNamingContext()
+        throws NamingException {
+
+        // Creating the comp subcontext
+        if (container instanceof Server) {
+            compCtx = namingContext;
+            envCtx = namingContext;
+        } else {
+            compCtx = namingContext.createSubcontext("comp");
+            envCtx = compCtx.createSubcontext("env");
+        }
+
+        int i;
+
+        if (log.isDebugEnabled())
+            log.debug("Creating JNDI naming context");
+
+        if (namingResources == null) {
+            namingResources = new NamingResourcesImpl();
+            namingResources.setContainer(container);
+        }
+
+        // Resource links
+        ContextResourceLink[] resourceLinks =
+            namingResources.findResourceLinks();
+        for (i = 0; i < resourceLinks.length; i++) {
+            addResourceLink(resourceLinks[i]);
+        }
+
+        // Resources
+        ContextResource[] resources = namingResources.findResources();
+        for (i = 0; i < resources.length; i++) {
+            addResource(resources[i]);
+        }
+
+        // Resources Env
+        ContextResourceEnvRef[] resourceEnvRefs = namingResources.findResourceEnvRefs();
+        for (i = 0; i < resourceEnvRefs.length; i++) {
+            addResourceEnvRef(resourceEnvRefs[i]);
+        }
+
+        // Environment entries
+        ContextEnvironment[] contextEnvironments =
+            namingResources.findEnvironments();
+        for (i = 0; i < contextEnvironments.length; i++) {
+            addEnvironment(contextEnvironments[i]);
+        }
+
+        // EJB references
+        ContextEjb[] ejbs = namingResources.findEjbs();
+        for (i = 0; i < ejbs.length; i++) {
+            addEjb(ejbs[i]);
+        }
+
+        // WebServices references
+        ContextService[] services = namingResources.findServices();
+        for (i = 0; i < services.length; i++) {
+            addService(services[i]);
+        }
+
+        // Binding a User Transaction reference
+        if (container instanceof Context) {
+            try {
+                Reference ref = new TransactionRef();
+                compCtx.bind("UserTransaction", ref);
+                ContextTransaction transaction = namingResources.getTransaction();
+                if (transaction != null) {
+                    Iterator<String> params = transaction.listProperties();
+                    while (params.hasNext()) {
+                        String paramName = params.next();
+                        String paramValue = (String) transaction.getProperty(paramName);
+                        StringRefAddr refAddr = new StringRefAddr(paramName, paramValue);
+                        ref.add(refAddr);
+                    }
+                }
+            } catch (NameAlreadyBoundException e) {
+                // Ignore because UserTransaction was obviously
+                // added via ResourceLink
+            } catch (NamingException e) {
+                logger.error(sm.getString("naming.bindFailed", e));
+            }
+        }
+
+        // Binding the resources directory context
+        if (container instanceof Context) {
+            try {
+                compCtx.bind("Resources",
+                             ((Context) container).getResources());
+            } catch (NamingException e) {
+                logger.error(sm.getString("naming.bindFailed", e));
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * List properties.
+     * @return the property names iterator
+     */
+    public Iterator<String> listProperties() {
+        return properties.keySet().iterator();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the transaction object.
+     */
+    public ContextTransaction getTransaction() {
+        return transaction;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param name The property name
+     * @return a configured property.
+     */
+    public Object getProperty(String name) {
+        return properties.get(name);
+    }

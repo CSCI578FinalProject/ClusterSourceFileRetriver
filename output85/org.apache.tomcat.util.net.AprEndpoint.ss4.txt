@@ -1,0 +1,39 @@
+4
+-----CSCI578-----
+
+
+    /*
+     * This method should only be called if there is no chance that the socket
+     * is currently being used by the Poller. It is generally a bad idea to call
+     * this directly from a known error condition.
+     */
+    private void destroySocket(long socket) {
+        connections.remove(Long.valueOf(socket));
+        if (log.isDebugEnabled()) {
+            String msg = sm.getString("endpoint.debug.destroySocket",
+                    Long.valueOf(socket));
+            if (log.isTraceEnabled()) {
+                log.trace(msg, new Exception());
+            } else {
+                log.debug(msg);
+            }
+        }
+        // Be VERY careful if you call this method directly. If it is called
+        // twice for the same socket the JVM will core. Currently this is only
+        // called from Poller.closePollset() to ensure kept alive connections
+        // are closed when calling stop() followed by start().
+        if (socket != 0) {
+            Socket.destroy(socket);
+            countDownConnection();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Destroy a pool associated with socket
+     * @param thesocket The destroy
+     */
+    public static native void destroy(long thesocket);
+-----CSCI578-----

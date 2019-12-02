@@ -1,0 +1,69 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- DirContext Methods
+
+
+    /**
+     * Retrieves selected attributes associated with a named object.
+     * See the class description regarding attribute models, attribute type
+     * names, and operational attributes.
+     *
+     * @return the requested attributes; never null
+     * @param name the name of the object from which to retrieve attributes
+     * @param attrIds the identifiers of the attributes to retrieve. null
+     * indicates that all attributes should be retrieved; an empty array
+     * indicates that none should be retrieved
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Attributes getAttributes(String name, String[] attrIds)
+        throws NamingException {
+
+        // Building attribute list
+        File file = file(name);
+
+        if (file == null)
+            throw new NamingException
+                (sm.getString("resources.notFound", name));
+
+        return new FileResourceAttributes(file);
+
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Attributes getAttributes(String name) throws NamingException {
+
+        // handle "virtual" tlds
+        if (name.startsWith("/WEB-INF/") && name.endsWith(".tld")) {
+            String tldName = name.substring(name.lastIndexOf("/") + 1);
+            if (virtualMappings.containsKey(tldName)) {
+                return new FileResourceAttributes(virtualMappings.get(tldName));
+            }
+        } else if (name.startsWith("/META-INF/tags") && name.endsWith(".tag")
+                || name.endsWith(".tagx")) {
+
+            // already loaded tag file
+            if (tagfileMappings.containsKey(name)) {
+                return new FileResourceAttributes(tagfileMappings.get(name));
+            }
+
+            // unknown tagfile, search for it in virtualClasspath
+            StringTokenizer tkn = new StringTokenizer(virtualClasspath, ";");
+            while (tkn.hasMoreTokens()) {
+                File file = new File(tkn.nextToken(), name);
+                if (file.exists()) {
+                    tagfileMappings.put(name, file);
+                    return new FileResourceAttributes(file);
+                }
+            }
+        }
+
+        return super.getAttributes(name);
+    }
+-----CSCI578-----
+-----CSCI578-----

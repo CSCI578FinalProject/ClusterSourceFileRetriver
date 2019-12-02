@@ -1,0 +1,252 @@
+17
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Store the specified Host properties and children
+     * (Listener,Alias,Realm,Valve,Cluster, Context)
+     *
+     * @param aWriter
+     *            PrintWriter to which we are storing
+     * @param indent
+     *            Number of spaces to indent this element
+     * @param aHost
+     *            Host whose properties are being stored
+     *
+     * @exception Exception
+     *                if an exception occurs while storing
+     */
+    @Override
+    public void storeChildren(PrintWriter aWriter, int indent, Object aHost,
+            StoreDescription parentDesc) throws Exception {
+        if (aHost instanceof StandardHost) {
+            StandardHost host = (StandardHost) aHost;
+            // Store nested <Listener> elements
+            LifecycleListener listeners[] = ((Lifecycle) host)
+                    .findLifecycleListeners();
+            storeElementArray(aWriter, indent, listeners);
+
+            // Store nested <Alias> elements
+            String aliases[] = host.findAliases();
+            getStoreAppender().printTagArray(aWriter, "Alias", indent + 2,
+                    aliases);
+
+            // Store nested <Realm> element
+            Realm realm = host.getRealm();
+            if (realm != null) {
+                Realm parentRealm = null;
+                if (host.getParent() != null) {
+                    parentRealm = host.getParent().getRealm();
+                }
+                if (realm != parentRealm) {
+                    storeElement(aWriter, indent, realm);
+                }
+            }
+
+            // Store nested <Valve> elements
+            Valve valves[] = host.getPipeline().getValves();
+            if(valves != null && valves.length > 0 ) {
+                List<Valve> hostValves = new ArrayList<>() ;
+                for(int i = 0 ; i < valves.length ; i++ ) {
+                    if(!( valves[i] instanceof ClusterValve))
+                        hostValves.add(valves[i]);
+                }
+                storeElementArray(aWriter, indent, hostValves.toArray());
+            }
+
+            // store all <Cluster> elements
+            Cluster cluster = host.getCluster();
+            if (cluster != null) {
+                Cluster parentCluster = null;
+                if (host.getParent() != null) {
+                    parentCluster = host.getParent().getCluster();
+                }
+                if (cluster != parentCluster) {
+                    storeElement(aWriter, indent, cluster);
+                }
+            }
+
+            // store all <Context> elements
+            Container children[] = host.findChildren();
+            storeElementArray(aWriter, indent, children);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * @return the set of alias names for this Host.  If none are defined,
+     * a zero length array is returned.
+     */
+    @Override
+    public String[] findAliases() {
+
+        synchronized (aliasesLock) {
+            return (this.aliases);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get the Cluster for this container.
+     *
+     * @return The Cluster with which this Container is associated. If there is
+     *         no associated Cluster, return the Cluster associated with our
+     *         parent Container (if any); otherwise return <code>null</code>.
+     */
+    public Cluster getCluster();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the set of Valves in the pipeline associated with this
+     * Container, including the basic Valve (if any).  If there are no
+     * such Valves, a zero-length array is returned.
+     */
+    public Valve[] getValves();
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain the Realm with which this Container is associated.
+     *
+     * @return The associated Realm; if there is no associated Realm, the
+     *         Realm associated with the parent Container (if any); otherwise
+     *         return <code>null</code>.
+     */
+    public Realm getRealm();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Cluster with which this Container is associated.  If there is
+     * no associated Cluster, return the Cluster associated with our parent
+     * Container (if any); otherwise return <code>null</code>.
+     */
+    @Override
+    public Cluster getCluster() {
+        Lock readLock = clusterLock.readLock();
+        readLock.lock();
+        try {
+            if (cluster != null)
+                return cluster;
+
+            if (parent != null)
+                return parent.getCluster();
+
+            return null;
+        } finally {
+            readLock.unlock();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return a String representation of this component.
+     */
+    @Override
+    public String toString() {
+
+        StringBuilder sb = new StringBuilder();
+        if (getParent() != null) {
+            sb.append(getParent().toString());
+            sb.append(".");
+        }
+        sb.append("StandardHost[");
+        sb.append(getName());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- JMX  --------------------
+    /**
+      * @return the MBean Names of the Valves associated with this Host
+      *
+      * @exception Exception if an MBean cannot be created or registered
+      */
+     public String[] getValveNames() throws Exception {
+         Valve [] valves = this.getPipeline().getValves();
+         String [] mbeanNames = new String[valves.length];
+         for (int i = 0; i < valves.length; i++) {
+             if (valves[i] instanceof JmxEnabled) {
+                 ObjectName oname = ((JmxEnabled) valves[i]).getObjectName();
+                 if (oname != null) {
+                     mbeanNames[i] = oname.toString();
+                 }
+             }
+         }
+
+         return mbeanNames;
+
+     }
+-----CSCI578-----
+
+
+
+    // -------------------- JMX and Registration  --------------------
+
+    @Override
+    public String getObjectNameKeyProperties() {
+        StringBuilder name = new StringBuilder("type=Valve");
+
+        Container container = getContainer();
+
+        name.append(container.getMBeanKeyProperties());
+
+        int seq = 0;
+
+        // Pipeline may not be present in unit testing
+        Pipeline p = container.getPipeline();
+        if (p != null) {
+            for (Valve valve : p.getValves()) {
+                // Skip null valves
+                if (valve == null) {
+                    continue;
+                }
+                // Only compare valves in pipeline until we find this valve
+                if (valve == this) {
+                    break;
+                }
+                if (valve.getClass() == this.getClass()) {
+                    // Duplicate valve earlier in pipeline
+                    // increment sequence number
+                    seq ++;
+                }
+            }
+        }
+
+        if (seq > 0) {
+            name.append(",seq=");
+            name.append(seq);
+        }
+
+        String className = this.getClass().getName();
+        int period = className.lastIndexOf('.');
+        if (period >= 0) {
+            className = className.substring(period + 1);
+        }
+        name.append(",name=");
+        name.append(className);
+
+        return name.toString();
+    }

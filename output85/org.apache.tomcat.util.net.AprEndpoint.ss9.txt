@@ -1,0 +1,77 @@
+6
+-----CSCI578-----
+
+
+    /**
+     * Unregister an OpenSSL SSLContext that will no longer be used to initiate
+     * TLS connections that may use the SNI extension.
+     *
+     * @param defaultSSLContext The Java representation of a pointer to the
+     *                          OpenSSL SSLContext that will no longer be used
+     */
+    public static void unregisterDefault(Long defaultSSLContext) {
+        sniCallBacks.remove(defaultSSLContext);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Close a socket.
+     * @param thesocket The socket to close
+     * @return the operation status
+     */
+    public static native int close(long thesocket);
+-----CSCI578-----
+
+
+
+    /**
+     * Deallocate APR memory pools, and close server socket.
+     */
+    @Override
+    public void unbind() throws Exception {
+        if (running) {
+            stop();
+        }
+
+        // Destroy pool if it was initialised
+        if (serverSockPool != 0) {
+            Pool.destroy(serverSockPool);
+            serverSockPool = 0;
+        }
+
+        // Close server socket if it was initialised
+        if (serverSock != 0) {
+            Socket.close(serverSock);
+            serverSock = 0;
+        }
+
+        if (sslContext != 0) {
+            Long ctx = Long.valueOf(sslContext);
+            SSLContext.unregisterDefault(ctx);
+            for (SSLHostConfig sslHostConfig : sslHostConfigs.values()) {
+                sslHostConfig.setOpenSslContext(null);
+            }
+            sslContext = 0;
+        }
+
+        // Close all APR memory pools and resources if initialised
+        if (rootPool != 0) {
+            Pool.destroy(rootPool);
+            rootPool = 0;
+        }
+
+        getHandler().recycle();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Destroy the pool. This takes similar action as apr_pool_clear() and then
+     * frees all the memory.
+     * This will actually free the memory
+     * @param pool The pool to destroy
+     */
+    public static native void destroy(long pool);
+-----CSCI578-----

@@ -1,0 +1,45 @@
+2
+-----CSCI578-----
+
+
+
+    @Override
+    public String getRealPath(String path) {
+        String validatedPath = validateResourcePath(path, true);
+        return context.getRealPath(validatedPath);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the real path for a given virtual path, if possible; otherwise
+     * return <code>null</code>.
+     *
+     * @param path The path to the desired resource
+     */
+    @Override
+    public String getRealPath(String path) {
+        // The WebResources API expects all paths to start with /. This is a
+        // special case for consistency with earlier Tomcat versions.
+        if ("".equals(path)) {
+            path = "/";
+        }
+        if (resources != null) {
+            try {
+                WebResource resource = resources.getResource(path);
+                String canonicalPath = resource.getCanonicalPath();
+                if (canonicalPath == null) {
+                    return null;
+                } else if ((resource.isDirectory() && !canonicalPath.endsWith(File.separator) ||
+                        !resource.exists()) && path.endsWith("/")) {
+                    return canonicalPath + File.separatorChar;
+                } else {
+                    return canonicalPath;
+                }
+            } catch (IllegalArgumentException iae) {
+                // ServletContext.getRealPath() does not allow this to be thrown
+            }
+        }
+        return null;
+    }

@@ -1,0 +1,118 @@
+19
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean isJspPrefixHijacked() {
+        return isJspPrefixHijacked;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /*
+     * Checks to see if this translation unit contains the given prefix.
+     *
+     * @param prefix The prefix to check
+     *
+     * @return true if this translation unit contains the given prefix, false
+     * otherwise
+     */
+    public boolean containsPrefix(String prefix) {
+        return prefixes.contains(prefix);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Handle the beginning of an XML element.
+     *
+     * @param attributes The attributes of this element
+     *
+     * @exception Exception if a processing error occurs
+     */
+    public void begin(String namespace, String name, Attributes attributes)
+        throws Exception {
+
+        Container c = (Container) digester.peek();
+        Container p = null;
+        Object obj = digester.peek(1);
+        if (obj instanceof Container) {
+            p = (Container) obj;
+        }
+
+        String className = null;
+        
+        // Check the container for the specified attribute
+        if (attributeName != null) {
+            String value = attributes.getValue(attributeName);
+            if (value != null)
+                className = value;
+        }
+
+        // Check the container's parent for the specified attribute
+        if (p != null && className == null) {
+            String configClass =
+                (String) IntrospectionUtils.getProperty(p, attributeName);
+            if (configClass != null && configClass.length() > 0) {
+                className = configClass;
+            }
+        }
+        
+        // Use the default
+        if (className == null) {
+            className = listenerClass;
+        }
+        
+        // Instantiate a new LifecyleListener implementation object
+        Class<?> clazz = Class.forName(className);
+        LifecycleListener listener =
+            (LifecycleListener) clazz.newInstance();
+
+        // Add this LifecycleListener to our associated component
+        ((Lifecycle) c).addLifecycleListener(listener);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Process the start of this element.
+     *
+     * @param attributes The attribute list for this element
+     */
+    public void begin(String namespace, String name,
+                      Attributes attributes) throws Exception {
+        Object anAttribute = null;
+        Object parameters[] = (Object[]) digester.peekParams();
+
+        if (attributeName != null) {
+            anAttribute = attributes.getValue(attributeName);
+            if(anAttribute != null) {
+                parameters[paramIndex] = param;
+            }
+            // note -- if attributeName != null and anAttribute == null, this rule
+            // will pass null as its parameter!
+        }else{
+            parameters[paramIndex] = param;
+        }
+    }
+-----CSCI578-----

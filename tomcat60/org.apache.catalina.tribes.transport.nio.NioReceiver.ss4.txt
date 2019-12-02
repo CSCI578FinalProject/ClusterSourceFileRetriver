@@ -1,0 +1,64 @@
+7
+
+    /**
+     * start cluster receiver
+     * @see org.apache.catalina.tribes.ChannelReceiver#start()
+     */
+    public void start() throws IOException {
+        super.start();
+        try {
+            setPool(new RxTaskPool(getMaxThreads(),getMinThreads(),this));
+        } catch (Exception x) {
+            log.fatal("ThreadPool can initilzed. Listener not started", x);
+            if ( x instanceof IOException ) throw (IOException)x;
+            else throw new IOException(x.getMessage());
+        }
+        try {
+            getBind();
+            bind();
+            Thread t = new Thread(this, "NioReceiver");
+            t.setDaemon(true);
+            t.start();
+        } catch (Exception x) {
+            log.fatal("Unable to start cluster receiver", x);
+            if ( x instanceof IOException ) throw (IOException)x;
+            else throw new IOException(x.getMessage());
+        }
+    }
+    
+    public void start() throws IOException {
+        if ( executor == null ) {
+            executor = new ThreadPoolExecutor(minThreads,maxThreads,60,TimeUnit.SECONDS,new LinkedBlockingQueue<Runnable>());
+        }
+    }
+    
+    /**
+     * recursive bind to find the next available port
+     * @param socket ServerSocket
+     * @param portstart int
+     * @param retries int
+     * @return int
+     * @throws IOException
+     */
+    protected int bind(ServerSocket socket, int portstart, int retries) throws IOException {
+        InetSocketAddress addr = null;
+        while ( retries > 0 ) {
+            try {
+                addr = new InetSocketAddress(getBind(), portstart);
+                socket.bind(addr);
+                setPort(portstart);
+                log.info("Receiver Server Socket bound to:"+addr);
+                return 0;
+            }catch ( IOException x) {
+                retries--;
+                if ( retries <= 0 ) {
+                    log.info("Unable to bind server socket to:"+addr+" throwing error.");
+                    throw x;
+                }
+                portstart++;
+                try {Thread.sleep(25);}catch( InterruptedException ti){Thread.currentThread().interrupted();}
+                retries = bind(socket,portstart,retries);
+            }
+        }
+        return retries;
+    }

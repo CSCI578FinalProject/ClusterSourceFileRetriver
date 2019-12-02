@@ -1,0 +1,34 @@
+5
+    
+    public static void removeAttribute( Node node, String attName ) {
+        NamedNodeMap attributes=node.getAttributes();
+        attributes.removeNamedItem(attName);                
+    }
+
+    public static void setAttribute(Node node, String attName, String val) {
+        NamedNodeMap attributes=node.getAttributes();
+        Node attNode=node.getOwnerDocument().createAttribute(attName);
+        attNode.setNodeValue( val );
+        attributes.setNamedItem(attNode);
+    }
+
+    public static void setAttributes( Object o, Node parent)
+    {
+        NamedNodeMap attrs=parent.getAttributes();
+        if( attrs==null ) return;
+
+        for (int i=0; i<attrs.getLength(); i++ ) {
+            Node n=attrs.item(i);
+            String name=n.getNodeName();
+            String value=n.getNodeValue();
+
+            if( log.isTraceEnabled() )
+                log.trace("Attribute " + parent.getNodeName() + " " +
+                            name + "=" + value);
+            try {
+                IntrospectionUtils.setProperty(o, name, value);
+            } catch( Exception ex ) {
+                ex.printStackTrace();
+            }
+        }
+    }

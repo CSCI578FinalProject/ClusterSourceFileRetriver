@@ -1,0 +1,42 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Stop the endpoint. This will cause all processing threads to stop.
+     */
+    @Override
+    public void stopInternal() {
+        releaseConnectionLatch();
+        if (!paused) {
+            pause();
+        }
+        if (running) {
+            running = false;
+            unlockAccept();
+            // Use the executor to avoid binding the main thread if something bad
+            // occurs and unbind will also wait for a bit for it to complete
+            getExecutor().execute(new Runnable() {
+                @Override
+                public void run() {
+                    // Then close all active connections if any remain
+                    try {
+                        for (Nio2Channel channel : getHandler().getOpenSockets()) {
+                            closeSocket(channel.getSocket());
+                        }
+                    } catch (Throwable t) {
+                        ExceptionUtils.handleThrowable(t);
+                    } finally {
+                        allClosed = true;
+                    }
+                }
+            });
+            nioChannels.clear();
+            processorCache.clear();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,74 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    protected void finalize() throws Throwable {
+        // This is required because of statement pooling. The poolable
+        // statements will always be strongly held by the statement pool. If the
+        // delegating statements that wrap the poolable statement are not
+        // strongly held they will be garbage collected but at that point the
+        // poolable statements need to be returned to the pool else there will
+        // be a leak of statements from the pool. Closing this statement will
+        // close all the wrapped statements and return any poolable statements
+        // to the pool.
+        close();
+        super.finalize();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Close this DelegatingStatement, and close
+     * any ResultSets that were not explicitly closed.
+     */
+    @Override
+    public void close() throws SQLException {
+        if (isClosed()) {
+            return;
+        }
+        try {
+            try {
+                if (_conn != null) {
+                    _conn.removeTrace(this);
+                    _conn = null;
+                }
+
+                // The JDBC spec requires that a statement close any open
+                // ResultSet's when it is closed.
+                // FIXME The PreparedStatement we're wrapping should handle this for us.
+                // See bug 17301 for what could happen when ResultSets are closed twice.
+                List<AbandonedTrace> resultSets = getTrace();
+                if( resultSets != null) {
+                    ResultSet[] set = resultSets.toArray(new ResultSet[resultSets.size()]);
+                    for (ResultSet element : set) {
+                        element.close();
+                    }
+                    clearTrace();
+                }
+
+                if (_stmt != null) {
+                    _stmt.close();
+                }
+            }
+            catch (SQLException e) {
+                handleException(e);
+            }
+        }
+        finally {
+            _closed = true;
+            _stmt = null;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /*
+     * Note was protected prior to JDBC 4
+     */
+    @Override
+    public boolean isClosed() throws SQLException {
+        return _closed;
+    }

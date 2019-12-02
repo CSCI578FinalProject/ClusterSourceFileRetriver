@@ -1,0 +1,43 @@
+5
+-----CSCI578-----
+
+
+
+    @Override
+    public XByteBuffer getBuffer(int minSize, boolean discard) {
+        XByteBuffer buffer = queue.poll();
+        if ( buffer != null ) size.addAndGet(-buffer.getCapacity());
+        if ( buffer == null ) buffer = new XByteBuffer(minSize,discard);
+        else if ( buffer.getCapacity() <= minSize ) buffer.expand(minSize);
+        buffer.setDiscard(discard);
+        buffer.reset();
+        return buffer;
+    }
+-----CSCI578-----
+
+
+    public void setDiscard(boolean discard) {
+        this.discard = discard;
+    }
+-----CSCI578-----
+
+
+    public void reset() {
+        bufSize = 0;
+    }
+-----CSCI578-----
+
+
+    public int getCapacity() {
+        return buf.length;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void returnBuffer(XByteBuffer buffer) {
+        if ( (size.get() + buffer.getCapacity()) <= maxSize ) {
+            size.addAndGet(buffer.getCapacity());
+            queue.offer(buffer);
+        }
+    }

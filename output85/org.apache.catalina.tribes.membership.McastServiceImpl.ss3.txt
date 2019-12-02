@@ -1,0 +1,58 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Stops the service.
+     * @param level Stop status
+     * @return <code>true</code> if the stop is complete
+     * @throws IOException if the service fails to disconnect from the sockets
+     */
+    public synchronized boolean stop(int level) throws IOException {
+        boolean valid = false;
+
+        if ( (level & Channel.MBR_RX_SEQ)==Channel.MBR_RX_SEQ ) {
+            valid = true;
+            doRunReceiver = false;
+            if ( receiver !=null ) receiver.interrupt();
+            receiver = null;
+        }
+        if ( (level & Channel.MBR_TX_SEQ)==Channel.MBR_TX_SEQ ) {
+            valid = true;
+            doRunSender = false;
+            if ( sender != null )sender.interrupt();
+            sender = null;
+        }
+
+        if (!valid) {
+            throw new IllegalArgumentException(sm.getString("mcastServiceImpl.invalid.stopLevel"));
+        }
+        startLevel = (startLevel & (~level));
+        //we're shutting down, send a shutdown message and close the socket
+        if ( startLevel == 0 ) {
+            //send a stop message
+            member.setCommand(Member.SHUTDOWN_PAYLOAD);
+            send(false);
+            //leave mcast group
+            try {socket.leaveGroup(address);}catch ( Exception ignore){}
+            try {socket.close();}catch ( Exception ignore){}
+            member.setServiceStartTime(-1);
+        }
+        return (startLevel == 0);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setServiceStartTime(long serviceStartTime) {
+        this.serviceStartTime = serviceStartTime;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public synchronized void setCommand(byte[] command) {
+        this.command = command!=null?command:new byte[0];
+        getData(true,true);
+    }

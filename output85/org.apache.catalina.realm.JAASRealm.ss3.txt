@@ -1,0 +1,65 @@
+3
+-----CSCI578-----
+
+
+     /**
+      * Ensure the given name is legal for JAAS configuration.
+      * Added for Bugzilla 30869, made protected for easy customization
+      * in case my implementation is insufficient, which I think is
+      * very likely.
+      *
+      * @param src The name to validate
+      * @return A string that's a valid JAAS realm name
+      */
+     protected String makeLegalForJAAS(final String src) {
+         String result = src;
+
+         // Default name is "other" per JAAS spec
+         if(result == null) {
+             result = "other";
+         }
+
+         // Strip leading slash if present, as Sun JAAS impl
+         // barfs on it (see Bugzilla 30869 bug report).
+         if(result.startsWith("/")) {
+             result = result.substring(1);
+         }
+
+         return result;
+     }
+-----CSCI578-----
+
+
+    @Override
+    public void setContainer(Container container) {
+        super.setContainer(container);
+
+        if( appName==null  ) {
+            String name = container.getName();
+            if (!name.startsWith("/")) {
+                name = "/" + name;
+            }
+            name = makeLegalForJAAS(name);
+
+            appName=name;
+
+            log.info("Set JAAS app name " + appName);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Container with which this Realm has been associated.
+     *
+     * @param container The associated Container
+     */
+    @Override
+    public void setContainer(Container container) {
+
+        Container oldContainer = this.container;
+        this.container = container;
+        support.firePropertyChange("container", oldContainer, this.container);
+
+    }

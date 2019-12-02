@@ -1,0 +1,117 @@
+4
+-----CSCI578-----
+
+
+
+    private int allocate(AbstractStream stream, int allocation) {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("upgradeHandler.allocate.debug", getConnectionId(),
+                    stream.getIdentifier(), Integer.toString(allocation)));
+        }
+        // Allocate to the specified stream
+        int[] value = backLogStreams.get(stream);
+        if (value[0] >= allocation) {
+            value[0] -= allocation;
+            value[1] += allocation;
+            return 0;
+        }
+
+        // There was some left over so allocate that to the children of the
+        // stream.
+        int leftToAllocate = allocation;
+        value[1] = value[0];
+        value[0] = 0;
+        leftToAllocate -= value[1];
+
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("upgradeHandler.allocate.left",
+                    getConnectionId(), stream.getIdentifier(), Integer.toString(leftToAllocate)));
+        }
+
+        // Recipients are children of the current stream that are in the
+        // backlog.
+        Set<AbstractStream> recipients = new HashSet<>();
+        recipients.addAll(stream.getChildStreams());
+        recipients.retainAll(backLogStreams.keySet());
+
+        // Loop until we run out of allocation or recipients
+        while (leftToAllocate > 0) {
+            if (recipients.size() == 0) {
+                backLogStreams.remove(stream);
+                return leftToAllocate;
+            }
+
+            int totalWeight = 0;
+            for (AbstractStream recipient : recipients) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("upgradeHandler.allocate.recipient",
+                            getConnectionId(), stream.getIdentifier(), recipient.getIdentifier(),
+                            Integer.toString(recipient.getWeight())));
+                }
+                totalWeight += recipient.getWeight();
+            }
+
+            // Use an Iterator so fully allocated children/recipients can be
+            // removed.
+            Iterator<AbstractStream> iter = recipients.iterator();
+            int allocated = 0;
+            while (iter.hasNext()) {
+                AbstractStream recipient = iter.next();
+                int share = leftToAllocate * recipient.getWeight() / totalWeight;
+                if (share == 0) {
+                    // This is to avoid rounding issues triggering an infinite
+                    // loop. It will cause a very slight over allocation but
+                    // HTTP/2 should cope with that.
+                    share = 1;
+                }
+                int remainder = allocate(recipient, share);
+                // Remove recipients that receive their full allocation so that
+                // they are excluded from the next allocation round.
+                if (remainder > 0) {
+                    iter.remove();
+                }
+                allocated += (share - remainder);
+            }
+            leftToAllocate -= allocated;
+        }
+
+        return 0;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected final String getConnectionId() {
+        return connectionId;
+    }
+-----CSCI578-----
+
+
+
+    private synchronized Set<AbstractStream> releaseBackLog(int increment) {
+        Set<AbstractStream> result = new HashSet<>();
+        if (backLogSize < increment) {
+            // Can clear the whole backlog
+            result.addAll(backLogStreams.keySet());
+            backLogStreams.clear();
+            backLogSize = 0;
+        } else {
+            int leftToAllocate = increment;
+            while (leftToAllocate > 0) {
+                leftToAllocate = allocate(this, leftToAllocate);
+            }
+            for (Entry<AbstractStream,int[]> entry : backLogStreams.entrySet()) {
+                int allocation = entry.getValue()[1];
+                if (allocation > 0) {
+                    backLogSize -= allocation;
+                    result.add(entry.getKey());
+                }
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    protected abstract int getWeight();

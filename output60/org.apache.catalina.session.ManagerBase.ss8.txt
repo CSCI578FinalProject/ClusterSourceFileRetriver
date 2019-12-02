@@ -1,0 +1,102 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Return the distributable flag for this web application.
+     */
+    public boolean getDistributable() {
+
+        return (this.distributable);
+
+    }
+-----CSCI578-----
+
+    
+    public void init() {
+        if( initialized ) return;
+        initialized=true;        
+        
+        log = LogFactory.getLog(ManagerBase.class);
+        
+        if( oname==null ) {
+            try {
+                StandardContext ctx=(StandardContext)this.getContainer();
+                domain=ctx.getEngineName();
+                distributable = ctx.getDistributable();
+                StandardHost hst=(StandardHost)ctx.getParent();
+                String path = ctx.getPath();
+                if (path.equals("")) {
+                    path = "/";
+                }   
+                oname=new ObjectName(domain + ":type=Manager,path="
+                + path + ",host=" + hst.getName());
+                Registry.getRegistry(null, null).registerComponent(this, oname, null );
+            } catch (Exception e) {
+                log.error("Error registering ",e);
+            }
+        }
+        
+        // Initialize random number generation
+        getRandomBytes(new byte[16]);
+        
+        if (!(container instanceof Context)) {
+            throw new IllegalStateException(sm.getString("managerBase.contextNull"));
+        }
+
+        // Ensure caches for timing stats are the right size by filling with
+        // nulls.
+        while (sessionCreationTiming.size() < TIMING_STATS_CACHE_SIZE) {
+            sessionCreationTiming.add(null);
+        }
+        while (sessionExpirationTiming.size() < TIMING_STATS_CACHE_SIZE) {
+            sessionExpirationTiming.add(null);
+        }
+
+        if(log.isDebugEnabled())
+            log.debug("Registering " + oname );
+               
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Container with which this Manager is associated.
+     */
+    public Container getContainer() {
+        return this.container;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the distributable flag for the sessions supported by
+     * this Manager.
+     */
+    @Deprecated
+    public boolean getDistributable() {
+        Container container = getContainer();
+        if (container instanceof Context) {
+            return ((Context) container).getDistributable();
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the default maximum inactive interval (in seconds)
+     * for Sessions created by this Manager.
+     */
+    public int getMaxInactiveInterval() {
+        Container container = getContainer();
+        if (container instanceof Context) {
+            // This method returns seconds, the Context uses minutes
+            return ((Context) container).getSessionTimeout() * 60;
+        }
+        return -1;
+    }

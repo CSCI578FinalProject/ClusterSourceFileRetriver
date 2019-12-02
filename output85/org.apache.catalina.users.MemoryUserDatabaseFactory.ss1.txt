@@ -1,0 +1,238 @@
+13
+-----CSCI578-----
+
+
+
+    /**
+     * Setting the readonly status of the user database
+     *
+     * @param readonly the new status
+     */
+    public void setReadonly(boolean readonly) {
+
+        this.readonly = readonly;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the relative or absolute pathname to the persistent storage file.
+     *
+     * @param pathname The new pathname
+     */
+    public void setPathname(String pathname) {
+
+        this.pathname = pathname;
+        this.pathnameOld = pathname + ".old";
+        this.pathnameNew = pathname + ".new";
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the relative or absolute pathname to the persistent storage file.
+     */
+    public String getPathname() {
+
+        return (this.pathname);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Initialize access to this user database.
+     *
+     * @exception Exception if any exception is thrown during opening
+     */
+    @Override
+    public void open() throws Exception {
+
+        synchronized (groups) {
+            synchronized (users) {
+
+                // Erase any previous groups and users
+                users.clear();
+                groups.clear();
+                roles.clear();
+
+                String pathName = getPathname();
+                try (InputStream is = ConfigFileLoader.getInputStream(getPathname())) {
+                    // Construct a digester to read the XML input file
+                    Digester digester = new Digester();
+                    try {
+                        digester.setFeature(
+                                "http://apache.org/xml/features/allow-java-encodings", true);
+                    } catch (Exception e) {
+                        log.warn(sm.getString("memoryUserDatabase.xmlFeatureEncoding"), e);
+                    }
+                    digester.addFactoryCreate("tomcat-users/group",
+                            new MemoryGroupCreationFactory(this), true);
+                    digester.addFactoryCreate("tomcat-users/role",
+                            new MemoryRoleCreationFactory(this), true);
+                    digester.addFactoryCreate("tomcat-users/user",
+                            new MemoryUserCreationFactory(this), true);
+
+                    // Parse the XML input to load this database
+                    digester.parse(is);
+                } catch (IOException ioe) {
+                    log.error(sm.getString("memoryUserDatabase.fileNotFound", pathName));
+                    return;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * <p>Create and return a new <code>MemoryUserDatabase</code> instance
+     * that has been configured according to the properties of the
+     * specified <code>Reference</code>.  If you instance can be created,
+     * return <code>null</code> instead.</p>
+     *
+     * @param obj The possibly null object containing location or
+     *  reference information that can be used in creating an object
+     * @param name The name of this object relative to <code>nameCtx</code>
+     * @param nameCtx The context relative to which the <code>name</code>
+     *  parameter is specified, or <code>null</code> if <code>name</code>
+     *  is relative to the default initial context
+     * @param environment The possibly null environment that is used in
+     *  creating this object
+     */
+    @Override
+    public Object getObjectInstance(Object obj, Name name, Context nameCtx,
+                                    Hashtable<?,?> environment)
+        throws Exception {
+
+        // We only know how to deal with <code>javax.naming.Reference</code>s
+        // that specify a class name of "org.apache.catalina.UserDatabase"
+        if ((obj == null) || !(obj instanceof Reference)) {
+            return (null);
+        }
+        Reference ref = (Reference) obj;
+        if (!"org.apache.catalina.UserDatabase".equals(ref.getClassName())) {
+            return (null);
+        }
+
+        // Create and configure a MemoryUserDatabase instance based on the
+        // RefAddr values associated with this Reference
+        MemoryUserDatabase database = new MemoryUserDatabase(name.toString());
+        RefAddr ra = null;
+
+        ra = ref.get("pathname");
+        if (ra != null) {
+            database.setPathname(ra.getContent().toString());
+        }
+
+        ra = ref.get("readonly");
+        if (ra != null) {
+            database.setReadonly(Boolean.parseBoolean(ra.getContent().toString()));
+        }
+
+        // Return the configured database instance
+        database.open();
+        // Don't try something we know won't work
+        if (!database.getReadonly())
+            database.save();
+        return (database);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Sets a flag indicating whether the requested feature is supported
+     * by the underlying implementation of <code>org.xml.sax.XMLReader</code>.
+     * See <a href="http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description">
+     * http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description</a>
+     * for information about the standard SAX2 feature flags.  In order to be
+     * effective, this method must be called <strong>before</strong> the
+     * <code>getParser()</code> method is called for the first time, either
+     * directly or indirectly.
+     *
+     * @param feature Name of the feature to set the status for
+     * @param value The new value for this feature
+     *
+     * @exception ParserConfigurationException if a parser configuration error
+     *  occurs
+     * @exception SAXNotRecognizedException if the property name is
+     *  not recognized
+     * @exception SAXNotSupportedException if the property name is
+     *  recognized but not supported
+     */
+    public void setFeature(String feature, boolean value)
+        throws ParserConfigurationException, SAXNotRecognizedException,
+        SAXNotSupportedException {
+
+        getFactory().setFeature(feature, value);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the readonly status of the user database
+     */
+    public boolean getReadonly() {
+
+        return (this.readonly);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * SAX parser factory method.
+     * @return the SAXParserFactory we will use, creating one if necessary.
+     * @throws ParserConfigurationException Error creating parser
+     * @throws SAXNotSupportedException Error creating parser
+     * @throws SAXNotRecognizedException Error creating parser
+     */
+    public SAXParserFactory getFactory()
+    throws SAXNotRecognizedException, SAXNotSupportedException,
+    ParserConfigurationException {
+
+        if (factory == null) {
+            factory = SAXParserFactory.newInstance();
+
+            factory.setNamespaceAware(namespaceAware);
+            // Preserve xmlns attributes
+            if (namespaceAware) {
+                factory.setFeature(
+                        "http://xml.org/sax/features/namespace-prefixes",
+                        true);
+            }
+
+            factory.setValidating(validating);
+            if (validating) {
+                // Enable DTD validation
+                factory.setFeature(
+                        "http://xml.org/sax/features/validation",
+                        true);
+                // Enable schema validation
+                factory.setFeature(
+                        "http://apache.org/xml/features/validation/schema",
+                        true);
+            }
+        }
+        return (factory);
+
+    }

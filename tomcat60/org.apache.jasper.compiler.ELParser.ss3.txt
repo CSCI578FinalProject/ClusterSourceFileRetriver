@@ -1,0 +1,35 @@
+5
+
+    /**
+     * Parse an EL expression string '${...}'. Currently only separates the EL
+     * into functions and everything else.
+     * 
+     * @return An ELNode.Nodes representing the EL expression
+     * 
+     * Note: This can not be refactored to use the standard EL implementation as
+     *       the EL API does not provide the level of access required to the
+     *       parsed expression.
+     */
+    private ELNode.Nodes parseEL() {
+
+        StringBuilder buf = new StringBuilder();
+        ELexpr = new ELNode.Nodes();
+        curToken = null;
+        while (hasNext()) {
+            curToken = nextToken();
+            if (curToken instanceof Char) {
+                if (curToken.toChar() == '}') {
+                    break;
+                }
+                buf.append(curToken.toString());
+            } else {
+                // Output whatever is in buffer
+                if (buf.length() > 0) {
+                    ELexpr.add(new ELNode.ELText(buf.toString()));
+                    buf.setLength(0);
+                }
+                if (!parseFunction()) {
+                    ELexpr.add(new ELNode.ELText(curToken.toString()));
+                }
+            }
+        }

@@ -1,0 +1,36 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    protected void destroyInternal() throws LifecycleException {
+        mapperListener.destroy();
+
+        // Destroy our defined Connectors
+        synchronized (connectorsLock) {
+            for (Connector connector : connectors) {
+                try {
+                    connector.destroy();
+                } catch (Exception e) {
+                    log.error(sm.getString(
+                            "standardService.connector.destroyFailed", connector), e);
+                }
+            }
+        }
+
+        // Destroy any Executors
+        for (Executor executor : findExecutors()) {
+            executor.destroy();
+        }
+
+        if (engine != null) {
+            engine.destroy();
+        }
+
+        super.destroyInternal();
+    }
+-----CSCI578-----

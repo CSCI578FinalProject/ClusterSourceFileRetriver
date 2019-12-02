@@ -1,0 +1,78 @@
+2
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Initialize this servlet.
+     */
+    public void init() throws ServletException {
+
+        // Retrieve the MBean server
+        mBeanServer = Registry.getRegistry(null, null).getMBeanServer();
+
+        // Set our properties from the initialization parameters
+        String value = null;
+        try {
+            value = getServletConfig().getInitParameter("debug");
+            debug = Integer.parseInt(value);
+        } catch (Throwable t) {
+            ;
+        }
+
+        try {
+
+            // Query protocol handlers
+            String onStr = "*:type=ProtocolHandler,*";
+            ObjectName objectName = new ObjectName(onStr);
+            Set set = mBeanServer.queryMBeans(objectName, null);
+            Iterator iterator = set.iterator();
+            while (iterator.hasNext()) {
+                ObjectInstance oi = (ObjectInstance) iterator.next();
+                protocolHandlers.addElement(oi.getObjectName());
+            }
+
+            // Query Thread Pools
+            onStr = "*:type=ThreadPool,*";
+            objectName = new ObjectName(onStr);
+            set = mBeanServer.queryMBeans(objectName, null);
+            iterator = set.iterator();
+            while (iterator.hasNext()) {
+                ObjectInstance oi = (ObjectInstance) iterator.next();
+                threadPools.addElement(oi.getObjectName());
+            }
+
+            // Query Global Request Processors
+            onStr = "*:type=GlobalRequestProcessor,*";
+            objectName = new ObjectName(onStr);
+            set = mBeanServer.queryMBeans(objectName, null);
+            iterator = set.iterator();
+            while (iterator.hasNext()) {
+                ObjectInstance oi = (ObjectInstance) iterator.next();
+                globalRequestProcessors.addElement(oi.getObjectName());
+            }
+
+            // Query Request Processors
+            onStr = "*:type=RequestProcessor,*";
+            objectName = new ObjectName(onStr);
+            set = mBeanServer.queryMBeans(objectName, null);
+            iterator = set.iterator();
+            while (iterator.hasNext()) {
+                ObjectInstance oi = (ObjectInstance) iterator.next();
+                requestProcessors.addElement(oi.getObjectName());
+            }
+
+            // Register with MBean server
+            onStr = "JMImplementation:type=MBeanServerDelegate";
+            objectName = new ObjectName(onStr);
+            mBeanServer.addNotificationListener(objectName, this, null, null);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+-----CSCI578-----

@@ -1,0 +1,74 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Skips a <code>boundary</code> token, and checks whether more
+     * <code>encapsulations</code> are contained in the stream.
+     *
+     * @return <code>true</code> if there are more encapsulations in
+     *         this stream; <code>false</code> otherwise.
+     *
+     * @exception MalformedStreamException if the stream ends unexpecetedly or
+     *                                     fails to follow required syntax.
+     */
+    public boolean readBoundary()
+        throws MalformedStreamException
+    {
+        byte[] marker = new byte[2];
+        boolean nextChunk = false;
+
+        head += boundaryLength;
+        try
+        {
+            marker[0] = readByte();
+            marker[1] = readByte();
+            if (arrayequals(marker, STREAM_TERMINATOR, 2))
+            {
+                nextChunk = false;
+            }
+            else if (arrayequals(marker, FIELD_SEPARATOR, 2))
+            {
+                nextChunk = true;
+            }
+            else
+            {
+                throw new MalformedStreamException(
+                        "Unexpected characters follow a boundary");
+            }
+        }
+        catch (IOException e)
+        {
+            throw new MalformedStreamException("Stream ended unexpectedly");
+        }
+        return nextChunk;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Compares <code>count</code> first bytes in the arrays
+     * <code>a</code> and <code>b</code>.
+     *
+     * @param a     The first array to compare.
+     * @param b     The second array to compare.
+     * @param count How many bytes should be compared.
+     *
+     * @return <code>true</code> if <code>count</code> first bytes in arrays
+     *         <code>a</code> and <code>b</code> are equal.
+     */
+    public static boolean arrayequals(byte[] a,
+                                      byte[] b,
+                                      int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            if (a[i] != b[i])
+            {
+                return false;
+            }
+        }
+        return true;
+    }

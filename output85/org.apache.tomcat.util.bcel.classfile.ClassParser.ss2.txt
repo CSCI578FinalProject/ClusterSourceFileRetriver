@@ -1,0 +1,112 @@
+13
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Read constant pool entries.
+     * @throws  IOException
+     * @throws  ClassFormatException
+     */
+    private void readConstantPool() throws IOException, ClassFormatException {
+        constant_pool = new ConstantPool(dataInputStream);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    static ConstantUtf8 getInstance(DataInput input) throws IOException {
+        return new ConstantUtf8(input.readUTF());
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Read one constant from the given input, the type depends on a tag byte.
+     *
+     * @param input Input stream
+     * @return Constant object
+     */
+    static Constant readConstant(DataInput input) throws IOException,
+            ClassFormatException {
+        byte b = input.readByte(); // Read tag byte
+        int skipSize;
+        switch (b) {
+            case Const.CONSTANT_Class:
+                return new ConstantClass(input);
+            case Const.CONSTANT_Integer:
+                return new ConstantInteger(input);
+            case Const.CONSTANT_Float:
+                return new ConstantFloat(input);
+            case Const.CONSTANT_Long:
+                return new ConstantLong(input);
+            case Const.CONSTANT_Double:
+                return new ConstantDouble(input);
+            case Const.CONSTANT_Utf8:
+                return ConstantUtf8.getInstance(input);
+            case Const.CONSTANT_String:
+            case Const.CONSTANT_MethodType:
+                skipSize = 2; // unsigned short
+                break;
+            case Const.CONSTANT_MethodHandle:
+                skipSize = 3; // unsigned byte, unsigned short
+                break;
+            case Const.CONSTANT_Fieldref:
+            case Const.CONSTANT_Methodref:
+            case Const.CONSTANT_InterfaceMethodref:
+            case Const.CONSTANT_NameAndType:
+            case Const.CONSTANT_InvokeDynamic:
+                skipSize = 4; // unsigned short, unsigned short
+                break;
+            default:
+                throw new ClassFormatException("Invalid byte tag in constant pool: " + b);
+        }
+        Utility.skipFully(input, skipSize);
+        return null;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Read information about the attributes of the class.
+     * @throws  IOException
+     * @throws  ClassFormatException
+     */
+    private void readAttributes() throws IOException, ClassFormatException {
+        int attributes_count = dataInputStream.readUnsignedShort();
+        for (int i = 0; i < attributes_count; i++) {
+            ConstantUtf8 c;
+            String name;
+            int name_index;
+            int length;
+            // Get class name from constant pool via `name_index' indirection
+            name_index = dataInputStream.readUnsignedShort();
+            c = (ConstantUtf8) constant_pool.getConstant(name_index,
+                    Const.CONSTANT_Utf8);
+            name = c.getBytes();
+            // Length of data in bytes
+            length = dataInputStream.readInt();
+
+            if (name.equals("RuntimeVisibleAnnotations")) {
+                if (runtimeVisibleAnnotations != null) {
+                    throw new ClassFormatException(
+                            "RuntimeVisibleAnnotations attribute is not allowed more than once in a class file");
+                }
+                runtimeVisibleAnnotations = new Annotations(dataInputStream, constant_pool);
+            } else {
+                // All other attributes are skipped
+                Utility.skipFully(dataInputStream, length);
+            }
+        }
+    }

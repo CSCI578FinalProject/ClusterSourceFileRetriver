@@ -1,0 +1,97 @@
+5
+-----CSCI578-----
+
+
+    public String getHostName() {
+        return hostName;
+    }
+-----CSCI578-----
+
+
+    public String getContextName() {
+        return contextName;
+    }
+-----CSCI578-----
+
+
+    public String getSessionId() {
+        return sessionId;
+    }
+-----CSCI578-----
+
+
+
+    private void expire(SingleSignOnSessionKey key) {
+        if (engine == null) {
+            containerLog.warn(sm.getString("singleSignOn.sessionExpire.engineNull", key));
+            return;
+        }
+        Container host = engine.findChild(key.getHostName());
+        if (host == null) {
+            containerLog.warn(sm.getString("singleSignOn.sessionExpire.hostNotFound", key));
+            return;
+        }
+        Context context = (Context) host.findChild(key.getContextName());
+        if (context == null) {
+            containerLog.warn(sm.getString("singleSignOn.sessionExpire.contextNotFound", key));
+            return;
+        }
+        Manager manager = context.getManager();
+        if (manager == null) {
+            containerLog.warn(sm.getString("singleSignOn.sessionExpire.managerNotFound", key));
+            return;
+        }
+        Session session = null;
+        try {
+            session = manager.findSession(key.getSessionId());
+        } catch (IOException e) {
+            containerLog.warn(sm.getString("singleSignOn.sessionExpire.managerError", key), e);
+            return;
+        }
+        if (session == null) {
+            containerLog.warn(sm.getString("singleSignOn.sessionExpire.sessionNotFound", key));
+            return;
+        }
+        session.expire();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Deregister the specified single sign on identifier, and invalidate
+     * any associated sessions.
+     *
+     * @param ssoId Single sign on identifier to deregister
+     */
+    protected void deregister(String ssoId) {
+
+        // Look up and remove the corresponding SingleSignOnEntry
+        SingleSignOnEntry sso = cache.remove(ssoId);
+
+        if (sso == null) {
+            if (containerLog.isDebugEnabled()) {
+                containerLog.debug(sm.getString("singleSignOn.debug.deregisterFail", ssoId));
+            }
+            return;
+        }
+
+        // Expire any associated sessions
+        Set<SingleSignOnSessionKey> ssoKeys = sso.findSessions();
+        if (ssoKeys.size() == 0) {
+            if (containerLog.isDebugEnabled()) {
+                containerLog.debug(sm.getString("singleSignOn.debug.deregisterNone", ssoId));
+            }
+        }
+        for (SingleSignOnSessionKey ssoKey : ssoKeys) {
+            if (containerLog.isDebugEnabled()) {
+                containerLog.debug(sm.getString("singleSignOn.debug.deregister", ssoKey, ssoId));
+            }
+            // Invalidate this session
+            expire(ssoKey);
+        }
+
+        // NOTE:  Clients may still possess the old single sign on cookie,
+        // but it will be removed on the next request since it is no longer
+        // in the cache
+    }

@@ -1,0 +1,39 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    protected Processor createUpgradeProcessor(
+            SocketWrapperBase<?> socket, ByteBuffer leftoverInput,
+            UpgradeToken upgradeToken) {
+        HttpUpgradeHandler httpUpgradeHandler = upgradeToken.getHttpUpgradeHandler();
+        if (httpUpgradeHandler instanceof InternalHttpUpgradeHandler) {
+            return new UpgradeProcessorInternal(socket, leftoverInput, upgradeToken);
+        } else {
+            return new UpgradeProcessorExternal(socket, leftoverInput, upgradeToken);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Return input that has been read to the input buffer for re-reading by the
+     * correct component. There are times when a component may read more data
+     * than it needs before it passes control to another component. One example
+     * of this is during HTTP upgrade. If an (arguably misbehaving client) sends
+     * data associated with the upgraded protocol before the HTTP upgrade
+     * completes, the HTTP handler may read it. This method provides a way for
+     * that data to be returned so it can be processed by the correct component.
+     *
+     * @param returnedInput The input to return to the input buffer.
+     */
+    public void unRead(ByteBuffer returnedInput) {
+        if (returnedInput != null) {
+            socketBufferHandler.configureReadBufferForWrite();
+            socketBufferHandler.getReadBuffer().put(returnedInput);
+        }
+    }

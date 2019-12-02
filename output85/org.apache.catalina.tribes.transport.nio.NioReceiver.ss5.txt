@@ -1,0 +1,210 @@
+16
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public synchronized void setLastAccess(long lastAccess) {
+        this.lastAccess = lastAccess;
+    }
+-----CSCI578-----
+
+
+    public void events() {
+        if (events.isEmpty()) {
+            return;
+        }
+        Runnable r = null;
+        while ((r = events.pollFirst()) != null ) {
+            try {
+                if (log.isTraceEnabled()) {
+                    log.trace("Processing event in selector:" + r);
+                }
+                r.run();
+            } catch (Exception x) {
+                log.error("", x);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get data from channel and store in byte array
+     * send it to cluster
+     * @throws IOException IO error
+     */
+    protected void listen() throws Exception {
+        if (doListen()) {
+            log.warn(sm.getString("nioReceiver.alreadyStarted"));
+            return;
+        }
+
+        setListen(true);
+
+        // Avoid NPEs if selector is set to null on stop.
+        Selector selector = this.selector.get();
+
+        if (selector!=null && datagramChannel!=null) {
+            ObjectReader oreader = new ObjectReader(MAX_UDP_SIZE); //max size for a datagram packet
+            registerChannel(selector,datagramChannel,SelectionKey.OP_READ,oreader);
+        }
+
+        while (doListen() && selector != null) {
+            // this may block for a long time, upon return the
+            // selected set contains keys of the ready channels
+            try {
+                events();
+                socketTimeouts();
+                int n = selector.select(getSelectorTimeout());
+                if (n == 0) {
+                    //there is a good chance that we got here
+                    //because the TcpReplicationThread called
+                    //selector wakeup().
+                    //if that happens, we must ensure that that
+                    //thread has enough time to call interestOps
+//                    synchronized (interestOpsMutex) {
+                        //if we got the lock, means there are no
+                        //keys trying to register for the
+                        //interestOps method
+//                    }
+                    continue; // nothing to do
+                }
+                // get an iterator over the set of selected keys
+                Iterator<SelectionKey> it = selector.selectedKeys().iterator();
+                // look at each key in the selected set
+                while (it!=null && it.hasNext()) {
+                    SelectionKey key = it.next();
+                    // Is a new connection coming in?
+                    if (key.isAcceptable()) {
+                        ServerSocketChannel server = (ServerSocketChannel) key.channel();
+                        SocketChannel channel = server.accept();
+                        channel.socket().setReceiveBufferSize(getTxBufSize());
+                        channel.socket().setSendBufferSize(getTxBufSize());
+                        channel.socket().setTcpNoDelay(getTcpNoDelay());
+                        channel.socket().setKeepAlive(getSoKeepAlive());
+                        channel.socket().setOOBInline(getOoBInline());
+                        channel.socket().setReuseAddress(getSoReuseAddress());
+                        channel.socket().setSoLinger(getSoLingerOn(),getSoLingerTime());
+                        channel.socket().setSoTimeout(getTimeout());
+                        Object attach = new ObjectReader(channel);
+                        registerChannel(selector,
+                                        channel,
+                                        SelectionKey.OP_READ,
+                                        attach);
+                    }
+                    // is there data to read on this channel?
+                    if (key.isReadable()) {
+                        readDataFromSocket(key);
+                    } else {
+                        key.interestOps(key.interestOps() & (~SelectionKey.OP_WRITE));
+                    }
+
+                    // remove key from selected set, it's been handled
+                    it.remove();
+                }
+            } catch (java.nio.channels.ClosedSelectorException cse) {
+                // ignore is normal at shutdown or stop listen socket
+            } catch (java.nio.channels.CancelledKeyException nx) {
+                log.warn(sm.getString("nioReceiver.clientDisconnect"));
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                log.error(sm.getString("nioReceiver.requestError"), t);
+            }
+
+        }
+        serverChannel.close();
+        if (datagramChannel!=null) {
+            try {
+                datagramChannel.close();
+            }catch (Exception iox) {
+                if (log.isDebugEnabled()) log.debug("Unable to close datagram channel.",iox);
+            }
+            datagramChannel=null;
+        }
+        closeSelector();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ----------------------------------------------------------
+
+    /**
+     * Register the given channel with the given selector for
+     * the given operations of interest
+     * @param selector The selector to use
+     * @param channel The channel
+     * @param ops The operations to register
+     * @param attach Attachment object
+     * @throws Exception IO error with channel
+     */
+    protected void registerChannel(Selector selector,
+                                   SelectableChannel channel,
+                                   int ops,
+                                   Object attach) throws Exception {
+        if (channel == null)return; // could happen
+        // set the new channel non-blocking
+        channel.configureBlocking(false);
+        // register it with the selector
+        channel.register(selector, ops, attach);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Checks whether the supplied Throwable is one that needs to be
+     * rethrown and swallows all others.
+     * @param t the Throwable to check
+     */
+    public static void handleThrowable(Throwable t) {
+        if (t instanceof ThreadDeath) {
+            throw (ThreadDeath) t;
+        }
+        if (t instanceof StackOverflowError) {
+            // Swallow silently - it should be recoverable
+            return;
+        }
+        if (t instanceof VirtualMachineError) {
+            throw (VirtualMachineError) t;
+        }
+        // All other instances of Throwable will be silently swallowed
+    }
+-----CSCI578-----
+
+
+    private void closeSelector() throws IOException {
+        Selector selector = this.selector.getAndSet(null);
+        if (selector == null) return;
+        try {
+            Iterator<SelectionKey> it = selector.keys().iterator();
+            // look at each key in the selected set
+            while (it.hasNext()) {
+                SelectionKey key = it.next();
+                key.channel().close();
+                key.attach(null);
+                key.cancel();
+            }
+        } catch (IOException ignore){
+            if (log.isWarnEnabled()) {
+                log.warn(sm.getString("nioReceiver.cleanup.fail"), ignore);
+            }
+        } catch (ClosedSelectorException ignore){
+            // Ignore
+        }
+        try {
+            selector.selectNow();
+        } catch (Throwable t){
+            ExceptionUtils.handleThrowable(t);
+            // Ignore everything else
+        }
+        selector.close();
+    }

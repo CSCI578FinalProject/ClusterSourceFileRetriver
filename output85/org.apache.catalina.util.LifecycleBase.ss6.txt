@@ -1,0 +1,28 @@
+2
+-----CSCI578-----
+
+
+
+    protected abstract void initInternal() throws LifecycleException;
+-----CSCI578-----
+
+
+
+    @Override
+    public final synchronized void init() throws LifecycleException {
+        if (!state.equals(LifecycleState.NEW)) {
+            invalidTransition(Lifecycle.BEFORE_INIT_EVENT);
+        }
+        setStateInternal(LifecycleState.INITIALIZING, null, false);
+
+        try {
+            initInternal();
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            setStateInternal(LifecycleState.FAILED, null, false);
+            throw new LifecycleException(
+                    sm.getString("lifecycleBase.initFail",toString()), t);
+        }
+
+        setStateInternal(LifecycleState.INITIALIZED, null, false);
+    }

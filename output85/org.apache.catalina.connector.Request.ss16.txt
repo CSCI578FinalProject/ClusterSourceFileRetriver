@@ -1,0 +1,256 @@
+13
+-----CSCI578-----
+
+
+    /**
+     * Release all object references, and initialize instance variables, in
+     * preparation for reuse of this object.
+     */
+    public void recycle() {
+
+        internalDispatcherType = null;
+        requestDispatcherPath = null;
+
+        authType = null;
+        inputBuffer.recycle();
+        usingInputStream = false;
+        usingReader = false;
+        userPrincipal = null;
+        subject = null;
+        parametersParsed = false;
+        if (parts != null) {
+            for (Part part: parts) {
+                try {
+                    part.delete();
+                } catch (IOException ignored) {
+                    // ApplicationPart.delete() never throws an IOEx
+                }
+            }
+            parts = null;
+        }
+        partsParseException = null;
+        locales.clear();
+        localesParsed = false;
+        secure = false;
+        remoteAddr = null;
+        remoteHost = null;
+        remotePort = -1;
+        localPort = -1;
+        localAddr = null;
+        localName = null;
+
+        attributes.clear();
+        sslAttributesParsed = false;
+        notes.clear();
+
+        recycleSessionInfo();
+        recycleCookieInfo(false);
+
+        if (Globals.IS_SECURITY_ENABLED || Connector.RECYCLE_FACADES) {
+            parameterMap = new ParameterMap<>();
+        } else {
+            parameterMap.setLocked(false);
+            parameterMap.clear();
+        }
+
+        mappingData.recycle();
+
+        applicationRequest = null;
+        if (Globals.IS_SECURITY_ENABLED || Connector.RECYCLE_FACADES) {
+            if (facade != null) {
+                facade.clear();
+                facade = null;
+            }
+            if (inputStream != null) {
+                inputStream.clear();
+                inputStream = null;
+            }
+            if (reader != null) {
+                reader.clear();
+                reader = null;
+            }
+        }
+
+        asyncSupported = null;
+        if (asyncContext!=null) {
+            asyncContext.recycle();
+        }
+        asyncContext = null;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Recycle the output buffer.
+     */
+    public void recycle() {
+
+        state = INITIAL_STATE;
+
+        // If usage of mark made the buffer too big, reallocate it
+        if (cb.getChars().length > size) {
+            cb = new CharChunk(size);
+            cb.setLimit(size);
+            cb.setOptimizedWrite(false);
+            cb.setCharInputChannel(this);
+            cb.setCharOutputChannel(this);
+        } else {
+            cb.recycle();
+        }
+        markPos = -1;
+        bb.recycle();
+        closed = false;
+
+        if (conv != null) {
+            conv.recycle();
+            encoders.get(conv.getCharset()).push(conv);
+            conv = null;
+        }
+
+        enc = null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Clear facade.
+     */
+    void clear() {
+        ib = null;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+
+    /**
+     * Remove all mappings from this map.
+     *
+     * @exception IllegalStateException if this map is currently locked
+     */
+    @Override
+    public void clear() {
+
+        if (locked)
+            throw new IllegalStateException
+                (sm.getString("parameterMap.locked"));
+        super.clear();
+
+    }
+-----CSCI578-----
+
+
+    public void recycle() {
+        if (log.isDebugEnabled()) {
+            logDebug("recycle    ");
+        }
+        context = null;
+        dispatch = null;
+        event = null;
+        hasOriginalRequestAndResponse = true;
+        instanceManager = null;
+        listeners.clear();
+        request = null;
+        clearServletRequestResponse();
+        timeout = -1;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Package Methods
+
+
+    /**
+     * Clear facade.
+     */
+    void clear() {
+        ib = null;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Clear facade.
+     */
+    public void clear() {
+        request = null;
+    }
+-----CSCI578-----
+
+
+
+    protected void recycleSessionInfo() {
+        if (session != null) {
+            try {
+                session.endAccess();
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                log.warn(sm.getString("coyoteRequest.sessionEndAccessFail"), t);
+            }
+        }
+        session = null;
+        requestedSessionCookie = false;
+        requestedSessionId = null;
+        requestedSessionURL = false;
+        requestedSessionSSL = false;
+    }
+-----CSCI578-----
+
+
+
+    protected void recycleCookieInfo(boolean recycleCoyote) {
+        cookiesParsed = false;
+        cookiesConverted = false;
+        cookies = null;
+        if (recycleCoyote) {
+            getCoyoteRequest().getCookies().recycle();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Reset the decoder state.
+     */
+    public void recycle() {
+        decoder.reset();
+        leftovers.position(0);
+    }
+-----CSCI578-----
+
+
+    /**
+     * When the buffer is empty, read the data from the input channel.
+     * @param in The input channel
+     */
+    public void setCharInputChannel(CharInputChannel in) {
+        this.in = in;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- Cookies --------------------
+
+    public ServerCookies getCookies() {
+        return serverCookies;
+    }
+-----CSCI578-----
+
+
+    private void clearServletRequestResponse() {
+        servletRequest = null;
+        servletResponse = null;
+    }

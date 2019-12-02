@@ -1,0 +1,40 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Sets a new limit. If the limit is decreased there may be a period where
+     * more shares of the latch are acquired than the limit. In this case no
+     * more shares of the latch will be issued until sufficient shares have been
+     * returned to reduce the number of acquired shares of the latch to below
+     * the new limit. If the limit is increased, threads currently in the queue
+     * may not be issued one of the newly available shares until the next
+     * request is made for a latch.
+     *
+     * @param limit The new limit
+     */
+    public void setLimit(long limit) {
+        this.limit = limit;
+    }
+-----CSCI578-----
+
+    public void setMaxConnections(int maxCon) {
+        this.maxConnections = maxCon;
+        LimitLatch latch = this.connectionLimitLatch;
+        if (latch != null) {
+            // Update the latch that enforces this
+            if (maxCon == -1) {
+                releaseConnectionLatch();
+            } else {
+                latch.setLimit(maxCon);
+            }
+        } else if (maxCon > 0) {
+            initializeConnectionLatch();
+        }
+    }
+-----CSCI578-----
+
+    public void setMaxConnections(int maxConnections) {
+        endpoint.setMaxConnections(maxConnections);
+    }

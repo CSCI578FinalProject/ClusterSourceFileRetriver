@@ -1,0 +1,160 @@
+7
+-----CSCI578-----
+
+
+
+    /**
+     * Create a <code>SAXParser</code> based on the underlying
+     * <code>Xerces</code> version.
+     * @param properties parser specific properties/features
+     * @return an XML Schema/DTD enabled <code>SAXParser</code>
+     */
+    public static SAXParser newSAXParser(Properties properties) 
+            throws ParserConfigurationException, 
+                   SAXException,
+                   SAXNotSupportedException {
+
+        SAXParserFactory factory =  
+                        (SAXParserFactory)properties.get("SAXParserFactory");
+
+        if (versionNumber == null){
+            versionNumber = getXercesVersion();
+            version = new Float( versionNumber ).floatValue();
+        }
+
+        // Note: 2.2 is completely broken (with XML Schema). 
+        if (version > 2.1) {
+
+            configureXerces(factory);
+            return factory.newSAXParser();
+        } else {
+            SAXParser parser = factory.newSAXParser();
+            configureOldXerces(parser,properties);
+            return parser;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Create a new <code>SAXParser</code>
+     * @param properties (logical) properties to be set on parser
+     * @return a <code>SAXParser</code> configured based on the underlying
+     * parser implementation.
+     */
+    public static SAXParser newSAXParser(Properties properties)
+            throws ParserConfigurationException, 
+                   SAXException,
+                   SAXNotRecognizedException, 
+                   SAXNotSupportedException {
+
+        if (isXercesUsed){
+            return XercesParser.newSAXParser(properties);
+        } else {
+            return GenericParser.newSAXParser(properties);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Configure schema validation as recommended by the JAXP 1.2 spec.
+     * The <code>properties</code> object may contains information about
+     * the schema local and language. 
+     * @param properties parser optional info
+     */
+    private static void configureOldXerces(SAXParser parser, 
+                                           Properties properties) 
+            throws ParserConfigurationException, 
+                   SAXNotSupportedException {
+
+        String schemaLocation = (String)properties.get("schemaLocation");
+        String schemaLanguage = (String)properties.get("schemaLanguage");
+
+        try{
+            if (schemaLocation != null) {
+                parser.setProperty(JAXP_SCHEMA_LANGUAGE, schemaLanguage);
+                parser.setProperty(JAXP_SCHEMA_SOURCE, schemaLocation);
+            }
+        } catch (SAXNotRecognizedException e){
+            log.info(parser.getClass().getName() + ": " 
+                                        + e.getMessage() + " not supported."); 
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create a <code>SAXParser</code> configured to support XML Scheman and DTD
+     * @param properties parser specific properties/features
+     * @return an XML Schema/DTD enabled <code>SAXParser</code>
+     */
+    public static SAXParser newSAXParser(Properties properties)
+            throws ParserConfigurationException, 
+                   SAXException,
+                   SAXNotRecognizedException{ 
+
+        SAXParserFactory factory = 
+                        (SAXParserFactory)properties.get("SAXParserFactory");
+        SAXParser parser = factory.newSAXParser();
+        String schemaLocation = (String)properties.get("schemaLocation");
+        String schemaLanguage = (String)properties.get("schemaLanguage");
+
+        try{
+            if (schemaLocation != null) {
+                parser.setProperty(JAXP_SCHEMA_LANGUAGE, schemaLanguage);
+                parser.setProperty(JAXP_SCHEMA_SOURCE, schemaLocation);
+            }
+        } catch (SAXNotRecognizedException e){
+            log.info(parser.getClass().getName() + ": "  
+                                        + e.getMessage() + " not supported."); 
+        }
+        return parser;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Configure schema validation as recommended by the Xerces spec. 
+     * Both DTD and Schema validation will be enabled simultaneously.
+     * @param factory SAXParserFactory to be configured
+     */
+    private static void configureXerces(SAXParserFactory factory)
+            throws ParserConfigurationException, 
+                   SAXNotRecognizedException, 
+                   SAXNotSupportedException {
+
+        factory.setFeature(XERCES_DYNAMIC, true);
+        factory.setFeature(XERCES_SCHEMA, true);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the current Xerces version.
+     * @return the current Xerces version.
+     */
+    private static String getXercesVersion() {
+        // If for some reason we can't get the version, set it to 1.0.
+        String versionNumber = "1.0";
+        try{
+            // Use reflection to avoid a build dependency with Xerces.
+            Class versionClass = 
+                            Class.forName("org.apache.xerces.impl.Version");
+            // Will return Xerces-J 2.x.0
+            Method method = 
+                versionClass.getMethod("getVersion", (Class[]) null); 
+            String version = (String)method.invoke(null, (Object[]) null);
+            versionNumber = version.substring( "Xerces-J".length() , 
+                                               version.lastIndexOf(".") ); 
+        } catch (Exception ex){
+            // Do nothing.
+        }
+        return versionNumber;
+    }

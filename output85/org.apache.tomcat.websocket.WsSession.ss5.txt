@@ -1,0 +1,122 @@
+15
+-----CSCI578-----
+
+
+
+    protected void setSession(WsSession wsSession) {
+        this.wsSession = wsSession;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public int getDefaultMaxTextMessageBufferSize() {
+        return maxTextMessageBufferSize;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public int getDefaultMaxBinaryMessageBufferSize() {
+        return maxBinaryMessageBufferSize;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public long getDefaultMaxSessionIdleTimeout() {
+        return defaultMaxSessionIdleTimeout;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Object newInstance(Class<?> clazz)
+            throws IllegalAccessException, InvocationTargetException, NamingException,
+                InstantiationException;
+
+
+    public Object newInstance(String className)
+        throws IllegalAccessException, InvocationTargetException, NamingException,
+            InstantiationException, ClassNotFoundException;
+
+
+    public Object newInstance(String fqcn, ClassLoader classLoader)
+        throws IllegalAccessException, InvocationTargetException, NamingException,
+            InstantiationException, ClassNotFoundException;
+
+
+    public void newInstance(Object o)
+        throws IllegalAccessException, InvocationTargetException, NamingException;
+-----CSCI578-----
+
+
+
+    public void setSendTimeout(long timeout) {
+        this.sendTimeout = timeout;
+    }
+-----CSCI578-----
+
+
+    InstanceManager getInstanceManager() {
+        return instanceManager;
+    }
+-----CSCI578-----
+
+    public static final InstanceManager get(ClassLoader classLoader) {
+        return bindings.get(classLoader);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets the next available tag handler from this tag handler pool,
+     * instantiating one if this tag handler pool is empty.
+     *
+     * @param handlerClass
+     *            Tag handler class
+     * @return Reused or newly instantiated tag handler
+     * @throws JspException
+     *             if a tag handler cannot be instantiated
+     */
+    public Tag get(Class<? extends Tag> handlerClass) throws JspException {
+        Tag handler;
+        synchronized (this) {
+            if (current >= 0) {
+                handler = handlers[current--];
+                return handler;
+            }
+        }
+
+        // Out of sync block - there is no need for other threads to
+        // wait for us to construct a tag for this thread.
+        try {
+            if (Constants.USE_INSTANCE_MANAGER_FOR_TAGS) {
+                return (Tag) instanceManager.newInstance(
+                        handlerClass.getName(), handlerClass.getClassLoader());
+            } else {
+                Tag instance = handlerClass.newInstance();
+                instanceManager.newInstance(instance);
+                return instance;
+            }
+        } catch (Exception e) {
+            Throwable t = ExceptionUtils.unwrapInvocationTargetException(e);
+            ExceptionUtils.handleThrowable(t);
+            throw new JspException(e.getMessage(), t);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setSendTimeout(long timeout) {
+        base.setSendTimeout(timeout);
+    }

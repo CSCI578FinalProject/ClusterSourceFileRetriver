@@ -1,0 +1,718 @@
+35
+-----CSCI578-----
+
+
+
+    /**
+     * Copy the specified file or directory to the destination.
+     *
+     * @param src File object representing the source
+     * @param dest File object representing the destination
+     */
+    public static boolean copy(File src, File dest) {
+        
+        boolean result = true;
+        
+        String files[] = null;
+        if (src.isDirectory()) {
+            files = src.list();
+            result = dest.mkdir();
+        } else {
+            files = new String[1];
+            files[0] = "";
+        }
+        if (files == null) {
+            files = new String[0];
+        }
+        for (int i = 0; (i < files.length) && result; i++) {
+            File fileSrc = new File(src, files[i]);
+            File fileDest = new File(dest, files[i]);
+            if (fileSrc.isDirectory()) {
+                result = copy(fileSrc, fileDest);
+            } else {
+                FileChannel ic = null;
+                FileChannel oc = null;
+                try {
+                    ic = (new FileInputStream(fileSrc)).getChannel();
+                    oc = (new FileOutputStream(fileDest)).getChannel();
+                    ic.transferTo(0, ic.size(), oc);
+                } catch (IOException e) {
+                    log.error(sm.getString
+                            ("expandWar.copy", fileSrc, fileDest), e);
+                    result = false;
+                } finally {
+                    if (ic != null) {
+                        try {
+                            ic.close();
+                        } catch (IOException e) {
+                        }
+                    }
+                    if (oc != null) {
+                        try {
+                            oc.close();
+                        } catch (IOException e) {
+                        }
+                    }
+                }
+            }
+        }
+        return result;
+        
+    }
+-----CSCI578-----
+
+
+
+    protected void antiLocking() throws IOException {
+
+        if ((context instanceof StandardContext)
+            && ((StandardContext) context).getAntiResourceLocking()) {
+
+            Host host = (Host) context.getParent();
+            String appBase = host.getAppBase();
+            String docBase = context.getDocBase();
+            if (docBase == null)
+                return;
+            originalDocBase = docBase;
+
+            File docBaseFile = new File(docBase);
+            if (!docBaseFile.isAbsolute()) {
+                File file = new File(appBase);
+                if (!file.isAbsolute()) {
+                    file = new File(System.getProperty("catalina.base"), appBase);
+                }
+                docBaseFile = new File(file, docBase);
+            }
+
+            String path = context.getPath();
+            if (path == null) {
+                return;
+            }
+            if (path.equals("")) {
+                docBase = "ROOT";
+            } else {
+                if (path.startsWith("/")) {
+                    docBase = path.substring(1).replace('/','#');
+                } else {
+                    docBase = path.replace('/','#');
+                }
+            }
+
+            if (originalDocBase.toLowerCase().endsWith(".war")) {
+                antiLockingDocBase = new File(
+                        System.getProperty("java.io.tmpdir"),
+                        deploymentCount++ + "-" + docBase + ".war");
+            } else {
+                antiLockingDocBase = new File(
+                        System.getProperty("java.io.tmpdir"),
+                        deploymentCount++ + "-" + docBase);
+            }
+            antiLockingDocBase = antiLockingDocBase.getAbsoluteFile();
+
+            if (log.isDebugEnabled())
+                log.debug("Anti locking context[" + context.getPath()
+                        + "] setting docBase to " +
+                        antiLockingDocBase.getPath());
+
+            // Cleanup just in case an old deployment is lying around
+            ExpandWar.delete(antiLockingDocBase);
+            if (ExpandWar.copy(docBaseFile, antiLockingDocBase)) {
+                context.setDocBase(antiLockingDocBase.getPath());
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process a "before start" event for this Context.
+     */
+    protected synchronized void beforeStart() {
+
+        try {
+            antiLocking();
+        } catch (IOException e) {
+            log.error(sm.getString("contextConfig.antiLocking"), e);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the antiResourceLocking flag for this Context.
+     */
+    public boolean getAntiResourceLocking() {
+
+        return (this.antiResourceLocking);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create (if necessary) and return a Digester configured to process the
+     * context configuration descriptor for an application.
+     */
+    protected Digester createContextDigester() {
+        Digester digester = new Digester();
+        digester.setValidating(false);
+        RuleSet contextRuleSet = new ContextRuleSet("", false);
+        digester.addRuleSet(contextRuleSet);
+        RuleSet namingRuleSet = new NamingRuleSet("Context/");
+        digester.addRuleSet(namingRuleSet);
+        return digester;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process a "init" event for this Context.
+     */
+    protected void init() {
+        // Called from StandardContext.init()
+
+        if (contextDigester == null){
+            contextDigester = createContextDigester();
+            contextDigester.getParser();
+        }
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("contextConfig.init"));
+        context.setConfigured(false);
+        ok = true;
+
+        contextConfig();
+
+        try {
+            fixDocBase();
+        } catch (IOException e) {
+            log.error(sm.getString(
+                    "contextConfig.fixDocBase", context.getPath()), e);
+        }
+
+        createWebXmlDigester(context.getXmlNamespaceAware(),
+                context.getXmlValidation());
+    }
+-----CSCI578-----
+
+     
+
+    /**
+     * Will the parsing of the web.xml file for this Context be performed by a
+     * validating parser?
+     *
+     * @return true if validation is enabled.
+     */
+    public boolean getXmlValidation();
+-----CSCI578-----
+
+
+
+    /**
+     * Will the parsing of the web.xml file for this Context be performed by a
+     * namespace aware parser?
+     *
+     * @return true if namespace awareness is enabled.
+     */
+    public boolean getXmlNamespaceAware();
+-----CSCI578-----
+
+
+    /**
+     * Reset counter used for validating the web.xml file.
+     */
+    public void recycle(){
+        jspConfig.isJspConfigSet = false;
+        sessionConfig.isSessionConfigSet = false;
+        loginConfig.isLoginConfigSet = false;
+    }
+-----CSCI578-----
+
+
+    public void setStartupTime(long startupTime) {
+        this.startupTime = startupTime;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process the application configuration file, if it exists.
+     */
+    protected void applicationWebConfig() {
+
+        String altDDName = null;
+
+        // Open the application web.xml file, if it exists
+        InputStream stream = null;
+        ServletContext servletContext = context.getServletContext();
+        if (servletContext != null) {
+            altDDName = (String)servletContext.getAttribute(
+                                                        Globals.ALT_DD_ATTR);
+            if (altDDName != null) {
+                try {
+                    stream = new FileInputStream(altDDName);
+                } catch (FileNotFoundException e) {
+                    log.error(sm.getString("contextConfig.altDDNotFound",
+                                           altDDName));
+                }
+            }
+            else {
+                stream = servletContext.getResourceAsStream
+                    (Constants.ApplicationWebXml);
+            }
+        }
+        if (stream == null) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("contextConfig.applicationMissing") + " " + context);
+            }
+            return;
+        }
+
+        long t1=System.currentTimeMillis();
+
+        URL url=null;
+        // Process the application web.xml file
+        synchronized (webDigester) {
+            try {
+                if (altDDName != null) {
+                    url = new File(altDDName).toURL();
+                } else {
+                    url = servletContext.getResource(
+                                                Constants.ApplicationWebXml);
+                }
+                if( url!=null ) {
+                    InputSource is = new InputSource(url.toExternalForm());
+                    is.setByteStream(stream);
+                    if (context instanceof StandardContext) {
+                        ((StandardContext) context).setReplaceWelcomeFiles(true);
+                    }
+
+                    XmlErrorHandler handler = new XmlErrorHandler();
+
+                    webDigester.push(context);
+                    webDigester.setErrorHandler(handler);
+
+                    if(log.isDebugEnabled()) {
+                        log.debug("Parsing application web.xml file at " + url.toExternalForm());
+                    }
+
+                    webDigester.parse(is);
+
+                    if (handler.getWarnings().size() > 0 ||
+                            handler.getErrors().size() > 0) {
+                        ok = false;
+                        handler.logFindings(log, is.getSystemId());
+                    }
+                } else {
+                    log.info("No web.xml, using defaults " + context );
+                }
+            } catch (SAXParseException e) {
+                log.error(sm.getString("contextConfig.applicationParse", url.toExternalForm()), e);
+                log.error(sm.getString("contextConfig.applicationPosition",
+                                 "" + e.getLineNumber(),
+                                 "" + e.getColumnNumber()));
+                ok = false;
+            } catch (Exception e) {
+                log.error(sm.getString("contextConfig.applicationParse", url.toExternalForm()), e);
+                ok = false;
+            } finally {
+                webDigester.reset();
+                try {
+                    if (stream != null) {
+                        stream.close();
+                    }
+                } catch (IOException e) {
+                    log.error(sm.getString("contextConfig.applicationClose"), e);
+                }
+            }
+        }
+        webRuleSet.recycle();
+
+        long t2=System.currentTimeMillis();
+        if (context instanceof StandardContext) {
+            ((StandardContext) context).setStartupTime(t2-t1);
+        }
+    }
+-----CSCI578-----
+
+
+
+    //-------------------------------------------------------------- Properties
+
+
+    /**
+     * Return descriptive information about this Valve implementation.
+     */
+    public String getInfo();
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new security role for this web application.
+     *
+     * @param role New security role
+     */
+    public void addSecurityRole(String role);
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the extensions for which MIME mappings are defined.  If there
+     * are none, a zero-length array is returned.
+     */
+    public String[] findMimeMappings();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of filter mappings for this Context.
+     */
+    public FilterMap[] findFilterMaps();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of LifecycleListener classes that will be added to
+     * newly created Wrappers automatically.
+     */
+    public String[] findWrapperLifecycles();
+-----CSCI578-----
+
+
+
+    /**
+     * Process a "stop" event for this Context.
+     */
+    protected synchronized void stop() {
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("contextConfig.stop"));
+
+        int i;
+
+        // Removing children
+        Container[] children = context.findChildren();
+        for (i = 0; i < children.length; i++) {
+            context.removeChild(children[i]);
+        }
+
+        // Removing application parameters
+        /*
+        ApplicationParameter[] applicationParameters =
+            context.findApplicationParameters();
+        for (i = 0; i < applicationParameters.length; i++) {
+            context.removeApplicationParameter
+                (applicationParameters[i].getName());
+        }
+        */
+
+        // Removing security constraints
+        SecurityConstraint[] securityConstraints = context.findConstraints();
+        for (i = 0; i < securityConstraints.length; i++) {
+            context.removeConstraint(securityConstraints[i]);
+        }
+
+        // Removing Ejbs
+        /*
+        ContextEjb[] contextEjbs = context.findEjbs();
+        for (i = 0; i < contextEjbs.length; i++) {
+            context.removeEjb(contextEjbs[i].getName());
+        }
+        */
+
+        // Removing environments
+        /*
+        ContextEnvironment[] contextEnvironments = context.findEnvironments();
+        for (i = 0; i < contextEnvironments.length; i++) {
+            context.removeEnvironment(contextEnvironments[i].getName());
+        }
+        */
+
+        // Removing errors pages
+        ErrorPage[] errorPages = context.findErrorPages();
+        for (i = 0; i < errorPages.length; i++) {
+            context.removeErrorPage(errorPages[i]);
+        }
+
+        // Removing filter defs
+        FilterDef[] filterDefs = context.findFilterDefs();
+        for (i = 0; i < filterDefs.length; i++) {
+            context.removeFilterDef(filterDefs[i]);
+        }
+
+        // Removing filter maps
+        FilterMap[] filterMaps = context.findFilterMaps();
+        for (i = 0; i < filterMaps.length; i++) {
+            context.removeFilterMap(filterMaps[i]);
+        }
+
+        // Removing local ejbs
+        /*
+        ContextLocalEjb[] contextLocalEjbs = context.findLocalEjbs();
+        for (i = 0; i < contextLocalEjbs.length; i++) {
+            context.removeLocalEjb(contextLocalEjbs[i].getName());
+        }
+        */
+
+        // Removing Mime mappings
+        String[] mimeMappings = context.findMimeMappings();
+        for (i = 0; i < mimeMappings.length; i++) {
+            context.removeMimeMapping(mimeMappings[i]);
+        }
+
+        // Removing parameters
+        String[] parameters = context.findParameters();
+        for (i = 0; i < parameters.length; i++) {
+            context.removeParameter(parameters[i]);
+        }
+
+        // Removing resource env refs
+        /*
+        String[] resourceEnvRefs = context.findResourceEnvRefs();
+        for (i = 0; i < resourceEnvRefs.length; i++) {
+            context.removeResourceEnvRef(resourceEnvRefs[i]);
+        }
+        */
+
+        // Removing resource links
+        /*
+        ContextResourceLink[] contextResourceLinks =
+            context.findResourceLinks();
+        for (i = 0; i < contextResourceLinks.length; i++) {
+            context.removeResourceLink(contextResourceLinks[i].getName());
+        }
+        */
+
+        // Removing resources
+        /*
+        ContextResource[] contextResources = context.findResources();
+        for (i = 0; i < contextResources.length; i++) {
+            context.removeResource(contextResources[i].getName());
+        }
+        */
+
+        // Removing security role
+        String[] securityRoles = context.findSecurityRoles();
+        for (i = 0; i < securityRoles.length; i++) {
+            context.removeSecurityRole(securityRoles[i]);
+        }
+
+        // Removing servlet mappings
+        String[] servletMappings = context.findServletMappings();
+        for (i = 0; i < servletMappings.length; i++) {
+            context.removeServletMapping(servletMappings[i]);
+        }
+
+        // FIXME : Removing status pages
+
+        // Removing taglibs
+        String[] taglibs = context.findTaglibs();
+        for (i = 0; i < taglibs.length; i++) {
+            context.removeTaglib(taglibs[i]);
+        }
+
+        // Removing welcome files
+        String[] welcomeFiles = context.findWelcomeFiles();
+        for (i = 0; i < welcomeFiles.length; i++) {
+            context.removeWelcomeFile(welcomeFiles[i]);
+        }
+
+        // Removing wrapper lifecycles
+        String[] wrapperLifecycles = context.findWrapperLifecycles();
+        for (i = 0; i < wrapperLifecycles.length; i++) {
+            context.removeWrapperLifecycle(wrapperLifecycles[i]);
+        }
+
+        // Removing wrapper listeners
+        String[] wrapperListeners = context.findWrapperListeners();
+        for (i = 0; i < wrapperListeners.length; i++) {
+            context.removeWrapperListener(wrapperListeners[i]);
+        }
+
+        // Remove (partially) folders and files created by antiLocking
+        if (antiLockingDocBase != null) {
+            // No need to log failure - it is expected in this case
+            ExpandWar.delete(antiLockingDocBase, false);
+        }
+
+        ok = true;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the names of all defined context initialization parameters
+     * for this Context.  If no parameters are defined, a zero-length
+     * array is returned.
+     */
+    public String[] findParameters();
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the MIME mapping for the specified extension, if it exists;
+     * otherwise, no action is taken.
+     *
+     * @param extension Extension to remove the mapping for
+     */
+    public void removeMimeMapping(String extension);
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the context initialization parameter with the specified
+     * name, if it exists; otherwise, no action is taken.
+     *
+     * @param name Name of the parameter to remove
+     */
+    public void removeParameter(String name);
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a class name from the set of LifecycleListener classes that
+     * will be added to newly created Wrappers.
+     *
+     * @param listener Class name of a LifecycleListener class to be removed
+     */
+    public void removeWrapperLifecycle(String listener);
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified filter definition from this Context, if it exists;
+     * otherwise, no action is taken.
+     *
+     * @param filterDef Filter definition to be removed
+     */
+    public void removeFilterDef(FilterDef filterDef);
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the error page for the specified error code or
+     * Java language exception, if it exists; otherwise, no action is taken.
+     *
+     * @param errorPage The error page definition to be removed
+     */
+    public void removeErrorPage(ErrorPage errorPage);
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the tag library location forthe specified tag library URI.
+     *
+     * @param uri URI, relative to the web.xml file
+     */
+    public void removeTaglib(String uri);
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of ContainerListener classes that will be added to
+     * newly created Wrappers automatically.
+     */
+    public String[] findWrapperListeners();
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any security role with the specified name.
+     *
+     * @param role Security role to remove
+     */
+    public void removeSecurityRole(String role);
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified security constraint from this web application.
+     *
+     * @param constraint Constraint to be removed
+     */
+    public void removeConstraint(SecurityConstraint constraint);
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a class name from the set of ContainerListener classes that
+     * will be added to newly created Wrappers.
+     *
+     * @param listener Class name of a ContainerListener class to be removed
+     */
+    public void removeWrapperListener(String listener);
+-----CSCI578-----
+
+    
+
+    /**
+     * Remove the specified welcome file name from the list recognized
+     * by this Context.
+     *
+     * @param name Name of the welcome file to be removed
+     */
+    public void removeWelcomeFile(String name);
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a filter mapping from this Context.
+     *
+     * @param filterMap The filter mapping to be removed
+     */
+    public void removeFilterMap(FilterMap filterMap);
+-----CSCI578-----
+
+
+
+
+    /**
+     * Return the set of defined error pages for all specified error codes
+     * and exception types.
+     */
+    public ErrorPage[] findErrorPages();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the security roles defined for this application.  If none
+     * have been defined, a zero-length array is returned.
+     */
+    public String[] findSecurityRoles();
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any servlet mapping for the specified pattern, if it exists;
+     * otherwise, no action is taken.
+     *
+     * @param pattern URL pattern of the mapping to remove
+     */
+    public void removeServletMapping(String pattern);
+-----CSCI578-----

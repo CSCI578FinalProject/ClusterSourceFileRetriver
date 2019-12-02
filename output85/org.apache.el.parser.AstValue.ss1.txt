@@ -1,0 +1,162 @@
+7
+-----CSCI578-----
+
+
+
+    /**
+     * @since EL 2.2
+     */
+    @Override
+    public boolean isParametersProvided() {
+        // Assumption is that method parameters, if present, will be the last
+        // child
+        int len = children.length;
+        if (len > 2) {
+            if (this.jjtGetChild(len - 1) instanceof AstMethodParameters) {
+                return true;
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+    @Override
+    // Interface el.parser.Node uses a raw type (and is auto-generated)
+    public Object invoke(EvaluationContext ctx,
+            @SuppressWarnings("rawtypes") Class[] paramTypes,
+            Object[] paramValues) throws ELException {
+
+        Target t = getTarget(ctx);
+        Method m = null;
+        Object[] values = null;
+        Class<?>[] types = null;
+        if (isParametersProvided()) {
+            values = ((AstMethodParameters) this.jjtGetChild(
+                    this.jjtGetNumChildren() - 1)).getParameters(ctx);
+            types = getTypesFromValues(values);
+        } else {
+            values = paramValues;
+            types = paramTypes;
+        }
+        m = ReflectionUtil.getMethod(ctx, t.base, t.property, types, values);
+
+        // Handle varArgs and any coercion required
+        values = convertArgs(ctx, values, m);
+
+        Object result = null;
+        try {
+            result = m.invoke(t.base, values);
+        } catch (IllegalAccessException iae) {
+            throw new ELException(iae);
+        } catch (IllegalArgumentException iae) {
+            throw new ELException(iae);
+        } catch (InvocationTargetException ite) {
+            Throwable cause = ite.getCause();
+            if (cause instanceof ThreadDeath) {
+                throw (ThreadDeath) cause;
+            }
+            if (cause instanceof VirtualMachineError) {
+                throw (VirtualMachineError) cause;
+            }
+            throw new ELException(cause);
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    private Object[] convertArgs(EvaluationContext ctx, Object[] src, Method m) {
+        Class<?>[] types = m.getParameterTypes();
+        if (types.length == 0) {
+            // Treated as if parameters have been provided so src is ignored
+            return EMPTY_ARRAY;
+        }
+
+        int paramCount = types.length;
+
+        if (m.isVarArgs() && paramCount > 1 && (src == null || paramCount > src.length) ||
+                !m.isVarArgs() && (paramCount > 0 && src == null ||
+                        src != null && src.length != paramCount)) {
+            String srcCount = null;
+            if (src != null) {
+                srcCount = Integer.toString(src.length);
+            }
+            String msg;
+            if (m.isVarArgs()) {
+                msg = MessageFactory.get("error.invoke.tooFewParams",
+                        m.getName(), srcCount, Integer.toString(paramCount));
+            } else {
+                msg = MessageFactory.get("error.invoke.wrongParams",
+                        m.getName(), srcCount, Integer.toString(paramCount));
+            }
+            throw new IllegalArgumentException(msg);
+        }
+
+        if (src == null) {
+            // Must be a varargs method with a single parameter.
+            // Use a new array every time since the called code could modify the
+            // contents of the array
+            return new Object[1];
+        }
+
+        Object[] dest = new Object[paramCount];
+
+        for (int i = 0; i < paramCount - 1; i++) {
+            dest[i] = ELSupport.coerceToType(ctx, src[i], types[i]);
+        }
+
+        if (m.isVarArgs()) {
+            Object[] varArgs = (Object[]) Array.newInstance(
+                    m.getParameterTypes()[paramCount - 1].getComponentType(),
+                    src.length - (paramCount - 1));
+            for (int i = 0; i < src.length - (paramCount - 1); i ++) {
+                varArgs[i] = ELSupport.coerceToType(ctx, src[paramCount - 1 + i],
+                        types[paramCount - 1].getComponentType());
+            }
+            dest[paramCount - 1] = varArgs;
+        } else {
+            dest[paramCount - 1] = ELSupport.coerceToType(
+                    ctx, src[paramCount - 1], types[paramCount - 1]);
+        }
+
+        return dest;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private Class<?>[] getTypesFromValues(Object[] values) {
+        if (values == null) {
+            return null;
+        }
+
+        Class<?> result[] = new Class<?>[values.length];
+        for (int i = 0; i < values.length; i++) {
+            if (values[i] == null) {
+                result[i] = null;
+            } else {
+                result[i] = values[i].getClass();
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @since EL 2.2
+     */
+    @Override
+    public ValueReference getValueReference(EvaluationContext ctx) {
+        // Check this is a reference to a base and a property
+        if (this.children.length > 2 &&
+                this.jjtGetChild(2) instanceof AstMethodParameters) {
+            // This is a method call
+            return null;
+        }
+        Target t = getTarget(ctx);
+        return new ValueReference(t.base, t.property);
+    }

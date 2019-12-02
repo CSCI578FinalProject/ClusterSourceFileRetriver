@@ -1,0 +1,91 @@
+7
+-----CSCI578-----
+
+
+    
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return a String representation of this object.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("ContextEjb[");
+        sb.append("name=");
+        sb.append(getName());
+        if (getDescription() != null) {
+            sb.append(", description=");
+            sb.append(getDescription());
+        }
+        if (getType() != null) {
+            sb.append(", type=");
+            sb.append(getType());
+        }
+        if (home != null) {
+            sb.append(", home=");
+            sb.append(home);
+        }
+        if (remote != null) {
+            sb.append(", remote=");
+            sb.append(remote);
+        }
+        if (link != null) {
+            sb.append(", link=");
+            sb.append(link);
+        }
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+
+    /**
+     * Add an EJB resource reference for this web application.
+     *
+     * @param ejb New EJB resource reference
+     */
+    public void addEjb(ContextEjb ejb) {
+
+        if (entries.containsKey(ejb.getName())) {
+            return;
+        } else {
+            entries.put(ejb.getName(), ejb.getType());
+        }
+
+        synchronized (ejbs) {
+            ejb.setNamingResources(this);
+            ejbs.put(ejb.getName(), ejb);
+        }
+        support.firePropertyChange("ejb", null, ejb);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any EJB resource reference with the specified name.
+     *
+     * @param name Name of the EJB resource reference to remove
+     */
+    public void removeEjb(String name) {
+
+        entries.remove(name);
+
+        ContextEjb ejb = null;
+        synchronized (ejbs) {
+            ejb = (ContextEjb) ejbs.remove(name);
+        }
+        if (ejb != null) {
+            support.firePropertyChange("ejb", ejb, null);
+            ejb.setNamingResources(null);
+        }
+
+    }

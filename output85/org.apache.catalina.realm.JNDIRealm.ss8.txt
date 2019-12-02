@@ -1,0 +1,102 @@
+9
+-----CSCI578-----
+
+
+    private DirContext createDirContext(Hashtable<String, String> env) throws NamingException {
+        if (useStartTls) {
+            return createTlsDirContext(env);
+        } else {
+            return new InitialDirContext(env);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * @return list of the allowed cipher suites when connections are made using
+     *         StartTLS
+     */
+    private String[] getCipherSuitesArray() {
+        if (cipherSuites == null || cipherSuitesArray != null) {
+            return cipherSuitesArray;
+        }
+        if (this.cipherSuites.trim().isEmpty()) {
+            containerLog.warn(sm.getString("jndiRealm.emptyCipherSuites"));
+            this.cipherSuitesArray = null;
+        } else {
+            this.cipherSuitesArray = cipherSuites.trim().split("\\s*,\\s*");
+            containerLog.debug(sm.getString("jndiRealm.cipherSuites",
+                    Arrays.asList(this.cipherSuitesArray)));
+        }
+        return this.cipherSuitesArray;
+    }
+-----CSCI578-----
+
+
+    private Object constructInstance(String className)
+            throws ClassNotFoundException, InstantiationException,
+            IllegalAccessException {
+        Class<?> clazz = Class.forName(className);
+        return clazz.newInstance();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private SSLSocketFactory createSSLSocketFactoryFromClassName(String className) {
+        try {
+            Object o = constructInstance(className);
+            if (o instanceof SSLSocketFactory) {
+                return sslSocketFactory;
+            } else {
+                throw new IllegalArgumentException(sm.getString(
+                        "jndiRealm.invalidSslSocketFactory",
+                        className));
+            }
+        } catch (ClassNotFoundException | SecurityException
+                | InstantiationException | IllegalAccessException e) {
+            throw new IllegalArgumentException(sm.getString(
+                    "jndiRealm.invalidSslSocketFactory",
+                    className), e);
+        }
+    }
+-----CSCI578-----
+
+
+    private SSLSocketFactory getSSLSocketFactory() {
+        if (sslSocketFactory != null) {
+            return sslSocketFactory;
+        }
+        final SSLSocketFactory result;
+        if (this.sslSocketFactoryClassName != null
+                && !sslSocketFactoryClassName.trim().equals("")) {
+            result = createSSLSocketFactoryFromClassName(this.sslSocketFactoryClassName);
+        } else {
+            result = createSSLContextFactoryFromProtocol(sslProtocol);
+        }
+        this.sslSocketFactory = result;
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private SSLSocketFactory createSSLContextFactoryFromProtocol(String protocol) {
+        try {
+            SSLContext sslContext;
+            if (protocol != null) {
+                sslContext = SSLContext.getInstance(protocol);
+                sslContext.init(null, null, null);
+            } else {
+                sslContext = SSLContext.getDefault();
+            }
+            return sslContext.getSocketFactory();
+        } catch (NoSuchAlgorithmException | KeyManagementException e) {
+            List<String> allowedProtocols = Arrays
+                    .asList(getSupportedSslProtocols());
+            throw new IllegalArgumentException(
+                    sm.getString("jndiRealm.invalidSslProtocol", protocol,
+                            allowedProtocols), e);
+        }
+    }

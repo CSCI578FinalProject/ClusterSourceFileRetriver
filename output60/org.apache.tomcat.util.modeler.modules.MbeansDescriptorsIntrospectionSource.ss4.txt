@@ -1,0 +1,63 @@
+2
+-----CSCI578-----
+
+    
+    /**
+     * Check if this class is one of the supported types.
+     * If the class is supported, returns true.  Otherwise,
+     * returns false.
+     * @param ret The class to check
+     * @return boolean True if class is supported
+     */ 
+    private boolean supportedType(Class ret) {
+        for (int i = 0; i < supportedTypes.length; i++) {
+            if (ret == supportedTypes[i]) {
+                return true;
+            }
+        }
+        if (isBeanCompatible(ret)) {
+            return true;
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Check if this class conforms to JavaBeans specifications.
+     * If the class is conformant, returns true.
+     *
+     * @param javaType The class to check
+     * @return boolean True if the class is compatible.
+     */
+    protected boolean isBeanCompatible(Class javaType) {
+        // Must be a non-primitive and non array
+        if (javaType.isArray() || javaType.isPrimitive()) {
+            return false;
+        }
+
+        // Anything in the java or javax package that
+        // does not have a defined mapping is excluded.
+        if (javaType.getName().startsWith("java.") || 
+            javaType.getName().startsWith("javax.")) {
+            return false;
+        }
+
+        try {
+            javaType.getConstructor(new Class[]{});
+        } catch (java.lang.NoSuchMethodException e) {
+            return false;
+        }
+
+        // Make sure superclass is compatible
+        Class superClass = javaType.getSuperclass();
+        if (superClass != null && 
+            superClass != java.lang.Object.class && 
+            superClass != java.lang.Exception.class && 
+            superClass != java.lang.Throwable.class) {
+            if (!isBeanCompatible(superClass)) {
+                return false;
+            }
+        }
+        return true;
+    }

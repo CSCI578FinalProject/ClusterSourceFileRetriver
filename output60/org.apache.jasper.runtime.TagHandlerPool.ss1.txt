@@ -1,0 +1,48 @@
+2
+-----CSCI578-----
+
+
+    
+    /**
+     * Call postConstruct method on the specified instance. Note: In Jasper, this
+     * calls naming resources injection as well.
+     */
+    public static void postConstruct(AnnotationProcessor processor, Object instance)
+        throws IllegalAccessException, InvocationTargetException, NamingException {
+        if (processor != null) {
+            processor.processAnnotations(instance);
+            processor.postConstruct(instance);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets the next available tag handler from this tag handler pool,
+     * instantiating one if this tag handler pool is empty.
+     *
+     * @param handlerClass Tag handler class
+     *
+     * @return Reused or newly instantiated tag handler
+     *
+     * @throws JspException if a tag handler cannot be instantiated
+     */
+    public Tag get(Class handlerClass) throws JspException {
+	Tag handler = null;
+        synchronized( this ) {
+            if (current >= 0) {
+                handler = handlers[current--];
+                return handler;
+            }
+        }
+
+        // Out of sync block - there is no need for other threads to
+        // wait for us to construct a tag for this thread.
+        try {
+            Tag instance = (Tag) handlerClass.newInstance();
+            AnnotationHelper.postConstruct(annotationProcessor, instance);
+            return instance;
+        } catch (Exception e) {
+            throw new JspException(e.getMessage(), e);
+        }
+    }

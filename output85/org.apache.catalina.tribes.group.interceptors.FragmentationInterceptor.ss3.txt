@@ -1,0 +1,250 @@
+9
+-----CSCI578-----
+
+
+
+    @Override
+    public void sendMessage(Member[] destination, ChannelMessage msg, InterceptorPayload payload) throws ChannelException {
+        int size = msg.getMessage().getLength();
+        boolean frag = (size>maxSize) && okToProcess(msg.getOptions());
+        if ( frag ) {
+            frag(destination, msg, payload);
+        } else {
+            msg.getMessage().append(frag);
+            super.sendMessage(destination, msg, payload);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void defrag(ChannelMessage msg ) {
+        FragKey key = new FragKey(msg.getUniqueId());
+        FragCollection coll = getFragCollection(key,msg);
+        coll.addMessage((ChannelMessage)msg.deepclone());
+
+        if ( coll.complete() ) {
+            removeFragCollection(key);
+            ChannelMessage complete = coll.assemble();
+            super.messageReceived(complete);
+
+        }
+    }
+
+
+    public void frag(Member[] destination, ChannelMessage msg, InterceptorPayload payload) throws ChannelException {
+        int size = msg.getMessage().getLength();
+
+        int count = ((size / maxSize )+(size%maxSize==0?0:1));
+        ChannelMessage[] messages = new ChannelMessage[count];
+        int remaining = size;
+        for ( int i=0; i<count; i++ ) {
+            ChannelMessage tmp = (ChannelMessage)msg.clone();
+            int offset = (i*maxSize);
+            int length = Math.min(remaining,maxSize);
+            tmp.getMessage().clear();
+            tmp.getMessage().append(msg.getMessage().getBytesDirect(),offset,length);
+            //add the msg nr
+            //tmp.getMessage().append(XByteBuffer.toBytes(i),0,4);
+            tmp.getMessage().append(i);
+            //add the total nr of messages
+            //tmp.getMessage().append(XByteBuffer.toBytes(count),0,4);
+            tmp.getMessage().append(count);
+            //add true as the frag flag
+            //byte[] flag = XByteBuffer.toBytes(true);
+            //tmp.getMessage().append(flag,0,flag.length);
+            tmp.getMessage().append(true);
+            messages[i] = tmp;
+            remaining -= length;
+
+        }
+        for ( int i=0; i<messages.length; i++ ) {
+            super.sendMessage(destination,messages[i],payload);
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void sendMessage(Member[] destination, ChannelMessage msg, InterceptorPayload payload) throws
+        ChannelException {
+        if (getNext() != null) getNext().sendMessage(destination, msg, payload);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Flag for discarding invalid packages
+     * If this flag is set to true, and append(byte[],...) is called,
+     * the data added will be inspected, and if it doesn't start with
+     * <code>START_DATA</code> it will be thrown away.
+     *
+     */
+    protected boolean discard = true;
+
+
+    /**
+     * Appends the data to the buffer. If the data is incorrectly formatted, ie, the data should always start with the
+     * header, false will be returned and the data will be discarded.
+     * @param b - bytes to be appended
+     * @param len - the number of bytes to append.
+     * @return true if the data was appended correctly. Returns false if the package is incorrect, ie missing header or something, or the length of data is 0
+     */
+    public boolean append(ByteBuffer b, int len) {
+        int newcount = bufSize + len;
+        if (newcount > buf.length) {
+            expand(newcount);
+        }
+        b.get(buf,bufSize,len);
+
+        bufSize = newcount;
+
+        if ( discard ) {
+            if (bufSize > START_DATA.length && (firstIndexOf(buf, 0, START_DATA) == -1)) {
+                bufSize = 0;
+                log.error(sm.getString("xByteBuffer.discarded.invalidHeader"));
+                return false;
+            }
+        }
+        return true;
+
+    }
+
+
+    public boolean append(byte i) {
+        int newcount = bufSize + 1;
+        if (newcount > buf.length) {
+            expand(newcount);
+        }
+        buf[bufSize] = i;
+        bufSize = newcount;
+        return true;
+    }
+
+
+
+    public boolean append(boolean i) {
+        int newcount = bufSize + 1;
+        if (newcount > buf.length) {
+            expand(newcount);
+        }
+        XByteBuffer.toBytes(i,buf,bufSize);
+        bufSize = newcount;
+        return true;
+    }
+
+
+    public boolean append(long i) {
+        int newcount = bufSize + 8;
+        if (newcount > buf.length) {
+            expand(newcount);
+        }
+        XByteBuffer.toBytes(i,buf,bufSize);
+        bufSize = newcount;
+        return true;
+    }
+
+
+    public boolean append(int i) {
+        int newcount = bufSize + 4;
+        if (newcount > buf.length) {
+            expand(newcount);
+        }
+        XByteBuffer.toBytes(i,buf,bufSize);
+        bufSize = newcount;
+        return true;
+    }
+
+
+    public boolean append(byte[] b, int off, int len) {
+        if ((off < 0) || (off > b.length) || (len < 0) ||
+            ((off + len) > b.length) || ((off + len) < 0))  {
+            throw new IndexOutOfBoundsException();
+        } else if (len == 0) {
+            return false;
+        }
+
+        int newcount = bufSize + len;
+        if (newcount > buf.length) {
+            expand(newcount);
+        }
+        System.arraycopy(b, off, buf, bufSize, len);
+        bufSize = newcount;
+
+        if ( discard ) {
+            if (bufSize > START_DATA.length && (firstIndexOf(buf, 0, START_DATA) == -1)) {
+                bufSize = 0;
+                log.error(sm.getString("xByteBuffer.discarded.invalidHeader"));
+                return false;
+            }
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Shallow clone, what gets cloned depends on the implementation
+     * @return ChannelMessage
+     */
+    public Object clone();
+
+
+    /**
+     * Deep clone, all fields MUST get cloned
+     * @return ChannelMessage
+     */
+    public Object deepclone();
+-----CSCI578-----
+
+
+    public void expand(int newcount) {
+        //don't change the allocation strategy
+        byte newbuf[] = new byte[Math.max(buf.length << 1, newcount)];
+        System.arraycopy(buf, 0, newbuf, 0, bufSize);
+        buf = newbuf;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void sendMessage(Member[] destination, ChannelMessage msg, InterceptorPayload payload) throws
+        ChannelException {
+        //todo, optimize, if destination.length==1, then we can do
+        //msg.setOptions(msg.getOptions() & (~getOptionFlag())
+        //and just send one message
+        if (okToProcess(msg.getOptions()) ) {
+            super.sendMessage(destination, msg, null);
+            ChannelMessage confirmation = null;
+            if ( deepclone ) confirmation = (ChannelMessage)msg.deepclone();
+            else confirmation = (ChannelMessage)msg.clone();
+            confirmation.getMessage().reset();
+            UUIDGenerator.randomUUID(false,confirmation.getUniqueId(),0);
+            confirmation.getMessage().append(START_DATA,0,START_DATA.length);
+            confirmation.getMessage().append(msg.getUniqueId(),0,msg.getUniqueId().length);
+            confirmation.getMessage().append(END_DATA,0,END_DATA.length);
+            super.sendMessage(destination,confirmation,payload);
+        } else {
+            //turn off two phase commit
+            //this wont work if the interceptor has 0 as a flag
+            //since there is no flag to turn off
+            //msg.setOptions(msg.getOptions() & (~getOptionFlag()));
+            super.sendMessage(destination, msg, payload);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Writes the specified byte to this output stream.
+     *
+     * @param b the <code>byte</code>.
+     * @throws IOException if an I/O error occurs. In particular, an
+     *   <code>IOException</code> may be thrown if the output stream has
+     *   been closed.
+     * TODO Implement this java.io.OutputStream method
+     */
+    @Override
+    public void write(int b) throws IOException {
+        buffer.append((byte)b);
+    }

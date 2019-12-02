@@ -1,0 +1,1230 @@
+52
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Gets the initialized key managers.
+     */
+    protected KeyManager[] getKeyManagers(String keystoreType,
+                                          String keystoreProvider,
+                                          String algorithm,
+                                          String keyAlias)
+                throws Exception {
+
+        KeyManager[] kms = null;
+
+        String keystorePass = getKeystorePassword();
+
+        KeyStore ks = getKeystore(keystoreType, keystoreProvider, keystorePass);
+        if (keyAlias != null && !ks.isKeyEntry(keyAlias)) {
+            throw new IOException(sm.getString("jsse.alias_no_key_entry", keyAlias));
+        }
+
+        KeyManagerFactory kmf = KeyManagerFactory.getInstance(algorithm);
+        kmf.init(ks, keystorePass.toCharArray());
+
+        kms = kmf.getKeyManagers();
+        if (keyAlias != null) {
+            if (JSSESocketFactory.defaultKeystoreType.equals(keystoreType)) {
+                keyAlias = keyAlias.toLowerCase();
+            }
+            for(int i=0; i<kms.length; i++) {
+                kms[i] = new JSSEKeyManager((X509KeyManager)kms[i], keyAlias);
+            }
+        }
+
+        return kms;
+    }
+-----CSCI578-----
+
+
+    /*
+     * Gets the key- or truststore with the specified type, path, and password.
+     */
+    private KeyStore getStore(String type, String provider, String path,
+            String pass) throws IOException {
+
+        KeyStore ks = null;
+        InputStream istream = null;
+        try {
+            if (provider == null) {
+                ks = KeyStore.getInstance(type);
+            } else {
+                ks = KeyStore.getInstance(type, provider);
+            }
+            if(!("PKCS11".equalsIgnoreCase(type) || "".equalsIgnoreCase(path))) {
+                File keyStoreFile = new File(path);
+                if (!keyStoreFile.isAbsolute()) {
+                    keyStoreFile = new File(System.getProperty("catalina.base"),
+                                            path);
+                }
+                istream = new FileInputStream(keyStoreFile);
+            }
+
+            char[] storePass = null;
+            if (pass != null && !"".equals(pass)) {
+                storePass = pass.toCharArray();
+            }
+            ks.load(istream, storePass);
+        } catch (FileNotFoundException fnfe) {
+            log.error(sm.getString("jsse.keystore_load_failed", type, path,
+                    fnfe.getMessage()), fnfe);
+            throw fnfe;
+        } catch (IOException ioe) {
+            // May be expected when working with a trust store
+            // Re-throw. Caller will catch and log as required
+            throw ioe;
+        } catch(Exception ex) {
+            String msg = sm.getString("jsse.keystore_load_failed", type, path,
+                    ex.getMessage());
+            log.error(msg, ex);
+            throw new IOException(msg);
+        } finally {
+            if (istream != null) {
+                try {
+                    istream.close();
+                } catch (IOException ioe) {
+                    // Do nothing
+                }
+            }
+        }
+
+        return ks;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Load the collection of CRLs.
+     *
+     */
+    protected Collection<? extends CRL> getCRLs(String crlf)
+        throws IOException, CRLException, CertificateException {
+
+        File crlFile = new File(crlf);
+        if( !crlFile.isAbsolute() ) {
+            crlFile = new File(System.getProperty("catalina.base"), crlf);
+        }
+        Collection<? extends CRL> crls = null;
+        InputStream is = null;
+        try {
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            is = new FileInputStream(crlFile);
+            crls = cf.generateCRLs(is);
+        } catch(IOException iex) {
+            throw iex;
+        } catch(CRLException crle) {
+            throw crle;
+        } catch(CertificateException ce) {
+            throw ce;
+        } finally {
+            if(is != null) {
+                try{
+                    is.close();
+                } catch(Exception ex) {
+                }
+            }
+        }
+        return crls;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Configures the given SSL server socket with the requested cipher suites,
+     * protocol versions, and need for client authentication
+     */
+    private void initServerSocket(ServerSocket ssocket) {
+
+        SSLServerSocket socket = (SSLServerSocket) ssocket;
+
+        if (enabledCiphers != null) {
+            socket.setEnabledCipherSuites(enabledCiphers);
+        }
+
+        String requestedProtocols = (String) attributes.get("protocols");
+        socket.setEnabledProtocols(getEnabledProtocols(socket, requestedProtocols));
+
+        // we don't know if client auth is needed -
+        // after parsing the request we may re-handshake
+        configureClientAuth(socket);
+    }
+-----CSCI578-----
+
+
+    /*
+     * Gets the SSL server's keystore.
+     */
+    protected KeyStore getKeystore(String type, String provider, String pass)
+            throws IOException {
+
+        String keystoreFile = (String)attributes.get("keystore");
+        if (keystoreFile == null)
+            keystoreFile = defaultKeystoreFile;
+
+        try {
+            return getStore(type, provider, keystoreFile, pass);
+        } catch (FileNotFoundException fnfe) {
+            throw fnfe;
+        } catch (IOException ioe) {
+            log.error(sm.getString("jsse.keystore_load_failed", type,
+                    keystoreFile, ioe.getMessage()), ioe);
+            throw ioe;
+        }
+    }
+-----CSCI578-----
+
+
+    /*
+     * Determines the SSL cipher suites to be enabled.
+     *
+     * @param requestedCiphers Comma-separated list of requested ciphers
+     * @param supportedCiphers Array of supported ciphers
+     *
+     * @return Array of SSL cipher suites to be enabled, or null if none of the
+     * requested ciphers are supported
+     */
+    protected String[] getEnabledCiphers(String requestedCiphersStr,
+                                         String[] supportedCiphers) {
+
+        if ((requestedCiphersStr == null)
+                || (requestedCiphersStr.trim().length() == 0)) {
+            return defaultServerCipherSuites;
+        }
+
+        List<String> requestedCiphers = new ArrayList<String>();
+        for (String rc : requestedCiphersStr.split(",")) {
+            final String cipher = rc.trim();
+            if (cipher.length() > 0) {
+                requestedCiphers.add(cipher);
+            }
+        }
+        if (requestedCiphers.isEmpty()) {
+            return defaultServerCipherSuites;
+        }
+        List<String> ciphers = new ArrayList<String>(requestedCiphers);
+        ciphers.retainAll(Arrays.asList(supportedCiphers));
+
+        if (ciphers.isEmpty()) {
+            log.warn(sm.getString("jsse.requested_ciphers_not_supported",
+                    requestedCiphersStr));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("jsse.enableable_ciphers", ciphers));
+            if (ciphers.size() != requestedCiphers.size()) {
+                List<String> skipped = new ArrayList<String>(requestedCiphers);
+                skipped.removeAll(ciphers);
+                log.debug(sm.getString("jsse.unsupported_ciphers", skipped));
+            }
+        }
+
+        return ciphers.toArray(new String[ciphers.size()]);
+    }
+-----CSCI578-----
+
+
+    /*
+     * Gets the SSL server's keystore password.
+     */
+    protected String getKeystorePassword() {
+        String keyPass = (String)attributes.get("keypass");
+        if (keyPass == null) {
+            keyPass = defaultKeyPass;
+        }
+        String keystorePass = (String)attributes.get("keystorePass");
+        if (keystorePass == null) {
+            keystorePass = keyPass;
+        }
+        return keystorePass;
+    }
+-----CSCI578-----
+
+
+    /*
+     * Gets the SSL server's truststore.
+     */
+    protected KeyStore getTrustStore(String keystoreType,
+            String keystoreProvider) throws IOException {
+        KeyStore trustStore = null;
+
+        String truststoreFile = (String)attributes.get("truststoreFile");
+        if(truststoreFile == null) {
+            truststoreFile = System.getProperty("javax.net.ssl.trustStore");
+        }
+        if(log.isDebugEnabled()) {
+            log.debug("Truststore = " + truststoreFile);
+        }
+        String truststorePassword = (String)attributes.get("truststorePass");
+        if( truststorePassword == null) {
+            truststorePassword = System.getProperty("javax.net.ssl.trustStorePassword");
+        }
+        if( truststorePassword == null ) {
+            truststorePassword = getKeystorePassword();
+        }
+        if(log.isDebugEnabled()) {
+            log.debug("TrustPass = " + truststorePassword);
+        }
+        String truststoreType = (String)attributes.get("truststoreType");
+        if( truststoreType == null) {
+            truststoreType = System.getProperty("javax.net.ssl.trustStoreType");
+        }
+        if(truststoreType == null) {
+            truststoreType = keystoreType;
+        }
+        if(log.isDebugEnabled()) {
+            log.debug("trustType = " + truststoreType);
+        }
+        String truststoreProvider =
+            (String)attributes.get("truststoreProvider");
+        if( truststoreProvider == null) {
+            truststoreProvider =
+                System.getProperty("javax.net.ssl.trustStoreProvider");
+        }
+        if (truststoreProvider == null) {
+            truststoreProvider = keystoreProvider;
+        }
+        if(log.isDebugEnabled()) {
+            log.debug("trustProvider = " + truststoreProvider);
+        }
+
+        if (truststoreFile != null) {
+            try {
+                trustStore = getStore(truststoreType, truststoreProvider,
+                        truststoreFile, truststorePassword);
+            } catch (FileNotFoundException fnfe) {
+                throw fnfe;
+            } catch (IOException ioe) {
+                // Log a warning that we had a password issue
+                // and re-try, unless the password is null already
+                if (truststorePassword != null) {
+                    log.warn(sm.getString("jsse.invalid_truststore_password"),
+                            ioe);
+                    try {
+                        trustStore = getStore(truststoreType,
+                                truststoreProvider, truststoreFile, null);
+                        ioe = null;
+                    } catch (IOException ioe2) {
+                        ioe = ioe2;
+                    }
+                }
+                if (ioe != null) {
+                    log.error(sm.getString("jsse.keystore_load_failed",
+                            truststoreType, truststoreFile, ioe.getMessage()),
+                            ioe);
+                    throw ioe;
+                }
+            }
+        }
+
+        return trustStore;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Gets the intialized trust managers.
+     */
+    protected TrustManager[] getTrustManagers(String keystoreType,
+            String keystoreProvider, String algorithm)
+        throws Exception {
+        String crlf = (String) attributes.get("crlFile");
+
+        TrustManager[] tms = null;
+
+        KeyStore trustStore = getTrustStore(keystoreType, keystoreProvider);
+        if (trustStore != null) {
+            if (crlf == null) {
+                TrustManagerFactory tmf = TrustManagerFactory.getInstance(algorithm);
+                tmf.init(trustStore);
+                tms = getTrustManagers(tmf);
+            } else {
+                TrustManagerFactory tmf = TrustManagerFactory.getInstance(algorithm);
+                CertPathParameters params = getParameters(algorithm, crlf, trustStore);
+                ManagerFactoryParameters mfp = new CertPathTrustManagerParameters(params);
+                tmf.init(mfp);
+                tms = getTrustManagers(tmf);
+            }
+        }
+
+        return tms;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Determines the SSL protocol variants to be enabled.
+     *
+     * @param socket The socket to get supported list from.
+     * @param requestedProtocols Comma-separated list of requested SSL
+     * protocol variants
+     *
+     * @return Array of SSL protocol variants to be enabled, or null if none of
+     * the requested protocol variants are supported
+     */
+    protected String[] getEnabledProtocols(SSLServerSocket socket,
+                                           String requestedProtocols){
+        Set<String> supportedProtocols = new HashSet<String>();
+        for (String supportedProtocol : socket.getSupportedProtocols()) {
+            supportedProtocols.add(supportedProtocol);
+        }
+
+        if (requestedProtocols == null) {
+            return defaultServerProtocols;
+        }
+
+        String[] requestedProtocolsArr = requestedProtocols.split(",");
+        List<String> enabledProtocols = new ArrayList<String>(requestedProtocolsArr.length);
+
+        for (String requestedProtocol : requestedProtocolsArr) {
+            String requestedProtocolTrim = requestedProtocol.trim();
+            if (supportedProtocols.contains(requestedProtocolTrim)) {
+                enabledProtocols.add(requestedProtocolTrim);
+            } else {
+                log.warn(sm.getString("jsse.unsupportedProtocol", requestedProtocolTrim));
+            }
+        }
+
+        return enabledProtocols.toArray(new String[enabledProtocols.size()]);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Checks that the certificate is compatible with the enabled cipher suites.
+     * If we don't check now, the JIoEndpoint can enter a nasty logging loop.
+     * See bug 45528.
+     */
+    private void checkConfig() throws IOException {
+        // Create an unbound server socket
+        ServerSocket socket = sslProxy.createServerSocket();
+        initServerSocket(socket);
+
+        try {
+            // Set the timeout to 1ms as all we care about is if it throws an
+            // SSLException on accept.
+            socket.setSoTimeout(1);
+
+            socket.accept();
+            // Will never get here - no client can connect to an unbound port
+        } catch (SSLException ssle) {
+            // SSL configuration is invalid. Possibly cert doesn't match ciphers
+            IOException ioe = new IOException(sm.getString(
+                    "jsse.invalid_ssl_conf", ssle.getMessage()));
+            ioe.initCause(ssle);
+            throw ioe;
+        } catch (Exception e) {
+            /*
+             * Possible ways of getting here
+             * socket.accept() throws a SecurityException
+             * socket.setSoTimeout() throws a SocketException
+             * socket.accept() throws some other exception (after a JDK change)
+             *      In these cases the test won't work so carry on - essentially
+             *      the behaviour before this patch
+             * socket.accept() throws a SocketTimeoutException
+             *      In this case all is well so carry on
+             */
+        } finally {
+            // Should be open here but just in case
+            if (!socket.isClosed()) {
+                socket.close();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Reads the keystore and initializes the SSL socket factory.
+     */
+    void init() throws IOException {
+        try {
+
+            String clientAuthStr = (String) attributes.get("clientauth");
+            if("true".equalsIgnoreCase(clientAuthStr) ||
+               "yes".equalsIgnoreCase(clientAuthStr)) {
+                requireClientAuth = true;
+            } else if("want".equalsIgnoreCase(clientAuthStr)) {
+                wantClientAuth = true;
+            }
+
+            // SSL protocol variant (e.g., TLS, SSL v3, etc.)
+            String protocol = (String) attributes.get("protocol");
+            if (protocol == null) {
+                protocol = defaultProtocol;
+            }
+
+            // Certificate encoding algorithm (e.g., SunX509)
+            String algorithm = (String) attributes.get("algorithm");
+            if (algorithm == null) {
+                algorithm = KeyManagerFactory.getDefaultAlgorithm();
+            }
+
+            String keystoreType = (String) attributes.get("keystoreType");
+            if (keystoreType == null) {
+                keystoreType = defaultKeystoreType;
+            }
+
+            String keystoreProvider =
+                (String) attributes.get("keystoreProvider");
+
+            String trustAlgorithm =
+                (String)attributes.get("truststoreAlgorithm");
+            if( trustAlgorithm == null ) {
+                trustAlgorithm = TrustManagerFactory.getDefaultAlgorithm();
+            }
+
+            // Create and init SSLContext
+            SSLContext context = SSLContext.getInstance(protocol);
+            context.init(getKeyManagers(keystoreType, keystoreProvider,
+                                 algorithm,
+                                 (String) attributes.get("keyAlias")),
+                         getTrustManagers(keystoreType, keystoreProvider,
+                                 trustAlgorithm),
+                         new SecureRandom());
+
+            // Configure SSL session cache
+            int sessionCacheSize;
+            if (attributes.get("sessionCacheSize") != null) {
+                sessionCacheSize = Integer.parseInt(
+                        (String)attributes.get("sessionCacheSize"));
+            } else {
+                sessionCacheSize = defaultSessionCacheSize;
+            }
+            int sessionTimeout;
+            if (attributes.get("sessionTimeout") != null) {
+                sessionTimeout = Integer.parseInt(
+                        (String)attributes.get("sessionTimeout"));
+            } else {
+                sessionTimeout = defaultSessionTimeout;
+            }
+            SSLSessionContext sessionContext =
+                context.getServerSessionContext();
+            if (sessionContext != null) {
+                sessionContext.setSessionCacheSize(sessionCacheSize);
+                sessionContext.setSessionTimeout(sessionTimeout);
+            }
+
+            // create proxy
+            sslProxy = context.getServerSocketFactory();
+
+            // Determine which cipher suites to enable
+            String requestedCiphers = (String)attributes.get("ciphers");
+            if (ALLOW_ALL_SUPPORTED_CIPHERS.equals(requestedCiphers)) {
+                enabledCiphers = sslProxy.getSupportedCipherSuites();
+            } else {
+                enabledCiphers = getEnabledCiphers(requestedCiphers,
+                        sslProxy.getSupportedCipherSuites());
+            }
+
+            allowUnsafeLegacyRenegotiation =
+                "true".equals(attributes.get("allowUnsafeLegacyRenegotiation"));
+
+            // Check the SSL config is OK
+            checkConfig();
+
+        } catch(Exception e) {
+            if( e instanceof IOException )
+                throw (IOException)e;
+            throw new IOException(e.getMessage());
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the initialization parameters for the TrustManager.
+     * Currently, only the default <code>PKIX</code> is supported.
+     *
+     * @param algorithm The algorithm to get parameters for.
+     * @param crlf The path to the CRL file.
+     * @param trustStore The configured TrustStore.
+     * @return The parameters including the CRLs and TrustStore.
+     */
+    protected CertPathParameters getParameters(String algorithm,
+                                                String crlf,
+                                                KeyStore trustStore)
+        throws Exception {
+        CertPathParameters params = null;
+        if("PKIX".equalsIgnoreCase(algorithm)) {
+            PKIXBuilderParameters xparams = new PKIXBuilderParameters(trustStore,
+                                                                     new X509CertSelector());
+            Collection<? extends CRL> crls = getCRLs(crlf);
+            CertStoreParameters csp = new CollectionCertStoreParameters(crls);
+            CertStore store = CertStore.getInstance("Collection", csp);
+            xparams.addCertStore(store);
+            xparams.setRevocationEnabled(true);
+            String trustLength = (String)attributes.get("trustMaxCertLength");
+            if(trustLength != null) {
+                try {
+                    xparams.setMaxPathLength(Integer.parseInt(trustLength));
+                } catch(Exception ex) {
+                    log.warn("Bad maxCertLength: "+trustLength);
+                }
+            }
+
+            params = xparams;
+        } else {
+            throw new CRLException("CRLs not supported for type: "+algorithm);
+        }
+        return params;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get a string from the underlying resource bundle or return null if the
+     * String is not found.
+     *
+     * @param key to desired resource String
+     *
+     * @return resource String matching <i>key</i> from underlying bundle or
+     *         null if not found.
+     *
+     * @throws IllegalArgumentException if <i>key</i> is null
+     */
+    public String getString(String key) {
+        if (key == null){
+            String msg = "key may not have a null value";
+            throw new IllegalArgumentException(msg);
+        }
+
+        String str = null;
+
+        try {
+            // Avoid NPE if bundle is null and treat it like an MRE
+            if (bundle != null) {
+                str = bundle.getString(key);
+            }
+        } catch (MissingResourceException mre) {
+            //bad: shouldn't mask an exception the following way:
+            //   str = "[cannot find message associated with key '" + key +
+            //         "' due to " + mre + "]";
+            //     because it hides the fact that the String was missing
+            //     from the calling code.
+            //good: could just throw the exception (or wrap it in another)
+            //      but that would probably cause much havoc on existing
+            //      code.
+            //better: consistent with container pattern to
+            //      simply return null.  Calling code can then do
+            //      a null check.
+            str = null;
+        }
+
+        return str;
+    }
+
+
+
+    /**
+     * Get a string from the underlying resource bundle and format
+     * it with the given set of arguments.
+     *
+     * @param key  The key for the required message
+     * @param args The values to insert into the message
+     *
+     * @return The request string formatted with the provided arguments or the
+     *         key if the key was not found.
+     */
+    public String getString(final String key, final Object... args) {
+        String value = getString(key);
+        if (value == null) {
+            value = key;
+        }
+
+        MessageFormat mf = new MessageFormat(value);
+        mf.setLocale(locale);
+        return mf.format(args, new StringBuffer(), null).toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Configure Client authentication for this version of JSSE.  The
+     * JSSE included in Java 1.4 supports the 'want' value.  Prior
+     * versions of JSSE will treat 'want' as 'false'.
+     * @param socket the SSLServerSocket
+     */
+    protected void configureClientAuth(SSLServerSocket socket){
+        if (wantClientAuth){
+            socket.setWantClientAuth(wantClientAuth);
+        } else {
+            socket.setNeedClientAuth(requireClientAuth);
+        }
+    }
+
+
+    /**
+     * Configure Client authentication for this version of JSSE.  The
+     * JSSE included in Java 1.4 supports the 'want' value.  Prior
+     * versions of JSSE will treat 'want' as 'false'.
+     * @param socket the SSLSocket
+     */
+    protected void configureClientAuth(SSLSocket socket){
+        // Per JavaDocs: SSLSockets returned from
+        // SSLServerSocket.accept() inherit this setting.
+    }
+-----CSCI578-----
+
+
+    /**
+     * Add this Mover as Cluster Listener ( receiver)
+     * 
+     * @throws LifecycleException
+     */
+    public void start() throws LifecycleException {
+        if (started)
+            return;
+        getCluster().addClusterListener(this);
+        started = true;
+        if (log.isInfoEnabled())
+            log.info(sm.getString("jvmRoute.clusterListener.started"));
+    }
+-----CSCI578-----
+
+
+    /**
+     * Remove this from Cluster Listener
+     * 
+     * @throws LifecycleException
+     */
+    public void stop() throws LifecycleException {
+        started = false;
+        getCluster().removeClusterListener(this);
+        if (log.isInfoEnabled())
+            log.info(sm.getString("jvmRoute.clusterListener.stopped"));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Copy all of the mappings from the specified map to this one.  These
+     * mappings replace any mappings that this map had for any of the keys
+     * currently in the specified Map.
+     *
+     * @param map Mappings to be stored into this map
+     *
+     * @exception IllegalStateException if this map is currently locked
+     */
+    @Override
+    public void putAll(Map<? extends K,? extends V> map) {
+
+        if (locked)
+            throw new IllegalStateException
+                (sm.getString("parameterMap.locked"));
+        super.putAll(map);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the mapping for this key from the map if present.
+     *
+     * @param key Key whose mapping is to be removed from the map
+     *
+     * @return The previous value associated with the specified key, or
+     *  <code>null</code> if there was no mapping for that key
+     *
+     * @exception IllegalStateException if this map is currently locked
+     */
+    @Override
+    public V remove(Object key) {
+
+        if (locked)
+            throw new IllegalStateException
+                (sm.getString("parameterMap.locked"));
+        return (super.remove(key));
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /**
+     * @see #setInternalProxies(String)
+     */
+    private Pattern[] internalProxies = new Pattern[] {
+        Pattern.compile("10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"), Pattern.compile("192\\.168\\.\\d{1,3}\\.\\d{1,3}"),
+        Pattern.compile("169\\.254\\.\\d{1,3}\\.\\d{1,3}"), Pattern.compile("127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}")
+    }
+
+    
+    /**
+     * @see #setInternalProxies(String)
+     * @return comma delimited list of internal proxies
+     */
+    public String getInternalProxies() {
+        List<String> internalProxiesAsStringList = new ArrayList<String>();
+        for (Pattern internalProxyPattern : internalProxies) {
+            internalProxiesAsStringList.add(String.valueOf(internalProxyPattern));
+        }
+        return listToCommaDelimitedString(internalProxiesAsStringList);
+    }
+-----CSCI578-----
+
+    
+    /**
+     * @see RemoteIpValve#setTrustedProxies(String)
+     */
+    private Pattern[] trustedProxies = new Pattern[0];
+
+
+    /**
+     * @see #setTrustedProxies(String)
+     * @return comma delimited list of trusted proxies
+     */
+    public String getTrustedProxies() {
+        List<String> trustedProxiesAsStringList = new ArrayList<String>();
+        for (Pattern trustedProxy : trustedProxies) {
+            trustedProxiesAsStringList.add(String.valueOf(trustedProxy));
+        }
+        return listToCommaDelimitedString(trustedProxiesAsStringList);
+    }
+-----CSCI578-----
+
+
+
+    /** Start the protocol
+     */
+    public void init() throws Exception {
+        endpoint.setName(getName());
+        endpoint.setHandler(cHandler);
+        endpoint.setUseSendfile(false);
+
+        try {
+            endpoint.init();
+        } catch (Exception ex) {
+            log.error(sm.getString("ajpprotocol.endpoint.initerror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled()) {
+            log.info(sm.getString("ajpprotocol.init", getName()));
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void start() throws Exception {
+        if (this.domain != null ) {
+            try {
+                tpOname = new ObjectName
+                    (domain + ":" + "type=ThreadPool,name=" + getName());
+                Registry.getRegistry(null, null)
+                    .registerComponent(endpoint, tpOname, null );
+            } catch (Exception e) {
+                log.error("Can't register threadpool" );
+            }
+            rgOname = new ObjectName
+                (domain + ":type=GlobalRequestProcessor,name=" + getName());
+            Registry.getRegistry(null, null).registerComponent
+                (cHandler.global, rgOname, null);
+        }
+
+        try {
+            endpoint.start();
+        } catch (Exception ex) {
+            log.error(sm.getString("ajpprotocol.endpoint.starterror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled())
+            log.info(sm.getString("ajpprotocol.start", getName()));
+    }
+-----CSCI578-----
+
+
+    public void pause() throws Exception {
+        try {
+            endpoint.pause();
+        } catch (Exception ex) {
+            log.error(sm.getString("ajpprotocol.endpoint.pauseerror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled())
+            log.info(sm.getString("ajpprotocol.pause", getName()));
+    }
+-----CSCI578-----
+
+
+    public void resume() throws Exception {
+        try {
+            endpoint.resume();
+        } catch (Exception ex) {
+            log.error(sm.getString("ajpprotocol.endpoint.resumeerror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled())
+            log.info(sm.getString("ajpprotocol.resume", getName()));
+    }
+-----CSCI578-----
+
+
+    public void destroy() throws Exception {
+        if (log.isInfoEnabled())
+            log.info(sm.getString("ajpprotocol.stop", getName()));
+        endpoint.destroy();
+        if (tpOname!=null)
+            Registry.getRegistry(null, null).unregisterComponent(tpOname);
+        if (rgOname != null)
+            Registry.getRegistry(null, null).unregisterComponent(rgOname);
+    }
+-----CSCI578-----
+
+
+
+    public void start() throws Exception {
+        if (this.domain != null ) {
+            try {
+                tpOname = new ObjectName
+                    (domain + ":" + "type=ThreadPool,name=" + getName());
+                Registry.getRegistry(null, null)
+                    .registerComponent(endpoint, tpOname, null );
+            } catch (Exception e) {
+                log.error("Can't register threadpool" );
+            }
+            rgOname = new ObjectName
+                (domain + ":type=GlobalRequestProcessor,name=" + getName());
+            Registry.getRegistry(null, null).registerComponent
+                (cHandler.global, rgOname, null);
+        }
+
+        try {
+            endpoint.start();
+        } catch (Exception ex) {
+            log.error(sm.getString("ajpprotocol.endpoint.starterror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled())
+            log.info(sm.getString("ajpprotocol.start", getName()));
+    }
+-----CSCI578-----
+
+
+    public void pause() throws Exception {
+        try {
+            endpoint.pause();
+        } catch (Exception ex) {
+            log.error(sm.getString("ajpprotocol.endpoint.pauseerror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled())
+            log.info(sm.getString("ajpprotocol.pause", getName()));
+    }
+-----CSCI578-----
+
+
+    public void resume() throws Exception {
+        try {
+            endpoint.resume();
+        } catch (Exception ex) {
+            log.error(sm.getString("ajpprotocol.endpoint.resumeerror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled())
+            log.info(sm.getString("ajpprotocol.resume", getName()));
+    }
+-----CSCI578-----
+
+
+    public void destroy() throws Exception {
+        if (log.isInfoEnabled())
+            log.info(sm.getString("ajpprotocol.stop", getName()));
+        endpoint.destroy();
+        if (tpOname!=null)
+            Registry.getRegistry(null, null).unregisterComponent(tpOname);
+        if (rgOname != null)
+            Registry.getRegistry(null, null).unregisterComponent(rgOname);
+    }
+-----CSCI578-----
+
+
+
+    /** Start the protocol
+     */
+    public void init() throws Exception {
+        endpoint.setName(getName());
+        endpoint.setHandler(cHandler);
+
+        try {
+            endpoint.init();
+        } catch (Exception ex) {
+            log.error(sm.getString("http11protocol.endpoint.initerror"), ex);
+            throw ex;
+        }
+        if(log.isInfoEnabled())
+            log.info(sm.getString("http11protocol.init", getName()));
+
+    }
+-----CSCI578-----
+
+
+    public void start() throws Exception {
+        if( this.domain != null ) {
+            try {
+                tpOname=new ObjectName
+                    (domain + ":" + "type=ThreadPool,name=" + getName());
+                Registry.getRegistry(null, null)
+                .registerComponent(endpoint, tpOname, null );
+            } catch (Exception e) {
+                log.error("Can't register threadpool" );
+            }
+            rgOname=new ObjectName
+                (domain + ":type=GlobalRequestProcessor,name=" + getName());
+            Registry.getRegistry(null, null).registerComponent
+                ( cHandler.global, rgOname, null );
+        }
+
+        try {
+            endpoint.start();
+        } catch (Exception ex) {
+            log.error(sm.getString("http11protocol.endpoint.starterror"), ex);
+            throw ex;
+        }
+        if(log.isInfoEnabled())
+            log.info(sm.getString("http11protocol.start", getName()));
+    }
+-----CSCI578-----
+
+
+    public void pause() throws Exception {
+        try {
+            endpoint.pause();
+        } catch (Exception ex) {
+            log.error(sm.getString("http11protocol.endpoint.pauseerror"), ex);
+            throw ex;
+        }
+        if(log.isInfoEnabled())
+            log.info(sm.getString("http11protocol.pause", getName()));
+    }
+-----CSCI578-----
+
+
+    public void resume() throws Exception {
+        try {
+            endpoint.resume();
+        } catch (Exception ex) {
+            log.error(sm.getString("http11protocol.endpoint.resumeerror"), ex);
+            throw ex;
+        }
+        if(log.isInfoEnabled())
+            log.info(sm.getString("http11protocol.resume", getName()));
+    }
+-----CSCI578-----
+
+
+    public void destroy() throws Exception {
+        if(log.isInfoEnabled())
+            log.info(sm.getString("http11protocol.stop", getName()));
+        endpoint.destroy();
+        if( tpOname!=null )
+            Registry.getRegistry(null, null).unregisterComponent(tpOname);
+        if( rgOname != null )
+            Registry.getRegistry(null, null).unregisterComponent(rgOname);
+    }
+-----CSCI578-----
+
+
+    public void start() throws Exception {
+        if (this.domain != null) {
+            try {
+                tpOname = new ObjectName
+                    (domain + ":" + "type=ThreadPool,name=" + getName());
+                Registry.getRegistry(null, null)
+                    .registerComponent(endpoint, tpOname, null );
+            } catch (Exception e) {
+                log.error("Can't register endpoint");
+            }
+            rgOname=new ObjectName
+                (domain + ":type=GlobalRequestProcessor,name=" + getName());
+            Registry.getRegistry(null, null).registerComponent
+                ( cHandler.global, rgOname, null );
+        }
+
+        try {
+            endpoint.start();
+        } catch (Exception ex) {
+            log.error(sm.getString("http11protocol.endpoint.starterror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled())
+            log.info(sm.getString("http11protocol.start", getName()));
+    }
+-----CSCI578-----
+
+
+    public void pause() throws Exception {
+        try {
+            endpoint.pause();
+        } catch (Exception ex) {
+            log.error(sm.getString("http11protocol.endpoint.pauseerror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled())
+            log.info(sm.getString("http11protocol.pause", getName()));
+    }
+-----CSCI578-----
+
+
+    public void resume() throws Exception {
+        try {
+            endpoint.resume();
+        } catch (Exception ex) {
+            log.error(sm.getString("http11protocol.endpoint.resumeerror"), ex);
+            throw ex;
+        }
+        if (log.isInfoEnabled())
+            log.info(sm.getString("http11protocol.resume", getName()));
+    }
+-----CSCI578-----
+
+
+    public void destroy() throws Exception {
+        if (log.isInfoEnabled())
+            log.info(sm.getString("http11protocol.stop", getName()));
+        endpoint.destroy();
+        if (tpOname!=null)
+            Registry.getRegistry(null, null).unregisterComponent(tpOname);
+        if (rgOname != null)
+            Registry.getRegistry(null, null).unregisterComponent(rgOname);
+    }
+-----CSCI578-----
+
+
+
+    public long end() throws IOException {
+
+        final int maxSwallowSize = org.apache.coyote.Constants.MAX_SWALLOW_SIZE;
+        final boolean maxSwallowSizeExceeded = (maxSwallowSize > -1 && remaining > maxSwallowSize);
+        long swallowed = 0;
+
+        // Consume extra bytes.
+        while (remaining > 0) {
+
+            int nread = buffer.doRead(endChunk, null);
+            if (nread > 0 ) {
+                swallowed += nread;
+                remaining = remaining - nread;
+                if (maxSwallowSizeExceeded && swallowed > maxSwallowSize) {
+                    // Note: We do not fail early so the client has a chance to
+                    // read the response before the connection is closed. See:
+                    // http://httpd.apache.org/docs/2.0/misc/fin_wait_2.html#appendix
+                    throw new IOException(sm.getString("inputFilter.maxSwallow"));
+                }
+            } else { // errors are handled higher up.
+                remaining = 0;
+            }
+        }
+
+        // If too many bytes were read, return the amount.
+        return -remaining;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Convert 4 hex digits to an int, and return the number of converted
+     * bytes.
+     *
+     * @param hex Byte array containing exactly four hexadecimal digits
+     *
+     * @exception IllegalArgumentException if an invalid hexadecimal digit
+     *  is included
+     * @deprecated Not used, will be removed in Tomcat 7
+     */
+    public static int convert2Int( byte[] hex ) {
+	// Code from Ajp11, from Apache's JServ
+    
+	// assert b.length==4
+	// assert valid data
+	int len;
+	if(hex.length < 4 ) return 0;
+	if( getDec(hex[0])<0 )
+	    throw new IllegalArgumentException(sm.getString("hexUtil.bad"));
+	len = getDec(hex[0]);
+	len = len << 4;
+	if( getDec(hex[1])<0 )
+	    throw new IllegalArgumentException(sm.getString("hexUtil.bad"));
+	len += getDec(hex[1]);
+	len = len << 4;
+	if( getDec(hex[2])<0 )
+	    throw new IllegalArgumentException(sm.getString("hexUtil.bad"));
+	len += getDec(hex[2]);
+	len = len << 4;
+	if( getDec(hex[3])<0 )
+	    throw new IllegalArgumentException(sm.getString("hexUtil.bad"));
+	len += getDec(hex[3]);
+	return len;
+    }
+-----CSCI578-----
+
+    
+    
+    @SuppressWarnings("unused")
+    public void setUseServerCipherSuitesOrder(SSLServerSocket socket,
+            boolean useCipherSuitesOrder) {
+        throw new UnsupportedOperationException(sm.getString("jreCompat.noServerCipherSuiteOrder"));
+    }
+
+    
+    
+    @SuppressWarnings("unused")
+    public void setUseServerCipherSuitesOrder(SSLEngine engine,
+            boolean useCipherSuitesOrder) {
+        throw new UnsupportedOperationException(sm.getString("jreCompat.noServerCipherSuiteOrder"));
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Socket acceptSocket(ServerSocket socket)
+        throws IOException
+    {
+        SSLSocket asock = null;
+        try {
+             asock = (SSLSocket)socket.accept();
+             configureClientAuth(asock);
+        } catch (SSLException e){
+          throw new SocketException("SSL handshake error" + e.toString());
+        }
+        return asock;
+    }
+-----CSCI578-----
+
+    public void setName(String name) { this.name = name; }
+-----CSCI578-----
+
+    public void setHandler(Handler handler ) { this.handler = handler; }
+-----CSCI578-----
+
+    public void setUseSendfile(boolean useSendfile) { this.useSendfile = useSendfile; }
+-----CSCI578-----
+
+
+
+    /**
+     * Resume the endpoint, which will make it start accepting new sockets
+     * again.
+     */
+    public void resume() {
+        if (running) {
+            paused = false;
+        }
+    }
+-----CSCI578-----
+
+
+    public void resume() {
+        if (running) {
+            paused = false;
+        }
+    }
+-----CSCI578-----
+
+    public void setUseSendfile(boolean useSendfile) { endpoint.setUseSendfile(useSendfile); }

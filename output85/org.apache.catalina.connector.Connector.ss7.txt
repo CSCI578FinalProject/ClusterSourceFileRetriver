@@ -1,0 +1,65 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Coyote protocol which will be used by the connector.
+     *
+     * @param protocol The Coyote protocol name
+     */
+    public void setProtocol(String protocol) {
+
+        boolean aprConnector = AprLifecycleListener.isAprAvailable() &&
+                AprLifecycleListener.getUseAprConnector();
+
+        if ("HTTP/1.1".equals(protocol) || protocol == null) {
+            if (aprConnector) {
+                setProtocolHandlerClassName("org.apache.coyote.http11.Http11AprProtocol");
+            } else {
+                setProtocolHandlerClassName("org.apache.coyote.http11.Http11NioProtocol");
+            }
+        } else if ("AJP/1.3".equals(protocol)) {
+            if (aprConnector) {
+                setProtocolHandlerClassName("org.apache.coyote.ajp.AjpAprProtocol");
+            } else {
+                setProtocolHandlerClassName("org.apache.coyote.ajp.AjpNioProtocol");
+            }
+        } else {
+            setProtocolHandlerClassName(protocol);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the class name of the Coyote protocol handler which will be used
+     * by the connector.
+     *
+     * @param protocolHandlerClassName The new class name
+     */
+    public void setProtocolHandlerClassName(String protocolHandlerClassName) {
+
+        this.protocolHandlerClassName = protocolHandlerClassName;
+
+    }
+-----CSCI578-----
+
+
+    public static boolean isAprAvailable() {
+        //https://bz.apache.org/bugzilla/show_bug.cgi?id=48613
+        if (instanceCreated) {
+            synchronized (lock) {
+                init();
+            }
+        }
+        return aprAvailable;
+    }
+-----CSCI578-----
+
+
+    public static boolean getUseAprConnector() {
+        return useAprConnector;
+    }

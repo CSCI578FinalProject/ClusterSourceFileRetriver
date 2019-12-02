@@ -1,0 +1,84 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Get the value of the configuration URL.
+     */
+    private static String getConfigUrl() {
+        return System.getProperty("catalina.config");
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Load properties.
+     */
+    private static void loadProperties() {
+
+        InputStream is = null;
+        Throwable error = null;
+
+        try {
+            String configUrl = getConfigUrl();
+            if (configUrl != null) {
+                is = (new URL(configUrl)).openStream();
+            }
+        } catch (Throwable t) {
+            // Ignore
+        }
+
+        if (is == null) {
+            try {
+                File home = new File(getCatalinaBase());
+                File conf = new File(home, "conf");
+                File properties = new File(conf, "catalina.properties");
+                is = new FileInputStream(properties);
+            } catch (Throwable t) {
+                // Ignore
+            }
+        }
+
+        if (is == null) {
+            try {
+                is = CatalinaProperties.class.getResourceAsStream
+                    ("/org/apache/catalina/startup/catalina.properties");
+            } catch (Throwable t) {
+                // Ignore
+            }
+        }
+
+        if (is != null) {
+            try {
+                properties = new Properties();
+                properties.load(is);
+                is.close();
+            } catch (Throwable t) {
+                error = t;
+            }
+        }
+
+        if ((is == null) || (error != null)) {
+            // Do something
+            log.warn("Failed to load catalina.properties", error);
+            // That's fine - we have reasonable defaults.
+            properties=new Properties();
+        }
+
+        // Register the properties as system properties
+        Enumeration enumeration = properties.propertyNames();
+        while (enumeration.hasMoreElements()) {
+            String name = (String) enumeration.nextElement();
+            String value = properties.getProperty(name);
+            if (value != null) {
+                System.setProperty(name, value);
+            }
+        }
+
+    }

@@ -1,0 +1,112 @@
+6
+-----CSCI578-----
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx) throws ELException {
+
+        // Correct evaluation requires knowledge of the whole set of nested
+        // expressions, not just the current expression
+        NestedState state = getNestedState();
+
+        // Check that there are not more sets of parameters than there are
+        // nested expressions.
+        int methodParameterSetCount = jjtGetNumChildren() - 2;
+        if (methodParameterSetCount > state.getNestingCount()) {
+            throw new ELException(MessageFactory.get(
+                    "error.lambda.tooManyMethodParameterSets"));
+        }
+
+        // First child is always parameters even if there aren't any
+        AstLambdaParameters formalParametersNode =
+                (AstLambdaParameters) children[0];
+        Node[] formalParamNodes = formalParametersNode.children;
+
+        // Second child is a value expression
+        ValueExpressionImpl ve = new ValueExpressionImpl("", children[1],
+                ctx.getFunctionMapper(), ctx.getVariableMapper(), null);
+
+        // Build a LambdaExpression
+        List<String> formalParameters = new ArrayList<>();
+        if (formalParamNodes != null) {
+            for (Node formalParamNode : formalParamNodes) {
+                formalParameters.add(formalParamNode.getImage());
+            }
+        }
+        LambdaExpression le = new LambdaExpression(formalParameters, ve);
+        le.setELContext(ctx);
+
+        if (jjtGetNumChildren() == 2) {
+            // No method parameters
+            // Can only invoke the expression if none of the lambda expressions
+            // in the nesting declare parameters
+            if (state.getHasFormalParameters()) {
+                return le;
+            } else {
+                return le.invoke(ctx, (Object[]) null);
+            }
+        }
+
+        /*
+         * This is a (possibly nested) lambda expression with one or more sets
+         * of parameters provided.
+         *
+         * If there are more nested expressions than sets of parameters this may
+         * return a LambdaExpression.
+         *
+         * If there are more sets of parameters than nested expressions an
+         * ELException will have been thrown by the check at the start of this
+         * method.
+         */
+
+        // Always have to invoke the outer-most expression
+        int methodParameterIndex = 2;
+        Object result = le.invoke(((AstMethodParameters)
+                children[methodParameterIndex]).getParameters(ctx));
+        methodParameterIndex++;
+
+        while (result instanceof LambdaExpression &&
+                methodParameterIndex < jjtGetNumChildren()) {
+            result = ((LambdaExpression) result).invoke(((AstMethodParameters)
+                    children[methodParameterIndex]).getParameters(ctx));
+            methodParameterIndex++;
+        }
+
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public FunctionMapper getFunctionMapper() {
+        return fnMapper;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public VariableMapper getVariableMapper() {
+        return varMapper;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public ValueReference getValueReference(EvaluationContext ctx) {
+        VariableMapper varMapper = ctx.getVariableMapper();
+
+        if (varMapper == null) {
+            return null;
+        }
+
+        ValueExpression expr = varMapper.resolveVariable(this.image);
+
+        if (expr == null) {
+            return null;
+        }
+
+        return expr.getValueReference(ctx);
+    }

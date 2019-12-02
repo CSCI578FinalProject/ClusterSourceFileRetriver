@@ -1,0 +1,165 @@
+12
+    
+    protected void performForcedCheck() {
+        //update all alive times
+        Member[] members = super.getMembers();
+        for (int i = 0; members != null && i < members.length; i++) {
+            if (memberAlive(members[i])) {
+                if (membership.memberAlive((MemberImpl)members[i])) super.memberAdded(members[i]);
+                addSuspects.remove(members[i]);
+            } else {
+                if (membership.getMember(members[i])!=null) {
+                    membership.removeMember((MemberImpl)members[i]);
+                    removeSuspects.remove(members[i]);
+                    if (members[i] instanceof StaticMember) {
+                        addSuspects.put(members[i],
+                                Long.valueOf(System.currentTimeMillis()));
+                    }
+                    super.memberDisappeared(members[i]);
+                }
+            } //end if
+        } //for
+
+    }
+    public void checkMembers(boolean checkAll) {
+        
+        try {
+            if (membership == null) setupMembership();
+            synchronized (membership) {
+                if ( !checkAll ) performBasicCheck();
+                else performForcedCheck();
+            }
+        }catch ( Exception x ) {
+            log.warn("Unable to perform heartbeat on the TcpFailureDetector.",x);
+        } finally {
+            
+        }
+    }
+
+    protected void performBasicCheck() {
+        //update all alive times
+        Member[] members = super.getMembers();
+        for (int i = 0; members != null && i < members.length; i++) {
+            if (addSuspects.containsKey(members[i]) && membership.getMember(members[i]) == null) {
+                // avoid temporary adding member.
+                continue;
+            }
+            if (membership.memberAlive( (MemberImpl) members[i])) {
+                //we don't have this one in our membership, check to see if he/she is alive
+                if (memberAlive(members[i])) {
+                    log.warn("Member added, even though we werent notified:" + members[i]);
+                    super.memberAdded(members[i]);
+                } else {
+                    membership.removeMember( (MemberImpl) members[i]);
+                } //end if
+            } //end if
+        } //for
+
+        //check suspect members if they are still alive,
+        //if not, simply issue the memberDisappeared message
+        MemberImpl[] keys = (MemberImpl[]) removeSuspects.keySet().toArray(new MemberImpl[removeSuspects.size()]);
+        for (int i = 0; i < keys.length; i++) {
+            MemberImpl m = (MemberImpl) keys[i];
+            if (membership.getMember(m) != null && (!memberAlive(m))) {
+                membership.removeMember(m);
+                super.memberDisappeared(m);
+                removeSuspects.remove(m);
+                if(log.isInfoEnabled())
+                    log.info("Suspect member, confirmed dead.["+m+"]");
+            } //end if
+        }
+
+        //check add suspects members if they are alive now,
+        //if they are, simply issue the memberAdded message
+        keys = (MemberImpl[]) addSuspects.keySet().toArray(new MemberImpl[addSuspects.size()]);
+        for (int i = 0; i < keys.length; i++) {
+            MemberImpl m = (MemberImpl) keys[i];
+            if ( membership.getMember(m) == null && (memberAlive(m))) {
+                membership.memberAlive(m);
+                super.memberAdded(m);
+                addSuspects.remove(m);
+                if(log.isInfoEnabled())
+                    log.info("Suspect member, confirmed alive.["+m+"]");
+            } //end if
+        }
+    }
+
+    public void memberDisappeared(Member member) {
+        if ( membership == null ) setupMembership();
+        boolean notify = false;
+        synchronized (membership) {
+            notify = Arrays.equals(domain,member.getDomain());
+            membership.removeMember((MemberImpl)member);
+        }
+        if ( notify ) super.memberDisappeared(member);
+    }
+
+    public Member[] getMembers() {
+        if ( membership == null ) setupMembership();
+        return membership.getMembers();
+    }
+
+    public Member getMember(Member mbr) {
+        if ( membership == null ) setupMembership();
+        return membership.getMember(mbr);
+    }
+
+    /**
+     * Get all current cluster members
+     * @return all members or empty array
+     */
+    public Member[] getMembers() {
+        
+        return membership.getMembers();
+    }
+
+    /**
+     *
+     * @param mbr Member
+     * @return Member
+     */
+    public Member getMember(Member mbr) {
+        
+        return membership.getMember(mbr);
+    }
+
+    public Member[] getMembers() {
+        if ( membership == null ) setupMembership();
+        return membership.getMembers();
+    }
+
+    public Member getMember(Member mbr) {
+        if ( membership == null ) setupMembership();
+        return membership.getMember(mbr);
+    }
+    
+    public void heartbeat() {
+        super.heartbeat();
+        checkMembers(false);
+    }
+
+
+    /**
+     * Return all the members by name
+     */
+    public String[] getMembersByName() {
+        Member[] currentMembers = getMembers();
+        String [] membernames ;
+        if(currentMembers != null) {
+            membernames = new String[currentMembers.length];
+            for (int i = 0; i < currentMembers.length; i++) {
+                membernames[i] = currentMembers[i].toString() ;
+            }
+        } else
+            membernames = new String[0] ;
+        return membernames ;
+    }
+    
+    public Member getMember(Member mbr) {
+        if ( impl == null || impl.membership == null ) return null;
+        return impl.membership.getMember(mbr);
+    }
+    public Member[] getMembers() {
+        if ( impl == null || impl.membership == null ) return EMPTY_MEMBERS;
+        return impl.membership.getMembers();
+    }

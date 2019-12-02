@@ -1,0 +1,42 @@
+2
+-----CSCI578-----
+
+
+    @Override
+    public Object invoke(ELContext context, Object base, Object method,
+            Class<?>[] paramTypes, Object[] params) {
+        String targetMethod = coerceToString(method);
+        if (targetMethod.length() == 0) {
+            throw new ELException(new NoSuchMethodException());
+        }
+
+        context.setPropertyResolved(false);
+
+        Object result = null;
+
+        // skip implicit and call app resolvers, stream resolver and static
+        // resolver
+        int index = 1 /* implicit */ + appResolversSize +
+                2 /* stream + static */;
+        for (int i = 1; i < index; i++) {
+            result = resolvers[i].invoke(
+                    context, base, targetMethod, paramTypes, params);
+            if (context.isPropertyResolved()) {
+                return result;
+            }
+        }
+
+        // skip collection (map, resource, list, and array) resolvers
+        index += 4;
+        // call bean and the rest of resolvers
+        for (int i = index; i < size; i++) {
+            result = resolvers[i].invoke(
+                    context, base, targetMethod, paramTypes, params);
+            if (context.isPropertyResolved()) {
+                return result;
+            }
+        }
+
+        return null;
+    }
+-----CSCI578-----

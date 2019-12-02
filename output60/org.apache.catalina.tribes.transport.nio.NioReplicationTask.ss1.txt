@@ -1,0 +1,287 @@
+20
+-----CSCI578-----
+
+
+    private void remoteEof(SelectionKey key) {
+        // close channel on EOF, invalidates the key
+        if ( log.isDebugEnabled() ) log.debug("Channel closed on the remote end, disconnecting");
+        cancelKey(key);
+    }
+-----CSCI578-----
+
+    
+    
+
+
+
+    /**
+     * send a reply-acknowledgement (6,2,3)
+     * @param key
+     * @param channel
+     */
+    protected void sendAck(SelectionKey key, SocketChannel channel, byte[] command) {
+        
+        try {
+            ByteBuffer buf = ByteBuffer.wrap(command);
+            int total = 0;
+            while ( total < command.length ) {
+                total += channel.write(buf);
+            }
+            if (log.isTraceEnabled()) {
+                log.trace("ACK sent to " + channel.socket().getPort());
+            }
+        } catch ( java.io.IOException x ) {
+            log.warn("Unable to send ACK back through channel, channel disconnected?: "+x.getMessage());
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+
+    public boolean hasPackage() {
+        return buffer.countPackages(true)>0;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    public synchronized void access() {
+        this.accessed = true;
+        this.lastAccess = System.currentTimeMillis();
+    }
+-----CSCI578-----
+
+    
+    public void addEvent(Runnable event) {
+        if ( selector != null ) {
+            synchronized (events) {
+                events.add(event);
+            }
+            if ( log.isTraceEnabled() ) log.trace("Adding event to selector:"+event);
+            if ( isListening() && selector!=null ) selector.wakeup();
+        }
+    }
+-----CSCI578-----
+
+
+    // loop forever waiting for work to do
+    public synchronized void run() { 
+        if ( buffer == null ) {
+            if ( (getOptions() & OPTION_DIRECT_BUFFER) == OPTION_DIRECT_BUFFER) {
+                buffer = ByteBuffer.allocateDirect(getRxBufSize());
+            } else {
+                buffer = ByteBuffer.allocate(getRxBufSize());
+            }
+        } else {
+            buffer.clear();
+        }
+        if (key == null) {
+            return;	// just in case
+        }
+        if ( log.isTraceEnabled() ) 
+            log.trace("Servicing key:"+key);
+
+        try {
+            ObjectReader reader = (ObjectReader)key.attachment();
+            if ( reader == null ) {
+                if ( log.isTraceEnabled() ) 
+                    log.trace("No object reader, cancelling:"+key);
+                cancelKey(key);
+            } else {
+                if ( log.isTraceEnabled() ) 
+                    log.trace("Draining channel:"+key);
+
+                drainChannel(key, reader);
+            }
+        } catch (Exception e) {
+            //this is common, since the sockets on the other
+            //end expire after a certain time.
+            if ( e instanceof CancelledKeyException ) {
+                //do nothing
+            } else if ( e instanceof IOException ) {
+                //dont spew out stack traces for IO exceptions unless debug is enabled.
+                if (log.isDebugEnabled()) log.debug ("IOException in replication worker, unable to drain channel. Probable cause: Keep alive socket closed["+e.getMessage()+"].", e);
+                else log.warn ("IOException in replication worker, unable to drain channel. Probable cause: Keep alive socket closed["+e.getMessage()+"].");
+            } else if ( log.isErrorEnabled() ) {
+                //this is a real error, log it.
+                log.error("Exception caught in TcpReplicationThread.drainChannel.",e);
+            } 
+            cancelKey(key);
+        } finally {
+
+        }
+        key = null;
+        // done, ready for more, return to pool
+        getTaskPool().returnWorker (this);
+    }
+
+
+    /**
+     * Called to initiate a unit of work by this worker thread
+     * on the provided SelectionKey object.  This method is
+     * synchronized, as is the run() method, so only one key
+     * can be serviced at a given time.
+     * Before waking the worker thread, and before returning
+     * to the main selection loop, this key's interest set is
+     * updated to remove OP_READ.  This will cause the selector
+     * to ignore read-readiness for this channel while the
+     * worker thread is servicing it.
+     */
+    public synchronized void serviceChannel (SelectionKey key) {
+        if ( log.isTraceEnabled() ) log.trace("About to service key:"+key);
+        ObjectReader reader = (ObjectReader)key.attachment();
+        if ( reader != null ) reader.setLastAccess(System.currentTimeMillis());
+        this.key = key;
+        key.interestOps (key.interestOps() & (~SelectionKey.OP_READ));
+        key.interestOps (key.interestOps() & (~SelectionKey.OP_WRITE));
+    }
+-----CSCI578-----
+
+
+    public int getRxBufSize() {
+        return rxBufSize;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * <p> Is error logging currently enabled? </p>
+     *
+     * <p> Call this method to prevent having to perform expensive operations
+     * (for example, <code>String</code> concatenation)
+     * when the log level is more than error. </p>
+     */
+    public boolean isErrorEnabled();
+-----CSCI578-----
+
+    
+    /**
+     * The byte buffer that contains the actual message payload
+     * @param buf XByteBuffer
+     */
+    public void setMessage(XByteBuffer buf);
+-----CSCI578-----
+
+
+    /**
+     * Append new bytes to buffer. 
+     * @see XByteBuffer#countPackages()
+     * @param data new transfer buffer
+     * @param len length in buffer
+     * @return number of messages that sent to callback
+     * @throws java.io.IOException
+     */
+    public int append(ByteBuffer data, int len, boolean count) throws java.io.IOException {
+        buffer.append(data,len);
+        int pkgCnt = -1;
+        if ( count ) pkgCnt = buffer.countPackages();
+        return pkgCnt;
+    }
+
+
+     public int append(byte[] data,int off,int len, boolean count) throws java.io.IOException {
+        buffer.append(data,off,len);
+        int pkgCnt = -1;
+        if ( count ) pkgCnt = buffer.countPackages();
+        return pkgCnt;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Internal mechanism to make a check if a complete package exists
+     * within the buffer
+     * @return - true if a complete package (header,compress,size,data,footer) exists within the buffer
+     */
+    public int countPackages() {
+        return countPackages(false);
+    }
+
+
+    public int countPackages(boolean first)
+    {
+        int cnt = 0;
+        int pos = START_DATA.length;
+        int start = 0;
+
+        while ( start < bufSize ) {
+            //first check start header
+            int index = XByteBuffer.firstIndexOf(buf,start,START_DATA);
+            //if the header (START_DATA) isn't the first thing or
+            //the buffer isn't even 14 bytes
+            if ( index != start || ((bufSize-start)<14) ) break;
+            //next 4 bytes are compress flag not needed for count packages
+            //then get the size 4 bytes
+            int size = toInt(buf, pos);
+            //now the total buffer has to be long enough to hold
+            //START_DATA.length+4+size+END_DATA.length
+            pos = start + START_DATA.length + 4 + size;
+            if ( (pos + END_DATA.length) > bufSize) break;
+            //and finally check the footer of the package END_DATA
+            int newpos = firstIndexOf(buf, pos, END_DATA);
+            //mismatch, there is no package
+            if (newpos != pos) break;
+            //increase the packet count
+            cnt++;
+            //reset the values
+            start = pos + END_DATA.length;
+            pos = start + START_DATA.length;
+            //we only want to verify that we have at least one package
+            if ( first ) break;
+        }
+        return cnt;
+    }
+-----CSCI578-----
+
+    /**
+     * Returns the number of packages that the reader has read
+     * @return int
+     */
+    public int count() {
+        return buffer.countPackages();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Utility method, returns true if the options flag indicates that an ack
+     * is to be sent after the message has been received but not yet processed
+     * @param options int - the options for the message
+     * @return boolean 
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_USE_ACK
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_SYNCHRONIZED_ACK
+     */
+    public static boolean sendAckAsync(int options) {
+        return ( (Channel.SEND_OPTIONS_USE_ACK & options) == Channel.SEND_OPTIONS_USE_ACK) &&
+            ( (Channel.SEND_OPTIONS_SYNCHRONIZED_ACK & options) != Channel.SEND_OPTIONS_SYNCHRONIZED_ACK);
+    }
+-----CSCI578-----
+
+    /**
+     * This method is invoked on the callback object to notify it that new data has
+     * been received from one of the cluster nodes.
+     * @param data - the message bytes received from the cluster/replication system
+     */
+     public void messageDataReceived(ChannelMessage data);
+-----CSCI578-----
+
+    
+    /**
+     * Utility method, returns true if the options flag indicates that an ack
+     * is to be sent after the message has been received and processed
+     * @param options int - the options for the message
+     * @return boolean 
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_USE_ACK
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_SYNCHRONIZED_ACK
+     */
+    public static boolean sendAckSync(int options) {
+        return ( (Channel.SEND_OPTIONS_USE_ACK & options) == Channel.SEND_OPTIONS_USE_ACK) &&
+            ( (Channel.SEND_OPTIONS_SYNCHRONIZED_ACK & options) == Channel.SEND_OPTIONS_SYNCHRONIZED_ACK);
+    }

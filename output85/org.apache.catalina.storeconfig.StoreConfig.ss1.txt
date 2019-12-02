@@ -1,0 +1,245 @@
+13
+-----CSCI578-----
+
+
+    /**
+     * Get server.xml location
+     *
+     * @return The server file name
+     */
+    public String getServerFilename() {
+        return serverFilename;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // Attributes
+
+    /**
+     * @return The encoding
+     */
+    public String getEncoding() {
+        return encoding;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Shuffle old-&gt;save and new-&gt;old.
+     *
+     * @throws IOException a file operation error occurred
+     */
+    public void move() throws IOException {
+        if (configOld.renameTo(configSave)) {
+            if (!configNew.renameTo(configOld)) {
+                configSave.renameTo(configOld);
+                throw new IOException("Cannot rename "
+                        + configNew.getAbsolutePath() + " to "
+                        + configOld.getAbsolutePath());
+            }
+        } else {
+            if (!configOld.exists()) {
+                if (!configNew.renameTo(configOld)) {
+                    throw new IOException("Cannot move "
+                            + configNew.getAbsolutePath() + " to "
+                            + configOld.getAbsolutePath());
+                }
+            } else {
+                throw new IOException("Cannot rename "
+                    + configOld.getAbsolutePath() + " to "
+                    + configSave.getAbsolutePath());
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the URL of the XML descriptor for this context.
+     *
+     * @return The URL of the XML descriptor for this context
+     */
+    public URL getConfigFile();
+-----CSCI578-----
+
+
+    /**
+     * Get the StoreRegistry with all factory to generate the
+     * server.xml/context.xml files.
+     *
+     * @see org.apache.catalina.storeconfig.IStoreConfig#getRegistry()
+     */
+    @Override
+    public StoreRegistry getRegistry() {
+        return registry;
+    }
+-----CSCI578-----
+
+
+    public void setStoreSeparate(boolean storeSeparate) {
+        this.storeSeparate = storeSeparate;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Store current Server.
+     */
+    @Override
+    public void storeConfig() {
+        store(server);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Store Server from Object Name (Catalina:type=Server).
+     *
+     * @param aServerName Server ObjectName
+     * @param backup <code>true</code> to backup existing configuration files
+     *  before rewriting them
+     * @param externalAllowed <code>true</code> to allow saving webapp
+     *  configuration for webapps that are not inside the host's app
+     *  directory
+     * @throws MalformedObjectNameException Bad MBean name
+     */
+    public synchronized void storeServer(String aServerName, boolean backup,
+            boolean externalAllowed) throws MalformedObjectNameException {
+        if (aServerName == null || aServerName.length() == 0) {
+            if (log.isErrorEnabled())
+                log.error("Please, call with a correct server ObjectName!");
+            return;
+        }
+        MBeanServer mserver = MBeanUtils.createServer();
+        ObjectName objectName = new ObjectName(aServerName);
+        if (mserver.isRegistered(objectName)) {
+            try {
+                Server aServer = (Server) mserver.getAttribute(objectName,
+                        "managedResource");
+                StoreDescription desc = null;
+                desc = getRegistry().findDescription(StandardContext.class);
+                if (desc != null) {
+                    boolean oldSeparate = desc.isStoreSeparate();
+                    boolean oldBackup = desc.isBackup();
+                    boolean oldExternalAllowed = desc.isExternalAllowed();
+                    try {
+                        desc.setStoreSeparate(true);
+                        desc.setBackup(backup);
+                        desc.setExternalAllowed(externalAllowed);
+                        store(aServer);
+                    } finally {
+                        desc.setStoreSeparate(oldSeparate);
+                        desc.setBackup(oldBackup);
+                        desc.setExternalAllowed(oldExternalAllowed);
+                    }
+                } else {
+                    store(aServer);
+                }
+            } catch (Exception e) {
+                if (log.isInfoEnabled())
+                    log.info("Object " + aServerName
+                            + " is no a Server instance or store exception", e);
+            }
+        } else if (log.isInfoEnabled())
+            log.info("Server " + aServerName + " not found!");
+    }
+-----CSCI578-----
+
+
+    /**
+     * Store a Context from ObjectName.
+     *
+     * @param aContextName MBean ObjectName
+     * @param backup <code>true</code> to backup existing configuration files
+     *  before rewriting them
+     * @param externalAllowed <code>true</code> to allow saving webapp
+     *  configuration for webapps that are not inside the host's app
+     *  directory
+     * @throws MalformedObjectNameException Bad MBean name
+     */
+    public synchronized void storeContext(String aContextName, boolean backup,
+            boolean externalAllowed) throws MalformedObjectNameException {
+        if (aContextName == null || aContextName.length() == 0) {
+            if (log.isErrorEnabled())
+                log.error("Please, call with a correct context ObjectName!");
+            return;
+        }
+        MBeanServer mserver = MBeanUtils.createServer();
+        ObjectName objectName = new ObjectName(aContextName);
+        if (mserver.isRegistered(objectName)) {
+            try {
+                Context aContext = (Context) mserver.getAttribute(objectName,
+                        "managedResource");
+                URL configFile = aContext.getConfigFile();
+                if (configFile != null) {
+                    try {
+                        StoreDescription desc = null;
+                        desc = getRegistry().findDescription(
+                                aContext.getClass());
+                        if (desc != null) {
+                            boolean oldSeparate = desc.isStoreSeparate();
+                            boolean oldBackup = desc.isBackup();
+                            boolean oldExternalAllowed = desc
+                                    .isExternalAllowed();
+                            try {
+                                desc.setStoreSeparate(true);
+                                desc.setBackup(backup);
+                                desc.setExternalAllowed(externalAllowed);
+                                desc.getStoreFactory()
+                                        .store(null, -2, aContext);
+                            } finally {
+                                desc.setStoreSeparate(oldSeparate);
+                                desc.setBackup(oldBackup);
+                                desc.setBackup(oldExternalAllowed);
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.error(e);
+                    }
+                } else
+                    log.error("Missing configFile at Context "
+                            + aContext.getPath() + " to store!");
+            } catch (Exception e) {
+                if (log.isInfoEnabled())
+                    log
+                            .info(
+                                    "Object "
+                                            + aContextName
+                                            + " is no a context instance or store exception",
+                                    e);
+            }
+        } else if (log.isInfoEnabled())
+            log.info("Context " + aContextName + " not found!");
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void storeXMLHead(PrintWriter aWriter) {
+        // Store the beginning of this element
+        aWriter.print("<?xml version=\"1.0\" encoding=\"");
+        aWriter.print(getRegistry().getEncoding());
+        aWriter.println("\"?>");
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param backup
+     *            The backup to set.
+     */
+    public void setBackup(boolean backup) {
+        this.backup = backup;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param external
+     *            The external to set.
+     */
+    public void setExternalAllowed(boolean external) {
+        this.externalAllowed = external;
+    }

@@ -1,0 +1,378 @@
+8
+-----CSCI578-----
+
+
+
+    /**
+     * Filters authenticated principals to ensure that <code>null</code> is
+     * returned for any user that is currently locked out.
+     */
+    private Principal filterLockedAccounts(String username, Principal authenticatedUser) {
+        // Register all failed authentications
+        if (authenticatedUser == null) {
+            registerAuthFailure(username);
+        }
+
+        if (isLocked(username)) {
+            // If the user is currently locked, authentication will always fail
+            log.warn(sm.getString("lockOutRealm.authLockedUser", username));
+            return null;
+        }
+
+        if (authenticatedUser != null) {
+            registerAuthSuccess(username);
+        }
+
+        return authenticatedUser;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Principal associated with the specified username and
+     * credentials, if there is one; otherwise return <code>null</code>.
+     *
+     * @param username Username of the Principal to look up
+     * @param credentials Password or other credentials to use in
+     *  authenticating this username
+     */
+    @Override
+    public Principal authenticate(String username, byte[] credentials) {
+        Principal authenticatedUser = null;
+        
+        for (Realm realm : realms) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("combinedRealm.authStart", username, realm.getInfo()));
+            }
+            
+            authenticatedUser = realm.authenticate(username, credentials);
+            
+            if (authenticatedUser == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("combinedRealm.authFail", username, realm.getInfo()));
+                }
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("combinedRealm.authSucess", username, realm.getInfo()));
+                }
+                break;
+            }
+        }
+        return authenticatedUser;
+    }
+
+
+
+    /**
+     * Return the Principal associated with the specified username, which
+     * matches the digest calculated using the given parameters using the
+     * method described in RFC 2069; otherwise return <code>null</code>.
+     *
+     * @param username Username of the Principal to look up
+     * @param clientDigest Digest which has been submitted by the client
+     * @param once Unique (or supposedly unique) token which has been used
+     * for this request
+     * @param realmName Realm name
+     * @param md5a2 Second MD5 digest used to calculate the digest :
+     * MD5(Method + ":" + uri)
+     */
+    @Override
+    public Principal authenticate(String username, String clientDigest,
+            String once, String nc, String cnonce, String qop,
+            String realmName, String md5a2) {
+        Principal authenticatedUser = null;
+        
+        for (Realm realm : realms) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("combinedRealm.authStart", username, realm.getInfo()));
+            }
+
+            authenticatedUser = realm.authenticate(username, clientDigest, once,
+                    nc, cnonce, qop, realmName, md5a2);
+
+            if (authenticatedUser == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("combinedRealm.authFail", username, realm.getInfo()));
+                }
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("combinedRealm.authSucess", username, realm.getInfo()));
+                }
+                break;
+            }
+        }
+        return authenticatedUser;
+    }
+
+
+
+    /**
+     * Return the Principal associated with the specified username and
+     * credentials, if there is one; otherwise return <code>null</code>.
+     *
+     * @param username Username of the Principal to look up
+     * @param credentials Password or other credentials to use in
+     *  authenticating this username
+     */
+    @Override
+    public Principal authenticate(String username, String credentials) {
+        Principal authenticatedUser = null;
+        
+        for (Realm realm : realms) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("combinedRealm.authStart", username, realm.getInfo()));
+            }
+
+            authenticatedUser = realm.authenticate(username, credentials);
+
+            if (authenticatedUser == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("combinedRealm.authFail", username, realm.getInfo()));
+                }
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("combinedRealm.authSucess", username, realm.getInfo()));
+                }
+                break;
+            }
+        }
+        return authenticatedUser;
+    }
+
+
+    /**
+     * Return the Principal associated with the specified chain of X509
+     * client certificates.  If there is none, return <code>null</code>.
+     *
+     * @param certs Array of client certificates, with the first one in
+     *  the array being the certificate of the client itself.
+     */
+    @Override
+    public Principal authenticate(X509Certificate[] certs) {
+        Principal authenticatedUser = null;
+        String username = null;
+        if (certs != null && certs.length >0) {
+            username = certs[0].getSubjectDN().getName();
+        }
+        
+        for (Realm realm : realms) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("combinedRealm.authStart", username, realm.getInfo()));
+            }
+
+            authenticatedUser = realm.authenticate(certs);
+
+            if (authenticatedUser == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("combinedRealm.authFail", username, realm.getInfo()));
+                }
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("combinedRealm.authSucess", username, realm.getInfo()));
+                }
+                break;
+            }
+        }
+        return authenticatedUser;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Principal associated with the specified username and
+     * credentials, if there is one; otherwise return <code>null</code>.
+     *
+     * @param username Username of the Principal to look up
+     * @param credentials Password or other credentials to use in
+     *  authenticating this username
+     */
+    public Principal authenticate(String username, byte[] credentials) {
+        if (isLocked(username)) {
+            // Trying to authenticate a locked user is an automatic failure
+            registerAuthFailure(username);
+            
+            log.warn(sm.getString("lockOutRealm.authLockedUser", username));
+            return null;
+        }
+
+        Principal authenticatedUser = super.authenticate(username, credentials);
+        
+        if (authenticatedUser == null) {
+            registerAuthFailure(username);
+        } else {
+            registerAuthSuccess(username);
+        }
+        return authenticatedUser;
+    }
+
+
+
+    /**
+     * Return the Principal associated with the specified username, which
+     * matches the digest calculated using the given parameters using the
+     * method described in RFC 2069; otherwise return <code>null</code>.
+     *
+     * @param username Username of the Principal to look up
+     * @param clientDigest Digest which has been submitted by the client
+     * @param once Unique (or supposedly unique) token which has been used
+     * for this request
+     * @param realmName Realm name
+     * @param md5a2 Second MD5 digest used to calculate the digest :
+     * MD5(Method + ":" + uri)
+     */
+    public Principal authenticate(String username, String clientDigest,
+            String once, String nc, String cnonce, String qop,
+            String realmName, String md5a2) {
+
+        Principal authenticatedUser = super.authenticate(username, clientDigest, once, nc, cnonce,
+                qop, realmName, md5a2);
+        return filterLockedAccounts(username, authenticatedUser);
+    }
+
+
+
+    /**
+     * Return the Principal associated with the specified username and
+     * credentials, if there is one; otherwise return <code>null</code>.
+     *
+     * @param username Username of the Principal to look up
+     * @param credentials Password or other credentials to use in
+     *  authenticating this username
+     */
+    public Principal authenticate(String username, String credentials) {
+        Principal authenticatedUser = super.authenticate(username, credentials);
+        return filterLockedAccounts(username, authenticatedUser);
+    }
+
+
+
+    /**
+     * Return the Principal associated with the specified chain of X509
+     * client certificates.  If there is none, return <code>null</code>.
+     *
+     * @param certs Array of client certificates, with the first one in
+     *  the array being the certificate of the client itself.
+     */
+    public Principal authenticate(X509Certificate[] certs) {
+        String username = null;
+        if (certs != null && certs.length >0) {
+            username = certs[0].getSubjectDN().getName();
+        }
+
+        Principal authenticatedUser = super.authenticate(certs);
+        return filterLockedAccounts(username, authenticatedUser);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /*
+     * Checks to see if the current user is locked. If this is associated with
+     * a login attempt, then the last access time will be recorded and any
+     * attempt to authenticated a locked user will log a warning.
+     */
+    private boolean isLocked(String username) {
+        LockRecord lockRecord = null;
+        synchronized (this) {
+            lockRecord = failedUsers.get(username);
+        }
+        
+        // No lock record means user can't be locked
+        if (lockRecord == null) {
+            return false;
+        }
+        
+        // Check to see if user is locked
+        if (lockRecord.getFailures() >= failureCount &&
+                (System.currentTimeMillis() -
+                        lockRecord.getLastFailureTime())/1000 < lockOutTime) {
+            return true;
+        }
+        
+        // User has not, yet, exceeded lock thresholds
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Principal associated with the specified username and
+     * credentials, if there is one; otherwise return <code>null</code>.
+     *
+     * @param username Username of the Principal to look up
+     * @param credentials Password or other credentials to use in
+     *  authenticating this username
+     */
+    public Principal authenticate(String username, String credentials);
+
+
+
+    /**
+     * Return the Principal associated with the specified username and
+     * credentials, if there is one; otherwise return <code>null</code>.
+     *
+     * @param username Username of the Principal to look up
+     * @param credentials Password or other credentials to use in
+     *  authenticating this username
+     */
+    public Principal authenticate(String username, byte[] credentials);
+
+
+
+    /**
+     * Return the Principal associated with the specified username, which
+     * matches the digest calculated using the given parameters using the
+     * method described in RFC 2069; otherwise return <code>null</code>.
+     *
+     * @param username Username of the Principal to look up
+     * @param digest Digest which has been submitted by the client
+     * @param nonce Unique (or supposedly unique) token which has been used
+     * for this request
+     * @param realm Realm name
+     * @param md5a2 Second MD5 digest used to calculate the digest :
+     * MD5(Method + ":" + uri)
+     */
+    public Principal authenticate(String username, String digest,
+                                  String nonce, String nc, String cnonce,
+                                  String qop, String realm,
+                                  String md5a2);
+
+
+
+    /**
+     * Return the Principal associated with the specified chain of X509
+     * client certificates.  If there is none, return <code>null</code>.
+     *
+     * @param certs Array of client certificates, with the first one in
+     *  the array being the certificate of the client itself.
+     */
+    public Principal authenticate(X509Certificate certs[]);
+-----CSCI578-----
+
+
+
+    /*
+     * After successful authentication, any record of previous authentication
+     * failure is removed.
+     */
+    private synchronized void registerAuthSuccess(String username) {
+        // Successful authentication means removal from the list of failed users
+        failedUsers.remove(username);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Unlock the specified username. This will remove all records of
+     * authentication failures for this user.
+     * 
+     * @param username The user to unlock
+     */
+    public void unlock(String username) {
+        // Auth success clears the lock record so... 
+        registerAuthSuccess(username);
+    }

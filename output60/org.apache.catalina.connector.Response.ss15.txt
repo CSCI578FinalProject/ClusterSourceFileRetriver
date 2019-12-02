@@ -1,0 +1,104 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Determine if a URI string has a <code>scheme</code> component.
+     */
+    private boolean hasScheme(String uri) {
+        int len = uri.length();
+        for(int i=0; i < len ; i++) {
+            char c = uri.charAt(i);
+            if(c == ':') {
+                return i > 0;
+            } else if(!URL.isSchemeChar(c)) {
+                return false;
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Convert (if necessary) and return the absolute URL that represents the
+     * resource referenced by this possibly relative URL.  If this URL is
+     * already absolute, return it unchanged.
+     *
+     * @param location URL to be (possibly) converted and then returned
+     *
+     * @exception IllegalArgumentException if a MalformedURLException is
+     *  thrown when converting the relative URL to an absolute one
+     */
+    private String toAbsolute(String location) {
+
+        if (location == null)
+            return (location);
+
+        boolean leadingSlash = location.startsWith("/");
+
+        if (leadingSlash || !hasScheme(location)) {
+
+            redirectURLCC.recycle();
+
+            String scheme = request.getScheme();
+            String name = request.getServerName();
+            int port = request.getServerPort();
+
+            try {
+                redirectURLCC.append(scheme, 0, scheme.length());
+                redirectURLCC.append("://", 0, 3);
+                redirectURLCC.append(name, 0, name.length());
+                if ((scheme.equals("http") && port != 80)
+                    || (scheme.equals("https") && port != 443)) {
+                    redirectURLCC.append(':');
+                    String portS = port + "";
+                    redirectURLCC.append(portS, 0, portS.length());
+                }
+                if (!leadingSlash) {
+                    String relativePath = request.getDecodedRequestURI();
+                    int pos = relativePath.lastIndexOf('/');
+                    relativePath = relativePath.substring(0, pos);
+                    
+                    String encodedURI = null;
+                    final String frelativePath = relativePath;
+                    if (SecurityUtil.isPackageProtectionEnabled() ){
+                        try{
+                            encodedURI = (String)AccessController.doPrivileged( 
+                                new PrivilegedExceptionAction(){                                
+                                    public Object run() throws IOException{
+                                        return urlEncoder.encodeURL(frelativePath);
+                                    }
+                           });   
+                        } catch (PrivilegedActionException pae){
+                            IllegalArgumentException iae =
+                                new IllegalArgumentException(location);
+                            iae.initCause(pae.getException());
+                            throw iae;
+                        }
+                    } else {
+                        encodedURI = urlEncoder.encodeURL(relativePath);
+                    }
+                    redirectURLCC.append(encodedURI, 0, encodedURI.length());
+                    redirectURLCC.append('/');
+                }
+                redirectURLCC.append(location, 0, location.length());
+            } catch (IOException e) {
+                IllegalArgumentException iae =
+                    new IllegalArgumentException(location);
+                iae.initCause(e);
+                throw iae;
+            }
+
+            return redirectURLCC.toString();
+
+        } else {
+
+            return (location);
+
+        }
+
+    }

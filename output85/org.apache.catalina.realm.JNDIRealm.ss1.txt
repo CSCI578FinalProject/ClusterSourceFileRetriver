@@ -1,0 +1,50 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Given a string containing LDAP patterns for user locations (separated by
+     * parentheses in a pseudo-LDAP search string format -
+     * "(location1)(location2)", returns an array of those paths.  Real LDAP
+     * search strings are supported as well (though only the "|" "OR" type).
+     *
+     * @param userPatternString - a string LDAP search paths surrounded by
+     * parentheses
+     * @return a parsed string array
+     */
+    protected String[] parseUserPatternString(String userPatternString) {
+
+        if (userPatternString != null) {
+            ArrayList<String> pathList = new ArrayList<>();
+            int startParenLoc = userPatternString.indexOf('(');
+            if (startParenLoc == -1) {
+                // no parens here; return whole thing
+                return new String[] {userPatternString};
+            }
+            int startingPoint = 0;
+            while (startParenLoc > -1) {
+                int endParenLoc = 0;
+                // weed out escaped open parens and parens enclosing the
+                // whole statement (in the case of valid LDAP search
+                // strings: (|(something)(somethingelse))
+                while ( (userPatternString.charAt(startParenLoc + 1) == '|') ||
+                        (startParenLoc != 0 && userPatternString.charAt(startParenLoc - 1) == '\\') ) {
+                    startParenLoc = userPatternString.indexOf('(', startParenLoc+1);
+                }
+                endParenLoc = userPatternString.indexOf(')', startParenLoc+1);
+                // weed out escaped end-parens
+                while (userPatternString.charAt(endParenLoc - 1) == '\\') {
+                    endParenLoc = userPatternString.indexOf(')', endParenLoc+1);
+                }
+                String nextPathPart = userPatternString.substring
+                    (startParenLoc+1, endParenLoc);
+                pathList.add(nextPathPart);
+                startingPoint = endParenLoc+1;
+                startParenLoc = userPatternString.indexOf('(', startingPoint);
+            }
+            return pathList.toArray(new String[] {});
+        }
+        return null;
+
+    }
+-----CSCI578-----

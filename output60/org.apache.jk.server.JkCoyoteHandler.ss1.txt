@@ -1,0 +1,39 @@
+3
+-----CSCI578-----
+
+
+    public ObjectName preRegister(MBeanServer server,
+                                  ObjectName oname) throws Exception {
+        this.oname=oname;
+        mserver=server;
+        domain=oname.getDomain();
+        if( name==null ) {
+            name=oname.getKeyProperty("name");
+        }
+        
+        // we need to create a workerEnv or set one.
+        ObjectName wEnvName=new ObjectName(domain + ":type=JkWorkerEnv");
+        if ( wEnv == null ) {
+            wEnv=new WorkerEnv();
+        }
+        if( ! mserver.isRegistered(wEnvName )) {
+            Registry.getRegistry(null, null).registerComponent(wEnv, wEnvName, null);
+        }
+        mserver.invoke( wEnvName, "addHandler", 
+                new Object[] {name, this}, 
+                new String[] {"java.lang.String", 
+                              "org.apache.jk.core.JkHandler"});
+        return oname;
+    }
+-----CSCI578-----
+
+
+
+    public ObjectName preRegister(MBeanServer server,
+                                  ObjectName oname) throws Exception
+    {
+        // override - we must be registered as "container"
+        this.name="container";        
+        return super.preRegister(server, oname);
+    }
+-----CSCI578-----

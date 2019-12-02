@@ -1,0 +1,96 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Should Tomcat attempt to terminate threads that have been started by the
+     * web application? Stopping threads is performed via the deprecated (for
+     * good reason) <code>Thread.stop()</code> method and is likely to result in
+     * instability. As such, enabling this should be viewed as an option of last
+     * resort in a development environment and is not recommended in a
+     * production environment. If not specified, the default value of
+     * <code>false</code> will be used.
+     */
+    private boolean clearReferencesStopThreads = false;
+
+
+    /**
+     * Stop the class loader.
+     *
+     * @exception LifecycleException if a lifecycle error occurs
+     */
+    public void stop() throws LifecycleException {
+
+        // Clearing references should be done before setting started to
+        // false, due to possible side effects
+        clearReferences();
+
+        started = false;
+
+        int length = files.length;
+        for (int i = 0; i < length; i++) {
+            files[i] = null;
+        }
+
+        length = jarFiles.length;
+        for (int i = 0; i < length; i++) {
+            try {
+                if (jarFiles[i] != null) {
+                    jarFiles[i].close();
+                }
+            } catch (IOException e) {
+                // Ignore
+            }
+            jarFiles[i] = null;
+        }
+
+        notFoundResources.clear();
+        resourceEntries.clear();
+        resources = null;
+        repositories = null;
+        repositoryURLs = null;
+        files = null;
+        jarFiles = null;
+        jarRealFiles = null;
+        jarPath = null;
+        jarNames = null;
+        lastModifiedDates = null;
+        paths = null;
+        hasExternalRepositories = false;
+        parent = null;
+
+        permissionList.clear();
+        loaderPC.clear();
+
+        if (loaderDir != null) {
+            deleteDir(loaderDir);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Delete the specified directory, including all of its contents and
+     * subdirectories recursively.
+     *
+     * @param dir File object representing the directory to be deleted
+     */
+    protected static void deleteDir(File dir) {
+
+        String files[] = dir.list();
+        if (files == null) {
+            files = new String[0];
+        }
+        for (int i = 0; i < files.length; i++) {
+            File file = new File(dir, files[i]);
+            if (file.isDirectory()) {
+                deleteDir(file);
+            } else {
+                file.delete();
+            }
+        }
+        dir.delete();
+
+    }

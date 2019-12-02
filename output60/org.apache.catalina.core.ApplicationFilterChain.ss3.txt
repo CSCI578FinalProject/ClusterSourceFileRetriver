@@ -1,0 +1,147 @@
+2
+-----CSCI578-----
+
+    
+    
+    private void internalDoFilterEvent(CometEvent event)
+        throws IOException, ServletException {
+
+        // Call the next filter if there is one
+        if (pos < n) {
+            ApplicationFilterConfig filterConfig = filters[pos++];
+            CometFilter filter = null;
+            try {
+                filter = (CometFilter) filterConfig.getFilter();
+                // FIXME: No instance listener processing for events for now
+                /*
+                support.fireInstanceEvent(InstanceEvent.BEFORE_FILTER_EVENT,
+                        filter, event);
+                        */
+
+                if( Globals.IS_SECURITY_ENABLED ) {
+                    final CometEvent ev = event;
+                    Principal principal = 
+                        ev.getHttpServletRequest().getUserPrincipal();
+
+                    Object[] args = new Object[]{ev, this};
+                    SecurityUtil.doAsPrivilege("doFilterEvent", filter,
+                            cometClassType, args, principal);
+
+                    args = null;
+                } else {  
+                    filter.doFilterEvent(event, this);
+                }
+
+                /*support.fireInstanceEvent(InstanceEvent.AFTER_FILTER_EVENT,
+                        filter, event);*/
+            } catch (IOException e) {
+                /*
+                if (filter != null)
+                    support.fireInstanceEvent(InstanceEvent.AFTER_FILTER_EVENT,
+                            filter, event, e);
+                            */
+                throw e;
+            } catch (ServletException e) {
+                /*
+                if (filter != null)
+                    support.fireInstanceEvent(InstanceEvent.AFTER_FILTER_EVENT,
+                            filter, event, e);
+                            */
+                throw e;
+            } catch (RuntimeException e) {
+                /*
+                if (filter != null)
+                    support.fireInstanceEvent(InstanceEvent.AFTER_FILTER_EVENT,
+                            filter, event, e);
+                            */
+                throw e;
+            } catch (Throwable e) {
+                /*if (filter != null)
+                    support.fireInstanceEvent(InstanceEvent.AFTER_FILTER_EVENT,
+                            filter, event, e);*/
+                throw new ServletException
+                    (sm.getString("filterChain.filter"), e);
+            }
+            return;
+        }
+
+        // We fell off the end of the chain -- call the servlet instance
+        try {
+            /*
+            support.fireInstanceEvent(InstanceEvent.BEFORE_SERVICE_EVENT,
+                    servlet, request, response);
+                    */
+            if( Globals.IS_SECURITY_ENABLED ) {
+                final CometEvent ev = event;
+                Principal principal = 
+                    ev.getHttpServletRequest().getUserPrincipal();
+                Object[] args = new Object[]{ ev };
+                SecurityUtil.doAsPrivilege("event",
+                        servlet,
+                        classTypeUsedInEvent, 
+                        args,
+                        principal);
+                args = null;
+            } else {  
+                ((CometProcessor) servlet).event(event);
+            }
+            /*
+            support.fireInstanceEvent(InstanceEvent.AFTER_SERVICE_EVENT,
+                    servlet, request, response);*/
+        } catch (IOException e) {
+            /*
+            support.fireInstanceEvent(InstanceEvent.AFTER_SERVICE_EVENT,
+                    servlet, request, response, e);
+                    */
+            throw e;
+        } catch (ServletException e) {
+            /*
+            support.fireInstanceEvent(InstanceEvent.AFTER_SERVICE_EVENT,
+                    servlet, request, response, e);
+                    */
+            throw e;
+        } catch (RuntimeException e) {
+            /*
+            support.fireInstanceEvent(InstanceEvent.AFTER_SERVICE_EVENT,
+                    servlet, request, response, e);
+                    */
+            throw e;
+        } catch (Throwable e) {
+            /*
+            support.fireInstanceEvent(InstanceEvent.AFTER_SERVICE_EVENT,
+                    servlet, request, response, e);
+                    */
+            throw new ServletException
+                (sm.getString("filterChain.servlet"), e);
+        }
+
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * The <code>doFilterEvent</code> method of the CometFilter is called by the container
+     * each time a request/response pair is passed through the chain due
+     * to a client event for a resource at the end of the chain. The CometFilterChain passed in to this
+     * method allows the Filter to pass on the event to the next entity in the
+     * chain.<p>
+     * A typical implementation of this method would follow the following pattern:- <br>
+     * 1. Examine the request<br>
+     * 2. Optionally wrap the request object contained in the event with a custom implementation to
+     * filter content or headers for input filtering and pass a CometEvent instance containing
+     * the wrapped request to the next filter<br>
+     * 3. Optionally wrap the response object contained in the event with a custom implementation to
+     * filter content or headers for output filtering and pass a CometEvent instance containing
+     * the wrapped request to the next filter<br>
+     * 4. a) <strong>Either</strong> invoke the next entity in the chain using the CometFilterChain object (<code>chain.doFilterEvent()</code>), <br>   
+     * 4. b) <strong>or</strong> not pass on the request/response pair to the next entity in the filter chain to block the event processing<br>
+     * 5. Directly set fields on the response after invocation of the next entity in the filter chain.
+     * 
+     * @param event the event that is being processed. Another event may be passed along the chain.
+     * @param chain 
+     * @throws IOException
+     * @throws ServletException
+     */
+    public void doFilterEvent(CometEvent event, CometFilterChain chain)
+        throws IOException, ServletException;

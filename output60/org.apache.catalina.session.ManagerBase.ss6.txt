@@ -1,0 +1,33 @@
+1
+-----CSCI578-----
+
+
+
+    protected void getRandomBytes(byte bytes[]) {
+        // Generate a byte array containing a session identifier
+        if (devRandomSource != null && randomIS == null) {
+            setRandomFile(devRandomSource);
+        }
+        if (randomIS != null) {
+            try {
+                int len = randomIS.read(bytes);
+                if (len == bytes.length) {
+                    return;
+                }
+                if(log.isDebugEnabled())
+                    log.debug("Got " + len + " " + bytes.length );
+            } catch (Exception ex) {
+                // Ignore
+            }
+            devRandomSource = null;
+            
+            try {
+                randomIS.close();
+            } catch (Exception e) {
+                log.warn("Failed to close randomIS.");
+            }
+            
+            randomIS = null;
+        }
+        getRandom().nextBytes(bytes);
+    }

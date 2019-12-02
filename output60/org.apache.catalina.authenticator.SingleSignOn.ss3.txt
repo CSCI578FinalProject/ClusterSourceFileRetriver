@@ -1,0 +1,174 @@
+8
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any object bound to the specified name in the internal notes
+     * for this request.
+     *
+     * @param name Name of the note to be removed
+     */
+    public void removeNote(String name) {
+        notes.remove(name);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets whether each request needs to be reauthenticated (by an
+     * Authenticator downstream in the pipeline) to the security
+     * <code>Realm</code>, or if this Valve can itself bind security info
+     * to the request based on the presence of a valid SSO entry without
+     * rechecking with the <code>Realm</code..
+     *
+     * @return  <code>true</code> if it is required that a downstream
+     *          Authenticator reauthenticate each request before calls to
+     *          <code>HttpServletRequest.setUserPrincipal()</code>
+     *          and <code>HttpServletRequest.setAuthType()</code> are made;
+     *          <code>false</code> if the <code>Valve</code> can itself make
+     *          those calls relying on the presence of a valid SingleSignOn
+     *          entry associated with the request.
+     *
+     * @see #setRequireReauthentication
+     */
+    public boolean getRequireReauthentication()
+    {
+        return requireReauthentication;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Perform single-sign-on support processing for this request.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        request.removeNote(Constants.REQ_SSOID_NOTE);
+
+        // Has a valid user already been authenticated?
+        if (containerLog.isDebugEnabled())
+            containerLog.debug("Process request for '" + request.getRequestURI() + "'");
+        if (request.getUserPrincipal() != null) {
+            if (containerLog.isDebugEnabled())
+                containerLog.debug(" Principal '" + request.getUserPrincipal().getName() +
+                    "' has already been authenticated");
+            getNext().invoke(request, response);
+            return;
+        }
+
+        // Check for the single sign on cookie
+        if (containerLog.isDebugEnabled())
+            containerLog.debug(" Checking for SSO cookie");
+        Cookie cookie = null;
+        Cookie cookies[] = request.getCookies();
+        if (cookies == null)
+            cookies = new Cookie[0];
+        for (int i = 0; i < cookies.length; i++) {
+            if (Constants.SINGLE_SIGN_ON_COOKIE.equals(cookies[i].getName())) {
+                cookie = cookies[i];
+                break;
+            }
+        }
+        if (cookie == null) {
+            if (containerLog.isDebugEnabled())
+                containerLog.debug(" SSO cookie is not present");
+            getNext().invoke(request, response);
+            return;
+        }
+
+        // Look up the cached Principal associated with this cookie value
+        if (containerLog.isDebugEnabled())
+            containerLog.debug(" Checking for cached principal for " + cookie.getValue());
+        SingleSignOnEntry entry = lookup(cookie.getValue());
+        if (entry != null) {
+            if (containerLog.isDebugEnabled())
+                containerLog.debug(" Found cached principal '" +
+                    (entry.getPrincipal() != null ? entry.getPrincipal().getName() : "") + "' with auth type '" +
+                    entry.getAuthType() + "'");
+            request.setNote(Constants.REQ_SSOID_NOTE, cookie.getValue());
+            // Only set security elements if reauthentication is not required
+            if (!getRequireReauthentication()) {
+                request.setAuthType(entry.getAuthType());
+                request.setUserPrincipal(entry.getPrincipal());
+            }
+        } else {
+            if (containerLog.isDebugEnabled())
+                containerLog.debug(" No cached principal found, erasing SSO cookie");
+            cookie.setMaxAge(0);
+            response.addCookie(cookie);
+        }
+
+        // Invoke the next Valve in our pipeline
+        getNext().invoke(request, response);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets the <code>Principal</code> that has been authenticated by
+     * the SSO.
+     */
+    public Principal getPrincipal() {
+        return (this.principal);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the principal that has been authenticated for this Request.
+     */
+    public Principal getUserPrincipal() {
+        if (userPrincipal instanceof GenericPrincipal) {
+            return ((GenericPrincipal) userPrincipal).getUserPrincipal();
+        } else {
+            return (userPrincipal);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Bind an object to a specified name in the internal notes associated
+     * with this request, replacing any existing binding for this name.
+     *
+     * @param name Name to which the object should be bound
+     * @param value Object to be bound to the specified name
+     */
+    public void setNote(String name, Object value) {
+        notes.put(name, value);
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------- HttpServletResponse Methods
+
+
+    /**
+     * Add the specified Cookie to those that will be included with
+     * this Response.
+     *
+     * @param cookie Cookie to be added
+     */
+    public void addCookie(final Cookie cookie) {
+
+        // Ignore any call from an included servlet
+        if (included)
+            return;
+
+        addCookieInternal(cookie);
+
+    }

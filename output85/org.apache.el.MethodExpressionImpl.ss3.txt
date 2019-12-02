@@ -1,0 +1,107 @@
+7
+-----CSCI578-----
+
+  public Object invoke(EvaluationContext ctx, Class<?>[] paramTypes,
+          Object[] paramValues) throws ELException;
+-----CSCI578-----
+
+
+    /**
+     * Evaluates the expression relative to the provided context, invokes the
+     * method that was found using the supplied parameters, and returns the
+     * result of the method invocation.
+     *
+     * @param context
+     *            The context of this evaluation.
+     * @param params
+     *            The parameters to pass to the method, or <code>null</code>
+     *            if no parameters.
+     * @return the result of the method invocation (<code>null</code> if the
+     *         method has a <code>void</code> return type).
+     * @throws NullPointerException
+     *             if context is <code>null</code> or the base object is
+     *             <code>null</code> on the last resolution.
+     * @throws PropertyNotFoundException
+     *             if one of the property resolutions failed because a specified
+     *             variable or property does not exist or is not readable.
+     * @throws MethodNotFoundException
+     *             if no suitable method can be found.
+     * @throws ELException
+     *             if an exception was thrown while performing property or
+     *             variable resolution. The thrown exception must be included as
+     *             the cause property of this exception, if available. If the
+     *             exception thrown is an <code>InvocationTargetException</code>,
+     *             extract its <code>cause</code> and pass it to the
+     *             <code>ELException</code> constructor.
+     * @see javax.el.MethodExpression#invoke(javax.el.ELContext,
+     *      java.lang.Object[])
+     */
+    @Override
+    public Object invoke(ELContext context, Object[] params)
+            throws PropertyNotFoundException, MethodNotFoundException,
+            ELException {
+        EvaluationContext ctx = new EvaluationContext(context, this.fnMapper,
+                this.varMapper);
+        ctx.notifyBeforeEvaluation(getExpressionString());
+        Object result = this.getNode().invoke(ctx, this.paramTypes, params);
+        ctx.notifyAfterEvaluation(getExpressionString());
+        return result;
+    }
+-----CSCI578-----
+
+
+    private Node getNode() throws ELException {
+        if (this.node == null) {
+            this.node = ExpressionBuilder.createNode(this.expr);
+        }
+        return this.node;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the original String used to create this <code>Expression</code>,
+     * unmodified.
+     *
+     * <p>
+     * This is used for debugging purposes but also for the purposes of
+     * comparison (e.g. to ensure the expression in a configuration file has not
+     * changed).
+     * </p>
+     *
+     * <p>
+     * This method does not provide sufficient information to re-create an
+     * expression. Two different expressions can have exactly the same
+     * expression string but different function mappings. Serialization should
+     * be used to save and restore the state of an <code>Expression</code>.
+     * </p>
+     *
+     * @return The original expression String.
+     *
+     * @see javax.el.Expression#getExpressionString()
+     */
+    @Override
+    public String getExpressionString() {
+        return this.expr;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void notifyBeforeEvaluation(String expression) {
+        elContext.notifyBeforeEvaluation(expression);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void notifyAfterEvaluation(String expression) {
+        elContext.notifyAfterEvaluation(expression);
+    }
+-----CSCI578-----
+
+
+    public static final Node createNode(String expr) throws ELException {
+        Node n = createNodeInternal(expr);
+        return n;
+    }

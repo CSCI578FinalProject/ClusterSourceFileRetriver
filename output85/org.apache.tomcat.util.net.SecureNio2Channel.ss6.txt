@@ -1,0 +1,58 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Force a blocking handshake to take place for this key.
+     * This requires that both network and application buffers have been emptied out prior to this call taking place, or a
+     * IOException will be thrown.
+     * @throws IOException - if an IO exception occurs or if application or network buffers contain data
+     * @throws java.net.SocketTimeoutException - if a socket operation timed out
+     */
+    public void rehandshake() throws IOException {
+        //validate the network buffers are empty
+        if (netInBuffer.position() > 0 && netInBuffer.position() < netInBuffer.limit()) throw new IOException(sm.getString("channel.nio.ssl.netInputNotEmpty"));
+        if (netOutBuffer.position() > 0 && netOutBuffer.position() < netOutBuffer.limit()) throw new IOException(sm.getString("channel.nio.ssl.netOutputNotEmpty"));
+        if (!getBufHandler().isReadBufferEmpty()) throw new IOException(sm.getString("channel.nio.ssl.appInputNotEmpty"));
+        if (!getBufHandler().isWriteBufferEmpty()) throw new IOException(sm.getString("channel.nio.ssl.appOutputNotEmpty"));
+
+        netOutBuffer.position(0);
+        netOutBuffer.limit(0);
+        netInBuffer.position(0);
+        netInBuffer.limit(0);
+        getBufHandler().reset();
+
+        handshakeComplete = false;
+        //initiate handshake
+        sslEngine.beginHandshake();
+        handshakeStatus = sslEngine.getHandshakeStatus();
+
+        boolean handshaking = true;
+        try {
+            while (handshaking) {
+                int hsStatus = handshakeInternal(false);
+                switch (hsStatus) {
+                    case -1 : throw new EOFException(sm.getString("channel.nio.ssl.eofDuringHandshake"));
+                    case  0 : handshaking = false; break;
+                    default : // Some blocking IO occurred, so iterate
+                }
+            }
+        } catch (IOException x) {
+            throw x;
+        } catch (Exception cx) {
+            IOException x = new IOException(cx);
+            throw x;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public void reset() {
+        readBuffer.clear();
+        readBufferConfiguredForWrite = true;
+        writeBuffer.clear();
+        writeBufferConfiguredForWrite = true;
+    }

@@ -1,0 +1,139 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // -------------------- Static methods  --------------------
+    // Factories
+    
+    /**
+     * Factory method to create (if necessary) and return our
+     * <code>Registry</code> instance.
+     *
+     * Use this method to obtain a Registry - all other static methods
+     * are deprecated and shouldn't be used.
+     *
+     * The current version uses a static - future versions could use
+     * the thread class loader.
+     * 
+     * @param key Support for application isolation. If null, the context class
+     * loader will be used ( if setUseContextClassLoader is called ) or the 
+     * default registry is returned. 
+     * @param guard Prevent access to the registry by untrusted components
+     *
+     * @since 1.1
+     */
+    public synchronized static Registry getRegistry(Object key, Object guard) {
+        Registry localRegistry;
+        if( perLoaderRegistries!=null ) {
+            if( key==null ) 
+                key=Thread.currentThread().getContextClassLoader();
+            if( key != null ) {
+                localRegistry=(Registry)perLoaderRegistries.get(key);
+                if( localRegistry == null ) {
+                    localRegistry=new Registry();
+//                    localRegistry.key=key;
+                    localRegistry.guard=guard;
+                    perLoaderRegistries.put( key, localRegistry );
+                    return localRegistry;
+                }
+                if( localRegistry.guard != null &&
+                        localRegistry.guard != guard ) {
+                    return null; // XXX Should I throw a permission ex ? 
+                }
+                return localRegistry;
+            }
+        }
+
+        // static 
+        if (registry == null) {
+            registry = new Registry();
+        }
+        if( registry.guard != null &&
+                registry.guard != guard ) {
+            return null;
+        }
+        return (registry);
+    }
+
+
+    /** Get a "singelton" registry, or one per thread if setUseContextLoader 
+     * was called 
+     * 
+     * @deprecated Not enough info - use the method that takes CL and domain
+     * @since 1.0 
+     */ 
+    public synchronized static Registry getRegistry() {
+        return getRegistry(null, null);
+    }
+-----CSCI578-----
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Initialize this servlet.
+     */
+    public void init() throws ServletException {
+        // Retrieve the MBean server
+        registry = Registry.getRegistry(null, null);
+        mBeanServer = Registry.getRegistry(null, null).getMBeanServer();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Wrapper with which we are associated.
+     *
+     * @param wrapper The new wrapper
+     */
+    public void setWrapper(Wrapper wrapper) {
+
+        this.wrapper = wrapper;
+        if (wrapper == null) {
+            context = null;
+            host = null;
+            oname = null;
+        } else {
+            context = (Context) wrapper.getParent();
+            host = (Host) context.getParent();
+            Engine engine = (Engine) host.getParent();
+            try {
+                oname = new ObjectName(engine.getName() 
+                        + ":type=Deployer,host=" + host.getName());
+            } catch (Exception e) {
+                // ?
+            }
+        }
+
+        // Retrieve the MBean server
+        mBeanServer = Registry.getRegistry(null, null).getMBeanServer();
+        
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Wrapper with which we are associated.
+     *
+     * @param wrapper The new wrapper
+     */
+    public void setWrapper(Wrapper wrapper) {
+
+        this.wrapper = wrapper;
+        if (wrapper == null) {
+            context = null;
+            host = null;
+            engine = null;
+        } else {
+            context = (Context) wrapper.getParent();
+            host = (Host) context.getParent();
+            engine = (Engine) host.getParent();
+        }
+
+        // Retrieve the MBean server
+        mBeanServer = Registry.getRegistry(null, null).getMBeanServer();
+        
+    }

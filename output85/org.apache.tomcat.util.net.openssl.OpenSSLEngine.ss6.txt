@@ -1,0 +1,121 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Returns the cipher suites available for negotiation in SSL handshake.
+     * <br>
+     * This complex directive uses a colon-separated cipher-spec string consisting
+     * of OpenSSL cipher specifications to configure the Cipher Suite the client
+     * is permitted to negotiate in the SSL handshake phase. Notice that this
+     * directive can be used both in per-server and per-directory context.
+     * In per-server context it applies to the standard SSL handshake when a
+     * connection is established. In per-directory context it forces a SSL
+     * renegotiation with the reconfigured Cipher Suite after the HTTP request
+     * was read but before the HTTP response is sent.
+     * @param ssl the SSL instance (SSL *)
+     * @param ciphers an SSL cipher specification
+     * @return <code>true</code> if the operation was successful
+     * @throws Exception An error occurred
+     */
+    public static native boolean setCipherSuites(long ssl, String ciphers)
+            throws Exception;
+-----CSCI578-----
+
+
+    @Override
+    public void setEnabledCipherSuites(String[] cipherSuites) {
+        if (cipherSuites == null) {
+            throw new IllegalArgumentException(sm.getString("engine.nullCipherSuite"));
+        }
+        final StringBuilder buf = new StringBuilder();
+        for (String cipherSuite : cipherSuites) {
+            if (cipherSuite == null) {
+                break;
+            }
+            String converted = OpenSSLCipherConfigurationParser.jsseToOpenSSL(cipherSuite);
+            if (converted != null) {
+                cipherSuite = converted;
+            }
+            if (!AVAILABLE_CIPHER_SUITES.contains(cipherSuite)) {
+                logger.debug(sm.getString("engine.unsupportedCipher", cipherSuite, converted));
+            }
+
+            buf.append(cipherSuite);
+            buf.append(':');
+        }
+
+        if (buf.length() == 0) {
+            throw new IllegalArgumentException(sm.getString("engine.emptyCipherSuite"));
+        }
+        buf.setLength(buf.length() - 1);
+
+        final String cipherSuiteSpec = buf.toString();
+        try {
+            SSL.setCipherSuites(ssl, cipherSuiteSpec);
+        } catch (Exception e) {
+            throw new IllegalStateException(sm.getString("engine.failedCipherSuite", cipherSuiteSpec), e);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Converts a JSSE cipher name to an OpenSSL cipher name.
+     *
+     * @param jsseCipherName The JSSE name for a cipher
+     *
+     * @return The OpenSSL name for the specified JSSE cipher
+     */
+    public static String jsseToOpenSSL(String jsseCipherName) {
+        if (!initialized) {
+            init();
+        }
+        return jsseToOpenSSL.get(jsseCipherName);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the new cipher configuration. Note: Regardless of the format used to
+     * set the configuration, it is always stored in OpenSSL format.
+     *
+     * @param ciphersList The new cipher configuration in OpenSSL or JSSE format
+     */
+    public void setCiphers(String ciphersList) {
+        // Ciphers is stored in OpenSSL format. Convert the provided value if
+        // necessary.
+        if (ciphersList != null && !ciphersList.contains(":")) {
+            StringBuilder sb = new StringBuilder();
+            // Not obviously in OpenSSL format. May be a single OpenSSL or JSSE
+            // cipher name. May be a comma separated list of cipher names
+            String ciphers[] = ciphersList.split(",");
+            for (String cipher : ciphers) {
+                String trimmed = cipher.trim();
+                if (trimmed.length() > 0) {
+                    String openSSLName = OpenSSLCipherConfigurationParser.jsseToOpenSSL(trimmed);
+                    if (openSSLName == null) {
+                        // Not a JSSE name. Maybe an OpenSSL name or alias
+                        openSSLName = trimmed;
+                    }
+                    if (sb.length() > 0) {
+                        sb.append(':');
+                    }
+                    sb.append(openSSLName);
+                }
+            }
+            this.ciphers = sb.toString();
+        } else {
+            this.ciphers = ciphersList;
+        }
+        this.cipherList = null;
+        this.jsseCipherNames = null;
+    }
+-----CSCI578-----
+
+    public void setSSLCipherSuite(String ciphers) {
+        registerDefaultSSLHostConfig();
+        defaultSSLHostConfig.setCiphers(ciphers);
+    }

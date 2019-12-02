@@ -1,0 +1,54 @@
+11
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+        while (hasNextChar()) {
+            char ch = nextChar();
+            if (prev == '\\') {
+                if (ch == '$' || (!isDeferredSyntaxAllowedAsLiteral && ch == '#')) {
+                prev = 0;
+                    buf.append(ch);
+                    continue;
+                } else if (ch == '\\') {
+                    // Not an escape (this time).
+                    // Optimisation - no need to set prev as it is unchanged
+                    buf.append('\\');
+                    continue;
+                } else {
+                    // Not an escape
+                    prev = 0;
+                    buf.append('\\');
+                    buf.append(ch);
+                    continue;
+                }
+            } else if (prev == '$'
+                    || (!isDeferredSyntaxAllowedAsLiteral && prev == '#')) {
+                if (ch == '{') {
+                    this.type = prev;
+                    prev = 0;
+                    break;
+                }
+                buf.append(prev);
+                prev = 0;
+            }
+            if (ch == '\\' || ch == '$'
+                    || (!isDeferredSyntaxAllowedAsLiteral && ch == '#')) {
+                prev = ch;
+            } else {
+                buf.append(ch);
+            }
+        }
+        if (prev != 0) {
+            buf.append(prev);
+        }
+        return buf.toString();
+    }

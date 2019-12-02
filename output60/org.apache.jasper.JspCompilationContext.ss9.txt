@@ -1,0 +1,90 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Remove generated files
+     */
+    public void removeGeneratedFiles() {
+        removeGeneratedClassFiles();
+
+        try {
+            String javaFileName = ctxt.getServletJavaFileName();
+            if (javaFileName != null) {
+                File javaFile = new File(javaFileName);
+                if (log.isDebugEnabled())
+                    log.debug("Deleting " + javaFile);
+                if (javaFile.exists()) {
+                    if (!javaFile.delete()) {
+                        log.warn(Localizer.getMessage(
+                                "jsp.warning.compiler.javafile.delete.fail",
+                                javaFile.getAbsolutePath()));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Remove as much as possible, log possible exceptions
+            log.warn(Localizer.getMessage("jsp.warning.compiler.classfile.delete.fail.unknown"),
+                     e);
+        }
+    }
+-----CSCI578-----
+
+
+    // ==================== Compile and reload ====================
+    
+    public void compile() throws JasperException, FileNotFoundException {
+        createCompiler();
+        if (jspCompiler.isOutDated()) {
+            if (isRemoved()) {
+                throw new FileNotFoundException(jspUri);
+            }
+            try {
+                jspCompiler.removeGeneratedFiles();
+                jspLoader = null;
+                jspCompiler.compile();
+                jsw.setReload(true);
+                jsw.setCompilationException(null);
+            } catch (JasperException ex) {
+                // Cache compilation exception
+                jsw.setCompilationException(ex);
+                if (options.getDevelopment() && options.getRecompileOnFail()) {
+                    // Force a recompilation attempt on next access
+                    jsw.setLastModificationTest(-1);
+                }
+                throw ex;
+            } catch (Exception ex) {
+                JasperException je = new JasperException(
+                            Localizer.getMessage("jsp.error.unable.compile"),
+                            ex);
+                // Cache compilation exception
+                jsw.setCompilationException(je);
+                throw je;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the compilation exception for this JspServletWrapper.
+     *
+     * @param je The compilation exception
+     */
+    public void setCompilationException(JasperException je) {
+        this.compileException = je;
+    }
+-----CSCI578-----
+
+    
+
+    /**
+     * Re-compile on failure.
+     */
+    public boolean getRecompileOnFail();
+-----CSCI578-----
+
+
+    public void setReload(boolean reload) {
+        this.reload = reload;
+    }

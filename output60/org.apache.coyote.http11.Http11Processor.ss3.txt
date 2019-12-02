@@ -1,0 +1,55 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Check if the resource could be compressed, if the client supports it.
+     */
+    private boolean isCompressable() {
+
+        // Check if content is not already gzipped
+        MessageBytes contentEncodingMB =
+            response.getMimeHeaders().getValue("Content-Encoding");
+
+        if ((contentEncodingMB != null)
+            && (contentEncodingMB.indexOf("gzip") != -1))
+            return false;
+
+        // If force mode, always compress (test purposes only)
+        if (compressionLevel == 2)
+           return true;
+
+        // Check if sufficient length to trigger the compression
+        long contentLength = response.getContentLengthLong();
+        if ((contentLength == -1)
+            || (contentLength > compressionMinSize)) {
+            // Check for compatible MIME-TYPE
+            if (compressableMimeTypes != null) {
+                return (startsWithStringArray(compressableMimeTypes,
+                                              response.getContentType()));
+            }
+        }
+
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Checks if any entry in the string array starts with the specified value
+     *
+     * @param sArray the StringArray
+     * @param value string
+     */
+    private boolean startsWithStringArray(String sArray[], String value) {
+        if (value == null)
+           return false;
+        for (int i = 0; i < sArray.length; i++) {
+            if (value.startsWith(sArray[i])) {
+                return true;
+            }
+        }
+        return false;
+    }

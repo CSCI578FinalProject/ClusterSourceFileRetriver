@@ -1,0 +1,84 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the size of the file.
+     *
+     * @return The size of the file, in bytes.
+     */
+    @Override
+    public long getSize() {
+        if (size >= 0) {
+            return size;
+        } else if (cachedContent != null) {
+            return cachedContent.length;
+        } else if (dfos.isInMemory()) {
+            return dfos.getData().length;
+        } else {
+            return dfos.getFile().length();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets the curent contents of this byte stream as a byte array.
+     * The result is independent of this stream.
+     *
+     * @return the current contents of this output stream, as a byte array
+     * @see java.io.ByteArrayOutputStream#toByteArray()
+     */
+    public synchronized byte[] toByteArray() {
+        int remaining = count;
+        if (remaining == 0) {
+            return EMPTY_BYTE_ARRAY;
+        }
+        byte newbuf[] = new byte[remaining];
+        int pos = 0;
+        for (byte[] buf : buffers) {
+            int c = Math.min(buf.length, remaining);
+            System.arraycopy(buf, 0, newbuf, pos, c);
+            pos += c;
+            remaining -= c;
+            if (remaining == 0) {
+                break;
+            }
+        }
+        return newbuf;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets the curent contents of this byte stream as a string.
+     * @return the contents of the byte array as a String
+     * @see java.io.ByteArrayOutputStream#toString()
+     */
+    @Override
+    public String toString() {
+        return new String(toByteArray());
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ------------------------------------------------------ Protected methods
+
+    /**
+     * Removes the file contents from the temporary storage.
+     */
+    @Override
+    protected void finalize() {
+        if (dfos == null) {
+            return;
+        }
+        File outputFile = dfos.getFile();
+
+        if (outputFile != null && outputFile.exists()) {
+            outputFile.delete();
+        }
+    }

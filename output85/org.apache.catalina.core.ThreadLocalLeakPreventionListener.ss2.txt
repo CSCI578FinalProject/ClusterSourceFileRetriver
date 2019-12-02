@@ -1,0 +1,81 @@
+6
+-----CSCI578-----
+
+
+    protected void processContainerAddChild(Container parent, Container child) {
+        if (log.isDebugEnabled())
+            log.debug("Process addChild[parent=" + parent + ",child=" + child +
+                "]");
+
+        if (child instanceof Context) {
+            registerContextListener((Context) child);
+        } else if (child instanceof Engine) {
+            registerListenersForEngine((Engine) child);
+        } else if (child instanceof Host) {
+            registerListenersForHost((Host) child);
+        }
+
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void containerEvent(ContainerEvent event) {
+        try {
+            String type = event.getType();
+            if (Container.ADD_CHILD_EVENT.equals(type)) {
+                processContainerAddChild(event.getContainer(),
+                    (Container) event.getData());
+            } else if (Container.REMOVE_CHILD_EVENT.equals(type)) {
+                processContainerRemoveChild(event.getContainer(),
+                    (Container) event.getData());
+            }
+        } catch (Exception e) {
+            String msg =
+                sm.getString(
+                    "threadLocalLeakPreventionListener.containerEvent.error",
+                    event);
+            log.error(msg, e);
+        }
+
+    }
+-----CSCI578-----
+
+
+    protected void processContainerRemoveChild(Container parent,
+        Container child) {
+
+        if (log.isDebugEnabled())
+            log.debug("Process removeChild[parent=" + parent + ",child=" +
+                child + "]");
+
+        if (child instanceof Context) {
+            Context context = (Context) child;
+            context.removeLifecycleListener(this);
+        } else if (child instanceof Host || child instanceof Engine) {
+            child.removeContainerListener(this);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Container on which this event occurred.
+     *
+     * @return The Container on which this event occurred.
+     */
+    public Container getContainer() {
+        return (Container) getSource();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a container event listener from this component.
+     *
+     * @param listener The listener to remove
+     */
+    public void removeContainerListener(ContainerListener listener);

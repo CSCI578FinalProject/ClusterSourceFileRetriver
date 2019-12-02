@@ -1,0 +1,418 @@
+14
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Handle the specified Throwable encountered while processing
+     * the specified Request to produce the specified Response.  Any
+     * exceptions that occur during generation of the exception report are
+     * logged and swallowed.
+     *
+     * @param request The request being processed
+     * @param response The response being generated
+     * @param throwable The exception that occurred (which possibly wraps
+     *  a root cause exception
+     */
+    protected void throwable(Request request, Response response,
+                             Throwable throwable) {
+        Context context = request.getContext();
+        if (context == null)
+            return;
+
+        Throwable realError = throwable;
+
+        if (realError instanceof ServletException) {
+            realError = ((ServletException) realError).getRootCause();
+            if (realError == null) {
+                realError = throwable;
+            }
+        }
+
+        // If this is an aborted request from a client just log it and return
+        if (realError instanceof ClientAbortException ) {
+            if (log.isDebugEnabled()) {
+                log.debug
+                    (sm.getString("standardHost.clientAbort",
+                        realError.getCause().getMessage()));
+            }
+            return;
+        }
+
+        ErrorPage errorPage = findErrorPage(context, throwable);
+        if ((errorPage == null) && (realError != throwable)) {
+            errorPage = findErrorPage(context, realError);
+        }
+
+        if (errorPage != null) {
+            response.setAppCommitted(false);
+            request.setAttribute
+                (ApplicationFilterFactory.DISPATCHER_REQUEST_PATH_ATTR,
+                 errorPage.getLocation());
+            request.setAttribute(ApplicationFilterFactory.DISPATCHER_TYPE_ATTR,
+                              new Integer(ApplicationFilterFactory.ERROR));
+            request.setAttribute
+                (Globals.STATUS_CODE_ATTR,
+                 new Integer(HttpServletResponse.SC_INTERNAL_SERVER_ERROR));
+            request.setAttribute(Globals.ERROR_MESSAGE_ATTR,
+                              throwable.getMessage());
+            request.setAttribute(Globals.EXCEPTION_ATTR,
+                              realError);
+            Wrapper wrapper = request.getWrapper();
+            if (wrapper != null)
+                request.setAttribute(Globals.SERVLET_NAME_ATTR,
+                                  wrapper.getName());
+            request.setAttribute(Globals.EXCEPTION_PAGE_ATTR,
+                                 request.getRequestURI());
+            request.setAttribute(Globals.EXCEPTION_TYPE_ATTR,
+                              realError.getClass());
+            if (custom(request, response, errorPage)) {
+                try {
+                    response.flushBuffer();
+                } catch (IOException e) {
+                    container.getLogger().warn("Exception Processing " + errorPage, e);
+                }
+            }
+        } else {
+            // A custom error-page has not been defined for the exception
+            // that was thrown during request processing. Check if an
+            // error-page for error code 500 was specified and if so,
+            // send that page back as the response.
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            // The response is an error
+            response.setError();
+
+            status(request, response);
+        }
+
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------ ServletResponse Methods
+
+
+    /**
+     * Flush the buffer and commit this response.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public void flushBuffer() 
+        throws IOException {
+        outputBuffer.flush();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the HTTP status to be returned with this response.
+     *
+     * @param status The new HTTP status
+     */
+    public void setStatus(int status) {
+        setStatus(status, null);
+    }
+
+
+
+    /**
+     * Set the HTTP status and message to be returned with this response.
+     *
+     * @param status The new HTTP status
+     * @param message The associated text message
+     *
+     * @deprecated As of Version 2.1 of the Java Servlet API, this method
+     *  has been deprecated due to the ambiguous meaning of the message
+     *  parameter.
+     */
+    public void setStatus(int status, String message) {
+
+        if (isCommitted())
+            return;
+
+        // Ignore any call from an included servlet
+        if (included)
+            return;
+
+        coyoteResponse.setStatus(status);
+        coyoteResponse.setMessage(message);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the application commit flag.
+     * 
+     * @param appCommitted The new application committed flag value
+     */
+    public void setAppCommitted(boolean appCommitted) {
+        this.appCommitted = appCommitted;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the location.
+     */
+    public String getLocation() {
+
+        return (this.location);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Handle the HTTP status code (and corresponding message) generated
+     * while processing the specified Request to produce the specified
+     * Response.  Any exceptions that occur during generation of the error
+     * report are logged and swallowed.
+     *
+     * @param request The request being processed
+     * @param response The response being generated
+     */
+    protected void status(Request request, Response response) {
+
+        int statusCode = response.getStatus();
+
+        // Handle a custom error page for this status code
+        Context context = request.getContext();
+        if (context == null)
+            return;
+
+        /* Only look for error pages when isError() is set.
+         * isError() is set when response.sendError() is invoked. This
+         * allows custom error pages without relying on default from
+         * web.xml.
+         */
+        if (!response.isError())
+            return;
+
+        ErrorPage errorPage = context.findErrorPage(statusCode);
+        if (errorPage != null) {
+            response.setAppCommitted(false);
+            request.setAttribute(Globals.STATUS_CODE_ATTR,
+                              new Integer(statusCode));
+
+            String message = response.getMessage();
+            if (message == null)
+                message = "";
+            request.setAttribute(Globals.ERROR_MESSAGE_ATTR, message);
+            request.setAttribute
+                (ApplicationFilterFactory.DISPATCHER_REQUEST_PATH_ATTR,
+                 errorPage.getLocation());
+            request.setAttribute(ApplicationFilterFactory.DISPATCHER_TYPE_ATTR,
+                              new Integer(ApplicationFilterFactory.ERROR));
+
+
+            Wrapper wrapper = request.getWrapper();
+            if (wrapper != null)
+                request.setAttribute(Globals.SERVLET_NAME_ATTR,
+                                  wrapper.getName());
+            request.setAttribute(Globals.EXCEPTION_PAGE_ATTR,
+                                 request.getRequestURI());
+            if (custom(request, response, errorPage)) {
+                try {
+                    response.flushBuffer();
+                } catch (ClientAbortException e) {
+                    // Ignore
+                } catch (IOException e) {
+                    container.getLogger().warn("Exception Processing " + errorPage, e);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the error page entry for the specified HTTP error code,
+     * if any; otherwise return <code>null</code>.
+     *
+     * @param errorCode Error code to look up
+     */
+    public ErrorPage findErrorPage(int errorCode);
+
+
+
+    /**
+     * Return the error page entry for the specified Java exception type,
+     * if any; otherwise return <code>null</code>.
+     *
+     * @param exceptionType Exception type to look up
+     */
+    public ErrorPage findErrorPage(String exceptionType);
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the context-relative URI of the error page for the specified
+     * HTTP status code, if any; otherwise return <code>null</code>.
+     *
+     * @param status HTTP status code to look up
+     */
+    public String findStatusPage(int status) {
+
+        ErrorPage errorPage = (ErrorPage)statusPages.get(new Integer(status));
+        if (errorPage!=null) {
+            return errorPage.getLocation();
+        }
+        return null;
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Select the appropriate child Context to process this request,
+     * based on the specified request URI.  If no matching Context can
+     * be found, return an appropriate HTTP error.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     * @param valveContext Valve context used to forward to the next Valve
+     *
+     * @exception IOException if an input/output error occurred
+     * @exception ServletException if a servlet error occurred
+     */
+    public final void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        // Select the Context to be used for this Request
+        Context context = request.getContext();
+        if (context == null) {
+            response.sendError
+                (HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                 sm.getString("standardHost.noContext"));
+            return;
+        }
+
+        // Bind the context CL to the current thread
+        if( context.getLoader() != null ) {
+            // Not started - it should check for availability first
+            // This should eventually move to Engine, it's generic.
+            Thread.currentThread().setContextClassLoader
+                    (context.getLoader().getClassLoader());
+        }
+
+        // Ask this Context to process this request
+        context.getPipeline().getFirst().invoke(request, response);
+
+        // Access a session (if present) to update last accessed time, based on a
+        // strict interpretation of the specification
+        if (Globals.STRICT_SERVLET_COMPLIANCE) {
+            request.getSession(false);
+        }
+
+        // Error page processing
+        response.setSuspended(false);
+
+        Throwable t = (Throwable) request.getAttribute(Globals.EXCEPTION_ATTR);
+
+        if (t != null) {
+            throwable(request, response, t);
+        } else {
+            status(request, response);
+        }
+
+        // Restore the context classloader
+        Thread.currentThread().setContextClassLoader
+            (StandardHostValve.class.getClassLoader());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process Comet event.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     * @param valveContext Valve context used to forward to the next Valve
+     *
+     * @exception IOException if an input/output error occurred
+     * @exception ServletException if a servlet error occurred
+     */
+    public final void event(Request request, Response response, CometEvent event)
+        throws IOException, ServletException {
+
+        // Select the Context to be used for this Request
+        Context context = request.getContext();
+
+        // Bind the context CL to the current thread
+        if( context.getLoader() != null ) {
+            // Not started - it should check for availability first
+            // This should eventually move to Engine, it's generic.
+            Thread.currentThread().setContextClassLoader
+                    (context.getLoader().getClassLoader());
+        }
+
+        // Ask this Context to process this request
+        context.getPipeline().getFirst().event(request, response, event);
+
+        // Access a session (if present) to update last accessed time, based on a
+        // strict interpretation of the specification
+        if (Globals.STRICT_SERVLET_COMPLIANCE) {
+            request.getSession(false);
+        }
+
+        // Error page processing
+        response.setSuspended(false);
+
+        Throwable t = (Throwable) request.getAttribute(Globals.EXCEPTION_ATTR);
+
+        if (t != null) {
+            throwable(request, response, t);
+        } else {
+            status(request, response);
+        }
+
+        // Restore the context classloader
+        Thread.currentThread().setContextClassLoader
+            (StandardHostValve.class.getClassLoader());
+
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Handle the specified ServletException encountered while processing
+     * the specified Request to produce the specified Response.  Any
+     * exceptions that occur during generation of the exception report are
+     * logged and swallowed.
+     *
+     * @param request The request being processed
+     * @param response The response being generated
+     * @param exception The exception that occurred (which possibly wraps
+     *  a root cause exception
+     */
+    private void exception(Request request, Response response,
+                           Throwable exception) {
+    	request.setAttribute(Globals.EXCEPTION_ATTR, exception);
+        response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+
+    }
+-----CSCI578-----

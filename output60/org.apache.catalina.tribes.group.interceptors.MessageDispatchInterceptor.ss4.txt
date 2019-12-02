@@ -1,0 +1,38 @@
+3
+-----CSCI578-----
+
+    
+    public long getCurrentSize() {
+        return currentSize;
+    }
+-----CSCI578-----
+
+
+    public void sendMessage(Member[] destination, ChannelMessage msg, InterceptorPayload payload) throws ChannelException {
+        boolean async = (msg.getOptions() & Channel.SEND_OPTIONS_ASYNCHRONOUS) == Channel.SEND_OPTIONS_ASYNCHRONOUS;
+        if ( async && run ) {
+            if ( (getCurrentSize()+msg.getMessage().getLength()) > maxQueueSize ) {
+                if ( alwaysSend ) {
+                    super.sendMessage(destination,msg,payload);
+                    return;
+                } else {
+                    throw new ChannelException("Asynchronous queue is full, reached its limit of " + maxQueueSize +" bytes, current:" + getCurrentSize() + " bytes.");
+                }//end if
+            }//end if
+            //add to queue
+            if ( useDeepClone ) msg = (ChannelMessage)msg.deepclone();
+            if (!addToQueue(msg, destination, payload) ) {
+                throw new ChannelException("Unable to add the message to the async queue, queue bug?");
+            }
+            addAndGetCurrentSize(msg.getMessage().getLength());
+        } else {
+            super.sendMessage(destination, msg, payload);
+        }
+    }
+-----CSCI578-----
+
+    
+    public synchronized long addAndGetCurrentSize(long inc) {
+        currentSize += inc;
+        return currentSize;
+    }

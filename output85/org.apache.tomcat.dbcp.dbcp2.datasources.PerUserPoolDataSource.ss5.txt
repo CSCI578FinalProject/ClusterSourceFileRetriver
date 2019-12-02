@@ -1,0 +1,70 @@
+10
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Sets the maximum lifetime in milliseconds of a connection after which the
+     * connection will always fail activation, passivation and validation.
+     *
+     * @param maxConnLifetimeMillis A value of zero or less indicates an
+     *        infinite lifetime. The default value is -1.
+     */
+    public void setMaxConnLifetimeMillis(long maxConnLifetimeMillis) {
+        this.maxConnLifetimeMillis = maxConnLifetimeMillis;
+    }
+-----CSCI578-----
+
+
+    private synchronized void registerPool(String username, String password)
+            throws NamingException, SQLException {
+
+        ConnectionPoolDataSource cpds = testCPDS(username, password);
+
+        // Set up the factory we will use (passing the pool associates
+        // the factory with the pool, so we do not have to do so
+        // explicitly)
+        CPDSConnectionFactory factory = new CPDSConnectionFactory(cpds,
+                getValidationQuery(), getValidationQueryTimeout(),
+                isRollbackAfterValidation(), username, password);
+        factory.setMaxConnLifetimeMillis(getMaxConnLifetimeMillis());
+
+        // Create an object pool to contain our PooledConnections
+        GenericObjectPool<PooledConnectionAndInfo> pool =
+                new GenericObjectPool<>(factory);
+        factory.setPool(pool);
+        pool.setBlockWhenExhausted(getPerUserBlockWhenExhausted(username));
+        pool.setEvictionPolicyClassName(
+                getPerUserEvictionPolicyClassName(username));
+        pool.setLifo(getPerUserLifo(username));
+        pool.setMaxIdle(getPerUserMaxIdle(username));
+        pool.setMaxTotal(getPerUserMaxTotal(username));
+        pool.setMaxWaitMillis(getPerUserMaxWaitMillis(username));
+        pool.setMinEvictableIdleTimeMillis(
+                getPerUserMinEvictableIdleTimeMillis(username));
+        pool.setMinIdle(getPerUserMinIdle(username));
+        pool.setNumTestsPerEvictionRun(
+                getPerUserNumTestsPerEvictionRun(username));
+        pool.setSoftMinEvictableIdleTimeMillis(
+                getPerUserSoftMinEvictableIdleTimeMillis(username));
+        pool.setTestOnCreate(getPerUserTestOnCreate(username));
+        pool.setTestOnBorrow(getPerUserTestOnBorrow(username));
+        pool.setTestOnReturn(getPerUserTestOnReturn(username));
+        pool.setTestWhileIdle(getPerUserTestWhileIdle(username));
+        pool.setTimeBetweenEvictionRunsMillis(
+                getPerUserTimeBetweenEvictionRunsMillis(username));
+
+        pool.setSwallowedExceptionListener(new SwallowedExceptionLogger(log));
+
+        Object old = managers.put(getPoolKey(username), factory);
+        if (old != null) {
+            throw new IllegalStateException("Pool already contains an entry for this user/password: " + username);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

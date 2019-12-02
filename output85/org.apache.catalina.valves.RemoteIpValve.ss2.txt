@@ -1,0 +1,37 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Set the port number of the server to process this request.
+     *
+     * @param port The server port
+     */
+    public void setLocalPort(int port) {
+        localPort = port;
+    }
+-----CSCI578-----
+
+
+    private void setPorts(Request request, int defaultPort) {
+        int port = defaultPort;
+        if (portHeader != null) {
+            String portHeaderValue = request.getHeader(portHeader);
+            if (portHeaderValue != null) {
+                try {
+                    port = Integer.parseInt(portHeaderValue);
+                } catch (NumberFormatException nfe) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString(
+                                "remoteIpValve.invalidPortHeader",
+                                portHeaderValue, portHeader), nfe);
+                    }
+                }
+            }
+        }
+        request.setServerPort(port);
+        if (changeLocalPort) {
+            request.setLocalPort(port);
+        }
+    }

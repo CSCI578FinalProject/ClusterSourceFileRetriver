@@ -1,0 +1,81 @@
+7
+-----CSCI578-----
+
+
+
+    @Override
+    public void init(WebConnection connection) {
+        if (ep == null) {
+            throw new IllegalStateException(
+                    sm.getString("wsHttpUpgradeHandler.noPreInit"));
+        }
+
+        String httpSessionId = null;
+        Object session = handshakeRequest.getHttpSession();
+        if (session != null ) {
+            httpSessionId = ((HttpSession) session).getId();
+        }
+
+        // Need to call onOpen using the web application's class loader
+        // Create the frame using the application's class loader so it can pick
+        // up application specific config from the ServerContainerImpl
+        Thread t = Thread.currentThread();
+        ClassLoader cl = t.getContextClassLoader();
+        t.setContextClassLoader(applicationClassLoader);
+        try {
+            wsRemoteEndpointServer = new WsRemoteEndpointImplServer(socketWrapper, webSocketContainer);
+            wsSession = new WsSession(ep, wsRemoteEndpointServer,
+                    webSocketContainer, handshakeRequest.getRequestURI(),
+                    handshakeRequest.getParameterMap(),
+                    handshakeRequest.getQueryString(),
+                    handshakeRequest.getUserPrincipal(), httpSessionId,
+                    negotiatedExtensions, subProtocol, pathParameters, secure,
+                    endpointConfig);
+            wsFrame = new WsFrameServer(socketWrapper, wsSession, transformation);
+            // WsFrame adds the necessary final transformations. Copy the
+            // completed transformation chain to the remote end point.
+            wsRemoteEndpointServer.setTransformation(wsFrame.getTransformation());
+            ep.onOpen(wsSession, endpointConfig);
+            webSocketContainer.registerSession(ep, wsSession);
+        } catch (DeploymentException e) {
+            throw new IllegalArgumentException(e);
+        } finally {
+            t.setContextClassLoader(cl);
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Principal getUserPrincipal() {
+        return userPrincipal;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Map<String,List<String>> getParameterMap() {
+        return parameterMap;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getHttpSession() {
+        return httpSession;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public URI getRequestURI() {
+        return requestUri;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String getQueryString() {
+        return queryString;
+    }

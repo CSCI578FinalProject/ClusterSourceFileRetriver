@@ -1,0 +1,55 @@
+3
+-----CSCI578-----
+
+
+    @Override
+    public boolean setInitParameter(String name, String value) {
+        if (name == null || value == null) {
+            throw new IllegalArgumentException(
+                    sm.getString("applicationFilterRegistration.nullInitParam",
+                            name, value));
+        }
+        if (getInitParameter(name) != null) {
+            return false;
+        }
+
+        wrapper.addInitParameter(name, value);
+
+        return true;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String getInitParameter(String name) {
+        return wrapper.findInitParameter(name);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Set<String> setInitParameters(Map<String, String> initParameters) {
+
+        Set<String> conflicts = new HashSet<>();
+
+        for (Map.Entry<String, String> entry : initParameters.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                throw new IllegalArgumentException(sm.getString(
+                        "applicationFilterRegistration.nullInitParams",
+                                entry.getKey(), entry.getValue()));
+            }
+            if (getInitParameter(entry.getKey()) != null) {
+                conflicts.add(entry.getKey());
+            }
+        }
+
+        // Have to add in a separate loop since spec requires no updates at all
+        // if there is an issue
+        if (conflicts.isEmpty()) {
+            for (Map.Entry<String, String> entry : initParameters.entrySet()) {
+                setInitParameter(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return conflicts;
+    }

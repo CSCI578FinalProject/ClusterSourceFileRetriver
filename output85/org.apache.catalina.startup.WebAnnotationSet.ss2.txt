@@ -1,0 +1,417 @@
+43
+-----CSCI578-----
+
+
+
+    /**
+     * @return the set of application listener class names configured
+     * for this application.
+     */
+    public String[] findApplicationListeners();
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- protected Methods
+
+
+    /**
+     * Process the annotations for the listeners.
+     * @param context The context which will have its annotations processed
+     */
+    protected static void loadApplicationListenerAnnotations(Context context) {
+        String[] applicationListeners = context.findApplicationListeners();
+        for (String className : applicationListeners) {
+            Class<?> classClass = Introspection.loadClass(context, className);
+            if (classClass == null) {
+                continue;
+            }
+
+            loadClassAnnotation(context, classClass);
+            loadFieldsAnnotation(context, classClass);
+            loadMethodsAnnotation(context, classClass);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Process a Resource annotation to set up a Resource.
+     * Ref JSR 250, equivalent to the resource-ref,
+     * message-destination-ref, env-ref, resource-env-ref
+     * or service-ref element in the deployment descriptor.
+     * @param context The context which will have its annotations processed
+     * @param annotation The annotation that was found
+     */
+    protected static void addResource(Context context, Resource annotation) {
+        addResource(context, annotation, null, null);
+    }
+
+
+    protected static void addResource(Context context, Resource annotation,
+            String defaultName, Class<?> defaultType) {
+        String name = getName(annotation, defaultName);
+        String type = getType(annotation, defaultType);
+
+        if (type.equals("java.lang.String") ||
+                type.equals("java.lang.Character") ||
+                type.equals("java.lang.Integer") ||
+                type.equals("java.lang.Boolean") ||
+                type.equals("java.lang.Double") ||
+                type.equals("java.lang.Byte") ||
+                type.equals("java.lang.Short") ||
+                type.equals("java.lang.Long") ||
+                type.equals("java.lang.Float")) {
+
+            // env-ref element
+            ContextEnvironment resource = new ContextEnvironment();
+
+            resource.setName(name);
+            resource.setType(type);
+
+            resource.setDescription(annotation.description());
+
+            resource.setValue(annotation.mappedName());
+
+            context.getNamingResources().addEnvironment(resource);
+
+        } else if (type.equals("javax.xml.rpc.Service")) {
+
+            // service-ref element
+            ContextService service = new ContextService();
+
+            service.setName(name);
+            service.setWsdlfile(annotation.mappedName());
+
+            service.setType(type);
+            service.setDescription(annotation.description());
+
+            context.getNamingResources().addService(service);
+
+        } else if (type.equals("javax.sql.DataSource") ||
+                type.equals("javax.jms.ConnectionFactory") ||
+                type.equals("javax.jms.QueueConnectionFactory") ||
+                type.equals("javax.jms.TopicConnectionFactory") ||
+                type.equals("javax.mail.Session") ||
+                type.equals("java.net.URL") ||
+                type.equals("javax.resource.cci.ConnectionFactory") ||
+                type.equals("org.omg.CORBA_2_3.ORB") ||
+                type.endsWith("ConnectionFactory")) {
+
+            // resource-ref element
+            ContextResource resource = new ContextResource();
+
+            resource.setName(name);
+            resource.setType(type);
+
+            if (annotation.authenticationType()
+                    == Resource.AuthenticationType.CONTAINER) {
+                resource.setAuth("Container");
+            } else if (annotation.authenticationType()
+                    == Resource.AuthenticationType.APPLICATION) {
+                resource.setAuth("Application");
+            }
+
+            resource.setScope(annotation.shareable() ? "Shareable" : "Unshareable");
+            resource.setProperty("mappedName", annotation.mappedName());
+            resource.setDescription(annotation.description());
+
+            context.getNamingResources().addResource(resource);
+
+        } else if (type.equals("javax.jms.Queue") ||
+                type.equals("javax.jms.Topic")) {
+
+            // message-destination-ref
+            MessageDestinationRef resource = new MessageDestinationRef();
+
+            resource.setName(name);
+            resource.setType(type);
+
+            resource.setUsage(annotation.mappedName());
+            resource.setDescription(annotation.description());
+
+            context.getNamingResources().addMessageDestinationRef(resource);
+
+        } else if (type.equals("javax.resource.cci.InteractionSpec") ||
+                type.equals("javax.transaction.UserTransaction") ||
+                true) {
+
+            // resource-env-ref
+            ContextResourceEnvRef resource = new ContextResourceEnvRef();
+
+            resource.setName(name);
+            resource.setType(type);
+
+            resource.setProperty("mappedName", annotation.mappedName());
+            resource.setDescription(annotation.description());
+
+            context.getNamingResources().addResourceEnvRef(resource);
+
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setUsage(String usage) {
+        this.usage = usage;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private static String getName(Resource annotation, String defaultName) {
+        String name = annotation.name();
+        if (name == null || name.equals("")) {
+            if (defaultName != null) {
+                name = defaultName;
+            }
+        }
+        return name;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private static String getType(Resource annotation, Class<?> defaultType) {
+        Class<?> type = annotation.type();
+        if (type == null || type.equals(Object.class)) {
+            if (defaultType != null) {
+                type = defaultType;
+            }
+        }
+        return Introspection.convertPrimitiveType(type).getCanonicalName();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the naming resources associated with this web application.
+     */
+    public NamingResourcesImpl getNamingResources();
+-----CSCI578-----
+
+
+    public void setWsdlfile(String wsdlfile) {
+        this.wsdlfile = wsdlfile;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a message destination reference for this web application.
+     *
+     * @param mdr New message destination reference
+     */
+    public void addMessageDestinationRef(MessageDestinationRef mdr) {
+
+        if (entries.contains(mdr.getName())) {
+            return;
+        } else {
+            if (!checkResourceType(mdr)) {
+                throw new IllegalArgumentException(sm.getString(
+                        "namingResources.resourceTypeFail", mdr.getName(),
+                        mdr.getType()));
+            }
+            entries.add(mdr.getName());
+        }
+
+        synchronized (mdrs) {
+            mdr.setNamingResources(this);
+            mdrs.put(mdr.getName(), mdr);
+        }
+        support.firePropertyChange("messageDestinationRef", null, mdr);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a resource reference for this web application.
+     *
+     * @param resource New resource reference
+     */
+    @Override
+    public void addResource(ContextResource resource) {
+
+        if (entries.contains(resource.getName())) {
+            return;
+        } else {
+            if (!checkResourceType(resource)) {
+                throw new IllegalArgumentException(sm.getString(
+                        "namingResources.resourceTypeFail", resource.getName(),
+                        resource.getType()));
+            }
+            entries.add(resource.getName());
+        }
+
+        synchronized (resources) {
+            resource.setNamingResources(this);
+            resources.put(resource.getName(), resource);
+        }
+        support.firePropertyChange("resource", null, resource);
+
+        // Register with JMX
+        if (resourceRequireExplicitRegistration) {
+            try {
+                MBeanUtils.createMBean(resource);
+            } catch (Exception e) {
+                log.warn(sm.getString("namingResources.mbeanCreateFail",
+                        resource.getName()), e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Converts the primitive type to its corresponding wrapper.
+     *
+     * @param clazz
+     *            Class that will be evaluated
+     * @return if the parameter is a primitive type returns its wrapper;
+     *         otherwise returns the same class
+     */
+    public static Class<?> convertPrimitiveType(Class<?> clazz) {
+        if (clazz.equals(char.class)) {
+            return Character.class;
+        } else if (clazz.equals(int.class)) {
+            return Integer.class;
+        } else if (clazz.equals(boolean.class)) {
+            return Boolean.class;
+        } else if (clazz.equals(double.class)) {
+            return Double.class;
+        } else if (clazz.equals(byte.class)) {
+            return Byte.class;
+        } else if (clazz.equals(short.class)) {
+            return Short.class;
+        } else if (clazz.equals(long.class)) {
+            return Long.class;
+        } else if (clazz.equals(float.class)) {
+            return Float.class;
+        } else {
+            return clazz;
+        }
+    }
+-----CSCI578-----
+
+
+    public void setAuth(String auth) {
+        this.auth = auth;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setScope(String scope) {
+        this.scope = scope;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setValue(String value) {
+        this.value = value;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Operations
+
+
+    /**
+     * Add an environment entry for this web application.
+     *
+     * @param envName New environment entry name
+     * @param type The type of the new environment entry
+     * @param value The value of the new environment entry
+     * @return the object name of the new environment entry
+     * @throws MalformedObjectNameException if the object name was invalid
+     */
+    public String addEnvironment(String envName, String type, String value)
+        throws MalformedObjectNameException {
+
+        NamingResourcesImpl nresources = (NamingResourcesImpl) this.resource;
+        if (nresources == null) {
+            return null;
+        }
+        ContextEnvironment env = nresources.findEnvironment(envName);
+        if (env != null) {
+            throw new IllegalArgumentException
+                ("Invalid environment name - already exists '" + envName + "'");
+        }
+        env = new ContextEnvironment();
+        env.setName(envName);
+        env.setType(type);
+        env.setValue(value);
+        nresources.addEnvironment(env);
+
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextEnvironment");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), env);
+        return (oname.toString());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a resource reference for this web application.
+     *
+     * @param resourceName New resource reference name
+     * @param type New resource reference type
+     * @return the object name of the new resource
+     * @throws MalformedObjectNameException if the object name was invalid
+     */
+    public String addResource(String resourceName, String type)
+        throws MalformedObjectNameException {
+
+        NamingResourcesImpl nresources = (NamingResourcesImpl) this.resource;
+        if (nresources == null) {
+            return null;
+        }
+        ContextResource resource = nresources.findResource(resourceName);
+        if (resource != null) {
+            throw new IllegalArgumentException
+                ("Invalid resource name - already exists'" + resourceName + "'");
+        }
+        resource = new ContextResource();
+        resource.setName(resourceName);
+        resource.setType(type);
+        nresources.addResource(resource);
+
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextResource");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), resource);
+        return (oname.toString());
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

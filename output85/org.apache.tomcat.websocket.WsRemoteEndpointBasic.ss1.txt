@@ -1,0 +1,74 @@
+4
+-----CSCI578-----
+
+
+
+    @Override
+    public void sendObject(Object o) throws IOException, EncodeException {
+        base.sendObject(o);
+    }
+-----CSCI578-----
+)
+    public void sendObject(Object obj) throws IOException, EncodeException {
+        if (obj == null) {
+            throw new IllegalArgumentException(sm.getString("wsRemoteEndpoint.nullData"));
+        }
+        /*
+         * Note that the implementation will convert primitives and their object
+         * equivalents by default but that users are free to specify their own
+         * encoders and decoders for this if they wish.
+         */
+        Encoder encoder = findEncoder(obj);
+        if (encoder == null && Util.isPrimitive(obj.getClass())) {
+            String msg = obj.toString();
+            sendString(msg);
+            return;
+        }
+        if (encoder == null && byte[].class.isAssignableFrom(obj.getClass())) {
+            ByteBuffer msg = ByteBuffer.wrap((byte[]) obj);
+            sendBytes(msg);
+            return;
+        }
+
+        if (encoder instanceof Encoder.Text) {
+            String msg = ((Encoder.Text) encoder).encode(obj);
+            sendString(msg);
+        } else if (encoder instanceof Encoder.TextStream) {
+            try (Writer w = getSendWriter()) {
+                ((Encoder.TextStream) encoder).encode(obj, w);
+            }
+        } else if (encoder instanceof Encoder.Binary) {
+            ByteBuffer msg = ((Encoder.Binary) encoder).encode(obj);
+            sendBytes(msg);
+        } else if (encoder instanceof Encoder.BinaryStream) {
+            try (OutputStream os = getSendStream()) {
+                ((Encoder.BinaryStream) encoder).encode(obj, os);
+            }
+        } else {
+            throw new EncodeException(obj, sm.getString(
+                    "wsRemoteEndpoint.noEncoder", obj.getClass()));
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void sendString(String text) throws IOException {
+        if (text == null) {
+            throw new IllegalArgumentException(sm.getString("wsRemoteEndpoint.nullData"));
+        }
+        stateMachine.textStart();
+        sendMessageBlock(CharBuffer.wrap(text), true);
+    }
+-----CSCI578-----
+
+
+
+    public void sendBytes(ByteBuffer data) throws IOException {
+        if (data == null) {
+            throw new IllegalArgumentException(sm.getString("wsRemoteEndpoint.nullData"));
+        }
+        stateMachine.binaryStart();
+        sendMessageBlock(Constants.OPCODE_BINARY, data, true);
+        stateMachine.complete(true);
+    }

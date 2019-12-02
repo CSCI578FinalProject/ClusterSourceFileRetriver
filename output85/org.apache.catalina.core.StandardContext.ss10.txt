@@ -1,0 +1,71 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Set the naming resources for this web application.
+     *
+     * @param namingResources The new naming resources
+     */
+    @Override
+    public void setNamingResources(NamingResourcesImpl namingResources) {
+
+        // Process the property setting change
+        NamingResourcesImpl oldNamingResources = this.namingResources;
+        this.namingResources = namingResources;
+        if (namingResources != null) {
+            namingResources.setContainer(this);
+        }
+        support.firePropertyChange("namingResources",
+                                   oldNamingResources, this.namingResources);
+
+        if (getState() == LifecycleState.NEW ||
+                getState() == LifecycleState.INITIALIZING ||
+                getState() == LifecycleState.INITIALIZED) {
+            // NEW will occur if Context is defined in server.xml
+            // At this point getObjectKeyPropertiesNameOnly() will trigger an
+            // NPE.
+            // INITIALIZED will occur if the Context is defined in a context.xml
+            // file
+            // If started now, a second start will be attempted when the context
+            // starts
+
+            // In both cases, return and let context init the namingResources
+            // when it starts
+            return;
+        }
+
+        if (oldNamingResources != null) {
+            try {
+                oldNamingResources.stop();
+                oldNamingResources.destroy();
+            } catch (LifecycleException e) {
+                log.warn("standardContext.namingResource.destroy.fail", e);
+            }
+        }
+        if (namingResources != null) {
+            try {
+                namingResources.init();
+                namingResources.start();
+            } catch (LifecycleException e) {
+                log.warn("standardContext.namingResource.init.fail", e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the naming resources associated with this web application.
+     */
+    @Override
+    public NamingResourcesImpl getNamingResources() {
+
+        if (namingResources == null) {
+            setNamingResources(new NamingResourcesImpl());
+        }
+        return (namingResources);
+
+    }

@@ -1,0 +1,145 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Add host with the given parameters.
+     *
+     * @param request The request
+     * @param writer The output writer
+     * @param name The host name
+     * @param htmlMode Flag value
+     */
+    protected void add(HttpServletRequest request, PrintWriter writer, String name, boolean htmlMode ) {
+        String aliases = request.getParameter("aliases");
+        String appBase = request.getParameter("appBase");
+        boolean manager = booleanParameter(request, "manager", false, htmlMode);
+        boolean autoDeploy = booleanParameter(request, "autoDeploy", true, htmlMode);
+        boolean deployOnStartup = booleanParameter(request, "deployOnStartup", true, htmlMode);
+        boolean deployXML = booleanParameter(request, "deployXML", true, htmlMode);
+        boolean unpackWARs = booleanParameter(request, "unpackWARs", true, htmlMode);
+        boolean xmlNamespaceAware = booleanParameter(request, "xmlNamespaceAware", false, htmlMode);
+        boolean xmlValidation = booleanParameter(request, "xmlValidation", false, htmlMode);
+        add(writer, name, aliases, appBase, manager,
+            autoDeploy,
+            deployOnStartup,
+            deployXML,                                       
+            unpackWARs,
+            xmlNamespaceAware,
+            xmlValidation);
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Support Methods
+
+
+    /**
+     * Get config base.
+     */
+    protected File getConfigBase(String hostName) {
+        File configBase = 
+            new File(System.getProperty("catalina.base"), "conf");
+        if (!configBase.exists()) {
+            return null;
+        }
+        if (engine != null) {
+            configBase = new File(configBase, engine.getName());
+        }
+        if (host != null) {
+            configBase = new File(configBase, hostName);
+        }
+        configBase.mkdirs();
+        return configBase;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * extract boolean value from checkbox with default
+     * @param request
+     * @param parameter
+     * @param theDefault
+     * @param htmlMode
+     */
+    protected boolean booleanParameter(HttpServletRequest request,
+            String parameter, boolean theDefault, boolean htmlMode) {
+        String value = request.getParameter(parameter);
+        boolean booleanValue = theDefault;
+        if (value != null) {
+            if (htmlMode) {
+                if (value.equals("on")) {
+                    booleanValue = true;
+                }
+            } else if (theDefault) {
+                if (value.equals("false")) {
+                    booleanValue = false;
+                }
+            } else if (value.equals("true")) {
+                booleanValue = true;
+            }
+        } else if (htmlMode)
+            booleanValue = false;
+        return booleanValue;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add an alias name that should be mapped to this same Host.
+     *
+     * @param alias The alias to be added
+     */
+    public void addAlias(String alias) {
+
+        alias = alias.toLowerCase();
+
+        synchronized (aliasesLock) {
+            // Skip duplicate aliases
+            for (int i = 0; i < aliases.length; i++) {
+                if (aliases[i].equals(alias))
+                    return;
+            }
+            // Add this alias to the list
+            String newAliases[] = new String[aliases.length + 1];
+            for (int i = 0; i < aliases.length; i++)
+                newAliases[i] = aliases[i];
+            newAliases[aliases.length] = alias;
+            aliases = newAliases;
+        }
+        // Inform interested listeners
+        fireContainerEvent(ADD_ALIAS_EVENT, alias);
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+
+    // ------------------------------------------------------------- Operations
+
+
+   /**
+     * Add an alias name that should be mapped to this Host
+     *
+     * @param alias The alias to be added
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public void addAlias(String alias)
+        throws Exception {
+
+        StandardHost host = (StandardHost) this.resource;
+        host.addAlias(alias);
+
+    }

@@ -1,0 +1,125 @@
+7
+-----CSCI578-----
+
+
+    private static Object coerceToArray(final Object obj, final Class<?> type) {
+        // Note: Nested arrays will result in nested calls to this method.
+
+        // Note: Calling method has checked the obj is an array.
+
+        int size = Array.getLength(obj);
+        // Cast the input object to an array (calling method has checked it is
+        // an array)
+        // Get the target type for the array elements
+        Class<?> componentType = type.getComponentType();
+        // Create a new array of the correct type
+        Object result = Array.newInstance(componentType, size);
+        // Coerce each element in turn.
+        for (int i = 0; i < size; i++) {
+            Array.set(result, i, coerceToType(Array.get(obj, i), componentType));
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+    public final static Object coerceToType(final Object obj,
+            final Class<?> type) throws ELException {
+        if (type == null || Object.class.equals(type) ||
+                (obj != null && type.isAssignableFrom(obj.getClass()))) {
+            return obj;
+        }
+        if (String.class.equals(type)) {
+            return coerceToString(obj);
+        }
+        if (ELArithmetic.isNumberType(type)) {
+            return coerceToNumber(obj, type);
+        }
+        if (Character.class.equals(type) || Character.TYPE == type) {
+            return coerceToCharacter(obj);
+        }
+        if (Boolean.class.equals(type) || Boolean.TYPE == type) {
+            return coerceToBoolean(obj);
+        }
+        if (type.isEnum()) {
+            return coerceToEnum(obj, type);
+        }
+
+        // new to spec
+        if (obj == null)
+            return null;
+        if (obj instanceof String) {
+            if ("".equals(obj))
+                return null;
+            PropertyEditor editor = PropertyEditorManager.findEditor(type);
+            if (editor != null) {
+                editor.setAsText((String) obj);
+                return editor.getValue();
+            }
+        }
+
+        // Handle arrays
+        if (type.isArray() && obj.getClass().isArray()) {
+            return coerceToArray(obj, type);
+        }
+
+        throw new ELException(MessageFactory.get("error.convert",
+                obj, obj.getClass(), type));
+    }
+-----CSCI578-----
+
+
+    public final static boolean isNumberType(final Class<?> type) {
+        return type == Long.TYPE || type == Double.TYPE ||
+            type == Byte.TYPE || type == Short.TYPE ||
+            type == Integer.TYPE || type == Float.TYPE ||
+            Number.class.isAssignableFrom(type);
+    }
+-----CSCI578-----
+
+
+    public final static Character coerceToCharacter(final Object obj)
+            throws ELException {
+        if (obj == null || "".equals(obj)) {
+            return new Character((char) 0);
+        }
+        if (obj instanceof String) {
+            return new Character(((String) obj).charAt(0));
+        }
+        if (ELArithmetic.isNumber(obj)) {
+            return new Character((char) ((Number) obj).shortValue());
+        }
+        Class objType = obj.getClass();
+        if (obj instanceof Character) {
+            return (Character) obj;
+        }
+
+        throw new ELException(MessageFactory.get("error.convert",
+                obj, objType, Character.class));
+    }
+-----CSCI578-----
+
+
+    public Object coerceToType(Object obj, Class type) {
+        return ELSupport.coerceToType(obj, type);
+    }
+-----CSCI578-----
+
+
+    public Object invoke(ELContext context, Object[] params) throws ELException {
+        if (this.expectedType != null) {
+            return ELSupport.coerceToType(this.expr, this.expectedType);
+        } else {
+            return this.expr;
+        }
+    }
+-----CSCI578-----
+
+
+    public Object getValue(ELContext context) {
+        if (this.expectedType != null) {
+            return ELSupport.coerceToType(this.value, this.expectedType);
+        }
+        return this.value;
+    }

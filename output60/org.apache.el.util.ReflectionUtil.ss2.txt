@@ -1,0 +1,79 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Returns a method based on the criteria
+     * @param base the object that owns the method
+     * @param property the name of the method
+     * @param paramTypes the parameter types to use
+     * @return the method specified
+     * @throws MethodNotFoundException
+     */
+    public static Method getMethod(Object base, Object property,
+            Class[] paramTypes) throws MethodNotFoundException {
+        if (base == null || property == null) {
+            throw new MethodNotFoundException(MessageFactory.get(
+                    "error.method.notfound", base, property,
+                    paramString(paramTypes)));
+        }
+
+        String methodName = (property instanceof String) ? (String) property
+                : property.toString();
+
+        Method method = null;
+        try {
+            method = base.getClass().getMethod(methodName, paramTypes);
+        } catch (NoSuchMethodException nsme) {
+            throw new MethodNotFoundException(MessageFactory.get(
+                    "error.method.notfound", base, property,
+                    paramString(paramTypes)));
+        }
+        return method;
+    }
+-----CSCI578-----
+
+
+    protected static final String paramString(Class[] types) {
+        if (types != null) {
+            StringBuffer sb = new StringBuffer();
+            for (int i = 0; i < types.length; i++) {
+                sb.append(types[i].getName()).append(", ");
+            }
+            if (sb.length() > 2) {
+                sb.setLength(sb.length() - 2);
+            }
+            return sb.toString();
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    public MethodInfo getMethodInfo(EvaluationContext ctx, Class[] paramTypes)
+            throws ELException {
+        Target t = getTarget(ctx);
+        Method m = ReflectionUtil.getMethod(t.base, t.property, paramTypes);
+        return new MethodInfo(m.getName(), m.getReturnType(), m
+                .getParameterTypes());
+    }
+-----CSCI578-----
+
+
+    public Object invoke(EvaluationContext ctx, Class[] paramTypes,
+            Object[] paramValues) throws ELException {
+        Target t = getTarget(ctx);
+        Method m = ReflectionUtil.getMethod(t.base, t.property, paramTypes);
+        Object result = null;
+        try {
+            result = m.invoke(t.base, (Object[]) paramValues);
+        } catch (IllegalAccessException iae) {
+            throw new ELException(iae);
+        } catch (IllegalArgumentException iae) {
+            throw new ELException(iae);
+        } catch (InvocationTargetException ite) {
+            throw new ELException(ite.getCause());
+        }
+        return result;
+    }

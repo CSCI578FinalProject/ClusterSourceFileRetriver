@@ -1,0 +1,123 @@
+8
+-----CSCI578-----
+
+
+
+    public String getEncoding() {
+        return encoding.name();
+    }
+-----CSCI578-----
+
+
+
+    private String getDigestEncoding() {
+        CredentialHandler ch = credentialHandler;
+        if (ch instanceof MessageDigestCredentialHandler) {
+            return ((MessageDigestCredentialHandler) ch).getEncoding();
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+    protected boolean hasMessageDigest() {
+        CredentialHandler ch = credentialHandler;
+        if (ch instanceof MessageDigestCredentialHandler) {
+            return ((MessageDigestCredentialHandler) ch).getAlgorithm() != null;
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the digest associated with given principal's user name.
+     * @param username the user name
+     * @param realmName the realm name
+     * @return the digest for the specified user
+     */
+    protected String getDigest(String username, String realmName) {
+        if (hasMessageDigest()) {
+            // Use pre-generated digest
+            return getPassword(username);
+        }
+
+        String digestValue = username + ":" + realmName + ":"
+            + getPassword(username);
+
+        byte[] valueBytes = null;
+        try {
+            valueBytes = digestValue.getBytes(getDigestCharset());
+        } catch (UnsupportedEncodingException uee) {
+            log.error("Illegal digestEncoding: " + getDigestEncoding(), uee);
+            throw new IllegalArgumentException(uee.getMessage());
+        }
+
+        return MD5Encoder.encode(ConcurrentMessageDigest.digestMD5(valueBytes));
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getAlgorithm() {
+        return algorithm;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get the principal associated with the specified certificate.
+     * @param usercert The user certificate
+     * @return the Principal associated with the given certificate.
+     */
+    protected Principal getPrincipal(X509Certificate usercert) {
+        String username = x509UsernameRetriever.getUsername(usercert);
+
+        if(log.isDebugEnabled())
+            log.debug(sm.getString("realmBase.gotX509Username", username));
+
+        return(getPrincipal(username));
+    }
+
+
+
+    /**
+     * Get the principal associated with the specified user.
+     * @param username The user name
+     * @return the Principal associated with the given user name.
+     */
+    protected abstract Principal getPrincipal(String username);
+
+
+
+    protected Principal getPrincipal(String username,
+            GSSCredential gssCredential) {
+        Principal p = getPrincipal(username);
+
+        if (p instanceof GenericPrincipal) {
+            ((GenericPrincipal) p).setGssCredential(gssCredential);
+        }
+
+        return p;
+    }
+-----CSCI578-----
+
+    /**
+     * Gets a user name from an X509Certificate.
+     *
+     * @param cert The certificate containing the user name.
+     * @return An appropriate user name obtained from one or more fields
+     *         in the certificate.
+     */
+    public String getUsername(X509Certificate cert);
+-----CSCI578-----
+
+    protected void setGssCredential(GSSCredential gssCredential) {
+        this.gssCredential = gssCredential;
+    }

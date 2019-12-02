@@ -1,0 +1,128 @@
+9
+-----CSCI578-----
+
+
+    void setSocketOptions(Socket socket)
+        throws SocketException {
+        if(linger >= 0 ) 
+            socket.setSoLinger( true, linger);
+        if( tcpNoDelay )
+            socket.setTcpNoDelay(tcpNoDelay);
+        if( socketTimeout > 0 )
+            socket.setSoTimeout( socketTimeout );
+    }
+-----CSCI578-----
+
+    public void setEndpoint(PoolTcpEndpoint endpoint) {
+	this.endpoint = endpoint;
+    }
+-----CSCI578-----
+
+
+    public void setSocket(Socket socket) {
+	this.socket=socket;
+    }
+-----CSCI578-----
+
+
+    
+    void processSocket(Socket s, TcpConnection con, Object[] threadData) {
+        // Process the connection
+        int step = 1;
+        try {
+            
+            // 1: Set socket options: timeout, linger, etc
+            setSocketOptions(s);
+            
+            // 2: SSL handshake
+            step = 2;
+            if (getServerSocketFactory() != null) {
+                getServerSocketFactory().handshake(s);
+            }
+            
+            // 3: Process the connection
+            step = 3;
+            con.setEndpoint(this);
+            con.setSocket(s);
+            getConnectionHandler().processConnection(con, threadData);
+            
+        } catch (SocketException se) {
+            log.debug(sm.getString("endpoint.err.socket", s.getInetAddress()),
+                    se);
+            // Try to close the socket
+            try {
+                s.close();
+            } catch (IOException e) {
+            }
+        } catch (Throwable t) {
+            if (step == 2) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("endpoint.err.handshake"), t);
+                }
+            } else {
+                log.error(sm.getString("endpoint.err.unexpected"), t);
+            }
+            // Try to close the socket
+            try {
+                s.close();
+            } catch (IOException e) {
+            }
+        } finally {
+            if (con != null) {
+                con.recycle();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public void recycle() {
+        endpoint = null;
+        socket = null;
+    }
+-----CSCI578-----
+
+    
+    /** Called before the call to processConnection.
+     *  If the thread is reused, init() should be called once per thread.
+     *
+     *  It may look strange, but it's a _very_ good way to avoid synchronized
+     *  methods and keep per thread data.
+     *
+     *  Assert: the object returned from init() will be passed to
+     *  all processConnection() methods happening in the same thread.
+     * 
+     */
+    public Object[] init( );
+
+
+    /**
+     *  Assert: connection!=null
+     *  Assert: connection.getSocket() != null
+     *  Assert: thData != null and is the result of calling init()
+     *  Assert: thData is preserved per Thread.
+     */
+    public void processConnection(TcpConnection connection, Object thData[]);
+-----CSCI578-----
+
+
+   ServerSocketFactory getServerSocketFactory() {
+ 	    return factory;
+   }
+-----CSCI578-----
+
+ 
+     /**
+       Extra function to initiate the handshake. Sometimes necessary
+       for SSL
+ 
+       @exception IOException;
+     */ 
+     public abstract void handshake(Socket sock)
+ 	throws IOException;
+-----CSCI578-----
+
+
+    public TcpConnectionHandler getConnectionHandler() {
+	    return handler;
+    }

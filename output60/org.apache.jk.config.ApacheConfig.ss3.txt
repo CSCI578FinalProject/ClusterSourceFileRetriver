@@ -1,0 +1,103 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    // -------------------- Apache serves static mode --------------------
+    // This is not going to work for all apps. We fall back to stupid mode.
+    
+    protected void generateContextMappings(Context context, PrintWriter mod_jk )
+    {
+	String ctxPath  = context.getPath();
+	Host vhost = getHost(context);
+
+        if( noRoot &&  "".equals(ctxPath) ) {
+            log.debug("Ignoring root context in non-forward-all mode  ");
+            return;
+        }
+
+	mod_jk.println();
+	mod_jk.println(indent + "#################### " +
+		       ((vhost!=null ) ? vhost.getName() + ":" : "" ) +
+		       (("".equals(ctxPath)) ? "/" : ctxPath ) +
+		       " ####################" );
+        mod_jk.println();
+	// Dynamic /servet pages go to Tomcat
+ 
+	generateStaticMappings( context, mod_jk );
+
+	// InvokerInterceptor - it doesn't have a container,
+	// but it's implemented using a special module.
+	
+	// XXX we need to better collect all mappings
+
+	if(context.getLoginConfig() != null) {
+	    String loginPage = context.getLoginConfig().getLoginPage();
+	    if(loginPage != null) {
+		int lpos = loginPage.lastIndexOf("/");
+		String jscurl = loginPage.substring(0,lpos+1) + "j_security_check";
+		addMapping( ctxPath, jscurl, mod_jk);
+	    }
+	}
+	String [] servletMaps = context.findServletMappings();
+	for(int ii=0; ii < servletMaps.length; ii++) {
+	      addMapping( ctxPath, servletMaps[ii] , mod_jk );
+	}
+    }
+-----CSCI578-----
+
+    
+    
+    /** Add a fulling specified Appache mapping.
+     */
+    protected boolean addMapping( String fullPath, PrintWriter mod_jk ) {
+        if( log.isDebugEnabled() )
+            log.debug( "Adding map for " + fullPath );
+	mod_jk.println(indent + "JkMount " + fullPath + "  " + jkWorker );
+	return true;
+    }
+
+    /** Add a partially specified Appache mapping.
+     */
+    protected boolean addMapping( String ctxP, String ext, PrintWriter mod_jk ) {
+        if( log.isDebugEnabled() )
+            log.debug( "Adding map for " + ext );
+	if(! ext.startsWith("/") )
+	    ext = "/" + ext;
+	if(ext.length() > 1)
+	    mod_jk.println(indent + "JkMount " + ctxP + ext+ "  " + jkWorker );
+	return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the canonical, fully qualified, name of the virtual host
+     * this Container represents.
+     */
+    public String getName();
+-----CSCI578-----
+
+
+    protected void generateVhostHead(Host host, PrintWriter mod_jk) {
+
+        mod_jk.println();
+        String vhostip = host.getName();
+	String vhost = vhostip;
+	int ppos = vhost.indexOf(":");
+	if(ppos >= 0)
+	    vhost = vhost.substring(0,ppos);
+
+        mod_jk.println("<VirtualHost "+ vhostip + ">");
+        mod_jk.println("    ServerName " + vhost );
+        String [] aliases=host.findAliases();
+        if( aliases.length > 0 ) {
+            mod_jk.print("    ServerAlias " );
+            for( int ii=0; ii < aliases.length ; ii++) {
+                mod_jk.print( aliases[ii] + " " );
+            }
+            mod_jk.println();
+        }
+        indent="    ";
+    }

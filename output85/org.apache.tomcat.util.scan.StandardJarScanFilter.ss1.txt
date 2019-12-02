@@ -1,0 +1,57 @@
+2
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean check(JarScanType jarScanType, String jarName) {
+        Lock readLock = configurationLock.readLock();
+        readLock.lock();
+        try {
+            final boolean defaultScan;
+            final Set<String> toSkip;
+            final Set<String> toScan;
+            switch (jarScanType) {
+                case TLD: {
+                    defaultScan = defaultTldScan;
+                    toSkip = tldSkipSet;
+                    toScan = tldScanSet;
+                    break;
+                }
+                case PLUGGABILITY: {
+                    defaultScan = defaultPluggabilityScan;
+                    toSkip = pluggabilitySkipSet;
+                    toScan = pluggabilityScanSet;
+                    break;
+                }
+                case OTHER:
+                default: {
+                    defaultScan = true;
+                    toSkip = defaultSkipSet;
+                    toScan = defaultScanSet;
+                }
+            }
+            if (defaultScan) {
+                if (Matcher.matchName(toSkip, jarName)) {
+                    if (Matcher.matchName(toScan, jarName)) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+                return true;
+            } else {
+                if (Matcher.matchName(toScan, jarName)) {
+                    if (Matcher.matchName(toSkip, jarName)) {
+                        return false;
+                    } else {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        } finally {
+            readLock.unlock();
+        }
+    }
+-----CSCI578-----

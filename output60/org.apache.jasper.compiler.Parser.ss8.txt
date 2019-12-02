@@ -1,0 +1,105 @@
+23
+-----CSCI578-----
+
+
+        new Node.Scriptlet(parseScriptText(reader.getText(start, stop)), start,
+                parent);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    Mark mark() {
+        return new Mark(current);
+    }
+-----CSCI578-----
+
+
+    /**
+     * search the stream for a match to a string
+     * @param string The string to match
+     * @return <strong>true</strong> is one is found, the current position
+     *         in stream is positioned after the search string, <strong>
+     *               false</strong> otherwise, position in stream unchanged.
+     */
+    boolean matches(String string) throws JasperException {
+        Mark mark = mark();
+        int ch = 0;
+        int i = 0;
+        do {
+            ch = nextChar();
+            if (((char) ch) != string.charAt(i++)) {
+                reset(mark);
+                return false;
+            }
+        } while (i < string.length());
+        return true;
+    }
+-----CSCI578-----
+
+
+    boolean matchesETagWithoutLessThan(String tagName)
+        throws JasperException
+    {
+       Mark mark = mark();
+
+       if (!matches("/" + tagName))
+           return false;
+       skipSpaces();
+       if (nextChar() == '>')
+           return true;
+
+       reset(mark);
+       return false;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Skip until the given string is matched in the stream.
+     * When returned, the context is positioned past the end of the match.
+     *
+     * @param s The String to match.
+     * @return A non-null <code>Mark</code> instance (positioned immediately
+     *         before the search string) if found, <strong>null</strong>
+     *         otherwise.
+     */
+    Mark skipUntil(String limit) throws JasperException {
+        Mark ret = null;
+        int limlen = limit.length();
+        int ch;
+
+    skip:
+        for (ret = mark(), ch = nextChar() ; ch != -1 ;
+                 ret = mark(), ch = nextChar()) {
+            if (ch == limit.charAt(0)) {
+                Mark restart = mark();
+                for (int i = 1 ; i < limlen ; i++) {
+                    if (peekChar() == limit.charAt(i))
+                        nextChar();
+                    else {
+                        reset(restart);
+                        continue skip;
+                    }
+                }
+                return ret;
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

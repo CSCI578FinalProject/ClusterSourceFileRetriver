@@ -1,0 +1,138 @@
+10
+-----CSCI578-----
+
+
+    /**
+     * Store the specified service element children.
+     *
+     * @param aWriter Current output writer
+     * @param indent Indentation level
+     * @param aService Service to store
+     * @param parentDesc The element description
+     * @throws Exception Configuration storing error
+     */
+    @Override
+    public void storeChildren(PrintWriter aWriter, int indent, Object aService,
+            StoreDescription parentDesc) throws Exception {
+        if (aService instanceof StandardService) {
+            StandardService service = (StandardService) aService;
+            // Store nested <Listener> elements
+            LifecycleListener listeners[] = ((Lifecycle) service)
+                    .findLifecycleListeners();
+            storeElementArray(aWriter, indent, listeners);
+
+            // Store nested <Executor> elements
+            Executor[] executors = service.findExecutors();
+            storeElementArray(aWriter, indent, executors);
+
+            Connector connectors[] = service.findConnectors();
+            storeElementArray(aWriter, indent, connectors);
+
+            // Store nested <Engine> element
+            Engine container = service.getContainer();
+            if (container != null) {
+                StoreDescription elementDesc = getRegistry().findDescription(container.getClass());
+                if (elementDesc != null) {
+                    IStoreFactory factory = elementDesc.getStoreFactory();
+                    factory.store(aWriter, indent, container);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Find and return the set of Connectors associated with this Service.
+     */
+    @Override
+    public Connector[] findConnectors() {
+        return connectors;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Get the life cycle listeners associated with this life cycle.
+     *
+     * @return An array containing the life cycle listeners associated with this
+     *         life cycle. If this component has no listeners registered, a
+     *         zero-length array is returned.
+     */
+    public LifecycleListener[] findLifecycleListeners();
+-----CSCI578-----
+
+
+
+    /**
+     * Retrieves all executors
+     * @return Executor[]
+     */
+    @Override
+    public Executor[] findExecutors() {
+        synchronized (executors) {
+            Executor[] arr = new Executor[executors.size()];
+            executors.toArray(arr);
+            return arr;
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Engine getContainer() {
+        return engine;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected String getDomainInternal() {
+        String domain = null;
+        Container engine = getContainer();
+
+        // Use the engine name first
+        if (engine != null) {
+            domain = engine.getName();
+        }
+
+        // No engine or no engine name, use the service name
+        if (domain == null) {
+            domain = getName();
+        }
+
+        // No service name, return null which will trigger the use of the
+        // default
+        return domain;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the name of this Service.
+     */
+    @Override
+    public String getName() {
+        return name;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a String representation of this component.
+     */
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("StandardService[");
+        sb.append(getName());
+        sb.append("]");
+        return (sb.toString());
+    }

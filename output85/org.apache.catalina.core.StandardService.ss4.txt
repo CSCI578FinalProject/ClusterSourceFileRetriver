@@ -1,0 +1,59 @@
+5
+-----CSCI578-----
+
+
+
+    @Override
+    public void setContainer(Engine engine) {
+        Engine oldEngine = this.engine;
+        if (oldEngine != null) {
+            oldEngine.setService(null);
+        }
+        this.engine = engine;
+        if (this.engine != null) {
+            this.engine.setService(this);
+        }
+        if (getState().isAvailable()) {
+            if (this.engine != null) {
+                try {
+                    this.engine.start();
+                } catch (LifecycleException e) {
+                    log.warn(sm.getString("standardService.engine.startFailed"), e);
+                }
+            }
+            // Restart MapperListener to pick up new engine.
+            try {
+                mapperListener.stop();
+            } catch (LifecycleException e) {
+                log.warn(sm.getString("standardService.mapperListener.stopFailed"), e);
+            }
+            try {
+                mapperListener.start();
+            } catch (LifecycleException e) {
+                log.warn(sm.getString("standardService.mapperListener.startFailed"), e);
+            }
+            if (oldEngine != null) {
+                try {
+                    oldEngine.stop();
+                } catch (LifecycleException e) {
+                    log.warn(sm.getString("standardService.engine.stopFailed"), e);
+                }
+            }
+        }
+
+        // Report this property change to interested listeners
+        support.firePropertyChange("container", oldEngine, this.engine);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>Service</code> with which we are associated (if any).
+     *
+     * @param service The service that owns this Engine
+     */
+    public void setService(Service service);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

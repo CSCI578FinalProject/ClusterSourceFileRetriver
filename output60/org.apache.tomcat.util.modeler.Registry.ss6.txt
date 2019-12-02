@@ -1,0 +1,129 @@
+5
+-----CSCI578-----
+
+    
+    /** Experimental.
+     *
+     * @param sourceType
+     * @param source
+     * @param param
+     * @return List of descriptors
+     * @throws Exception
+     * @deprecated bad interface, mixing of metadata and mbeans
+     */
+    public List load( String sourceType, Object source, String param)
+        throws Exception
+    {
+        if( log.isTraceEnabled()) {
+            log.trace("load " + source );
+        }
+        String location=null;
+        String type=null;
+        Object inputsource=null;
+
+        if( source instanceof DynamicMBean ) {
+            sourceType="MbeansDescriptorsDynamicMBeanSource";
+            inputsource=source;
+        } else if( source instanceof URL ) {
+            URL url=(URL)source;
+            location=url.toString();
+            type=param;
+            inputsource=url.openStream();
+            if( sourceType == null ) {
+                sourceType = sourceTypeFromExt(location);
+            }
+        } else if( source instanceof File ) {
+            location=((File)source).getAbsolutePath();
+            inputsource=new FileInputStream((File)source);            
+            type=param;
+            if( sourceType == null ) {
+                sourceType = sourceTypeFromExt(location);
+            }
+        } else if( source instanceof InputStream ) {
+            type=param;
+            inputsource=source;
+        } else if( source instanceof Class ) {
+            location=((Class)source).getName();
+            type=param;
+            inputsource=source;
+            if( sourceType== null ) {
+                sourceType="MbeansDescriptorsIntrospectionSource";
+            }
+        }
+        
+        if( sourceType==null ) {
+            sourceType="MbeansDescriptorsDigesterSource";
+        }
+        ModelerSource ds=getModelerSource(sourceType);
+        List mbeans=ds.loadDescriptors(this, location, type, inputsource);
+
+        return mbeans;
+    }
+-----CSCI578-----
+
+
+    private ModelerSource getModelerSource( String type )
+            throws Exception
+    {
+        if( type==null ) type="MbeansDescriptorsDigesterSource";
+        if( type.indexOf( ".") < 0 ) {
+            type="org.apache.tomcat.util.modeler.modules." + type;
+        }
+
+        Class c=Class.forName( type );
+        ModelerSource ds=(ModelerSource)c.newInstance();
+        return ds;
+    }
+-----CSCI578-----
+
+
+    /** Load data, returns a list of items. 
+     * 
+     * @param registry
+     * @param location
+     * @param type
+     * @param source Introspected object or some other source
+     * @throws Exception
+     */ 
+    public List loadDescriptors( Registry registry, String location,
+                                 String type, Object source)
+            throws Exception
+    {
+        // TODO
+        return null;
+    }
+-----CSCI578-----
+
+
+    private String sourceTypeFromExt( String s ) {
+        if( s.endsWith( ".ser")) {
+            return "MbeansDescriptorsSerSource";
+        }
+        else if( s.endsWith(".xml")) {
+            return "MbeansDescriptorsDigesterSource";
+        }
+        return null;
+    }
+-----CSCI578-----
+
+    
+    /** 
+     * Load an extended mlet file. The source can be an URL, File or
+     * InputStream. 
+     * 
+     * All mbeans will be instantiated, registered and the attributes will be 
+     * set. The result is a list of ObjectNames.
+     *
+     * @param source InputStream or URL of the file
+     * @param cl ClassLoader to be used to load the mbeans, or null to use the
+     *        default JMX mechanism ( i.e. all registered loaders )
+     * @return List of ObjectName for the loaded mbeans
+     * @throws Exception
+     * 
+     * @since 1.1
+     */ 
+    public List loadMBeans( Object source, ClassLoader cl )
+            throws Exception
+    {
+        return load("MbeansSource", source, null );
+    }

@@ -1,0 +1,290 @@
+23
+-----CSCI578-----
+
+
+    /**
+     * The Host of the <code>JMX JSR 160</code> MBeanServer to be used.
+     */
+
+    public String getHost() {
+        return (this.host);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /**
+     * get all Properties
+     * @param property
+     * @return The property
+     */
+    public String getProperty(String property) {
+        Project currentProject = getProject();
+        if (currentProject != null) {
+            return currentProject.getProperty(property);
+        } else {
+            return properties.getProperty(property);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * The URL of the <code>JMX JSR 160</code> MBeanServer to be used.
+     */
+
+    public String getUrl() {
+        return (this.url);
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Execute the specified command. This logic only performs the common
+     * attribute validation required by all subclasses; it does not perform any
+     * functional logic directly.
+     * 
+     * @exception BuildException
+     *                if a validation error occurs
+     */
+    public void execute() throws BuildException {
+        if (testIfCondition() && testUnlessCondition()) {
+            try {
+                String error = null;
+
+                MBeanServerConnection jmxServerConnection = getJMXConnection();
+                error = jmxExecute(jmxServerConnection);
+                if (error != null && isFailOnError()) {
+                    // exception should be thrown only if failOnError == true
+                    // or error line will be logged twice
+                    throw new BuildException(error);
+                }
+            } catch (Throwable t) {
+                if (isFailOnError()) {
+                    throw new BuildException(t);
+                } else {
+                    handleErrorOutput(t.getMessage());
+                }
+            } finally {
+                closeRedirector();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Execute the specified command, based on the configured properties. The
+     * input stream will be closed upon completion of this task, whether it was
+     * executed successfully or not.
+     * 
+     * @exception Exception
+     *                if an error occurs
+     */
+    public String jmxExecute(MBeanServerConnection jmxServerConnection)
+            throws Exception {
+
+        if ((jmxServerConnection == null)) {
+            throw new BuildException("Must open a connection!");
+        } else if (isEcho()) {
+            handleOutput("JMX Connection ref=" + ref + " is open!");
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * test the if condition
+     * 
+     * @return true if there is no if condition, or the named property exists
+     */
+    protected boolean testIfCondition() {
+        if (ifCondition == null || "".equals(ifCondition)) {
+            return true;
+        }
+        return getProperty(ifCondition) != null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * test the unless condition
+     * 
+     * @return true if there is no unless condition, or there is a named
+     *         property but it doesn't exist
+     */
+    protected boolean testUnlessCondition() {
+        if (unlessCondition == null || "".equals(unlessCondition)) {
+            return true;
+        }
+        return getProperty(unlessCondition) == null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the useRef.
+     */
+    public boolean isUseRef() {
+        return ref != null && !"".equals(ref);
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------------ protected Methods
+
+    /**
+     * get JMXConnection
+     * 
+     * @return The connection
+     * @throws MalformedURLException
+     * @throws IOException
+     */
+    protected MBeanServerConnection getJMXConnection()
+            throws MalformedURLException, IOException {
+
+        MBeanServerConnection jmxServerConnection = null;
+        if (isUseRef()) {
+            Object pref = null ;
+            if(getProject() != null) {
+                pref = getProject().getReference(getRef());
+                if (pref != null) {
+                    try {
+                        jmxServerConnection = (MBeanServerConnection) pref;
+                    } catch (ClassCastException cce) {
+                        getProject().log(
+                            "Wrong object reference " + getRef() + " - "
+                                    + pref.getClass());
+                        return null;
+                    }
+                }
+            }
+            if (jmxServerConnection == null) {
+                jmxServerConnection = accessJMXConnection(getProject(),
+                        getUrl(), getHost(), getPort(), getUsername(),
+                        getPassword(), getRef());
+            }
+        } else {
+            jmxServerConnection = accessJMXConnection(getProject(), getUrl(),
+                    getHost(), getPort(), getUsername(), getPassword(), null);
+        }
+        return jmxServerConnection;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the ref.
+     */
+    public String getRef() {
+        return ref;
+    }
+-----CSCI578-----
+
+
+    /**
+     * The Port of the <code>JMX JSR 160</code> MBeanServer to be used.
+     */
+
+    public String getPort() {
+        return (this.port);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * The login username for the <code>JMX</code> MBeanServer.
+     */
+    public String getUsername() {
+        return (this.username);
+    }
+-----CSCI578-----
+
+
+    /**
+     * The login password for the <code>Manager</code> application.
+     */
+    public String getPassword() {
+        return (this.password);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Add a <CODE>RedirectorElement</CODE> to this task.
+     * @param redirectorElement   <CODE>RedirectorElement</CODE>.
+     */
+    public void addConfiguredRedirector(RedirectorElement redirectorElement) {
+        if (this.redirectorElement != null) {
+            throw new BuildException("Cannot have > 1 nested <redirector>s");
+        } else {
+            this.redirectorElement = redirectorElement;
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Execute the requested operation.
+     *
+     * @exception BuildException if an error occurs
+     */
+    public void execute() throws BuildException {
+
+        super.execute();
+        if (path == null) {
+            throw new BuildException
+                ("Must specify 'path' attribute");
+        }
+        if ((config == null) && (war == null)) {
+            throw new BuildException
+                ("Must specify at least one of 'config' and 'war'");
+        }
+        StringBuffer sb = new StringBuffer("/install?path=");
+        sb.append(URLEncoder.encode(this.path));
+        if (config != null) {
+            sb.append("&config=");
+            sb.append(URLEncoder.encode(config));
+        }
+        if (war != null) {
+            sb.append("&war=");
+            sb.append(URLEncoder.encode(war));
+        }
+        execute(sb.toString());
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Execute the requested operation.
+     *
+     * @exception BuildException if an error occurs
+     */
+    public void execute() throws BuildException {
+
+        super.execute();
+        if (path == null) {
+            throw new BuildException
+                ("Must specify 'path' attribute");
+        }
+        execute("/remove?path=" + URLEncoder.encode(this.path));
+
+    }

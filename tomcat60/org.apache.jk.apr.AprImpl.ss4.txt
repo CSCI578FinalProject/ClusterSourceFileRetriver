@@ -1,0 +1,256 @@
+5
+
+    // -------------------- Apr generic utils --------------------
+    /** Initialize APR
+     */
+    public native int initialize();
+
+    public native int terminate();
+
+    /* -------------------- Access to the jk_env_t -------------------- */
+
+    /* The jk_env_t provide temporary storage ( pool ), logging, common services
+     */
+    
+    /* Return a jk_env_t, used to keep the execution context ( temp pool, etc )
+     */
+    public native long getJkEnv();
+
+    /** Clean the temp pool, put back the env in the pool
+     */
+    public native void releaseJkEnv(long xEnv);
+
+    /* -------------------- Interface to the jk_bean object -------------------- */
+    /* Each jk component is 'wrapped' as a bean, with a specified lifecycle
+     *
+     */
+    
+    /** Get a native component
+     *  @return 0 if the component is not found.
+     */
+    public native long getJkHandler(long xEnv, String compName );
+
+    public native long createJkHandler(long xEnv, String compName );
+
+    public native int jkSetAttribute( long xEnv, long componentP, String name, String val );
+
+    public native String jkGetAttribute( long xEnv, long componentP, String name );
+    
+    public native int jkInit( long xEnv, long componentP );
+
+    public native int jkDestroy( long xEnv, long componentP );
+    
+    /** Send the packet to the C side. On return it contains the response
+     *  or indication there is no response. Asymetrical because we can't
+     *  do things like continuations.
+     */
+    public static native int jkInvoke(long xEnv, long componentP, long endpointP,
+                                      int code, byte data[], int off, int len, int raw);
+
+    /** Recycle an endpoint after use.
+     */
+    public native void jkRecycle(long xEnv, long endpointP);
+
+    // -------------------- Called from C --------------------
+    // XXX Check security, add guard or other protection
+    // It's better to do it the other way - on init 'push' AprImpl into
+    // the native library, and have native code call instance methods.
+    
+    public static Object createJavaContext(String type, long cContext) {
+        // XXX will be an instance method, fields accessible directly
+        AprImpl apr=aprSingleton;
+        JkChannel jkH=(JkChannel)apr.jkHandlers.get( type );
+        if( jkH==null ) return null;
+
+        MsgContext ep=jkH.createMsgContext();
+
+        ep.setSource( jkH );
+        
+        ep.setJniContext( cContext );
+        return ep;
+    }
+
+    // -------------------- Initialization -------------------- 
+
+    public void init() throws IOException {
+        try {
+            initialized=true;
+            loadNative();
+
+            initialize();
+            jkSetAttribute(0, 0, "channel:jni", "starting");
+            
+            log.info("JK: Initialized apr" );
+            
+        } catch( Throwable t ) {
+            throw new IOException( t.toString() );
+        }
+        ok=true;
+    }
+
+    // -------------------- Apr generic utils --------------------
+    /** Initialize APR
+     */
+    public native int initialize();
+
+    public native int terminate();
+
+    /* -------------------- Access to the jk_env_t -------------------- */
+
+    /* The jk_env_t provide temporary storage ( pool ), logging, common services
+     */
+    
+    /* Return a jk_env_t, used to keep the execution context ( temp pool, etc )
+     */
+    public native long getJkEnv();
+
+    /** Clean the temp pool, put back the env in the pool
+     */
+    public native void releaseJkEnv(long xEnv);
+
+    /* -------------------- Interface to the jk_bean object -------------------- */
+    /* Each jk component is 'wrapped' as a bean, with a specified lifecycle
+     *
+     */
+    
+    /** Get a native component
+     *  @return 0 if the component is not found.
+     */
+    public native long getJkHandler(long xEnv, String compName );
+
+    public native long createJkHandler(long xEnv, String compName );
+
+    public native int jkSetAttribute( long xEnv, long componentP, String name, String val );
+
+    public native String jkGetAttribute( long xEnv, long componentP, String name );
+    
+    public native int jkInit( long xEnv, long componentP );
+
+    public native int jkDestroy( long xEnv, long componentP );
+    
+    /** Send the packet to the C side. On return it contains the response
+     *  or indication there is no response. Asymetrical because we can't
+     *  do things like continuations.
+     */
+    public static native int jkInvoke(long xEnv, long componentP, long endpointP,
+                                      int code, byte data[], int off, int len, int raw);
+
+    /** Recycle an endpoint after use.
+     */
+    public native void jkRecycle(long xEnv, long endpointP);
+
+    // -------------------- Called from C --------------------
+    // XXX Check security, add guard or other protection
+    // It's better to do it the other way - on init 'push' AprImpl into
+    // the native library, and have native code call instance methods.
+    
+    public static Object createJavaContext(String type, long cContext) {
+        // XXX will be an instance method, fields accessible directly
+        AprImpl apr=aprSingleton;
+        JkChannel jkH=(JkChannel)apr.jkHandlers.get( type );
+        if( jkH==null ) return null;
+
+        MsgContext ep=jkH.createMsgContext();
+
+        ep.setSource( jkH );
+        
+        ep.setJniContext( cContext );
+        return ep;
+    }
+
+    /** This method of loading the libs doesn't require setting
+     *   LD_LIBRARY_PATH. Assuming a 'right' binary distribution,
+     *   or a correct build all files will be in their right place.
+     *
+     *  The burden is on our code to deal with platform specific
+     *  extensions and to keep the paths consistent - not easy, but
+     *  worth it if it avoids one extra step for the user.
+     *
+     *  Of course, this can change to System.load() and putting the
+     *  libs in LD_LIBRARY_PATH.
+     */
+    public void loadNative() throws Throwable {
+        if( aprHome==null )
+            aprHome=baseDir;
+
+        // XXX Update for windows
+        if( jniMode ) {
+            /* In JNI mode we use mod_jk for the native functions.
+               This seems the cleanest solution that works with multiple
+               VMs.
+            */
+            if (jniModeSo.equals("inprocess")) {
+                ok=true;
+                return;                                
+            }
+            try {
+                log.info("Loading " + jniModeSo);
+                if( jniModeSo!= null ) System.load( jniModeSo );
+            } catch( Throwable ex ) {
+                // ignore
+                //ex.printStackTrace();
+                return;
+            }
+            ok=true;
+            return;
+        }
+        
+            /*
+              jkjni _must_ be linked with apr and crypt -
+              this seem the only ( decent ) way to support JDK1.4 and
+              JDK1.3 at the same time
+              try {
+                  System.loadLibrary( "crypt" );
+              } catch( Throwable ex ) {
+                  // ignore
+                  ex.printStackTrace();
+              }
+              try {
+                  System.loadLibrary( "apr" );
+              } catch( Throwable ex ) {
+                  System.out.println("can't load apr, that's fine");
+                  ex.printStackTrace();
+              }
+            */
+        try {
+            if( nativeSo == null ) {
+                // This will load libjkjni.so or jkjni.dll in LD_LIBRARY_PATH
+                log.debug("Loading jkjni from " + System.getProperty("java.library.path"));
+                System.loadLibrary( "jkjni" );
+            } else {
+                System.load( nativeSo );
+            }
+        } catch( Throwable ex ) {
+            ok=false;
+            //ex.printStackTrace();
+            throw ex;
+        }
+    } 
+
+    public void loadNative(String libPath) {
+        try {
+            System.load( libPath );
+        } catch( Throwable ex ) {
+            ok=false;
+            if( log.isDebugEnabled() ) 
+                log.debug( "Error loading native library ", ex);
+        }
+    }
+    
+    public void run() {
+        System.err.println("Starting " + c.getName());
+        try {
+            Class argClass=args.getClass();
+            Method m=c.getMethod( "main", new Class[] {argClass} );
+            m.invoke( c, new Object[] { args } );
+            System.out.println("TomcatStarter: Done");
+            if (apr.isLoaded())
+                apr.jkSetAttribute(0, 0, "channel:jni", "done");
+            if (args[0].equals("stop")) {
+                  Thread.sleep(5000);
+                  Runtime.getRuntime().exit(0);
+            }
+        } catch( Throwable t ) {
+            t.printStackTrace(System.err);
+        }
+    }

@@ -1,0 +1,76 @@
+10
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void doFilter(final ServletRequest servletRequest,
+            final ServletResponse servletResponse, final FilterChain filterChain)
+            throws IOException, ServletException {
+        if (!(servletRequest instanceof HttpServletRequest) ||
+                !(servletResponse instanceof HttpServletResponse)) {
+            throw new ServletException(sm.getString("corsFilter.onlyHttp"));
+        }
+
+        // Safe to downcast at this point.
+        HttpServletRequest request = (HttpServletRequest) servletRequest;
+        HttpServletResponse response = (HttpServletResponse) servletResponse;
+
+        // Determines the CORS request type.
+        CorsFilter.CORSRequestType requestType = checkRequestType(request);
+
+        // Adds CORS specific attributes to request.
+        if (decorateRequest) {
+            CorsFilter.decorateCORSProperties(request, requestType);
+        }
+        switch (requestType) {
+        case SIMPLE:
+            // Handles a Simple CORS request.
+            this.handleSimpleCORS(request, response, filterChain);
+            break;
+        case ACTUAL:
+            // Handles an Actual CORS request.
+            this.handleSimpleCORS(request, response, filterChain);
+            break;
+        case PRE_FLIGHT:
+            // Handles a Pre-flight CORS request.
+            this.handlePreflightCORS(request, response, filterChain);
+            break;
+        case NOT_CORS:
+            // Handles a Normal request that is not a cross-origin request.
+            this.handleNonCORS(request, response, filterChain);
+            break;
+        default:
+            // Handles a CORS request that violates specification.
+            this.handleInvalidCORS(request, response, filterChain);
+            break;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Checks if the Origin is allowed to make a CORS request.
+     *
+     * @param origin
+     *            The Origin.
+     * @return <code>true</code> if origin is allowed; <code>false</code>
+     *         otherwise.
+     */
+    private boolean isOriginAllowed(final String origin) {
+        if (anyOriginAllowed) {
+            return true;
+        }
+
+        // If 'Origin' header is a case-sensitive match of any of allowed
+        // origins, then return true, else return false.
+        return allowedOrigins.contains(origin);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

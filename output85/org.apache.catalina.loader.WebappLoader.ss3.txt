@@ -1,0 +1,62 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the reloadable flag for this web application.
+     */
+    public boolean getReloadable();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void setContext(Context context) {
+
+        if (this.context == context) {
+            return;
+        }
+
+        if (getState().isAvailable()) {
+            throw new IllegalStateException(
+                    sm.getString("webappLoader.setContext.ise"));
+        }
+
+        // Deregister from the old Context (if any)
+        if (this.context != null) {
+            this.context.removePropertyChangeListener(this);
+        }
+
+        // Process this property change
+        Context oldContext = this.context;
+        this.context = context;
+        support.firePropertyChange("context", oldContext, this.context);
+
+        // Register with the new Container (if any)
+        if (this.context != null) {
+            setReloadable(this.context.getReloadable());
+            this.context.addPropertyChangeListener(this);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the reloadable flag for this Loader.
+     *
+     * @param reloadable The new reloadable flag
+     */
+    @Override
+    public void setReloadable(boolean reloadable) {
+        // Process this property change
+        boolean oldReloadable = this.reloadable;
+        this.reloadable = reloadable;
+        support.firePropertyChange("reloadable",
+                                   Boolean.valueOf(oldReloadable),
+                                   Boolean.valueOf(this.reloadable));
+    }

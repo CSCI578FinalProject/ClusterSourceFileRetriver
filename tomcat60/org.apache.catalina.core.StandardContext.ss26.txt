@@ -1,0 +1,73 @@
+49
+
+
+    /**
+     * Set the maximum size of the cache in KB.
+     */
+    public void setCacheMaxSize(int cacheMaxSize) {
+        this.cacheMaxSize = cacheMaxSize;
+    }
+
+
+    /**
+     * Set cached.
+     */
+    public void setCached(boolean cached) {
+        this.cached = cached;
+    }
+
+
+    /**
+     * Set context, used for wrapper mapping (request dispatcher).
+     *
+     * @param welcomeResources Welcome files defined for this context
+     * @param resources Static resources of the context
+     */
+    public void setContext(String path, String[] welcomeResources,
+                           javax.naming.Context resources) {
+        context.name = path;
+        context.welcomeResources = welcomeResources;
+        context.resources = resources;
+    }
+
+
+    /**
+     * Set cache TTL.
+     */
+    public void setCacheTTL(int cacheTTL) {
+        this.cacheTTL = cacheTTL;
+    }
+
+    /**
+     * Factory method to create (if necessary) and return our
+     * <code>MBeanServer</code> instance.
+     *
+     */
+    public synchronized MBeanServer getMBeanServer() {
+        long t1=System.currentTimeMillis();
+
+        if (server == null) {
+            if( MBeanServerFactory.findMBeanServer(null).size() > 0 ) {
+                server=(MBeanServer)MBeanServerFactory.findMBeanServer(null).get(0);
+                if( log.isDebugEnabled() ) {
+                    log.debug("Using existing MBeanServer " + (System.currentTimeMillis() - t1 ));
+                }
+            } else {
+                server = ManagementFactory.getPlatformMBeanServer();
+                if( log.isDebugEnabled() ) {
+                    log.debug("Creating MBeanServer"+ (System.currentTimeMillis() - t1 ));
+                }
+            }
+        }
+        return (server);
+    }
+
+
+    /**
+     * Return the naming resources associated with this web application.
+     */
+    public javax.naming.directory.DirContext getStaticResources() {
+
+        return ((StandardContext)this.resource).getResources();
+
+    }

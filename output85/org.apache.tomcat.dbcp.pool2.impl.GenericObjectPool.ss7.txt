@@ -1,0 +1,244 @@
+25
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public int getNumActive() {
+        return allObjects.size() - idleObjects.size();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public int getNumIdle() {
+        return idleObjects.size();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Unlinks the first element in the queue, waiting until there is an element
+     * to unlink if the queue is empty.
+     *
+     * @return the unlinked element
+     * @throws InterruptedException if the current thread is interrupted
+     */
+    public E takeFirst() throws InterruptedException {
+        lock.lock();
+        try {
+            E x;
+            while ( (x = unlinkFirst()) == null) {
+                notEmpty.await();
+            }
+            return x;
+        } finally {
+            lock.unlock();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the number of elements in this deque.
+     *
+     * @return the number of elements in this deque
+     */
+    @Override
+    public int size() {
+        lock.lock();
+        try {
+            return count;
+        } finally {
+            lock.unlock();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * [Read Only] The current number of active connections that have been
+     * allocated from this data source.
+     *
+     * @return the current number of active connections
+     */
+    @Override
+    public int getNumActive() {
+        // Copy reference to avoid NPE if close happens after null check
+        GenericObjectPool<PoolableConnection> pool = connectionPool;
+        if (pool != null) {
+            return pool.getNumActive();
+        }
+        return 0;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * [Read Only] The current number of idle connections that are waiting
+     * to be allocated from this data source.
+     *
+     * @return the current number of idle connections
+     */
+    @Override
+    public int getNumIdle() {
+        // Copy reference to avoid NPE if close happens after null check
+        GenericObjectPool<PoolableConnection> pool = connectionPool;
+        if (pool != null) {
+            return pool.getNumIdle();
+        }
+        return 0;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Links the provided element as the first in the queue, waiting until there
+     * is space to do so if the queue is full.
+     *
+     * @param e element to link
+     *
+     * @throws NullPointerException if e is null
+     * @throws InterruptedException if the thread is interrupted whilst waiting
+     *         for space
+     */
+    public void putFirst(E e) throws InterruptedException {
+        if (e == null) {
+            throw new NullPointerException();
+        }
+        lock.lock();
+        try {
+            while (!linkFirst(e)) {
+                notFull.await();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Unlinks the last element in the queue, waiting until there is an element
+     * to unlink if the queue is empty.
+     *
+     * @return the unlinked element
+     * @throws InterruptedException if the current thread is interrupted
+     */
+    public E takeLast() throws InterruptedException {
+        lock.lock();
+        try {
+            E x;
+            while ( (x = unlinkLast()) == null) {
+                notEmpty.await();
+            }
+            return x;
+        } finally {
+            lock.unlock();
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean removeLastOccurrence(Object o) {
+        if (o == null) {
+            return false;
+        }
+        lock.lock();
+        try {
+            for (Node<E> p = last; p != null; p = p.prev) {
+                if (o.equals(p.item)) {
+                    unlink(p);
+                    return true;
+                }
+            }
+            return false;
+        } finally {
+            lock.unlock();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Empty the queue to the specified collection.
+     *
+     * @param c The collection to add the elements to
+     *
+     * @return number of elements added to the collection
+     *
+     * @throws UnsupportedOperationException if the add operation is not
+     *         supported by the specified collection
+     * @throws ClassCastException if the class of the elements held by this
+     *         collection prevents them from being added to the specified
+     *         collection
+     * @throws NullPointerException if c is null
+     * @throws IllegalArgumentException if c is this instance
+     */
+    public int drainTo(Collection<? super E> c) {
+        return drainTo(c, Integer.MAX_VALUE);
+    }
+
+
+    /**
+     * Empty no more than the specified number of elements from the queue to the
+     * specified collection.
+     *
+     * @param c           collection to add the elements to
+     * @param maxElements maximum number of elements to remove from the queue
+     *
+     * @return number of elements added to the collection
+     * @throws UnsupportedOperationException if the add operation is not
+     *         supported by the specified collection
+     * @throws ClassCastException if the class of the elements held by this
+     *         collection prevents them from being added to the specified
+     *         collection
+     * @throws NullPointerException if c is null
+     * @throws IllegalArgumentException if c is this instance
+     */
+    public int drainTo(Collection<? super E> c, int maxElements) {
+        if (c == null) {
+            throw new NullPointerException();
+        }
+        if (c == this) {
+            throw new IllegalArgumentException();
+        }
+        lock.lock();
+        try {
+            int n = Math.min(maxElements, count);
+            for (int i = 0; i < n; i++) {
+                c.add(first.item);   // In this order, in case add() throws.
+                unlinkFirst();
+            }
+            return n;
+        } finally {
+            lock.unlock();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public String toString() {
+        lock.lock();
+        try {
+            return super.toString();
+        } finally {
+            lock.unlock();
+        }
+    }
+-----CSCI578-----

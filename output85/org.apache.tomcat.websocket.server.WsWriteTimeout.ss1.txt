@@ -1,0 +1,54 @@
+4
+-----CSCI578-----
+
+
+
+    /*
+     * Currently this is only called from the background thread so we could just
+     * call clearHandler() with useDispatch == false but the method parameter
+     * was added in case other callers started to use this method to make sure
+     * that those callers think through what the correct value of useDispatch is
+     * for them.
+     */
+    protected void onTimeout(boolean useDispatch) {
+        if (handler != null) {
+            clearHandler(new SocketTimeoutException(), useDispatch);
+        }
+        close();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void backgroundProcess() {
+        // This method gets called once a second.
+        backgroundProcessCount ++;
+
+        if (backgroundProcessCount >= processPeriod) {
+            backgroundProcessCount = 0;
+
+            long now = System.currentTimeMillis();
+            Iterator<WsRemoteEndpointImplServer> iter = endpoints.iterator();
+            while (iter.hasNext()) {
+                WsRemoteEndpointImplServer endpoint = iter.next();
+                if (endpoint.getTimeoutExpiry() < now) {
+                    // Background thread, not the thread that triggered the
+                    // write so no need to use a dispatch
+                    endpoint.onTimeout(false);
+                } else {
+                    // Endpoints are ordered by timeout expiry so if this point
+                    // is reached there is no need to check the remaining
+                    // endpoints
+                    break;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    protected long getTimeoutExpiry() {
+        return timeoutExpiry;
+    }
+-----CSCI578-----

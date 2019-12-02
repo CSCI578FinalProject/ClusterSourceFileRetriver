@@ -1,0 +1,161 @@
+11
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of Valves in the pipeline associated with this
+     * Container, including the basic Valve (if any).  If there are no
+     * such Valves, a zero-length array is returned.
+     */
+    public Valve[] getValves() {
+
+        return (pipeline.getValves());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove an existing Valve.
+     *
+     * @param name MBean Name of the comonent to remove
+     *
+     * @exception Exception if a component cannot be removed
+     */
+    public void removeValve(String name) throws Exception {
+
+        // Acquire a reference to the component to be removed
+        ObjectName oname = new ObjectName(name);
+        ContainerBase container = getParentContainerFromChild(oname);
+        String sequence = oname.getKeyProperty("seq");
+        Valve[] valves = (Valve[])container.getValves();
+        for (int i = 0; i < valves.length; i++) {
+            ObjectName voname = ((ValveBase) valves[i]).getObjectName();
+            if (voname.equals(oname)) {
+                container.removeValve(valves[i]);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get Parent ContainerBase to add its child component 
+     * from child component's ObjectName  as a String
+     */    
+    private ContainerBase getParentContainerFromChild(ObjectName oname) 
+        throws Exception {
+        
+        String hostName = oname.getKeyProperty("host");
+        String path = oname.getKeyProperty("path");
+        Service service = getService(oname);
+        StandardEngine engine = (StandardEngine) service.getContainer();
+        if (hostName == null) {             
+            // child's container is Engine
+            return engine;
+        } else if (path == null) {      
+            // child's container is Host
+            StandardHost host = (StandardHost) engine.findChild(hostName);
+            return host;
+        } else {                
+            // child's container is Context
+            StandardHost host = (StandardHost) engine.findChild(hostName);
+            path = getPathStr(path);
+            StandardContext context = (StandardContext) host.findChild(path);
+            return context;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove an existing Loader.
+     *
+     * @param name MBean Name of the comonent to remove
+     *
+     * @exception Exception if a component cannot be removed
+     */
+    public void removeLoader(String name) throws Exception {
+
+        ObjectName oname = new ObjectName(name);
+        // Acquire a reference to the component to be removed
+        ContainerBase container = getParentContainerFromChild(oname);    
+        container.setLoader(null);
+        
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove an existing Manager.
+     *
+     * @param name MBean Name of the comonent to remove
+     *
+     * @exception Exception if a component cannot be removed
+     */
+    public void removeManager(String name) throws Exception {
+
+        ObjectName oname = new ObjectName(name);
+        // Acquire a reference to the component to be removed
+        ContainerBase container = getParentContainerFromChild(oname);    
+        container.setManager(null);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove an existing Realm.
+     *
+     * @param name MBean Name of the comonent to remove
+     *
+     * @exception Exception if a component cannot be removed
+     */
+    public void removeRealm(String name) throws Exception {
+
+        ObjectName oname = new ObjectName(name);
+        // Acquire a reference to the component to be removed
+        ContainerBase container = getParentContainerFromChild(oname); 
+        container.setRealm(null);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create a new StandardManager.
+     *
+     * @param parent MBean Name of the associated parent component
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createStandardManager(String parent)
+        throws Exception {
+
+        // Create a new StandardManager instance
+        StandardManager manager = new StandardManager();
+
+        // Add the new instance to its parent component
+        ObjectName pname = new ObjectName(parent);
+        ContainerBase containerBase = getParentContainerFromParent(pname);
+        if (containerBase != null) {
+            containerBase.setManager(manager);
+        } 
+        ObjectName oname = manager.getObjectName();
+        if (oname != null) {
+            return (oname.toString());
+        } else {
+            return null;
+        }
+        
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

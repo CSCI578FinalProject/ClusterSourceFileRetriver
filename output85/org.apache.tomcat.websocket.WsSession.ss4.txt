@@ -1,0 +1,79 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Use protected so unit tests can access this method directly.
+     * @param msg The message
+     * @param reason The reason
+     */
+    protected static void appendCloseReasonWithTruncation(ByteBuffer msg,
+            String reason) {
+        // Once the close code has been added there are a maximum of 123 bytes
+        // left for the reason phrase. If it is truncated then care needs to be
+        // taken to ensure the bytes are not truncated in the middle of a
+        // multi-byte UTF-8 character.
+        byte[] reasonBytes = reason.getBytes(StandardCharsets.UTF_8);
+
+        if (reasonBytes.length  <= 123) {
+            // No need to truncate
+            msg.put(reasonBytes);
+        } else {
+            // Need to truncate
+            int remaining = 123 - ELLIPSIS_BYTES_LEN;
+            int pos = 0;
+            byte[] bytesNext = reason.substring(pos, pos + 1).getBytes(
+                    StandardCharsets.UTF_8);
+            while (remaining >= bytesNext.length) {
+                msg.put(bytesNext);
+                remaining -= bytesNext.length;
+                pos++;
+                bytesNext = reason.substring(pos, pos + 1).getBytes(
+                        StandardCharsets.UTF_8);
+            }
+            msg.put(ELLIPSIS_BYTES);
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void sendCloseMessage(CloseReason closeReason) {
+        // 125 is maximum size for the payload of a control message
+        ByteBuffer msg = ByteBuffer.allocate(125);
+        CloseCode closeCode = closeReason.getCloseCode();
+        // CLOSED_ABNORMALLY should not be put on the wire
+        if (closeCode == CloseCodes.CLOSED_ABNORMALLY) {
+            // PROTOCOL_ERROR is probably better than GOING_AWAY here
+            msg.putShort((short) CloseCodes.PROTOCOL_ERROR.getCode());
+        } else {
+            msg.putShort((short) closeCode.getCode());
+        }
+
+        String reason = closeReason.getReasonPhrase();
+        if (reason != null && reason.length() > 0) {
+            appendCloseReasonWithTruncation(msg, reason);
+        }
+        msg.flip();
+        try {
+            wsRemoteEndpoint.sendMessageBlock(
+                    Constants.OPCODE_CLOSE, msg, true);
+        } catch (IOException ioe) {
+            // Failed to send close message. Close the socket and let the caller
+            // deal with the Exception
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("wsSession.sendCloseFail", id), ioe);
+            }
+            wsRemoteEndpoint.close();
+            // Failure to send a close message is not unexpected in the case of
+            // an abnormal closure (usually triggered by a failure to read/write
+            // from/to the client. In this case do not trigger the endpoint's
+            // error handling
+            if (closeCode != CloseCodes.CLOSED_ABNORMALLY) {
+                localEndpoint.onError(this, ioe);
+            }
+        } finally {
+            webSocketContainer.unregisterSession(localEndpoint, this);
+        }
+    }

@@ -1,0 +1,178 @@
+11
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Create a new StandardHost.
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param name Unique name of this Host
+     * @param appBase Application base directory name
+     * @param autoDeploy Should we auto deploy?
+     * @param deployOnStartup Deploy on server startup?
+     * @param deployXML Should we deploy Context XML config files property?
+     * @param unpackWARs Should we unpack WARs when auto deploying?
+     * @return the object name of the created host
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createStandardHost(String parent, String name,
+                                     String appBase,
+                                     boolean autoDeploy,
+                                     boolean deployOnStartup,
+                                     boolean deployXML,
+                                     boolean unpackWARs)
+        throws Exception {
+
+        // Create a new StandardHost instance
+        StandardHost host = new StandardHost();
+        host.setName(name);
+        host.setAppBase(appBase);
+        host.setAutoDeploy(autoDeploy);
+        host.setDeployOnStartup(deployOnStartup);
+        host.setDeployXML(deployXML);
+        host.setUnpackWARs(unpackWARs);
+
+        // add HostConfig for active reloading
+        HostConfig hostConfig = new HostConfig();
+        host.addLifecycleListener(hostConfig);
+
+        // Add the new instance to its parent component
+        ObjectName pname = new ObjectName(parent);
+        Service service = getService(pname);
+        Engine engine = service.getContainer();
+        engine.addChild(host);
+
+        // Return the corresponding MBean name
+        return (host.getObjectName().toString());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the application root for this Host.  This can be an absolute
+     * pathname, a relative pathname, or a URL.
+     *
+     * @param appBase The new application root
+     */
+    @Override
+    public void setAppBase(String appBase) {
+
+        if (appBase.trim().equals("")) {
+            log.warn(sm.getString("standardHost.problematicAppBase", getName()));
+        }
+        String oldAppBase = this.appBase;
+        this.appBase = appBase;
+        support.firePropertyChange("appBase", oldAppBase, this.appBase);
+        this.appBaseFile = null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the canonical, fully qualified, name of the virtual host
+     * this Container represents.
+     */
+    @Override
+    public String getName() {
+
+        return (name);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the canonical, fully qualified, name of the virtual host
+     * this Container represents.
+     *
+     * @param name Virtual host name
+     *
+     * @exception IllegalArgumentException if name is null
+     */
+    @Override
+    public void setName(String name) {
+
+        if (name == null)
+            throw new IllegalArgumentException
+                (sm.getString("standardHost.nullName"));
+
+        name = name.toLowerCase(Locale.ENGLISH);      // Internally all names are lower case
+
+        String oldName = this.name;
+        this.name = name;
+        support.firePropertyChange("name", oldName, this.name);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the auto deploy flag value for this host.
+     *
+     * @param autoDeploy The new auto deploy flag
+     */
+    @Override
+    public void setAutoDeploy(boolean autoDeploy) {
+
+        boolean oldAutoDeploy = this.autoDeploy;
+        this.autoDeploy = autoDeploy;
+        support.firePropertyChange("autoDeploy", oldAutoDeploy,
+                                   this.autoDeploy);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the deploy on startup flag value for this host.
+     *
+     * @param deployOnStartup The new deploy on startup flag
+     */
+    @Override
+    public void setDeployOnStartup(boolean deployOnStartup) {
+
+        boolean oldDeployOnStartup = this.deployOnStartup;
+        this.deployOnStartup = deployOnStartup;
+        support.firePropertyChange("deployOnStartup", oldDeployOnStartup,
+                                   this.deployOnStartup);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Deploy XML Context config files flag mutator.
+     *
+     * @param deployXML <code>true</code> if context descirptors should be deployed
+     */
+    public void setDeployXML(boolean deployXML) {
+
+        this.deployXML = deployXML;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Unpack WARs flag mutator.
+     *
+     * @param unpackWARs <code>true</code> to unpack WARs on deployement
+     */
+    public void setUnpackWARs(boolean unpackWARs) {
+
+        this.unpackWARs = unpackWARs;
+
+    }

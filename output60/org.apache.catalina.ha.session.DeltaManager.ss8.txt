@@ -1,0 +1,255 @@
+12
+-----CSCI578-----
+
+
+    /**
+     * get from first session master the backup from all clustered sessions
+     * @see #findSessionMasterMember()
+     */
+    public synchronized void getAllClusterSessions() {
+        if (cluster != null && cluster.getMembers().length > 0) {
+            long beforeSendTime = System.currentTimeMillis();
+            Member mbr = findSessionMasterMember();
+            if(mbr == null) { // No domain member found
+                 return;
+            }
+            SessionMessage msg = new SessionMessageImpl(this.getName(),SessionMessage.EVT_GET_ALL_SESSIONS, null, "GET-ALL","GET-ALL-" + getName());
+            // set reference time
+            stateTransferCreateSendTime = beforeSendTime ;
+            // request session state
+            counterSend_EVT_GET_ALL_SESSIONS++;
+            stateTransfered = false ;
+            // FIXME This send call block the deploy thread, when sender waitForAck is enabled
+            try {
+                synchronized(receivedMessageQueue) {
+                     receiverQueue = true ;
+                }
+                cluster.send(msg, mbr);
+                if (log.isWarnEnabled()) log.warn(sm.getString("deltaManager.waitForSessionState",getName(), mbr,getStateTransferTimeout()));
+                // FIXME At sender ack mode this method check only the state transfer and resend is a problem!
+                waitForSendAllSessions(beforeSendTime);
+            } finally {
+                synchronized(receivedMessageQueue) {
+                    for (Iterator iter = receivedMessageQueue.iterator(); iter.hasNext();) {
+                        SessionMessage smsg = (SessionMessage) iter.next();
+                        if (!stateTimestampDrop) {
+                            messageReceived(smsg, smsg.getAddress() != null ? (Member) smsg.getAddress() : null);
+                        } else {
+                            if (smsg.getEventType() != SessionMessage.EVT_GET_ALL_SESSIONS && smsg.getTimestamp() >= stateTransferCreateSendTime) {
+                                // FIXME handle EVT_GET_ALL_SESSIONS later
+                                messageReceived(smsg,smsg.getAddress() != null ? (Member) smsg.getAddress() : null);
+                            } else {
+                                if (log.isWarnEnabled()) {
+                                    log.warn(sm.getString("deltaManager.dropMessage",getName(), smsg.getEventTypeString(),new Date(stateTransferCreateSendTime), new Date(smsg.getTimestamp())));
+                                }
+                            }
+                        }
+                    }        
+                    receivedMessageQueue.clear();
+                    receiverQueue = false ;
+                }
+           }
+        } else {
+            if (log.isInfoEnabled()) log.info(sm.getString("deltaManager.noMembers", getName()));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setCluster(CatalinaCluster cluster) {
+        this.cluster = cluster;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the name of the cluster that this Server is currently
+     * configured to operate within.
+     *
+     * @return The name of the cluster associated with this server
+     */
+    public String getClusterName();
+-----CSCI578-----
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component. This method should be called after <code>configure()</code>,
+     * and before any of the public methods of the component are utilized.
+     * 
+     * @exception LifecycleException
+     *                if this component detects a fatal error that prevents this
+     *                component from being used
+     */
+    public void start() throws LifecycleException {
+        if (!initialized) init();
+
+        // Validate and update our current component state
+        if (started) {
+            return;
+        }
+        started = true;
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+
+        // Force initialization of the random number generator
+        generateSessionId();
+
+        // Load unloaded sessions, if any
+        try {
+            //the channel is already running
+            Cluster cluster = getCluster() ;
+            // stop remove cluster binding
+            //wow, how many nested levels of if statements can we have ;)
+            if(cluster == null) {
+                Container context = getContainer();
+                Container host = context.getParent() ;
+                if (host instanceof Host) {
+                    cluster = host.getCluster();
+                    if (cluster instanceof CatalinaCluster) {
+                        setCluster((CatalinaCluster) cluster) ;
+                    } else {
+                        Container engine = host.getParent() ;
+                        if (engine instanceof Engine) {
+                            cluster = engine.getCluster();
+                            if (cluster instanceof CatalinaCluster) {
+                                setCluster((CatalinaCluster) cluster) ;
+                            }
+                        } else {
+                            cluster = null ;
+                        }
+                    }
+                }
+            }
+            if (cluster == null) {
+                log.error(sm.getString("deltaManager.noCluster", getName()));
+                return;
+            } else {
+                if (log.isInfoEnabled()) {
+                    String type = "unknown" ;
+                    if( cluster.getContainer() instanceof Host){
+                        type = "Host" ;
+                    } else if( cluster.getContainer() instanceof Engine){
+                        type = "Engine" ;
+                    }
+                    log.info(sm.getString("deltaManager.registerCluster", getName(), type, cluster.getClusterName()));
+                }
+            }
+            if (log.isInfoEnabled()) log.info(sm.getString("deltaManager.startClustering", getName()));
+            //to survice context reloads, as only a stop/start is called, not
+            // createManager
+            cluster.registerManager(this);
+
+            getAllClusterSessions();
+
+        } catch (Throwable t) {
+            log.error(sm.getString("deltaManager.managerLoad"), t);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Get the Container associated with our Cluster
+     *
+     * @return The Container associated with our Cluster
+     */
+    public Container getContainer();
+-----CSCI578-----
+
+
+    /**
+     * get from first session master the backup from all clustered sessions
+     * @see #findSessionMasterMember()
+     */
+    public synchronized void getAllClusterSessions() {
+        if (cluster != null && cluster.getMembers().length > 0) {
+            long beforeSendTime = System.currentTimeMillis();
+            Member mbr = findSessionMasterMember();
+            if(mbr == null) { // No domain member found
+                 return;
+            }
+            SessionMessage msg = new SessionMessageImpl(this.getName(),SessionMessage.EVT_GET_ALL_SESSIONS, null, "GET-ALL","GET-ALL-" + getName());
+            // set reference time
+            stateTransferCreateSendTime = beforeSendTime ;
+            // request session state
+            counterSend_EVT_GET_ALL_SESSIONS++;
+            stateTransfered = false ;
+            // FIXME This send call block the deploy thread, when sender waitForAck is enabled
+            try {
+                synchronized(receivedMessageQueue) {
+                     receiverQueue = true ;
+                }
+                cluster.send(msg, mbr);
+                if (log.isWarnEnabled()) log.warn(sm.getString("deltaManager.waitForSessionState",getName(), mbr,getStateTransferTimeout()));
+                // FIXME At sender ack mode this method check only the state transfer and resend is a problem!
+                waitForSendAllSessions(beforeSendTime);
+            } finally {
+                synchronized(receivedMessageQueue) {
+                    for (Iterator iter = receivedMessageQueue.iterator(); iter.hasNext();) {
+                        SessionMessage smsg = (SessionMessage) iter.next();
+                        if (!stateTimestampDrop) {
+                            messageReceived(smsg, smsg.getAddress() != null ? (Member) smsg.getAddress() : null);
+                        } else {
+                            if (smsg.getEventType() != SessionMessage.EVT_GET_ALL_SESSIONS && smsg.getTimestamp() >= stateTransferCreateSendTime) {
+                                // FIXME handle EVT_GET_ALL_SESSIONS later
+                                messageReceived(smsg,smsg.getAddress() != null ? (Member) smsg.getAddress() : null);
+                            } else {
+                                if (log.isWarnEnabled()) {
+                                    log.warn(sm.getString("deltaManager.dropMessage",getName(), smsg.getEventTypeString(),new Date(stateTransferCreateSendTime), new Date(smsg.getTimestamp())));
+                                }
+                            }
+                        }
+                    }        
+                    receivedMessageQueue.clear();
+                    receiverQueue = false ;
+                }
+           }
+        } else {
+            if (log.isInfoEnabled()) log.info(sm.getString("deltaManager.noMembers", getName()));
+        }
+    }
+
+    
+    /**
+     * Find the master of the session state
+     * @return master member of sessions 
+     */
+    protected Member findSessionMasterMember() {
+        Member mbr = null;
+        Member mbrs[] = cluster.getMembers();
+        if(mbrs.length != 0 ) mbr = mbrs[0];
+        if(mbr == null && log.isWarnEnabled()) log.warn(sm.getString("deltaManager.noMasterMember",getName(), ""));
+        if(mbr != null && log.isDebugEnabled()) log.warn(sm.getString("deltaManager.foundMasterMember",getName(), mbr));
+        return mbr;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * @return Returns the stateTransferTimeout.
+     */
+    public int getStateTransferTimeout() {
+        return stateTransferTimeout;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns all the members currently participating in the cluster.
+     *
+     * @return Member[]
+     */
+    public Member[] getMembers();
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /**
+     * Register a manager with the cluster. If the cluster is not responsible 
+     * for creating a manager, then the container will at least notify the 
+     * cluster that this mananger is participating in the cluster.
+     * @param manager Manager
+     */
+    public void registerManager(Manager manager);

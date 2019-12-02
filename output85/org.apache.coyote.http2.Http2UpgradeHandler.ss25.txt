@@ -1,0 +1,155 @@
+8
+-----CSCI578-----
+
+
+
+    private void prepareHeaders(Response coyoteResponse) {
+        MimeHeaders headers = coyoteResponse.getMimeHeaders();
+        int statusCode = coyoteResponse.getStatus();
+
+        // Add the pseudo header for status
+        headers.addValue(":status").setString(Integer.toString(statusCode));
+
+        // Check to see if a response body is present
+        if (!(statusCode < 200 || statusCode == 205 || statusCode == 304)) {
+            String contentType = coyoteResponse.getContentType();
+            if (contentType != null) {
+                headers.setValue("content-type").setString(contentType);
+            }
+            String contentLanguage = coyoteResponse.getContentLanguage();
+            if (contentLanguage != null) {
+                headers.setValue("content-language").setString(contentLanguage);
+            }
+        }
+
+        // Add date header unless the application has already set one
+        if (headers.getValue("date") == null) {
+            headers.addValue("date").setString(FastHttpDateFormat.getCurrentDate());
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    void writeHeaders(Stream stream, Response coyoteResponse, int payloadSize)
+            throws IOException {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("upgradeHandler.writeHeaders", connectionId,
+                    stream.getIdentifier()));
+        }
+
+        prepareHeaders(coyoteResponse);
+
+        byte[] header = new byte[9];
+        ByteBuffer target = ByteBuffer.allocate(payloadSize);
+        boolean first = true;
+        State state = null;
+        // This ensures the Stream processing thread has control of the socket.
+        synchronized (socketWrapper) {
+            while (state != State.COMPLETE) {
+                state = getHpackEncoder().encode(coyoteResponse.getMimeHeaders(), target);
+                target.flip();
+                ByteUtil.setThreeBytes(header, 0, target.limit());
+                if (first) {
+                    first = false;
+                    header[3] = FrameType.HEADERS.getIdByte();
+                    if (stream.getOutputBuffer().hasNoBody()) {
+                        header[4] = FLAG_END_OF_STREAM;
+                    }
+                } else {
+                    header[3] = FrameType.CONTINUATION.getIdByte();
+                }
+                if (state == State.COMPLETE) {
+                    header[4] += FLAG_END_OF_HEADERS;
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug(target.limit() + " bytes");
+                }
+                ByteUtil.set31Bits(header, 5, stream.getIdentifier().intValue());
+                try {
+                    socketWrapper.write(true, header, 0, header.length);
+                    socketWrapper.write(true, target.array(), target.arrayOffset(), target.limit());
+                    socketWrapper.flush(true);
+                } catch (IOException ioe) {
+                    handleAppInitiatedIOException(ioe);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public String getContentType() {
+
+        String ret = contentType;
+
+        if (ret != null
+            && characterEncoding != null
+            && charsetSet) {
+            ret = ret + ";charset=" + characterEncoding;
+        }
+
+        return ret;
+    }
+-----CSCI578-----
+
+
+
+    public MimeHeaders getMimeHeaders() {
+        return headers;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Get the current date in HTTP format.
+     * @return the HTTP date
+     */
+    public static final String getCurrentDate() {
+
+        long now = System.currentTimeMillis();
+        if ((now - currentDateGenerated) > 1000) {
+            synchronized (format) {
+                if ((now - currentDateGenerated) > 1000) {
+                    currentDate = format.format(new Date(now));
+                    currentDateGenerated = now;
+                }
+            }
+        }
+        return currentDate;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the content language.
+     *
+     * @return The language code for the language currently associated with this
+     *         response
+     */
+    public String getContentLanguage() {
+        return contentLanguage;
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * Handles an I/O error on the socket underlying the HTTP/2 connection when
+     * it is triggered by application code (usually reading the request or
+     * writing the response). Such I/O errors are fatal so the connection is
+     * closed. The exception is re-thrown to make the client code aware of the
+     * problem.
+     *
+     * Note: We can not rely on this exception reaching the socket processor
+     *       since the application code may swallow it.
+     */
+    private void handleAppInitiatedIOException(IOException ioe) throws IOException {
+        close();
+        throw ioe;
+    }

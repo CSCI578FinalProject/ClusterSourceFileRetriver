@@ -1,0 +1,53 @@
+17
+
+
+    /**
+     * Create a new StandardHost.
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param name Unique name of this Host
+     * @param appBase Application base directory name
+     * @param autoDeploy Should we auto deploy?
+     * @param deployOnStartup Deploy on server startup?
+     * @param deployXML Should we deploy Context XML config files property?
+     * @param unpackWARs Should we unpack WARs when auto deploying?
+     * @param xmlNamespaceAware Should we turn on/off XML namespace awareness?
+     * @param xmlValidation Should we turn on/off XML validation?        
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createStandardHost(String parent, String name,
+                                     String appBase,
+                                     boolean autoDeploy,
+                                     boolean deployOnStartup,
+                                     boolean deployXML,                                       
+                                     boolean unpackWARs,
+                                     boolean xmlNamespaceAware,
+                                     boolean xmlValidation)
+        throws Exception {
+
+        // Create a new StandardHost instance
+        StandardHost host = new StandardHost();
+        host.setName(name);
+        host.setAppBase(appBase);
+        host.setAutoDeploy(autoDeploy);
+        host.setDeployOnStartup(deployOnStartup);
+        host.setDeployXML(deployXML);
+        host.setUnpackWARs(unpackWARs);
+        host.setXmlNamespaceAware(xmlNamespaceAware);
+        host.setXmlValidation(xmlValidation);
+	
+        // add HostConfig for active reloading
+        HostConfig hostConfig = new HostConfig();
+        host.addLifecycleListener(hostConfig);
+
+        // Add the new instance to its parent component
+        ObjectName pname = new ObjectName(parent);
+        Service service = getService(pname);
+        Engine engine = (Engine) service.getContainer();
+        engine.addChild(host);
+
+        // Return the corresponding MBean name
+        return (host.getObjectName().toString());
+
+    }

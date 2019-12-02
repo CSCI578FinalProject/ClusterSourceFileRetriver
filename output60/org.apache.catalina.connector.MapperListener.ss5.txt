@@ -1,0 +1,64 @@
+2
+-----CSCI578-----
+
+
+    
+    // ------------------------------------------------------ Protected Methods
+
+    private void registerEngine()
+        throws Exception
+    {
+        ObjectName engineName = new ObjectName
+            (domain + ":type=Engine");
+        if ( ! mBeanServer.isRegistered(engineName)) return;
+        String defaultHost = 
+            (String) mBeanServer.getAttribute(engineName, "defaultHost");
+        ObjectName hostName = new ObjectName
+            (domain + ":type=Host," + "host=" + defaultHost);
+        if (!mBeanServer.isRegistered(hostName)) {
+
+            // Get the hosts' list
+            String onStr = domain + ":type=Host,*";
+            ObjectName objectName = new ObjectName(onStr);
+            Set set = mBeanServer.queryMBeans(objectName, null);
+            Iterator iterator = set.iterator();
+            String[] aliases;
+            boolean isRegisteredWithAlias = false;
+            
+            while (iterator.hasNext()) {
+
+                if (isRegisteredWithAlias) break;
+            
+                ObjectInstance oi = (ObjectInstance) iterator.next();
+                hostName = oi.getObjectName();
+                aliases = (String[])
+                    mBeanServer.invoke(hostName, "findAliases", null, null);
+
+                for (int i=0; i < aliases.length; i++){
+                    if (aliases[i].equalsIgnoreCase(defaultHost)){
+                        isRegisteredWithAlias = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (!isRegisteredWithAlias && log.isWarnEnabled())
+                log.warn(sm.getString("mapperListener.unknownDefaultHost", defaultHost));
+        }
+        // This should probably be called later 
+        if( defaultHost != null ) {
+            mapper.setDefaultHostName(defaultHost);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set default host.
+     *
+     * @param defaultHostName Default host name
+     */
+    public void setDefaultHostName(String defaultHostName) {
+        this.defaultHostName = defaultHostName;
+    }

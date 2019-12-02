@@ -1,0 +1,100 @@
+8
+-----CSCI578-----
+
+
+    public long getLastAccessWasDistributed() {
+        return lastAccessWasDistributed;
+    }
+-----CSCI578-----
+
+
+
+    public boolean isDirty()
+    {
+        return isDirty;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public ClusterMessage requestCompleted(String sessionId)
+    {
+        if (  !getDistributable() ) {
+            log.warn("Received requestCompleted message, although this context["+
+                     getName()+"] is not distributable. Ignoring message");
+            return null;
+        }
+        try
+        {
+            if ( invalidatedSessions.get(sessionId) != null ) {
+                synchronized ( invalidatedSessions ) {
+                    invalidatedSessions.remove(sessionId);
+                    SessionMessage msg = new SessionMessageImpl(name,
+                    SessionMessage.EVT_SESSION_EXPIRED,
+                    null,
+                    sessionId,
+                    sessionId);
+                return msg;
+                }
+            } else {
+                ReplicatedSession session = (ReplicatedSession) findSession(
+                    sessionId);
+                if (session != null) {
+                    //return immediately if the session is not dirty
+                    if (useDirtyFlag && (!session.isDirty())) {
+                        //but before we return doing nothing,
+                        //see if we should send
+                        //an updated last access message so that
+                        //sessions across cluster dont expire
+                        long interval = session.getMaxInactiveInterval();
+                        long lastaccdist = System.currentTimeMillis() -
+                            session.getLastAccessWasDistributed();
+                        if ( ((interval*1000) / lastaccdist)< 3 ) {
+                            SessionMessage accmsg = new SessionMessageImpl(name,
+                                SessionMessage.EVT_SESSION_ACCESSED,
+                                null,
+                                sessionId,
+                                sessionId);
+                            session.setLastAccessWasDistributed(System.currentTimeMillis());
+                            return accmsg;
+                        }
+                        return null;
+                    }
+
+                    session.setIsDirty(false);
+                    if (log.isDebugEnabled()) {
+                        try {
+                            log.debug("Sending session to cluster=" + session);
+                        }
+                        catch (Exception ignore) {}
+                    }
+                    SessionMessage msg = new SessionMessageImpl(name,
+                        SessionMessage.EVT_SESSION_CREATED,
+                        writeSession(session),
+                        session.getIdInternal(),
+                        session.getIdInternal());
+                    return msg;
+                } //end if
+            }//end if
+        }
+        catch (Exception x )
+        {
+            log.error("Unable to replicate session",x);
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    public void setLastAccessWasDistributed(long time) {
+        lastAccessWasDistributed = time;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean getDistributable() {
+        return distributable;
+    }
+-----CSCI578-----

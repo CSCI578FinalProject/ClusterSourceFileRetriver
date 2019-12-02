@@ -1,0 +1,37 @@
+2
+-----CSCI578-----
+
+
+
+    public String getVariableValue(String variableName) {
+        return getVariableValue(variableName, "none");
+    }
+
+
+
+    public String getVariableValue(String variableName, String encoding) {
+        String lowerCaseVariableName = variableName.toLowerCase();
+        String variableValue = null;
+        if (!isNameReserved(lowerCaseVariableName)) {
+            //Try getting it externally first, if it fails, try getting the
+            // 'built-in'
+            // value
+            variableValue = ssiExternalResolver.getVariableValue(variableName);
+            if (variableValue == null) {
+                variableName = variableName.toUpperCase();
+                variableValue = (String)ssiExternalResolver
+                        .getVariableValue(className + "." + variableName);
+            }
+            if (variableValue != null) {
+                variableValue = encode(variableValue, encoding);
+            }
+        }
+        return variableValue;
+    }
+-----CSCI578-----
+
+
+
+    protected boolean isNameReserved(String name) {
+        return name.startsWith(className + ".");
+    }

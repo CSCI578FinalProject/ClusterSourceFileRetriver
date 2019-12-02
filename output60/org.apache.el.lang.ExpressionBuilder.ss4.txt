@@ -1,0 +1,56 @@
+5
+-----CSCI578-----
+
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see com.sun.el.parser.NodeVisitor#visit(com.sun.el.parser.Node)
+     */
+    public void visit(Node node) throws ELException {
+        if (node instanceof AstFunction) {
+
+            AstFunction funcNode = (AstFunction) node;
+
+            if (this.fnMapper == null) {
+                throw new ELException(MessageFactory.get("error.fnMapper.null"));
+            }
+            Method m = fnMapper.resolveFunction(funcNode.getPrefix(), funcNode
+                    .getLocalName());
+            if (m == null) {
+                throw new ELException(MessageFactory.get(
+                        "error.fnMapper.method", funcNode.getOutputName()));
+            }
+            int methodParameterCount = m.getParameterTypes().length;
+            int inputParameterCount = node.jjtGetNumChildren();
+            if (m.isVarArgs() && inputParameterCount < methodParameterCount - 1 ||
+                    !m.isVarArgs() && inputParameterCount != methodParameterCount) {
+                throw new ELException(MessageFactory.get(
+                        "error.fnMapper.paramcount", funcNode.getOutputName(),
+                        "" + methodParameterCount, "" + node.jjtGetNumChildren()));
+            }
+        } else if (node instanceof AstIdentifier && this.varMapper != null) {
+            String variable = ((AstIdentifier) node).getImage();
+
+            // simply capture it
+            this.varMapper.resolveVariable(variable);
+        }
+    }
+-----CSCI578-----
+
+
+    public String getPrefix() {
+        return prefix;
+    }
+-----CSCI578-----
+
+
+    public String getLocalName() {
+        return localName;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+  /** Return the number of children the node has. */
+  public int jjtGetNumChildren();

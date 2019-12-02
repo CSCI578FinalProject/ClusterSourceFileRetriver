@@ -1,0 +1,74 @@
+3
+-----CSCI578-----
+
+
+    private synchronized void registerNotifications( FixedNotificationFilter filter ) {
+        String names[]=filter.getNames();
+        Registry reg=Registry.getRegistry();
+        for( int i=0; i<names.length; i++ ) {
+            int code=reg.getId(null, names[i]);
+            if( hooks.length < code ) {
+                // XXX reallocate
+                throw new RuntimeException( "Too many hooks " + code );
+            }
+            NotificationListener listeners[]=hooks[code];
+            if( listeners== null ) {
+
+            }
+
+
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the set of names that are accepted by this filter.  If this
+     * filter accepts all attribute names, a zero length array will be
+     * returned.
+     */
+    public String[] getNames() {
+        synchronized (names) {
+            return ((String[]) names.toArray(new String[names.size()]));
+        }
+    }
+-----CSCI578-----
+
+
+    // -------------------- ID registry --------------------
+
+    /** Return an int ID for faster access. Will be used for notifications
+     * and for other operations we want to optimize. 
+     *
+     * @param domain Namespace 
+     * @param name  Type of the notification
+     * @return  An unique id for the domain:name combination
+     * @since 1.1
+     */
+    public synchronized int getId( String domain, String name) {
+        if( domain==null) {
+            domain="";
+        }
+        Hashtable domainTable=(Hashtable)idDomains.get( domain );
+        if( domainTable == null ) {
+            domainTable=new Hashtable();
+            idDomains.put( domain, domainTable); 
+        }
+        if( name==null ) {
+            name="";
+        }
+        Integer i=(Integer)domainTable.get(name);
+        
+        if( i!= null ) {
+            return i.intValue();
+        }
+
+        int id[]=(int [])ids.get( domain );
+        if( id == null ) {
+            id=new int[1];
+            ids.put( domain, id); 
+        }
+        int code=id[0]++;
+        domainTable.put( name, new Integer( code ));
+        return code;
+    }

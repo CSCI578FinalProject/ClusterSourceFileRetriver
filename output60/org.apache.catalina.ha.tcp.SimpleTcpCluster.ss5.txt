@@ -1,0 +1,112 @@
+7
+-----CSCI578-----
+
+
+    /**
+     * Create new Manager without add to cluster (comes with start the manager)
+     * 
+     * @param name
+     *            Context Name of this manager
+     * @see org.apache.catalina.Cluster#createManager(java.lang.String)
+     * @see #registerManager(Manager)
+     * @see DeltaManager#start()
+     */
+    public synchronized Manager createManager(String name) {
+        if (log.isDebugEnabled()) log.debug("Creating ClusterManager for context " + name + " using class " + getManagerClassName());
+        Manager manager = null;
+        try {
+            manager = managerTemplate.cloneFromTemplate();
+            ((ClusterManager)manager).setName(name);
+        } catch (Exception x) {
+            log.error("Unable to clone cluster manager, defaulting to org.apache.catalina.ha.session.DeltaManager", x);
+            manager = new org.apache.catalina.ha.session.DeltaManager();
+        } finally {
+            if ( manager != null && (manager instanceof ClusterManager)) ((ClusterManager)manager).setCluster(this);
+        }
+        return manager;
+    }
+
+    
+    public void registerManager(Manager manager) {
+    
+        if (! (manager instanceof ClusterManager)) {
+            log.warn("Manager [ " + manager + "] does not implement ClusterManager, addition to cluster has been aborted.");
+            return;
+        }
+        ClusterManager cmanager = (ClusterManager) manager;
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(BEFORE_MANAGERREGISTER_EVENT, manager);
+        String clusterName = getManagerName(cmanager.getName(), manager);
+        cmanager.setName(clusterName);
+        cmanager.setCluster(this);
+        cmanager.setDefaultMode(false);
+    
+        managers.put(clusterName, manager);
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(AFTER_MANAGERREGISTER_EVENT, manager);    
+    }
+-----CSCI578-----
+
+
+   /**
+    * @param mode The mode
+    * @since 5.5.10
+    */
+   public void setDefaultMode(boolean mode);
+-----CSCI578-----
+
+   
+   /**
+    * Return the name of the manager, at host /context name and at engine hostname+/context.
+    * @return String
+    * @since 5.5.10
+    */
+   public String getName();
+-----CSCI578-----
+
+   
+   /**
+    * Set the name of the manager, at host /context name and at engine hostname+/context
+    * @param name
+    * @since 5.5.10
+    */
+   public void setName(String name);
+-----CSCI578-----
+
+
+   public void setCluster(CatalinaCluster cluster);
+-----CSCI578-----
+
+
+    public String getManagerName(String name, Manager manager) {
+        String clusterName = name ;
+        if (clusterName == null) clusterName = manager.getContainer().getName();
+        if (getContainer() instanceof Engine) {
+            Context context = (Context) manager.getContainer() ;
+            Container host = context.getParent();
+            if (host instanceof Host && clusterName != null && 
+                    !(clusterName.startsWith(host.getName() +"#"))) {
+                clusterName = host.getName() +"#" + clusterName ;
+            }
+        }
+        return clusterName;
+    }
+-----CSCI578-----
+
+
+    /**
+     * remove an application form cluster replication bus
+     * 
+     * @see org.apache.catalina.ha.CatalinaCluster#removeManager(Manager)
+     */
+    public void removeManager(Manager manager) {
+        if (manager != null && manager instanceof ClusterManager ) {
+            ClusterManager cmgr = (ClusterManager) manager;
+            // Notify our interested LifecycleListeners
+            lifecycle.fireLifecycleEvent(BEFORE_MANAGERUNREGISTER_EVENT,manager);
+            managers.remove(getManagerName(cmgr.getName(),manager));
+            cmgr.setCluster(null);
+            // Notify our interested LifecycleListeners
+            lifecycle.fireLifecycleEvent(AFTER_MANAGERUNREGISTER_EVENT, manager);
+        }
+    }

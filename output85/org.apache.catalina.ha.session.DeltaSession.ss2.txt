@@ -1,0 +1,104 @@
+6
+-----CSCI578-----
+
+
+    /**
+     * Register cross context session at replication valve thread local
+     * @param session cross context session
+     */
+    protected void registerSessionAtReplicationValve(DeltaSession session) {
+        if(replicationValve == null) {
+            CatalinaCluster cluster = getCluster() ;
+            if(cluster != null) {
+                Valve[] valves = cluster.getValves();
+                if(valves != null && valves.length > 0) {
+                    for(int i=0; replicationValve == null && i < valves.length ; i++ ){
+                        if(valves[i] instanceof ReplicationValve) replicationValve =
+                                (ReplicationValve)valves[i] ;
+                    }//for
+
+                    if(replicationValve == null && log.isDebugEnabled()) {
+                        log.debug("no ReplicationValve found for CrossContext Support");
+                    }//endif
+                }//end if
+            }//endif
+        }//end if
+        if(replicationValve != null) {
+            replicationValve.registerReplicationSession(session);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * End the access and register to ReplicationValve (crossContext support)
+     */
+    @Override
+    public void endAccess() {
+        super.endAccess() ;
+        if(manager instanceof ClusterManagerBase) {
+            ((ClusterManagerBase)manager).registerSessionAtReplicationValve(this);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * End the access.
+     */
+    @Override
+    public void endAccess() {
+
+        isNew = false;
+
+        /**
+         * The servlet spec mandates to ignore request handling time
+         * in lastAccessedTime.
+         */
+        if (LAST_ACCESS_AT_START) {
+            this.lastAccessedTime = this.thisAccessedTime;
+            this.thisAccessedTime = System.currentTimeMillis();
+        } else {
+            this.thisAccessedTime = System.currentTimeMillis();
+            this.lastAccessedTime = this.thisAccessedTime;
+        }
+
+        if (ACTIVITY_CHECK) {
+            accessCount.decrementAndGet();
+        }
+
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Register all cross context sessions inside endAccess.
+     * Use a list with contains check, that the Portlet API can include a lot of fragments from same or
+     * different applications with session changes.
+     *
+     * @param session cross context session
+     */
+    public void registerReplicationSession(DeltaSession session) {
+        List<DeltaSession> sessions = crossContextSessions.get();
+        if(sessions != null) {
+            if(!sessions.contains(session)) {
+                if(log.isDebugEnabled()) {
+                    log.debug(sm.getString("ReplicationValve.crossContext.registerSession",
+                        session.getIdInternal(),
+                        session.getManager().getContext().getName()));
+                }
+                sessions.add(session);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * The string manager for this package.
+     */
+    protected static final StringManager sm = StringManager.getManager(DeltaSession.class);

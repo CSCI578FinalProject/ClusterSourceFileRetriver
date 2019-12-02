@@ -1,0 +1,149 @@
+13
+-----CSCI578-----
+
+
+    /**
+     * Set Configuration Registry
+     *
+     * @param aRegistry
+     *            aregistry that handle the store operations
+     */
+    void setRegistry(StoreRegistry aRegistry);
+-----CSCI578-----
+
+
+    /**
+     * @return the configuration URL.
+     */
+    private static String getConfigUrl() {
+        return System.getProperty("catalina.storeconfig");
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Load main configuration file from external source.
+     *
+     * @param aURL URL to the configuration file
+     */
+    public void load(String aURL) {
+        synchronized (digester) {
+            File aRegistryFile = serverFile(aURL);
+            try {
+                registry = (StoreRegistry) digester.parse(aRegistryFile);
+                registryResource = aRegistryFile.toURI().toURL();
+            } catch (IOException e) {
+                log.error(e);
+            } catch (SAXException e) {
+                log.error(e);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Register StoreRegistry after Start the complete Server.
+     *
+     * @see org.apache.catalina.LifecycleListener#lifecycleEvent(org.apache.catalina.LifecycleEvent)
+     */
+    @Override
+    public void lifecycleEvent(LifecycleEvent event) {
+        if (Lifecycle.AFTER_START_EVENT.equals(event.getType())) {
+            if (event.getSource() instanceof Server) {
+                createMBean((Server) event.getSource());
+            } else {
+                log.warn(sm.getString("storeConfigListener.notServer"));
+            }
+        } else if (Lifecycle.AFTER_STOP_EVENT.equals(event.getType())) {
+            if (oname != null) {
+                registry.unregisterComponent(oname);
+                oname = null;
+            }
+        }
+     }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Set associated server
+     *
+     * @param aServer the associated server
+     */
+    void setServer(Server aServer);
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the registry.
+     */
+    public StoreRegistry getRegistry() {
+        return registry;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the store registry
+     */
+    public String getStoreRegistry() {
+        return storeRegistry;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the main store config class name
+     */
+    public String getStoreConfigClass() {
+        return storeConfigClass;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create StoreConfig MBean and load StoreRgistry MBeans name is
+     * <code>Catalina:type=StoreConfig</code>.
+     * @param server The Server instance
+     */
+    protected void createMBean(Server server) {
+        StoreLoader loader = new StoreLoader();
+        try {
+            Class<?> clazz = Class.forName(getStoreConfigClass(), true, this
+                    .getClass().getClassLoader());
+            storeConfig = (IStoreConfig) clazz.newInstance();
+            if (null == getStoreRegistry())
+                // default Loading
+                loader.load();
+            else
+                // load a special file registry (url)
+                loader.load(getStoreRegistry());
+            // use the loader Registry
+            storeConfig.setRegistry(loader.getRegistry());
+            storeConfig.setServer(server);
+        } catch (Exception e) {
+            log.error("createMBean load", e);
+            return;
+        }
+        try {
+            // Note: Hard-coded domain used since this object is per Server/JVM
+            oname = new ObjectName("Catalina:type=StoreConfig" );
+            registry.registerComponent(storeConfig, oname, "StoreConfig");
+        } catch (Exception ex) {
+            log.error("createMBean register MBean", ex);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the event type of this event.
+     */
+    public String getType() {
+        return this.type;
+    }
+-----CSCI578-----

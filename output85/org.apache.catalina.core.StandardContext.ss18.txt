@@ -1,0 +1,60 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Add a filter mapping to this Context before the mappings defined in the
+     * deployment descriptor but after any other mappings added via this method.
+     *
+     * @param filterMap The filter mapping to be added
+     *
+     * @exception IllegalArgumentException if the specified filter name
+     *  does not match an existing filter definition, or the filter mapping
+     *  is malformed
+     */
+    @Override
+    public void addFilterMapBefore(FilterMap filterMap) {
+        validateFilterMap(filterMap);
+        // Add this filter mapping to our registered set
+        filterMaps.addBefore(filterMap);
+        fireContainerEvent("addFilterMap", filterMap);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Validate the supplied FilterMap.
+     *
+     * @param filterMap the filter mapping
+     */
+    private void validateFilterMap(FilterMap filterMap) {
+        // Validate the proposed filter mapping
+        String filterName = filterMap.getFilterName();
+        String[] servletNames = filterMap.getServletNames();
+        String[] urlPatterns = filterMap.getURLPatterns();
+        if (findFilterDef(filterName) == null)
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.filterMap.name", filterName));
+
+        if (!filterMap.getMatchAllServletNames() &&
+            !filterMap.getMatchAllUrlPatterns() &&
+            (servletNames.length == 0) && (urlPatterns.length == 0))
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.filterMap.either"));
+        // FIXME: Older spec revisions may still check this
+        /*
+        if ((servletNames.length != 0) && (urlPatterns.length != 0))
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.filterMap.either"));
+        */
+        for (int i = 0; i < urlPatterns.length; i++) {
+            if (!validateURLPattern(urlPatterns[i])) {
+                throw new IllegalArgumentException
+                    (sm.getString("standardContext.filterMap.pattern",
+                            urlPatterns[i]));
+            }
+        }
+    }

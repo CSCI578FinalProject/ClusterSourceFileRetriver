@@ -1,0 +1,178 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Should Tomcat attempt to terminate threads that have been started by the
+     * web application? Stopping threads is performed via the deprecated (for
+     * good reason) <code>Thread.stop()</code> method and is likely to result in
+     * instability. As such, enabling this should be viewed as an option of last
+     * resort in a development environment and is not recommended in a
+     * production environment. If not specified, the default value of
+     * <code>false</code> will be used.
+     */
+    private boolean clearReferencesStopThreads = false;
+
+
+    /** Destroy needs to clean up the context completely.
+     *
+     * The problem is that undoing all the config in start() and restoring
+     * a 'fresh' state is impossible. After stop()/destroy()/init()/start()
+     * we should have the same state as if a fresh start was done - i.e
+     * read modified web.xml, etc. This can only be done by completely
+     * removing the context object and remapping a new one, or by cleaning
+     * up everything.
+     *
+     * XXX Should this be done in stop() ?
+     *
+     */
+    @Override
+    protected void destroyInternal() throws LifecycleException {
+
+        // If in state NEW when destroy is called, the object name will never
+        // have been set so the notification can't be created
+        if (getObjectName() != null) {
+            // Send j2ee.object.deleted notification
+            Notification notification =
+                new Notification("j2ee.object.deleted", this.getObjectName(),
+                                 sequenceNumber.getAndIncrement());
+            broadcaster.sendNotification(notification);
+        }
+
+        if (namingResources != null) {
+            namingResources.destroy();
+        }
+
+        Loader loader = getLoader();
+        if (loader instanceof Lifecycle) {
+            ((Lifecycle) loader).destroy();
+        }
+
+        Manager manager = getManager();
+        if (manager instanceof Lifecycle) {
+            ((Lifecycle) manager).destroy();
+        }
+
+        if (resources != null) {
+            resources.destroy();
+        }
+
+        super.destroyInternal();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the request processing paused flag for this Context.
+     *
+     * @param paused The new request processing paused flag
+     */
+    private void setPaused(boolean paused) {
+
+        this.paused = paused;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Reload this web application, if reloading is supported.
+     * <p>
+     * <b>IMPLEMENTATION NOTE</b>:  This method is designed to deal with
+     * reloads required by changes to classes in the underlying repositories
+     * of our class loader and changes to the web.xml file. It does not handle
+     * changes to any context.xml file. If the context.xml has changed, you
+     * should stop this Context and create (and start) a new Context instance
+     * instead. Note that there is additional code in
+     * <code>CoyoteAdapter#postParseRequest()</code> to handle mapping requests
+     * to paused Contexts.
+     *
+     * @exception IllegalStateException if the <code>reloadable</code>
+     *  property is set to <code>false</code>.
+     */
+    @Override
+    public synchronized void reload() {
+
+        // Validate our current component state
+        if (!getState().isAvailable())
+            throw new IllegalStateException
+                (sm.getString("standardContext.notStarted", getName()));
+
+        if(log.isInfoEnabled())
+            log.info(sm.getString("standardContext.reloadingStarted",
+                    getName()));
+
+        // Stop accepting requests temporarily.
+        setPaused(true);
+
+        try {
+            stop();
+        } catch (LifecycleException e) {
+            log.error(
+                sm.getString("standardContext.stoppingContext", getName()), e);
+        }
+
+        try {
+            start();
+        } catch (LifecycleException e) {
+            log.error(
+                sm.getString("standardContext.startingContext", getName()), e);
+        }
+
+        setPaused(false);
+
+        if(log.isInfoEnabled())
+            log.info(sm.getString("standardContext.reloadingCompleted",
+                    getName()));
+
+    }
+-----CSCI578-----
+
+
+    /** Destroy needs to clean up the context completely.
+     *
+     * The problem is that undoing all the config in start() and restoring
+     * a 'fresh' state is impossible. After stop()/destroy()/init()/start()
+     * we should have the same state as if a fresh start was done - i.e
+     * read modified web.xml, etc. This can only be done by completely
+     * removing the context object and remapping a new one, or by cleaning
+     * up everything.
+     *
+     * XXX Should this be done in stop() ?
+     *
+     */
+    @Override
+    protected void destroyInternal() throws LifecycleException {
+
+        // If in state NEW when destroy is called, the object name will never
+        // have been set so the notification can't be created
+        if (getObjectName() != null) {
+            // Send j2ee.object.deleted notification
+            Notification notification =
+                new Notification("j2ee.object.deleted", this.getObjectName(),
+                                 sequenceNumber.getAndIncrement());
+            broadcaster.sendNotification(notification);
+        }
+
+        if (namingResources != null) {
+            namingResources.destroy();
+        }
+
+        Loader loader = getLoader();
+        if (loader instanceof Lifecycle) {
+            ((Lifecycle) loader).destroy();
+        }
+
+        Manager manager = getManager();
+        if (manager instanceof Lifecycle) {
+            ((Lifecycle) manager).destroy();
+        }
+
+        if (resources != null) {
+            resources.destroy();
+        }
+
+        super.destroyInternal();
+    }

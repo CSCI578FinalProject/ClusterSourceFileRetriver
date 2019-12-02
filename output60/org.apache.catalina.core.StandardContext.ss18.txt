@@ -1,0 +1,77 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Set the request processing paused flag for this Context.
+     *
+     * @param paused The new request processing paused flag
+     */
+    private void setPaused(boolean paused) {
+
+        this.paused = paused;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Reload this web application, if reloading is supported.
+     * <p>
+     * <b>IMPLEMENTATION NOTE</b>:  This method is designed to deal with
+     * reloads required by changes to classes in the underlying repositories
+     * of our class loader.  It does not handle changes to the web application
+     * deployment descriptor.  If that has occurred, you should stop this
+     * Context and create (and start) a new Context instance instead.
+     *
+     * @exception IllegalStateException if the <code>reloadable</code>
+     *  property is set to <code>false</code>.
+     */
+    public synchronized void reload() {
+
+        // Validate our current component state
+        if (!started)
+            throw new IllegalStateException
+                (sm.getString("containerBase.notStarted", logName()));
+
+        // Make sure reloading is enabled
+        //      if (!reloadable)
+        //          throw new IllegalStateException
+        //              (sm.getString("standardContext.notReloadable"));
+        if(log.isInfoEnabled())
+            log.info(sm.getString("standardContext.reloadingStarted",
+                    getName()));
+
+        // Stop accepting requests temporarily
+        setPaused(true);
+
+        try {
+            stop();
+        } catch (LifecycleException e) {
+            log.error(sm.getString("standardContext.stoppingContext",
+                    getName()), e);
+        }
+
+        try {
+            start();
+        } catch (LifecycleException e) {
+            log.error(sm.getString("standardContext.startingContext",
+                    getName()), e);
+        }
+
+        setPaused(false);
+
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Return the naming resources associated with this web application.
+     */
+    public void reload() {
+        
+        ((StandardContext)this.resource).reload();
+    
+    }

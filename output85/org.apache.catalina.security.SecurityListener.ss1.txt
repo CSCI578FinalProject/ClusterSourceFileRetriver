@@ -1,0 +1,89 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Get the minimum umask that must be configured before Tomcat will start.
+     *
+     * @return  The 4-digit umask as used by the OS command <i>umask</i>
+     */
+    public String getMinimumUmask() {
+        return String.format(UMASK_FORMAT, minimumUmask);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void lifecycleEvent(LifecycleEvent event) {
+        // This is the earliest event in Lifecycle
+        if (event.getType().equals(Lifecycle.BEFORE_INIT_EVENT)) {
+            doChecks();
+        }
+    }
+-----CSCI578-----
+
+
+
+    protected void checkUmask() {
+        String prop = System.getProperty(UMASK_PROPERTY_NAME);
+        Integer umask = null;
+        if (prop != null) {
+            try {
+                 umask = Integer.valueOf(prop, 8);
+            } catch (NumberFormatException nfe) {
+                log.warn(sm.getString("SecurityListener.checkUmaskParseFail",
+                        prop));
+            }
+        }
+        if (umask == null) {
+            if (Constants.CRLF.equals(System.lineSeparator())) {
+                // Probably running on Windows so no umask
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("SecurityListener.checkUmaskSkip"));
+                }
+                return;
+            } else {
+                if (minimumUmask.intValue() > 0) {
+                    log.warn(sm.getString(
+                            "SecurityListener.checkUmaskNone",
+                            UMASK_PROPERTY_NAME, getMinimumUmask()));
+                }
+                return;
+            }
+        }
+
+        if ((umask.intValue() & minimumUmask.intValue()) !=
+                minimumUmask.intValue()) {
+            throw new Error(sm.getString("SecurityListener.checkUmaskFail",
+                    String.format(UMASK_FORMAT, umask), getMinimumUmask()));
+        }
+    }
+-----CSCI578-----
+
+
+
+    protected void checkOsUser() {
+        String userName = System.getProperty("user.name");
+        if (userName != null) {
+            String userNameLC = userName.toLowerCase(Locale.getDefault());
+
+            if (checkedOsUsers.contains(userNameLC)) {
+                // Have to throw Error to force start process to be aborted
+                throw new Error(sm.getString(
+                        "SecurityListener.checkUserWarning", userName));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Execute the security checks. Each check should be in a separate method.
+     */
+    protected void doChecks() {
+        checkOsUser();
+        checkUmask();
+    }

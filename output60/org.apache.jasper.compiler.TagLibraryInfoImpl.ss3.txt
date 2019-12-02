@@ -1,0 +1,95 @@
+4
+-----CSCI578-----
+
+
+    /** ---------- Access resources in the webapp ---------- */
+
+    /** 
+     * Get the full value of a URI relative to this compilations context
+     * uses current file as the base.
+     */
+    public String resolveRelativeUri(String uri) {
+        // sometimes we get uri's massaged from File(String), so check for
+        // a root directory deperator char
+        if (uri.startsWith("/") || uri.startsWith(File.separator)) {
+            return uri;
+        } else {
+            return baseURI + uri;
+        }
+    }
+-----CSCI578-----
+
+
+    /*
+     * @param uri The uri of the TLD @param ctxt The compilation context
+     *
+     * @return String array whose first element denotes the path to the TLD. If
+     * the path to the TLD points to a jar file, then the second element denotes
+     * the name of the TLD entry in the jar file, which is hardcoded to
+     * META-INF/taglib.tld.
+     */
+    private String[] generateTLDLocation(String uri, JspCompilationContext ctxt)
+            throws JasperException {
+
+        int uriType = TldLocationsCache.uriType(uri);
+        if (uriType == TldLocationsCache.ABS_URI) {
+            err.jspError("jsp.error.taglibDirective.absUriCannotBeResolved",
+                    uri);
+        } else if (uriType == TldLocationsCache.NOROOT_REL_URI) {
+            uri = ctxt.resolveRelativeUri(uri);
+        }
+
+        String[] location = new String[2];
+        location[0] = uri;
+        if (location[0].endsWith("jar")) {
+            URL url = null;
+            try {
+                url = ctxt.getResource(location[0]);
+            } catch (Exception ex) {
+                err.jspError("jsp.error.tld.unable_to_get_jar", location[0], ex
+                        .toString());
+            }
+            if (url == null) {
+                err.jspError("jsp.error.tld.missing_jar", location[0]);
+            }
+            location[0] = url.toString();
+            location[1] = "META-INF/taglib.tld";
+        } else if (uri.startsWith("/WEB-INF/lib/")
+                || uri.startsWith("/WEB-INF/classes/") ||
+                (uri.startsWith("/WEB-INF/tags/") && uri.endsWith(".tld")
+                        && !uri.endsWith("implicit.tld"))) {
+            err.jspError("jsp.error.tld.invalid_tld_file", uri);
+        }
+
+        return location;
+    }
+-----CSCI578-----
+
+
+
+    public URL getResource(String res) throws MalformedURLException {
+        URL result = null;
+
+        if (res.startsWith("/META-INF/")) {
+            // This is a tag file packaged in a jar that is being compiled
+            URL jarUrl = tagFileJarUrls.get(res);
+            if (jarUrl == null) {
+                jarUrl = tagFileJarUrl;
+            }
+            if (jarUrl != null) {
+                result = new URL(jarUrl.toExternalForm() + res.substring(1));
+            } else {
+                // May not be in a JAR in some IDE environments
+                result = context.getResource(canonicalURI(res));
+            }
+        } else if (res.startsWith("jar:file:")) {
+                // This is a tag file packaged in a jar that is being checked
+                // for a dependency
+                result = new URL(res);
+
+        } else {
+            result = context.getResource(canonicalURI(res));
+        }
+        return result;
+    }
+-----CSCI578-----

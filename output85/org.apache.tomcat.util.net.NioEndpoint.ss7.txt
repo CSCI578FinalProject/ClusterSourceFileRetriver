@@ -1,0 +1,70 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------- Public Lifecycle Methods
+
+    /**
+     * Initialize the endpoint.
+     */
+    @Override
+    public void bind() throws Exception {
+
+        serverSock = ServerSocketChannel.open();
+        socketProperties.setProperties(serverSock.socket());
+        InetSocketAddress addr = (getAddress()!=null?new InetSocketAddress(getAddress(),getPort()):new InetSocketAddress(getPort()));
+        serverSock.socket().bind(addr,getBacklog());
+        serverSock.configureBlocking(true); //mimic APR behavior
+        serverSock.socket().setSoTimeout(getSocketProperties().getSoTimeout());
+
+        // Initialize thread count defaults for acceptor, poller
+        if (acceptorThreadCount == 0) {
+            // FIXME: Doesn't seem to work that well with multiple accept threads
+            acceptorThreadCount = 1;
+        }
+        if (pollerThreadCount <= 0) {
+            //minimum one poller thread
+            pollerThreadCount = 1;
+        }
+        stopLatch = new CountDownLatch(pollerThreadCount);
+
+        // Initialize SSL if needed
+        initialiseSsl();
+
+        selectorPool.open();
+    }
+
+
+
+    /**
+     * Deallocate NIO memory pools, and close server socket.
+     */
+    @Override
+    public void unbind() throws Exception {
+        if (log.isDebugEnabled()) {
+            log.debug("Destroy initiated for "+new InetSocketAddress(getAddress(),getPort()));
+        }
+        if (running) {
+            stop();
+        }
+        // Close server socket
+        serverSock.socket().close();
+        serverSock.close();
+        serverSock = null;
+        destroySsl();
+        super.unbind();
+        releaseCaches();
+        selectorPool.close();
+        if (log.isDebugEnabled()) {
+            log.debug("Destroy completed for "+new InetSocketAddress(getAddress(),getPort()));
+        }
+    }
+-----CSCI578-----
+
+
+    public int getSoTimeout() {
+        return soTimeout.intValue();
+    }

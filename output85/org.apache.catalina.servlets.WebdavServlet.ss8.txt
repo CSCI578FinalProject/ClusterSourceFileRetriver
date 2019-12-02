@@ -1,0 +1,350 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void generatePropFindResponse(XMLWriter generatedXML, String rewrittenUrl,
+            String path, int propFindType, Vector<String> propertiesVector, boolean isFile,
+            boolean isLockNull, long created, long lastModified, long contentLength,
+            String contentType, String eTag) {
+
+        generatedXML.writeElement("D", "response", XMLWriter.OPENING);
+        String status = "HTTP/1.1 " + WebdavStatus.SC_OK + " " +
+                WebdavStatus.getStatusText(WebdavStatus.SC_OK);
+
+        // Generating href element
+        generatedXML.writeElement("D", "href", XMLWriter.OPENING);
+        generatedXML.writeText(rewrittenUrl);
+        generatedXML.writeElement("D", "href", XMLWriter.CLOSING);
+
+        String resourceName = path;
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash != -1)
+            resourceName = resourceName.substring(lastSlash + 1);
+
+        switch (propFindType) {
+
+        case FIND_ALL_PROP :
+
+            generatedXML.writeElement("D", "propstat", XMLWriter.OPENING);
+            generatedXML.writeElement("D", "prop", XMLWriter.OPENING);
+
+            generatedXML.writeProperty("D", "creationdate", getISOCreationDate(created));
+            generatedXML.writeElement("D", "displayname", XMLWriter.OPENING);
+            generatedXML.writeData(resourceName);
+            generatedXML.writeElement("D", "displayname", XMLWriter.CLOSING);
+            if (isFile) {
+                generatedXML.writeProperty("D", "getlastmodified",
+                        FastHttpDateFormat.formatDate(lastModified, null));
+                generatedXML.writeProperty("D", "getcontentlength", Long.toString(contentLength));
+                if (contentType != null) {
+                    generatedXML.writeProperty("D", "getcontenttype", contentType);
+                }
+                generatedXML.writeProperty("D", "getetag", eTag);
+                if (isLockNull) {
+                    generatedXML.writeElement("D", "resourcetype", XMLWriter.OPENING);
+                    generatedXML.writeElement("D", "lock-null", XMLWriter.NO_CONTENT);
+                    generatedXML.writeElement("D", "resourcetype", XMLWriter.CLOSING);
+                } else {
+                    generatedXML.writeElement("D", "resourcetype", XMLWriter.NO_CONTENT);
+                }
+            } else {
+                generatedXML.writeElement("D", "resourcetype", XMLWriter.OPENING);
+                generatedXML.writeElement("D", "collection", XMLWriter.NO_CONTENT);
+                generatedXML.writeElement("D", "resourcetype", XMLWriter.CLOSING);
+            }
+
+            generatedXML.writeProperty("D", "source", "");
+
+            String supportedLocks = "<D:lockentry>"
+                + "<D:lockscope><D:exclusive/></D:lockscope>"
+                + "<D:locktype><D:write/></D:locktype>"
+                + "</D:lockentry>" + "<D:lockentry>"
+                + "<D:lockscope><D:shared/></D:lockscope>"
+                + "<D:locktype><D:write/></D:locktype>"
+                + "</D:lockentry>";
+            generatedXML.writeElement("D", "supportedlock", XMLWriter.OPENING);
+            generatedXML.writeText(supportedLocks);
+            generatedXML.writeElement("D", "supportedlock", XMLWriter.CLOSING);
+
+            generateLockDiscovery(path, generatedXML);
+
+            generatedXML.writeElement("D", "prop", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "status", XMLWriter.OPENING);
+            generatedXML.writeText(status);
+            generatedXML.writeElement("D", "status", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "propstat", XMLWriter.CLOSING);
+
+            break;
+
+        case FIND_PROPERTY_NAMES :
+
+            generatedXML.writeElement("D", "propstat", XMLWriter.OPENING);
+            generatedXML.writeElement("D", "prop", XMLWriter.OPENING);
+
+            generatedXML.writeElement("D", "creationdate", XMLWriter.NO_CONTENT);
+            generatedXML.writeElement("D", "displayname", XMLWriter.NO_CONTENT);
+            if (isFile) {
+                generatedXML.writeElement("D", "getcontentlanguage", XMLWriter.NO_CONTENT);
+                generatedXML.writeElement("D", "getcontentlength", XMLWriter.NO_CONTENT);
+                generatedXML.writeElement("D", "getcontenttype", XMLWriter.NO_CONTENT);
+                generatedXML.writeElement("D", "getetag", XMLWriter.NO_CONTENT);
+                generatedXML.writeElement("D", "getlastmodified", XMLWriter.NO_CONTENT);
+            }
+            generatedXML.writeElement("D", "resourcetype", XMLWriter.NO_CONTENT);
+            generatedXML.writeElement("D", "source", XMLWriter.NO_CONTENT);
+            generatedXML.writeElement("D", "lockdiscovery", XMLWriter.NO_CONTENT);
+
+            generatedXML.writeElement("D", "prop", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "status", XMLWriter.OPENING);
+            generatedXML.writeText(status);
+            generatedXML.writeElement("D", "status", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "propstat", XMLWriter.CLOSING);
+
+            break;
+
+        case FIND_BY_PROPERTY :
+
+            Vector<String> propertiesNotFound = new Vector<>();
+
+            // Parse the list of properties
+
+            generatedXML.writeElement("D", "propstat", XMLWriter.OPENING);
+            generatedXML.writeElement("D", "prop", XMLWriter.OPENING);
+
+            Enumeration<String> properties = propertiesVector.elements();
+
+            while (properties.hasMoreElements()) {
+
+                String property = properties.nextElement();
+
+                if (property.equals("creationdate")) {
+                    generatedXML.writeProperty ("D", "creationdate", getISOCreationDate(created));
+                } else if (property.equals("displayname")) {
+                    generatedXML.writeElement("D", "displayname", XMLWriter.OPENING);
+                    generatedXML.writeData(resourceName);
+                    generatedXML.writeElement("D", "displayname", XMLWriter.CLOSING);
+                } else if (property.equals("getcontentlanguage")) {
+                    if (isFile) {
+                        generatedXML.writeElement("D", "getcontentlanguage",
+                                XMLWriter.NO_CONTENT);
+                    } else {
+                        propertiesNotFound.addElement(property);
+                    }
+                } else if (property.equals("getcontentlength")) {
+                    if (isFile) {
+                        generatedXML.writeProperty("D", "getcontentlength",
+                                Long.toString(contentLength));
+                    } else {
+                        propertiesNotFound.addElement(property);
+                    }
+                } else if (property.equals("getcontenttype")) {
+                    if (isFile) {
+                        generatedXML.writeProperty("D", "getcontenttype", contentType);
+                    } else {
+                        propertiesNotFound.addElement(property);
+                    }
+                } else if (property.equals("getetag")) {
+                    if (isFile) {
+                        generatedXML.writeProperty("D", "getetag", eTag);
+                    } else {
+                        propertiesNotFound.addElement(property);
+                    }
+                } else if (property.equals("getlastmodified")) {
+                    if (isFile) {
+                        generatedXML.writeProperty("D", "getlastmodified",
+                                FastHttpDateFormat.formatDate(lastModified, null));
+                    } else {
+                        propertiesNotFound.addElement(property);
+                    }
+                } else if (property.equals("resourcetype")) {
+                    if (isFile) {
+                        if(isLockNull) {
+                            generatedXML.writeElement("D", "resourcetype", XMLWriter.OPENING);
+                            generatedXML.writeElement("D", "lock-null", XMLWriter.NO_CONTENT);
+                            generatedXML.writeElement("D", "resourcetype", XMLWriter.CLOSING);
+                        } else {
+                            generatedXML.writeElement("D", "resourcetype", XMLWriter.NO_CONTENT);
+                        }
+                    } else {
+                        generatedXML.writeElement("D", "resourcetype", XMLWriter.OPENING);
+                        generatedXML.writeElement("D", "collection", XMLWriter.NO_CONTENT);
+                        generatedXML.writeElement("D", "resourcetype",XMLWriter.CLOSING);
+                    }
+                } else if (property.equals("source")) {
+                    generatedXML.writeProperty("D", "source", "");
+                } else if (property.equals("supportedlock")) {
+                    supportedLocks = "<D:lockentry>"
+                        + "<D:lockscope><D:exclusive/></D:lockscope>"
+                        + "<D:locktype><D:write/></D:locktype>"
+                        + "</D:lockentry>" + "<D:lockentry>"
+                        + "<D:lockscope><D:shared/></D:lockscope>"
+                        + "<D:locktype><D:write/></D:locktype>"
+                        + "</D:lockentry>";
+                    generatedXML.writeElement("D", "supportedlock", XMLWriter.OPENING);
+                    generatedXML.writeText(supportedLocks);
+                    generatedXML.writeElement("D", "supportedlock", XMLWriter.CLOSING);
+                } else if (property.equals("lockdiscovery")) {
+                    if (!generateLockDiscovery(path, generatedXML))
+                        propertiesNotFound.addElement(property);
+                } else {
+                    propertiesNotFound.addElement(property);
+                }
+
+            }
+
+            generatedXML.writeElement("D", "prop", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "status", XMLWriter.OPENING);
+            generatedXML.writeText(status);
+            generatedXML.writeElement("D", "status", XMLWriter.CLOSING);
+            generatedXML.writeElement("D", "propstat", XMLWriter.CLOSING);
+
+            Enumeration<String> propertiesNotFoundList = propertiesNotFound.elements();
+
+            if (propertiesNotFoundList.hasMoreElements()) {
+
+                status = "HTTP/1.1 " + WebdavStatus.SC_NOT_FOUND + " " +
+                        WebdavStatus.getStatusText(WebdavStatus.SC_NOT_FOUND);
+
+                generatedXML.writeElement("D", "propstat", XMLWriter.OPENING);
+                generatedXML.writeElement("D", "prop", XMLWriter.OPENING);
+
+                while (propertiesNotFoundList.hasMoreElements()) {
+                    generatedXML.writeElement("D", propertiesNotFoundList.nextElement(),
+                            XMLWriter.NO_CONTENT);
+                }
+
+                generatedXML.writeElement("D", "prop", XMLWriter.CLOSING);
+                generatedXML.writeElement("D", "status", XMLWriter.OPENING);
+                generatedXML.writeText(status);
+                generatedXML.writeElement("D", "status", XMLWriter.CLOSING);
+                generatedXML.writeElement("D", "propstat", XMLWriter.CLOSING);
+
+            }
+
+            break;
+
+        }
+
+        generatedXML.writeElement("D", "response", XMLWriter.CLOSING);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get creation date in ISO format.
+     * @return the formatted creation date
+     */
+    private String getISOCreationDate(long creationDate) {
+        return creationDateFormat.format(new Date(creationDate));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write data.
+     *
+     * @param data Data to append
+     */
+    public void writeData(String data) {
+        buffer.append("<![CDATA[" + data + "]]>");
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write property to the XML.
+     *
+     * @param namespace Namespace
+     * @param name Property name
+     * @param value Property value
+     */
+    public void writeProperty(String namespace, String name, String value) {
+        writeElement(namespace, name, OPENING);
+        buffer.append(value);
+        writeElement(namespace, name, CLOSING);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write an element.
+     *
+     * @param name Element name
+     * @param namespace Namespace abbreviation
+     * @param type Element type
+     */
+    public void writeElement(String namespace, String name, int type) {
+        writeElement(namespace, null, name, type);
+    }
+
+
+
+    /**
+     * Write an element.
+     *
+     * @param namespace Namespace abbreviation
+     * @param namespaceInfo Namespace info
+     * @param name Element name
+     * @param type Element type
+     */
+    public void writeElement(String namespace, String namespaceInfo,
+                             String name, int type) {
+        if ((namespace != null) && (namespace.length() > 0)) {
+            switch (type) {
+            case OPENING:
+                if (namespaceInfo != null) {
+                    buffer.append("<" + namespace + ":" + name + " xmlns:"
+                                  + namespace + "=\""
+                                  + namespaceInfo + "\">");
+                } else {
+                    buffer.append("<" + namespace + ":" + name + ">");
+                }
+                break;
+            case CLOSING:
+                buffer.append("</" + namespace + ":" + name + ">\n");
+                break;
+            case NO_CONTENT:
+            default:
+                if (namespaceInfo != null) {
+                    buffer.append("<" + namespace + ":" + name + " xmlns:"
+                                  + namespace + "=\""
+                                  + namespaceInfo + "\"/>");
+                } else {
+                    buffer.append("<" + namespace + ":" + name + "/>");
+                }
+                break;
+            }
+        } else {
+            switch (type) {
+            case OPENING:
+                buffer.append("<" + name + ">");
+                break;
+            case CLOSING:
+                buffer.append("</" + name + ">\n");
+                break;
+            case NO_CONTENT:
+            default:
+                buffer.append("<" + name + "/>");
+                break;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write text.
+     *
+     * @param text Text to append
+     */
+    public void writeText(String text) {
+        buffer.append(text);
+    }
+-----CSCI578-----

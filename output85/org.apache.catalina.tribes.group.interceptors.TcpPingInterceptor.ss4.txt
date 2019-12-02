@@ -1,0 +1,59 @@
+7
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public synchronized void start(int svc) throws ChannelException {
+        super.start(svc);
+        running = true;
+        if ( thread == null && useThread) {
+            thread = new PingThread();
+            thread.setDaemon(true);
+            thread.setName("TcpPingInterceptor.PingThread-"+cnt.addAndGet(1));
+            thread.start();
+        }
+
+        //acquire the interceptors to invoke on send ping events
+        ChannelInterceptor next = getNext();
+        while ( next != null ) {
+            if ( next instanceof TcpFailureDetector )
+                failureDetector = new WeakReference<>((TcpFailureDetector)next);
+            if ( next instanceof StaticMembershipInterceptor )
+                staticMembers = new WeakReference<>((StaticMembershipInterceptor)next);
+            next = next.getNext();
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Retrieve the next interceptor in the list
+     * @return ChannelInterceptor - returns the next interceptor in the list or null if no more interceptors exist
+     */
+    public ChannelInterceptor getNext();
+
+
+    /**
+     * The <code>sendMessage</code> method is called when a message is being sent to one more destinations.
+     * The interceptor can modify any of the parameters and then pass on the message down the stack by
+     * invoking <code>getNext().sendMessage(destination,msg,payload)</code><br>
+     * Alternatively the interceptor can stop the message from being sent by not invoking
+     * <code>getNext().sendMessage(destination,msg,payload)</code><br>
+     * If the message is to be sent asynchronous the application can be notified of completion and
+     * errors by passing in an error handler attached to a payload object.<br>
+     * The ChannelMessage.getAddress contains Channel.getLocalMember, and can be overwritten
+     * to simulate a message sent from another node.<br>
+     * @param destination Member[] - the destination for this message
+     * @param msg ChannelMessage - the message to be sent
+     * @param payload InterceptorPayload - the payload, carrying an error handler and future useful data, can be null
+     * @throws ChannelException if a serialization error happens.
+     * @see ErrorHandler
+     * @see InterceptorPayload
+     */
+    public void sendMessage(Member[] destination, ChannelMessage msg, InterceptorPayload payload) throws ChannelException;

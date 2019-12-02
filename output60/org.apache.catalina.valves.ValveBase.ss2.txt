@@ -1,0 +1,106 @@
+5
+-----CSCI578-----
+
+
+    public ObjectName createObjectName(String domain, ObjectName parent)
+            throws MalformedObjectNameException
+    {
+        Container container=this.getContainer();
+        if( container == null || ! (container instanceof ContainerBase) )
+            return null;
+        this.containerLog = container.getLogger();
+        ContainerBase containerBase=(ContainerBase)container;
+        Pipeline pipe=containerBase.getPipeline();
+        Valve valves[]=pipe.getValves();
+
+        /* Compute the "parent name" part */
+        String parentName="";
+        if (container instanceof Engine) {
+        } else if (container instanceof Host) {
+            parentName=",host=" +container.getName();
+        } else if (container instanceof Context) {
+                    String path = ((Context)container).getPath();
+                    if (path.length() < 1) {
+                        path = "/";
+                    }
+                    Host host = (Host) container.getParent();
+                    parentName=",path=" + path + ",host=" +
+                            host.getName();
+        } else if (container instanceof Wrapper) {
+            Context ctx = (Context) container.getParent();
+            String path = ctx.getPath();
+            if (path.length() < 1) {
+                path = "/";
+            }
+            Host host = (Host) ctx.getParent();
+            parentName=",servlet=" + container.getName() +
+                    ",path=" + path + ",host=" + host.getName();
+        }
+        log.debug("valve parent=" + parentName + " " + parent);
+
+        String className=this.getClass().getName();
+        int period = className.lastIndexOf('.');
+        if (period >= 0)
+            className = className.substring(period + 1);
+
+        int seq=0;
+        for( int i=0; i<valves.length; i++ ) {
+            // Find other valves with the same name
+            if (valves[i] == this) {
+                break;
+            }
+            if( valves[i]!=null &&
+                    valves[i].getClass() == this.getClass() ) {
+                log.debug("Duplicate " + valves[i] + " " + this + " " + container);
+                seq++;
+            }
+        }
+        String ext="";
+        if( seq > 0 ) {
+            ext=",seq=" + seq;
+        }
+
+        ObjectName objectName = 
+            new ObjectName( domain + ":type=Valve,name=" + className + ext + parentName);
+        log.debug("valve objectname = "+objectName);
+        return objectName;
+    }
+-----CSCI578-----
+
+
+
+    //-------------------------------------------------------------- Properties
+
+
+    /**
+     * Return the Container with which this Valve is associated, if any.
+     */
+    public Container getContainer() {
+
+        return (container);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of Valves in the pipeline associated with this
+     * Container, including the basic Valve (if any).  If there are no
+     * such Valves, a zero-length array is returned.
+     */
+    public Valve[] getValves();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Pipeline object that manages the Valves associated with
+     * this Container.
+     */
+    public Pipeline getPipeline() {
+
+        return (this.pipeline);
+
+    }

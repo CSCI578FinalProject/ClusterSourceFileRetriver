@@ -1,0 +1,78 @@
+13
+
+
+    /**
+     * Add an input filter to the filter library.
+     */
+    public void addActiveFilter(InputFilter filter) {
+
+        if (lastActiveFilter == -1) {
+            filter.setBuffer(inputStreamInputBuffer);
+        } else {
+            for (int i = 0; i <= lastActiveFilter; i++) {
+                if (activeFilters[i] == filter)
+                    return;
+            }
+            filter.setBuffer(activeFilters[lastActiveFilter]);
+        }
+
+        activeFilters[++lastActiveFilter] = filter;
+
+        filter.setRequest(request);
+
+    }
+
+    public SSLEngine getSslEngine() {
+        return sslEngine;
+    }
+
+
+    /**
+     * Available bytes (note that due to encoding, this may not correspond )
+     */
+    public int available() {
+        int result = (lastValid - pos);
+        if ((result == 0) && (lastActiveFilter >= 0)) {
+            for (int i = 0; (result == 0) && (i <= lastActiveFilter); i++) {
+                result = activeFilters[i].available();
+            }
+        }
+        return result;
+    }
+
+    public void setSslSupport(SSLSupport sslSupport) {
+        this.sslSupport = sslSupport;
+    }
+
+
+    /**
+     * Get filters.
+     */
+    public InputFilter[] getFilters() {
+
+        return filterLibrary;
+
+    }
+
+
+    /**
+     * Set the swallow input flag.
+     */
+    public void setSwallowInput(boolean swallowInput) {
+        this.swallowInput = swallowInput;
+    }
+
+    /**
+     * Determine if we must drop the connection because of the HTTP status
+     * code.  Use the same list of codes as Apache/httpd.
+     */
+    protected boolean statusDropsConnection(int status) {
+        return status == 400 /* SC_BAD_REQUEST */ ||
+               status == 408 /* SC_REQUEST_TIMEOUT */ ||
+               status == 411 /* SC_LENGTH_REQUIRED */ ||
+               status == 413 /* SC_REQUEST_ENTITY_TOO_LARGE */ ||
+               status == 414 /* SC_REQUEST_URI_TOO_LARGE */ ||
+               status == 500 /* SC_INTERNAL_SERVER_ERROR */ ||
+               status == 503 /* SC_SERVICE_UNAVAILABLE */ ||
+               status == 501 /* SC_NOT_IMPLEMENTED */;
+    }

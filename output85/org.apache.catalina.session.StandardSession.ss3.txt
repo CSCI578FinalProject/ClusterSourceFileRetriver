@@ -1,0 +1,90 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Write a serialized version of the contents of this session object to
+     * the specified object output stream, without requiring that the
+     * StandardSession itself have been serialized.
+     *
+     * @param stream The object output stream to write to
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public void writeObjectData(ObjectOutputStream stream)
+        throws IOException {
+
+        doWriteObject(stream);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write a serialized version of this session object to the specified
+     * object output stream.
+     * <p>
+     * <b>IMPLEMENTATION NOTE</b>:  The owning Manager will not be stored
+     * in the serialized representation of this Session.  After calling
+     * <code>readObject()</code>, you must set the associated Manager
+     * explicitly.
+     * <p>
+     * <b>IMPLEMENTATION NOTE</b>:  Any attribute that is not Serializable
+     * will be unbound from the session, with appropriate actions if it
+     * implements HttpSessionBindingListener.  If you do not want any such
+     * attributes, be sure the <code>distributable</code> property of the
+     * associated Manager is set to <code>true</code>.
+     *
+     * @param stream The output stream to write to
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    protected void doWriteObject(ObjectOutputStream stream) throws IOException {
+
+        // Write the scalar instance variables (except Manager)
+        stream.writeObject(Long.valueOf(creationTime));
+        stream.writeObject(Long.valueOf(lastAccessedTime));
+        stream.writeObject(Integer.valueOf(maxInactiveInterval));
+        stream.writeObject(Boolean.valueOf(isNew));
+        stream.writeObject(Boolean.valueOf(isValid));
+        stream.writeObject(Long.valueOf(thisAccessedTime));
+        stream.writeObject(id);
+        if (manager.getContext().getLogger().isDebugEnabled())
+            manager.getContext().getLogger().debug
+                ("writeObject() storing session " + id);
+
+        // Accumulate the names of serializable and non-serializable attributes
+        String keys[] = keys();
+        ArrayList<String> saveNames = new ArrayList<>();
+        ArrayList<Object> saveValues = new ArrayList<>();
+        for (int i = 0; i < keys.length; i++) {
+            Object value = attributes.get(keys[i]);
+            if (value == null) {
+                continue;
+            } else if (isAttributeDistributable(keys[i], value) && !exclude(keys[i], value)) {
+                saveNames.add(keys[i]);
+                saveValues.add(value);
+            } else {
+                removeAttributeInternal(keys[i], true);
+            }
+        }
+
+        // Serialize the attribute count and the Serializable attributes
+        int n = saveNames.size();
+        stream.writeObject(Integer.valueOf(n));
+        for (int i = 0; i < n; i++) {
+            stream.writeObject(saveNames.get(i));
+            try {
+                stream.writeObject(saveValues.get(i));
+                if (manager.getContext().getLogger().isDebugEnabled())
+                    manager.getContext().getLogger().debug(
+                            "  storing attribute '" + saveNames.get(i) + "' with value '" + saveValues.get(i) + "'");
+            } catch (NotSerializableException e) {
+                manager.getContext().getLogger().warn(
+                        sm.getString("standardSession.notSerializable", saveNames.get(i), id), e);
+            }
+        }
+
+    }

@@ -1,0 +1,1025 @@
+27
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Invoke the servlet we are managing, respecting the rules regarding
+     * servlet lifecycle and SingleThreadModel support.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     *
+     * @exception IOException if an input/output error occurred
+     * @exception ServletException if a servlet error occurred
+     */
+    @Override
+    public final void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        // Initialize local variables we may need
+        boolean unavailable = false;
+        Throwable throwable = null;
+        // This should be a Request attribute...
+        long t1=System.currentTimeMillis();
+        requestCount.incrementAndGet();
+        StandardWrapper wrapper = (StandardWrapper) getContainer();
+        Servlet servlet = null;
+        Context context = (Context) wrapper.getParent();
+
+        // Check for the application being marked unavailable
+        if (!context.getState().isAvailable()) {
+            response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+                           sm.getString("standardContext.isUnavailable"));
+            unavailable = true;
+        }
+
+        // Check for the servlet being marked unavailable
+        if (!unavailable && wrapper.isUnavailable()) {
+            container.getLogger().info(sm.getString("standardWrapper.isUnavailable",
+                    wrapper.getName()));
+            long available = wrapper.getAvailable();
+            if ((available > 0L) && (available < Long.MAX_VALUE)) {
+                response.setDateHeader("Retry-After", available);
+                response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+                        sm.getString("standardWrapper.isUnavailable",
+                                wrapper.getName()));
+            } else if (available == Long.MAX_VALUE) {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                        sm.getString("standardWrapper.notFound",
+                                wrapper.getName()));
+            }
+            unavailable = true;
+        }
+
+        // Allocate a servlet instance to process this request
+        try {
+            if (!unavailable) {
+                servlet = wrapper.allocate();
+            }
+        } catch (UnavailableException e) {
+            container.getLogger().error(
+                    sm.getString("standardWrapper.allocateException",
+                            wrapper.getName()), e);
+            long available = wrapper.getAvailable();
+            if ((available > 0L) && (available < Long.MAX_VALUE)) {
+                response.setDateHeader("Retry-After", available);
+                response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+                           sm.getString("standardWrapper.isUnavailable",
+                                        wrapper.getName()));
+            } else if (available == Long.MAX_VALUE) {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                           sm.getString("standardWrapper.notFound",
+                                        wrapper.getName()));
+            }
+        } catch (ServletException e) {
+            container.getLogger().error(sm.getString("standardWrapper.allocateException",
+                             wrapper.getName()), StandardWrapper.getRootCause(e));
+            throwable = e;
+            exception(request, response, e);
+        } catch (Throwable e) {
+            ExceptionUtils.handleThrowable(e);
+            container.getLogger().error(sm.getString("standardWrapper.allocateException",
+                             wrapper.getName()), e);
+            throwable = e;
+            exception(request, response, e);
+            servlet = null;
+        }
+
+        MessageBytes requestPathMB = request.getRequestPathMB();
+        DispatcherType dispatcherType = DispatcherType.REQUEST;
+        if (request.getDispatcherType()==DispatcherType.ASYNC) dispatcherType = DispatcherType.ASYNC;
+        request.setAttribute(Globals.DISPATCHER_TYPE_ATTR,dispatcherType);
+        request.setAttribute(Globals.DISPATCHER_REQUEST_PATH_ATTR,
+                requestPathMB);
+        // Create the filter chain for this request
+        ApplicationFilterChain filterChain =
+                ApplicationFilterFactory.createFilterChain(request, wrapper, servlet);
+
+        // Call the filter chain for this request
+        // NOTE: This also calls the servlet's service() method
+        try {
+            if ((servlet != null) && (filterChain != null)) {
+                // Swallow output if needed
+                if (context.getSwallowOutput()) {
+                    try {
+                        SystemLogHandler.startCapture();
+                        if (request.isAsyncDispatching()) {
+                            ((AsyncContextImpl)request.getAsyncContext()).doInternalDispatch();
+                        } else {
+                            filterChain.doFilter(request.getRequest(),
+                                    response.getResponse());
+                        }
+                    } finally {
+                        String log = SystemLogHandler.stopCapture();
+                        if (log != null && log.length() > 0) {
+                            context.getLogger().info(log);
+                        }
+                    }
+                } else {
+                    if (request.isAsyncDispatching()) {
+                        ((AsyncContextImpl)request.getAsyncContext()).doInternalDispatch();
+                    } else {
+                        filterChain.doFilter
+                            (request.getRequest(), response.getResponse());
+                    }
+                }
+
+            }
+        } catch (ClientAbortException e) {
+            throwable = e;
+            exception(request, response, e);
+        } catch (IOException e) {
+            container.getLogger().error(sm.getString(
+                    "standardWrapper.serviceException", wrapper.getName(),
+                    context.getName()), e);
+            throwable = e;
+            exception(request, response, e);
+        } catch (UnavailableException e) {
+            container.getLogger().error(sm.getString(
+                    "standardWrapper.serviceException", wrapper.getName(),
+                    context.getName()), e);
+            //            throwable = e;
+            //            exception(request, response, e);
+            wrapper.unavailable(e);
+            long available = wrapper.getAvailable();
+            if ((available > 0L) && (available < Long.MAX_VALUE)) {
+                response.setDateHeader("Retry-After", available);
+                response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+                           sm.getString("standardWrapper.isUnavailable",
+                                        wrapper.getName()));
+            } else if (available == Long.MAX_VALUE) {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                            sm.getString("standardWrapper.notFound",
+                                        wrapper.getName()));
+            }
+            // Do not save exception in 'throwable', because we
+            // do not want to do exception(request, response, e) processing
+        } catch (ServletException e) {
+            Throwable rootCause = StandardWrapper.getRootCause(e);
+            if (!(rootCause instanceof ClientAbortException)) {
+                container.getLogger().error(sm.getString(
+                        "standardWrapper.serviceExceptionRoot",
+                        wrapper.getName(), context.getName(), e.getMessage()),
+                        rootCause);
+            }
+            throwable = e;
+            exception(request, response, e);
+        } catch (Throwable e) {
+            ExceptionUtils.handleThrowable(e);
+            container.getLogger().error(sm.getString(
+                    "standardWrapper.serviceException", wrapper.getName(),
+                    context.getName()), e);
+            throwable = e;
+            exception(request, response, e);
+        }
+
+        // Release the filter chain (if any) for this request
+        if (filterChain != null) {
+            filterChain.release();
+        }
+
+        // Deallocate the allocated servlet instance
+        try {
+            if (servlet != null) {
+                wrapper.deallocate(servlet);
+            }
+        } catch (Throwable e) {
+            ExceptionUtils.handleThrowable(e);
+            container.getLogger().error(sm.getString("standardWrapper.deallocateException",
+                             wrapper.getName()), e);
+            if (throwable == null) {
+                throwable = e;
+                exception(request, response, e);
+            }
+        }
+
+        // If this servlet has been marked permanently unavailable,
+        // unload it and release this instance
+        try {
+            if ((servlet != null) &&
+                (wrapper.getAvailable() == Long.MAX_VALUE)) {
+                wrapper.unload();
+            }
+        } catch (Throwable e) {
+            ExceptionUtils.handleThrowable(e);
+            container.getLogger().error(sm.getString("standardWrapper.unloadException",
+                             wrapper.getName()), e);
+            if (throwable == null) {
+                throwable = e;
+                exception(request, response, e);
+            }
+        }
+        long t2=System.currentTimeMillis();
+
+        long time=t2-t1;
+        processingTime += time;
+        if( time > maxTime) maxTime=time;
+        if( time < minTime) minTime=time;
+
+    }
+-----CSCI578-----
+
+
+    protected void doInternalDispatch() throws ServletException, IOException {
+        if (log.isDebugEnabled()) {
+            logDebug("intDispatch");
+        }
+        try {
+            Runnable runnable = dispatch;
+            dispatch = null;
+            runnable.run();
+            if (!request.isAsync()) {
+                // Uses internal method since we don't want the request/response
+                // to be closed. That will be handled in the adapter.
+                doFireOnComplete();
+            }
+        } catch (RuntimeException x) {
+            // doInternalComplete(true);
+            if (x.getCause() instanceof ServletException) {
+                throw (ServletException)x.getCause();
+            }
+            if (x.getCause() instanceof IOException) {
+                throw (IOException)x.getCause();
+            }
+            throw new ServletException(x);
+        }
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+    /**
+     * Handle the specified ServletException encountered while processing
+     * the specified Request to produce the specified Response.  Any
+     * exceptions that occur during generation of the exception report are
+     * logged and swallowed.
+     *
+     * @param request The request being processed
+     * @param response The response being generated
+     * @param exception The exception that occurred (which possibly wraps
+     *  a root cause exception
+     */
+    private void exception(Request request, Response response,
+                           Throwable exception) {
+        request.setAttribute(RequestDispatcher.ERROR_EXCEPTION, exception);
+        response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        response.setError();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the available date/time for this servlet, in milliseconds since
+     * the epoch.  If this date/time is Long.MAX_VALUE, it is considered to mean
+     * that unavailability is permanent and any request for this servlet will return
+     * an SC_NOT_FOUND error.  If this date/time is in the future, any request for
+     * this servlet will return an SC_SERVICE_UNAVAILABLE error.  If it is zero,
+     * the servlet is currently available.
+     */
+    @Override
+    public long getAvailable() {
+
+        return (this.available);
+
+    }
+-----CSCI578-----
+
+
+    @Override
+    public AsyncContext getAsyncContext() {
+        return this.asyncContext;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public DispatcherType getDispatcherType() {
+        if (internalDispatcherType == null) {
+            return DispatcherType.REQUEST;
+        }
+
+        return this.internalDispatcherType;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified date header to the specified value.
+     *
+     * @param name Name of the header to set
+     * @param value Date value to be set
+     */
+    @Override
+    public void setDateHeader(String name, long value) {
+
+        if (name == null || name.length() == 0) {
+            return;
+        }
+
+        if (isCommitted()) {
+            return;
+        }
+
+        // Ignore any call from an included servlet
+        if (included) {
+            return;
+        }
+
+        if (format == null) {
+            format = new SimpleDateFormat(FastHttpDateFormat.RFC1123_DATE,
+                                          Locale.US);
+            format.setTimeZone(TimeZone.getTimeZone("GMT"));
+        }
+
+        setHeader(name, FastHttpDateFormat.formatDate(value, format));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Extract the root cause from a servlet exception.
+     *
+     * @param e The servlet exception
+     * @return the root cause of the Servlet exception
+     */
+    public static Throwable getRootCause(ServletException e) {
+        Throwable rootCause = e;
+        Throwable rootCauseCheck = null;
+        // Extra aggressive rootCause finding
+        int loops = 0;
+        do {
+            loops++;
+            rootCauseCheck = rootCause.getCause();
+            if (rootCauseCheck != null)
+                rootCause = rootCauseCheck;
+        } while (rootCauseCheck != null && (loops < 20));
+        return rootCause;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Release references to the filters and wrapper executed by this chain.
+     */
+    void release() {
+        for (int i = 0; i < n; i++) {
+            filters[i] = null;
+        }
+        n = 0;
+        pos = 0;
+        servlet = null;
+        servletSupportsAsync = false;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the value of the swallowOutput flag.
+     */
+    public boolean getSwallowOutput();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Allocate an initialized instance of this Servlet that is ready to have
+     * its <code>service()</code> method called.  If the servlet class does
+     * not implement <code>SingleThreadModel</code>, the (only) initialized
+     * instance may be returned immediately.  If the servlet class implements
+     * <code>SingleThreadModel</code>, the Wrapper implementation must ensure
+     * that this instance is not allocated again until it is deallocated by a
+     * call to <code>deallocate()</code>.
+     *
+     * @exception ServletException if the servlet init() method threw
+     *  an exception
+     * @exception ServletException if a loading error occurs
+     */
+    @Override
+    public Servlet allocate() throws ServletException {
+
+        // If we are currently unloading this servlet, throw an exception
+        if (unloading) {
+            throw new ServletException(sm.getString("standardWrapper.unloading", getName()));
+        }
+
+        boolean newInstance = false;
+
+        // If not SingleThreadedModel, return the same instance every time
+        if (!singleThreadModel) {
+            // Load and initialize our instance if necessary
+            if (instance == null || !instanceInitialized) {
+                synchronized (this) {
+                    if (instance == null) {
+                        try {
+                            if (log.isDebugEnabled()) {
+                                log.debug("Allocating non-STM instance");
+                            }
+
+                            // Note: We don't know if the Servlet implements
+                            // SingleThreadModel until we have loaded it.
+                            instance = loadServlet();
+                            newInstance = true;
+                            if (!singleThreadModel) {
+                                // For non-STM, increment here to prevent a race
+                                // condition with unload. Bug 43683, test case
+                                // #3
+                                countAllocated.incrementAndGet();
+                            }
+                        } catch (ServletException e) {
+                            throw e;
+                        } catch (Throwable e) {
+                            ExceptionUtils.handleThrowable(e);
+                            throw new ServletException(sm.getString("standardWrapper.allocate"), e);
+                        }
+                    }
+                    if (!instanceInitialized) {
+                        initServlet(instance);
+                    }
+                }
+            }
+
+            if (singleThreadModel) {
+                if (newInstance) {
+                    // Have to do this outside of the sync above to prevent a
+                    // possible deadlock
+                    synchronized (instancePool) {
+                        instancePool.push(instance);
+                        nInstances++;
+                    }
+                }
+            } else {
+                if (log.isTraceEnabled()) {
+                    log.trace("  Returning non-STM instance");
+                }
+                // For new instances, count will have been incremented at the
+                // time of creation
+                if (!newInstance) {
+                    countAllocated.incrementAndGet();
+                }
+                return instance;
+            }
+        }
+
+        synchronized (instancePool) {
+            while (countAllocated.get() >= nInstances) {
+                // Allocate a new instance if possible, or else wait
+                if (nInstances < maxInstances) {
+                    try {
+                        instancePool.push(loadServlet());
+                        nInstances++;
+                    } catch (ServletException e) {
+                        throw e;
+                    } catch (Throwable e) {
+                        ExceptionUtils.handleThrowable(e);
+                        throw new ServletException(sm.getString("standardWrapper.allocate"), e);
+                    }
+                } else {
+                    try {
+                        instancePool.wait();
+                    } catch (InterruptedException e) {
+                        // Ignore
+                    }
+                }
+            }
+            if (log.isTraceEnabled()) {
+                log.trace("  Returning allocated STM instance");
+            }
+            countAllocated.incrementAndGet();
+            return instancePool.pop();
+        }
+    }
+
+
+
+    /**
+     * Return this previously allocated servlet to the pool of available
+     * instances.  If this servlet class does not implement SingleThreadModel,
+     * no action is actually required.
+     *
+     * @param servlet The servlet to be returned
+     *
+     * @exception ServletException if a deallocation error occurs
+     */
+    @Override
+    public void deallocate(Servlet servlet) throws ServletException {
+
+        // If not SingleThreadModel, no action is required
+        if (!singleThreadModel) {
+            countAllocated.decrementAndGet();
+            return;
+        }
+
+        // Unlock and free this instance
+        synchronized (instancePool) {
+            countAllocated.decrementAndGet();
+            instancePool.push(servlet);
+            instancePool.notify();
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Allocate an initialized instance of this Servlet that is ready to have
+     * its <code>service()</code> method called.  If the servlet class does
+     * not implement <code>SingleThreadModel</code>, the (only) initialized
+     * instance may be returned immediately.  If the servlet class implements
+     * <code>SingleThreadModel</code>, the Wrapper implementation must ensure
+     * that this instance is not allocated again until it is deallocated by a
+     * call to <code>deallocate()</code>.
+     *
+     * @exception ServletException if the servlet init() method threw
+     *  an exception
+     * @exception ServletException if a loading error occurs
+     */
+    @Override
+    public Servlet allocate() throws ServletException {
+
+        // If we are currently unloading this servlet, throw an exception
+        if (unloading) {
+            throw new ServletException(sm.getString("standardWrapper.unloading", getName()));
+        }
+
+        boolean newInstance = false;
+
+        // If not SingleThreadedModel, return the same instance every time
+        if (!singleThreadModel) {
+            // Load and initialize our instance if necessary
+            if (instance == null || !instanceInitialized) {
+                synchronized (this) {
+                    if (instance == null) {
+                        try {
+                            if (log.isDebugEnabled()) {
+                                log.debug("Allocating non-STM instance");
+                            }
+
+                            // Note: We don't know if the Servlet implements
+                            // SingleThreadModel until we have loaded it.
+                            instance = loadServlet();
+                            newInstance = true;
+                            if (!singleThreadModel) {
+                                // For non-STM, increment here to prevent a race
+                                // condition with unload. Bug 43683, test case
+                                // #3
+                                countAllocated.incrementAndGet();
+                            }
+                        } catch (ServletException e) {
+                            throw e;
+                        } catch (Throwable e) {
+                            ExceptionUtils.handleThrowable(e);
+                            throw new ServletException(sm.getString("standardWrapper.allocate"), e);
+                        }
+                    }
+                    if (!instanceInitialized) {
+                        initServlet(instance);
+                    }
+                }
+            }
+
+            if (singleThreadModel) {
+                if (newInstance) {
+                    // Have to do this outside of the sync above to prevent a
+                    // possible deadlock
+                    synchronized (instancePool) {
+                        instancePool.push(instance);
+                        nInstances++;
+                    }
+                }
+            } else {
+                if (log.isTraceEnabled()) {
+                    log.trace("  Returning non-STM instance");
+                }
+                // For new instances, count will have been incremented at the
+                // time of creation
+                if (!newInstance) {
+                    countAllocated.incrementAndGet();
+                }
+                return instance;
+            }
+        }
+
+        synchronized (instancePool) {
+            while (countAllocated.get() >= nInstances) {
+                // Allocate a new instance if possible, or else wait
+                if (nInstances < maxInstances) {
+                    try {
+                        instancePool.push(loadServlet());
+                        nInstances++;
+                    } catch (ServletException e) {
+                        throw e;
+                    } catch (Throwable e) {
+                        ExceptionUtils.handleThrowable(e);
+                        throw new ServletException(sm.getString("standardWrapper.allocate"), e);
+                    }
+                } else {
+                    try {
+                        instancePool.wait();
+                    } catch (InterruptedException e) {
+                        // Ignore
+                    }
+                }
+            }
+            if (log.isTraceEnabled()) {
+                log.trace("  Returning allocated STM instance");
+            }
+            countAllocated.incrementAndGet();
+            return instancePool.pop();
+        }
+    }
+
+
+
+    /**
+     * Return this previously allocated servlet to the pool of available
+     * instances.  If this servlet class does not implement SingleThreadModel,
+     * no action is actually required.
+     *
+     * @param servlet The servlet to be returned
+     *
+     * @exception ServletException if a deallocation error occurs
+     */
+    @Override
+    public void deallocate(Servlet servlet) throws ServletException {
+
+        // If not SingleThreadModel, no action is required
+        if (!singleThreadModel) {
+            countAllocated.decrementAndGet();
+            return;
+        }
+
+        // Unlock and free this instance
+        synchronized (instancePool) {
+            countAllocated.decrementAndGet();
+            instancePool.push(servlet);
+            instancePool.notify();
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private synchronized void initServlet(Servlet servlet)
+            throws ServletException {
+
+        if (instanceInitialized && !singleThreadModel) return;
+
+        // Call the initialization method of this servlet
+        try {
+            if( Globals.IS_SECURITY_ENABLED) {
+                boolean success = false;
+                try {
+                    Object[] args = new Object[] { facade };
+                    SecurityUtil.doAsPrivilege("init",
+                                               servlet,
+                                               classType,
+                                               args);
+                    success = true;
+                } finally {
+                    if (!success) {
+                        // destroy() will not be called, thus clear the reference now
+                        SecurityUtil.remove(servlet);
+                    }
+                }
+            } else {
+                servlet.init(facade);
+            }
+
+            instanceInitialized = true;
+        } catch (UnavailableException f) {
+            unavailable(f);
+            throw f;
+        } catch (ServletException f) {
+            // If the servlet wanted to be unavailable it would have
+            // said so, so do not call unavailable(null).
+            throw f;
+        } catch (Throwable f) {
+            ExceptionUtils.handleThrowable(f);
+            getServletContext().log("StandardWrapper.Throwable", f );
+            // If the servlet wanted to be unavailable it would have
+            // said so, so do not call unavailable(null).
+            throw new ServletException
+                (sm.getString("standardWrapper.initException", getName()), f);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process an UnavailableException, marking this servlet as unavailable
+     * for the specified amount of time.
+     *
+     * @param unavailable The exception that occurred, or <code>null</code>
+     *  to mark this servlet as permanently unavailable
+     */
+    @Override
+    public void unavailable(UnavailableException unavailable) {
+        getServletContext().log(sm.getString("standardWrapper.unavailable", getName()));
+        if (unavailable == null)
+            setAvailable(Long.MAX_VALUE);
+        else if (unavailable.isPermanent())
+            setAvailable(Long.MAX_VALUE);
+        else {
+            int unavailableSeconds = unavailable.getUnavailableSeconds();
+            if (unavailableSeconds <= 0)
+                unavailableSeconds = 60;        // Arbitrary default
+            setAvailable(System.currentTimeMillis() +
+                         (unavailableSeconds * 1000L));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the servlet context with which this servlet is associated.
+     */
+    @Override
+    public ServletContext getServletContext() {
+
+        if (parent == null)
+            return (null);
+        else if (!(parent instanceof Context))
+            return (null);
+        else
+            return (((Context) parent).getServletContext());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the available date/time for this servlet, in milliseconds since the
+     * epoch.  If this date/time is Long.MAX_VALUE, it is considered to mean
+     * that unavailability is permanent and any request for this servlet will return
+     * an SC_NOT_FOUND error. If this date/time is in the future, any request for
+     * this servlet will return an SC_SERVICE_UNAVAILABLE error.
+     *
+     * @param available The new available date/time
+     */
+    @Override
+    public void setAvailable(long available) {
+
+        long oldAvailable = this.available;
+        if (available > System.currentTimeMillis())
+            this.available = available;
+        else
+            this.available = 0L;
+        support.firePropertyChange("available", Long.valueOf(oldAvailable),
+                                   Long.valueOf(this.available));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Unload all initialized instances of this servlet, after calling the
+     * <code>destroy()</code> method for each instance.  This can be used,
+     * for example, prior to shutting down the entire servlet engine, or
+     * prior to reloading all of the classes from the Loader associated with
+     * our Loader's repository.
+     *
+     * @exception ServletException if an exception is thrown by the
+     *  destroy() method
+     */
+    @Override
+    public synchronized void unload() throws ServletException {
+
+        // Nothing to do if we have never loaded the instance
+        if (!singleThreadModel && (instance == null))
+            return;
+        unloading = true;
+
+        // Loaf a while if the current instance is allocated
+        // (possibly more than once if non-STM)
+        if (countAllocated.get() > 0) {
+            int nRetries = 0;
+            long delay = unloadDelay / 20;
+            while ((nRetries < 21) && (countAllocated.get() > 0)) {
+                if ((nRetries % 10) == 0) {
+                    log.info(sm.getString("standardWrapper.waiting",
+                                          countAllocated.toString(),
+                                          getName()));
+                }
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException e) {
+                    // Ignore
+                }
+                nRetries++;
+            }
+        }
+
+        if (instanceInitialized) {
+            PrintStream out = System.out;
+            if (swallowOutput) {
+                SystemLogHandler.startCapture();
+            }
+
+            // Call the servlet destroy() method
+            try {
+                if( Globals.IS_SECURITY_ENABLED) {
+                    try {
+                        SecurityUtil.doAsPrivilege("destroy", instance);
+                    } finally {
+                        SecurityUtil.remove(instance);
+                    }
+                } else {
+                    instance.destroy();
+                }
+
+                // Annotation processing
+                if (!((Context) getParent()).getIgnoreAnnotations()) {
+                   ((StandardContext)getParent()).getInstanceManager().destroyInstance(instance);
+                }
+            } catch (Throwable t) {
+                t = ExceptionUtils.unwrapInvocationTargetException(t);
+                ExceptionUtils.handleThrowable(t);
+                instance = null;
+                instancePool = null;
+                nInstances = 0;
+                fireContainerEvent("unload", this);
+                unloading = false;
+                throw new ServletException
+                    (sm.getString("standardWrapper.destroyException", getName()),
+                     t);
+            } finally {
+                // Write captured output
+                if (swallowOutput) {
+                    String log = SystemLogHandler.stopCapture();
+                    if (log != null && log.length() > 0) {
+                        if (getServletContext() != null) {
+                            getServletContext().log(log);
+                        } else {
+                            out.println(log);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Deregister the destroyed instance
+        instance = null;
+        instanceInitialized = false;
+
+        if (isJspServlet && jspMonitorON != null ) {
+            Registry.getRegistry(null, null).unregisterComponent(jspMonitorON);
+        }
+
+        if (singleThreadModel && (instancePool != null)) {
+            try {
+                while (!instancePool.isEmpty()) {
+                    Servlet s = instancePool.pop();
+                    if (Globals.IS_SECURITY_ENABLED) {
+                        try {
+                            SecurityUtil.doAsPrivilege("destroy", s);
+                        } finally {
+                            SecurityUtil.remove(s);
+                        }
+                    } else {
+                        s.destroy();
+                    }
+                    // Annotation processing
+                    if (!((Context) getParent()).getIgnoreAnnotations()) {
+                       ((StandardContext)getParent()).getInstanceManager().destroyInstance(s);
+                    }
+                }
+            } catch (Throwable t) {
+                t = ExceptionUtils.unwrapInvocationTargetException(t);
+                ExceptionUtils.handleThrowable(t);
+                instancePool = null;
+                nInstances = 0;
+                unloading = false;
+                fireContainerEvent("unload", this);
+                throw new ServletException
+                    (sm.getString("standardWrapper.destroyException",
+                                  getName()), t);
+            }
+            instancePool = null;
+            nInstances = 0;
+        }
+
+        singleThreadModel = false;
+
+        unloading = false;
+        fireContainerEvent("unload", this);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public AsyncContext getAsyncContext() {
+        return request.getAsyncContext();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public DispatcherType getDispatcherType() {
+        return request.getDispatcherType();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if the servlet class represented by this
+     * component implements the <code>SingleThreadModel</code> interface.
+     */
+    public boolean isSingleThreadModel() {
+
+        // Short-cuts
+        // If singleThreadModel is true, must have already checked this
+        // If instance != null, must have already loaded
+        if (singleThreadModel || instance != null) {
+            return singleThreadModel;
+        }
+
+        // The logic to determine this safely is more complex than one might
+        // expect. allocate() already has the necessary logic so re-use it.
+        // Make sure the Servlet is loaded with the right class loader
+        ClassLoader oldCL = null;
+        try {
+            oldCL = ((Context) getParent()).bind(false, null);
+            Servlet s = allocate();
+            deallocate(s);
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+        } finally {
+            ((Context) getParent()).unbind(false, oldCL);
+        }
+        return singleThreadModel;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return a String representation of this component.
+     */
+    @Override
+    public String toString() {
+
+        StringBuilder sb = new StringBuilder();
+        if (getParent() != null) {
+            sb.append(getParent().toString());
+            sb.append(".");
+        }
+        sb.append("StandardWrapper[");
+        sb.append(getName());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+
+
+
+    /**
+     * Set the name of this servlet.  This is an alias for the normal
+     * <code>Container.setName()</code> method, and complements the
+     * <code>getServletName()</code> method required by the
+     * <code>ServletConfig</code> interface.
+     *
+     * @param name The new name of this servlet
+     */
+    public void setServletName(String name) {
+
+        setName(name);
+
+    }
+
+
+
+    /**
+     * @return the name of this servlet.
+     */
+    @Override
+    public String getServletName() {
+
+        return (getName());
+
+    }
+-----CSCI578-----

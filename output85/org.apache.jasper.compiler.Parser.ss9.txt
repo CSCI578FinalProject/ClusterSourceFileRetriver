@@ -1,0 +1,85 @@
+20
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    Mark mark() {
+        return new Mark(current);
+    }
+-----CSCI578-----
+
+
+    /**
+     * search the stream for a match to a string
+     * @param string The string to match
+     * @return <strong>true</strong> is one is found, the current position
+     *         in stream is positioned after the search string, <strong>
+     *               false</strong> otherwise, position in stream unchanged.
+     */
+    boolean matches(String string) {
+       int len = string.length();
+       int cursor = current.cursor;
+       int streamSize = current.stream.length;
+       if (cursor + len < streamSize) { //Try to scan in memory
+           int line = current.line;
+           int col = current.col;
+           int ch;
+           int i = 0;
+           for(; i < len; i ++) {
+               ch = current.stream[i+cursor];
+               if (string.charAt(i) != ch) {
+                   return false;
+               }
+               if (ch == '\n') {
+                  line ++;
+                  col = 0;
+               } else {
+                  col++;
+               }
+           }
+           current.update(i+cursor, line, col);
+       } else {
+           Mark mark = mark();
+           int ch = 0;
+           int i = 0;
+           do {
+               ch = nextChar();
+               if (((char) ch) != string.charAt(i++)) {
+                   setCurrent(mark);
+                   return false;
+               }
+           } while (i < len);
+       }
+       return true;
+    }
+-----CSCI578-----
+
+
+    boolean matchesETagWithoutLessThan(String tagName) {
+       Mark mark = mark();
+
+       if (!matches("/" + tagName))
+           return false;
+       skipSpaces();
+       if (nextChar() == '>')
+           return true;
+
+       setCurrent(mark);
+       return false;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

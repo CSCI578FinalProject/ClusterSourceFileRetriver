@@ -1,0 +1,94 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Searches all subnodes of this node for jsp:attribute standard actions,
+     * and returns that set of nodes as a Node.Nodes object.
+     * 
+     * @return Possibly empty Node.Nodes object containing any jsp:attribute
+     *         subnodes of this Node
+     */
+    public Node.Nodes getNamedAttributeNodes() {
+
+        if (namedAttributeNodes != null) {
+            return namedAttributeNodes;
+        }
+
+        Node.Nodes result = new Node.Nodes();
+
+        // Look for the attribute in NamedAttribute children
+        Nodes nodes = getBody();
+        if (nodes != null) {
+            int numChildNodes = nodes.size();
+            for (int i = 0; i < numChildNodes; i++) {
+                Node n = nodes.getNode(i);
+                if (n instanceof NamedAttribute) {
+                    result.add(n);
+                } else if (!(n instanceof Comment)) {
+                    // Nothing can come before jsp:attribute, and only
+                    // jsp:body can come after it.
+                    break;
+                }
+            }
+        }
+
+        namedAttributeNodes = result;
+        return result;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Searches all subnodes of this node for jsp:attribute standard actions
+     * with the given name, and returns the NamedAttribute node of the matching
+     * named attribute, nor null if no such node is found.
+     * <p>
+     * This should always be called and only be called for nodes that accept
+     * dynamic runtime attribute expressions.
+     */
+    public NamedAttribute getNamedAttributeNode(String name) {
+        NamedAttribute result = null;
+
+        // Look for the attribute in NamedAttribute children
+        Nodes nodes = getNamedAttributeNodes();
+        int numChildNodes = nodes.size();
+        for (int i = 0; i < numChildNodes; i++) {
+            NamedAttribute na = (NamedAttribute) nodes.getNode(i);
+            boolean found = false;
+            int index = name.indexOf(':');
+            if (index != -1) {
+                // qualified name
+                found = na.getName().equals(name);
+            } else {
+                found = na.getLocalName().equals(name);
+            }
+            if (found) {
+                result = na;
+                break;
+            }
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get the attribute that is non request time expression, either from the
+     * attribute of the node, or from a jsp:attrbute
+     */
+    public String getTextAttribute(String name) {
+
+        String attr = getAttributeValue(name);
+        if (attr != null) {
+            return attr;
+        }
+
+        NamedAttribute namedAttribute = getNamedAttributeNode(name);
+        if (namedAttribute == null) {
+            return null;
+        }
+
+        return namedAttribute.getText();
+    }

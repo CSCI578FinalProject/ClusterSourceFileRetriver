@@ -1,0 +1,95 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void checkRecycled(org.apache.coyote.Request req,
+            org.apache.coyote.Response res) {
+        Request request = (Request) req.getNote(ADAPTER_NOTES);
+        Response response = (Response) res.getNote(ADAPTER_NOTES);
+        String messageKey = null;
+        if (request != null && request.getHost() != null) {
+            messageKey = "coyoteAdapter.checkRecycled.request";
+        } else if (response != null && response.getContentWritten() != 0) {
+            messageKey = "coyoteAdapter.checkRecycled.response";
+        }
+        if (messageKey != null) {
+            // Log this request, as it has probably skipped the access log.
+            // The log() method will take care of recycling.
+            log(req, res, 0L);
+
+            if (connector.getState().isAvailable()) {
+                if (log.isInfoEnabled()) {
+                    log.info(sm.getString(messageKey),
+                            new RecycleRequiredException());
+                }
+            } else {
+                // There may be some aborted requests.
+                // When connector shuts down, the request and response will not
+                // be reused, so there is no issue to warn about here.
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString(messageKey),
+                            new RecycleRequiredException());
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void log(org.apache.coyote.Request req,
+            org.apache.coyote.Response res, long time) {
+
+        Request request = (Request) req.getNote(ADAPTER_NOTES);
+        Response response = (Response) res.getNote(ADAPTER_NOTES);
+
+        if (request == null) {
+            // Create objects
+            request = connector.createRequest();
+            request.setCoyoteRequest(req);
+            response = connector.createResponse();
+            response.setCoyoteResponse(res);
+
+            // Link objects
+            request.setResponse(response);
+            response.setRequest(request);
+
+            // Set as notes
+            req.setNote(ADAPTER_NOTES, request);
+            res.setNote(ADAPTER_NOTES, response);
+
+            // Set query string encoding
+            req.getParameters().setQueryStringEncoding
+                (connector.getURIEncoding());
+        }
+
+        try {
+            // Log at the lowest level available. logAccess() will be
+            // automatically called on parent containers.
+            boolean logged = false;
+            if (request.mappingData != null) {
+                if (request.mappingData.context != null) {
+                    logged = true;
+                    request.mappingData.context.logAccess(
+                            request, response, time, true);
+                } else if (request.mappingData.host != null) {
+                    logged = true;
+                    request.mappingData.host.logAccess(
+                            request, response, time, true);
+                }
+            }
+            if (!logged) {
+                connector.getService().getContainer().logAccess(
+                        request, response, time, true);
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            log.warn(sm.getString("coyoteAdapter.accesslogFail"), t);
+        } finally {
+            request.recycle();
+            response.recycle();
+        }
+    }

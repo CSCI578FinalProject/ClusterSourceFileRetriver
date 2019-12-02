@@ -1,0 +1,39 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public static boolean output(JspWriter out, Object input, String value,
+            String defaultValue, boolean escapeXml) throws IOException {
+        if (input instanceof Reader) {
+            char[] buffer = new char[8096];
+            int read = 0;
+            while (read != -1) {
+                read = ((Reader) input).read(buffer);
+                if (read != -1) {
+                    if (escapeXml) {
+                        String escaped = Util.escapeXml(buffer, read);
+                        if (escaped == null) {
+                            out.write(buffer, 0, read);
+                        } else {
+                            out.print(escaped);
+                        }
+                    } else {
+                        out.write(buffer, 0, read);
+                    }
+                }
+            }
+            return true;
+        } else {
+            String v = value != null ? value : defaultValue;
+            if (v != null) {
+                if(escapeXml){
+                    v = Util.escapeXml(v);
+                }
+                out.write(v);
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }

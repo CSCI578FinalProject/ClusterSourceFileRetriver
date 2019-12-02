@@ -1,0 +1,464 @@
+18
+-----CSCI578-----
+
+
+
+    /**
+     * Get filters.
+     *
+     * @return The current filter library containing all possible filters
+     */
+    public OutputFilter[] getFilters() {
+        return filterLibrary;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Check if compression should be used for this resource. Already checked
+     * that the resource could be compressed if the client supports it.
+     */
+    private boolean useCompression() {
+
+        // Check if browser support gzip encoding
+        MessageBytes acceptEncodingMB =
+            request.getMimeHeaders().getValue("accept-encoding");
+
+        if ((acceptEncodingMB == null)
+            || (acceptEncodingMB.indexOf("gzip") == -1)) {
+            return false;
+        }
+
+        // If force mode, always compress (test purposes only)
+        if (compressionLevel == 2) {
+            return true;
+        }
+
+        // Check for incompatible Browser
+        if (noCompressionUserAgents != null) {
+            MessageBytes userAgentValueMB =
+                request.getMimeHeaders().getValue("user-agent");
+            if(userAgentValueMB != null) {
+                String userAgentValue = userAgentValueMB.toString();
+
+                if (noCompressionUserAgents.matcher(userAgentValue).matches()) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+-----CSCI578-----
+
+
+    private static boolean isConnectionClose(MimeHeaders headers) {
+        MessageBytes connection = headers.getValue(Constants.CONNECTION);
+        if (connection == null) {
+            return false;
+        }
+        return connection.equals(Constants.CLOSE);
+    }
+-----CSCI578-----
+
+
+    // Inefficient initial implementation. Will be replaced on the next
+    // round of tune-up
+    public int indexOf(String s, int starting) {
+        toString();
+        return strValue.indexOf( s, starting );
+    }
+
+
+    // Inefficient initial implementation. Will be replaced on the next
+    // round of tune-up
+    public int indexOf(String s) {
+        return indexOf( s, 0 );
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * When committing the response, we have to validate the set of headers, as
+     * well as setup the response filters.
+     */
+    private void prepareResponse() {
+
+        boolean entityBody = true;
+        contentDelimitation = false;
+
+        OutputFilter[] outputFilters = outputBuffer.getFilters();
+
+        if (http09 == true) {
+            // HTTP/0.9
+            outputBuffer.addActiveFilter
+                (outputFilters[Constants.IDENTITY_FILTER]);
+            return;
+        }
+
+        int statusCode = response.getStatus();
+        if (statusCode < 200 || statusCode == 204 || statusCode == 205 ||
+                statusCode == 304) {
+            // No entity body
+            outputBuffer.addActiveFilter
+                (outputFilters[Constants.VOID_FILTER]);
+            entityBody = false;
+            contentDelimitation = true;
+        }
+
+        MessageBytes methodMB = request.method();
+        if (methodMB.equals("HEAD")) {
+            // No entity body
+            outputBuffer.addActiveFilter
+                (outputFilters[Constants.VOID_FILTER]);
+            contentDelimitation = true;
+        }
+
+        // Sendfile support
+        boolean sendingWithSendfile = false;
+        if (endpoint.getUseSendfile()) {
+            sendingWithSendfile = prepareSendfile(outputFilters);
+        }
+
+        // Check for compression
+        boolean isCompressable = false;
+        boolean useCompression = false;
+        if (entityBody && (compressionLevel > 0) && !sendingWithSendfile) {
+            isCompressable = isCompressable();
+            if (isCompressable) {
+                useCompression = useCompression();
+            }
+            // Change content-length to -1 to force chunking
+            if (useCompression) {
+                response.setContentLength(-1);
+            }
+        }
+
+        MimeHeaders headers = response.getMimeHeaders();
+        if (!entityBody) {
+            response.setContentLength(-1);
+        }
+        // A SC_NO_CONTENT response may include entity headers
+        if (entityBody || statusCode == HttpServletResponse.SC_NO_CONTENT) {
+            String contentType = response.getContentType();
+            if (contentType != null) {
+                headers.setValue("Content-Type").setString(contentType);
+            }
+            String contentLanguage = response.getContentLanguage();
+            if (contentLanguage != null) {
+                headers.setValue("Content-Language")
+                    .setString(contentLanguage);
+            }
+        }
+
+        long contentLength = response.getContentLengthLong();
+        boolean connectionClosePresent = false;
+        if (contentLength != -1) {
+            headers.setValue("Content-Length").setLong(contentLength);
+            outputBuffer.addActiveFilter
+                (outputFilters[Constants.IDENTITY_FILTER]);
+            contentDelimitation = true;
+        } else {
+            // If the response code supports an entity body and we're on
+            // HTTP 1.1 then we chunk unless we have a Connection: close header
+            connectionClosePresent = isConnectionClose(headers);
+            if (entityBody && http11 && !connectionClosePresent) {
+                outputBuffer.addActiveFilter
+                    (outputFilters[Constants.CHUNKED_FILTER]);
+                contentDelimitation = true;
+                headers.addValue(Constants.TRANSFERENCODING).setString(Constants.CHUNKED);
+            } else {
+                outputBuffer.addActiveFilter
+                    (outputFilters[Constants.IDENTITY_FILTER]);
+            }
+        }
+
+        if (useCompression) {
+            outputBuffer.addActiveFilter(outputFilters[Constants.GZIP_FILTER]);
+            headers.setValue("Content-Encoding").setString("gzip");
+        }
+        // If it might be compressed, set the Vary header
+        if (isCompressable) {
+            // Make Proxies happy via Vary (from mod_deflate)
+            MessageBytes vary = headers.getValue("Vary");
+            if (vary == null) {
+                // Add a new Vary header
+                headers.setValue("Vary").setString("Accept-Encoding");
+            } else if (vary.equals("*")) {
+                // No action required
+            } else {
+                // Merge into current header
+                headers.setValue("Vary").setString(
+                        vary.getString() + ",Accept-Encoding");
+            }
+        }
+
+        // Add date header unless application has already set one (e.g. in a
+        // Caching Filter)
+        if (headers.getValue("Date") == null) {
+            headers.addValue("Date").setString(
+                    FastHttpDateFormat.getCurrentDate());
+        }
+
+        // FIXME: Add transfer encoding header
+
+        if ((entityBody) && (!contentDelimitation)) {
+            // Mark as close the connection after the request, and add the
+            // connection: close header
+            keepAlive = false;
+        }
+
+        // This may disabled keep-alive to check before working out the
+        // Connection header.
+        checkExpectationAndResponseStatus();
+
+        // If we know that the request is bad this early, add the
+        // Connection: close header.
+        if (keepAlive && statusDropsConnection(statusCode)) {
+            keepAlive = false;
+        }
+        if (!keepAlive) {
+            // Avoid adding the close header twice
+            if (!connectionClosePresent) {
+                headers.addValue(Constants.CONNECTION).setString(
+                        Constants.CLOSE);
+            }
+        } else if (!http11 && !getErrorState().isError()) {
+            headers.addValue(Constants.CONNECTION).setString(Constants.KEEPALIVE);
+        }
+
+        // Build the response header
+        outputBuffer.sendStatus();
+
+        // Add server header
+        if (server != null) {
+            // Always overrides anything the app might set
+            headers.setValue("Server").setString(server);
+        } else if (headers.getValue("Server") == null) {
+            // If app didn't set the header, use the default
+            outputBuffer.write(Constants.SERVER_BYTES);
+        }
+
+        int size = headers.size();
+        for (int i = 0; i < size; i++) {
+            outputBuffer.sendHeader(headers.getName(i), headers.getValue(i));
+        }
+        outputBuffer.endHeaders();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * End the header block.
+     */
+    public void endHeaders() {
+        headerBuffer[pos++] = Constants.CR;
+        headerBuffer[pos++] = Constants.LF;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Send the response status line.
+     */
+    public void sendStatus() {
+        // Write protocol name
+        write(Constants.HTTP_11_BYTES);
+        headerBuffer[pos++] = Constants.SP;
+
+        // Write status code
+        int status = response.getStatus();
+        switch (status) {
+        case 200:
+            write(Constants._200_BYTES);
+            break;
+        case 400:
+            write(Constants._400_BYTES);
+            break;
+        case 404:
+            write(Constants._404_BYTES);
+            break;
+        default:
+            write(String.valueOf(status));
+        }
+
+        headerBuffer[pos++] = Constants.SP;
+
+        // The reason phrase is optional but the space before it is not. Skip
+        // sending the reason phrase. Clients should ignore it (RFC 7230) and it
+        // just wastes bytes.
+
+        headerBuffer[pos++] = Constants.CR;
+        headerBuffer[pos++] = Constants.LF;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Send a header.
+     *
+     * @param name Header name
+     * @param value Header value
+     */
+    public void sendHeader(MessageBytes name, MessageBytes value) {
+        write(name);
+        headerBuffer[pos++] = Constants.COLON;
+        headerBuffer[pos++] = Constants.SP;
+        write(value);
+        headerBuffer[pos++] = Constants.CR;
+        headerBuffer[pos++] = Constants.LF;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param n The header index
+     * @return the Nth header value, or null if there is no such header.
+     * This may be used to iterate through all header fields.
+     */
+    public MessageBytes getValue(int n) {
+        return n >= 0 && n < count ? headers[n].getValue() : null;
+    }
+
+
+    //-------------------- Getting headers --------------------
+    /**
+     * Finds and returns a header field with the given name.  If no such
+     * field exists, null is returned.  If more than one such field is
+     * in the header, an arbitrary one is returned.
+     * @param name The header name
+     * @return the value
+     */
+    public MessageBytes getValue(String name) {
+        for (int i = 0; i < count; i++) {
+            if (headers[i].getName().equalsIgnoreCase(name)) {
+                return headers[i].getValue();
+            }
+        }
+        return null;
+    }
+
+
+    public MessageBytes getValue() {
+        return valueB;
+    }
+-----CSCI578-----
+
+
+    public long getContentLengthLong() {
+        return contentLength;
+    }
+-----CSCI578-----
+
+
+    public void setContentLength(long contentLength) {
+        this.contentLength = contentLength;
+    }
+-----CSCI578-----
+
+    public boolean getUseSendfile() {
+        return useSendfile;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the buffer to the representation of an long.
+     * @param l The long
+     */
+    public void setLong(long l) {
+        byteC.allocate(32, 64);
+        long current = l;
+        byte[] buf = byteC.getBuffer();
+        int start = 0;
+        int end = 0;
+        if (l == 0) {
+            buf[end++] = (byte) '0';
+        }
+        if (l < 0) {
+            current = -l;
+            buf[end++] = (byte) '-';
+        }
+        while (current > 0) {
+            int digit = (int) (current % 10);
+            current = current / 10;
+            buf[end++] = HexUtils.getHex(digit);
+        }
+        byteC.setOffset(0);
+        byteC.setEnd(end);
+        // Inverting buffer
+        end--;
+        if (l < 0) {
+            start++;
+        }
+        while (end > start) {
+            byte temp = buf[start];
+            buf[start] = buf[end];
+            buf[end] = temp;
+            start++;
+            end--;
+        }
+        longValue=l;
+        hasStrValue=false;
+        hasHashCode=false;
+        hasLongValue=true;
+        type=T_BYTES;
+    }
+-----CSCI578-----
+
+
+
+    public static byte getHex(int index) {
+        return HEX[index];
+    }
+-----CSCI578-----
+
+
+    // -------------------- Setup --------------------
+
+    public void allocate( int initial, int limit  ) {
+        if( buff==null || buff.length < initial ) {
+            buff=new byte[initial];
+        }
+        this.limit=limit;
+        start=0;
+        end=0;
+        isSet=true;
+        hasHashCode = false;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isSendfileSupported() {
+        return endpoint.getUseSendfile();
+    }
+-----CSCI578-----
+
+
+
+    public boolean getUseSendfile() { return getEndpoint().getUseSendfile(); }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------- OutputFilter Methods
+
+
+    /**
+     * Some filters need additional parameters from the response. All the
+     * necessary reading can occur in that method, as this method is called
+     * after the response header processing is complete.
+     */
+    @Override
+    public void setResponse(Response response) {
+        contentLength = response.getContentLengthLong();
+        remaining = contentLength;
+    }

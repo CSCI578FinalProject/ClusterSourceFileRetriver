@@ -1,0 +1,156 @@
+21
+-----CSCI578-----
+
+
+    public int getPerformanceLatency() {
+        return performanceLatency;
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------- Public Lifecycle Methods
+
+
+    /**
+     * Initialize the endpoint.
+     */
+    public void init()
+        throws Exception {
+
+        if (initialized)
+            return;
+
+        serverSock = ServerSocketChannel.open();
+        serverSock.socket().setPerformancePreferences(socketProperties.getPerformanceConnectionTime(),
+                                                      socketProperties.getPerformanceLatency(),
+                                                      socketProperties.getPerformanceBandwidth());
+        InetSocketAddress addr = (address!=null?new InetSocketAddress(address,port):new InetSocketAddress(port));
+        serverSock.socket().bind(addr,backlog);
+        serverSock.configureBlocking(true); //mimic APR behavior
+        serverSock.socket().setSoTimeout(getSocketProperties().getSoTimeout());
+
+        // Initialize thread count defaults for acceptor, poller
+        if (acceptorThreadCount == 0) {
+            // FIXME: Doesn't seem to work that well with multiple accept threads
+            acceptorThreadCount = 1;
+        }
+        if (pollerThreadCount <= 0) {
+            //minimum one poller thread
+            pollerThreadCount = 1;
+        }
+        stopLatch = new CountDownLatch(pollerThreadCount);
+
+        // Initialize SSL if needed
+        if (isSSLEnabled()) {
+            // Initialize SSL
+            char[] passphrase = getKeystorePass().toCharArray();
+
+            char[] tpassphrase = (getTruststorePass()!=null)?getTruststorePass().toCharArray():passphrase;
+            String ttype = (getTruststoreType()!=null)?getTruststoreType():getKeystoreType();
+
+            KeyStore ks = KeyStore.getInstance(getKeystoreType());
+            ks.load(new FileInputStream(getKeystoreFile()), passphrase);
+            KeyStore ts = null;
+            if (getTruststoreFile()==null) {
+                //no op, same as for BIO connector
+            }else {
+                ts = KeyStore.getInstance(ttype);
+                ts.load(new FileInputStream(getTruststoreFile()), tpassphrase);
+            }
+
+            KeyManagerFactory kmf = KeyManagerFactory.getInstance(getAlgorithm());
+            kmf.init(ks, passphrase);
+
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(getAlgorithm());
+            tmf.init(ts);
+
+            sslContext = SSLContext.getInstance(getSslProtocol());
+            sslContext.init(wrap(kmf.getKeyManagers()), tmf.getTrustManagers(), null);
+            SSLSessionContext sessionContext =
+                sslContext.getServerSessionContext();
+            if (sessionContext != null) {
+                sessionContext.setSessionCacheSize(sessionCacheSize);
+                sessionContext.setSessionTimeout(sessionTimeout);
+            }
+        }
+
+        if (oomParachute>0) reclaimParachute(true);
+        selectorPool.open();
+        initialized = true;
+
+    }
+-----CSCI578-----
+
+
+    public int getPerformanceConnectionTime() {
+        return performanceConnectionTime;
+    }
+-----CSCI578-----
+
+
+    public int getPerformanceBandwidth() {
+        return performanceBandwidth;
+    }
+-----CSCI578-----
+
+    public boolean isSSLEnabled() { return SSLEnabled;}
+-----CSCI578-----
+
+    public String getKeystoreFile() { return keystoreFile;}
+-----CSCI578-----
+
+    public String getAlgorithm() { return algorithm;}
+-----CSCI578-----
+
+    public String getKeystorePass() { return keystorePass;}
+-----CSCI578-----
+
+    public String getKeystoreType() { return keystoreType;}
+-----CSCI578-----
+
+    public String getTruststoreFile() {return truststoreFile;}
+-----CSCI578-----
+
+    public String getTruststorePass() {return truststorePass;}
+-----CSCI578-----
+
+    public String getTruststoreType() {return truststoreType;}
+-----CSCI578-----
+
+    public String getSslProtocol() { return sslProtocol;}
+-----CSCI578-----
+
+
+    protected boolean reclaimParachute(boolean force) {
+        if ( oomParachuteData != null ) return true;
+        if ( oomParachute > 0 && ( force || (Runtime.getRuntime().freeMemory() > (oomParachute*2))) )
+            oomParachuteData = new byte[oomParachute];
+        return oomParachuteData != null;
+    }
+-----CSCI578-----
+
+
+
+    public String getAlgorithm() { return ep.getAlgorithm();}
+-----CSCI578-----
+
+    public String getTruststoreFile(){return ep.getTruststoreFile();}
+-----CSCI578-----
+
+    public String getTruststorePass(){return ep.getTruststorePass();}
+-----CSCI578-----
+
+    public String getTruststoreType(){ return ep.getTruststoreType();}
+-----CSCI578-----
+
+
+
+    public String getSslProtocol() { return ep.getSslProtocol();}
+-----CSCI578-----
+
+
+    public boolean getSSLEnabled() { return ep.isSSLEnabled(); }
+-----CSCI578-----
+
+    public String getKeystore() { return getKeystoreFile();}

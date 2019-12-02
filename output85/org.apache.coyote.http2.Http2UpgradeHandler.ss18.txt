@@ -1,0 +1,164 @@
+9
+-----CSCI578-----
+
+
+
+    public static int getTwoBytes(byte[] input, int firstByte) {
+        return ((input[firstByte] & 0xFF) << 8) +  (input[firstByte + 1] & 0xFF);
+    }
+-----CSCI578-----
+
+
+    public static Setting valueOf(int i) {
+        switch(i) {
+        case 1: {
+            return HEADER_TABLE_SIZE;
+        }
+        case 2: {
+            return ENABLE_PUSH;
+        }
+        case 3: {
+            return MAX_CONCURRENT_STREAMS;
+        }
+        case 4: {
+            return INITIAL_WINDOW_SIZE;
+        }
+        case 5: {
+            return MAX_FRAME_SIZE;
+        }
+        case 6: {
+            return MAX_HEADER_LIST_SIZE;
+        }
+        default: {
+            return Setting.UNKNOWN;
+        }
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public SocketState upgradeDispatch(SocketEvent status) {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("upgradeHandler.upgradeDispatch.entry", connectionId, status));
+        }
+
+        // WebConnection is not used so passing null here is fine
+        // Might not be necessary. init() will handle that.
+        init(null);
+
+
+        SocketState result = SocketState.CLOSED;
+
+        try {
+            pingManager.sendPing(false);
+
+            checkPauseState();
+
+            switch(status) {
+            case OPEN_READ:
+                try {
+                    // There is data to read so use the read timeout while
+                    // reading frames.
+                   socketWrapper.setReadTimeout(getReadTimeout());
+                    while (true) {
+                        try {
+                            if (!parser.readFrame(false)) {
+                                break;
+                            }
+                        } catch (StreamException se) {
+                            // Stream errors are not fatal to the connection so
+                            // continue reading frames
+                            resetStream(se);
+                        }
+                    }
+                    // No more frames to read so switch to the keep-alive
+                    // timeout.
+                    socketWrapper.setReadTimeout(getKeepAliveTimeout());
+                } catch (Http2Exception ce) {
+                    // Really ConnectionException
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("upgradeHandler.connectionError"), ce);
+                    }
+                    closeConnection(ce);
+                    break;
+                }
+
+                result = SocketState.UPGRADED;
+                break;
+
+            case OPEN_WRITE:
+                processWrites();
+
+                result = SocketState.UPGRADED;
+                break;
+
+            case DISCONNECT:
+            case ERROR:
+            case TIMEOUT:
+            case STOP:
+                close();
+                break;
+            }
+        } catch (IOException ioe) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("upgradeHandler.ioerror", connectionId), ioe);
+            }
+            close();
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("upgradeHandler.upgradeDispatch.exit", connectionId, result));
+        }
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------- Configuration getters/setters
+
+    public long getReadTimeout() {
+        return readTimeout;
+    }
+-----CSCI578-----
+
+
+
+    public long getKeepAliveTimeout() {
+        return keepAliveTimeout;
+    }
+-----CSCI578-----
+
+
+
+    public static long getFourBytes(byte[] input, int firstByte) {
+        return ((long)(input[firstByte] & 0xFF) << 24) + ((input[firstByte + 1] & 0xFF) << 16) +
+                ((input[firstByte + 2] & 0xFF) << 8) + (input[firstByte + 3] & 0xFF);
+    }
+-----CSCI578-----
+
+
+
+    private void processWrites() throws IOException {
+        synchronized (socketWrapper) {
+            if (socketWrapper.flush(false)) {
+                socketWrapper.registerWriteInterest();
+                return;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void close() {
+        connectionState.set(ConnectionState.CLOSED);
+        try {
+            socketWrapper.close();
+        } catch (IOException ioe) {
+            log.debug(sm.getString("upgradeHandler.socketCloseFailed"), ioe);
+        }
+    }

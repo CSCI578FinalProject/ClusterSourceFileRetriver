@@ -1,0 +1,101 @@
+7
+
+
+    public static void releaseTag(Tag tag, AnnotationProcessor annotationProcessor, boolean reused) {
+        // Caller ensures pool is non-null if reuse is true
+        if (!reused) {
+            releaseTag(tag, annotationProcessor);
+        }
+    }
+
+
+    protected static void releaseTag(Tag tag, AnnotationProcessor annotationProcessor) {
+        try {
+            tag.release();
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            log.warn("Error processing release on tag instance of " +
+                 tag.getClass().getName(), t);
+        }
+        try {
+        	AnnotationHelper.preDestroy(annotationProcessor, tag);
+        } catch (Exception e) {
+            Throwable t = ExceptionUtils.unwrapInvocationTargetException(e);
+            ExceptionUtils.handleThrowable(t);
+            log.warn("Error processing preDestroy on tag instance of " +
+                 tag.getClass().getName(), t);
+        }
+    }
+    
+    
+    /**
+     * Call preDestroy method on the specified instance.
+     */
+    public static void preDestroy(AnnotationProcessor processor, Object instance)
+        throws IllegalAccessException, InvocationTargetException {
+        if (processor != null) {
+            processor.preDestroy(instance);
+        }
+    }
+    
+    /**
+     * Checks whether the supplied Throwable is one that needs to be 
+     * rethrown and swallows all others.
+     * @param t the Throwable to check
+     */
+    public static void handleThrowable(Throwable t) {
+        if (t instanceof ThreadDeath) {
+            throw (ThreadDeath) t;
+        }
+        if (t instanceof StackOverflowError) {
+            // Swallow silently - it should be recoverable
+            return;
+        }
+        if (t instanceof VirtualMachineError) {
+            throw (VirtualMachineError) t;
+        }
+        // All other instances of Throwable will be silently swallowed
+    }
+
+    /**
+     * Checks whether the supplied Throwable is an instance of
+     * <code>InvocationTargetException</code> and returns the throwable that is
+     * wrapped by it, if there is any.
+     *
+     * @param t the Throwable to check
+     * @return <code>t</code> or <code>t.getCause()</code>
+     */
+    public static Throwable unwrapInvocationTargetException(Throwable t) {
+        if (t instanceof InvocationTargetException && t.getCause() != null) {
+            return t.getCause();
+        }
+        return t;
+    }
+
+    /**
+     * Adds the given tag handler to this tag handler pool, unless this tag
+     * handler pool has already reached its capacity, in which case the tag
+     * handler's release() method is called.
+     *
+     * @param handler Tag handler to add to this tag handler pool
+     */
+    public void reuse(Tag handler) {
+        synchronized( this ) {
+            if (current < (handlers.length - 1)) {
+                handlers[++current] = handler;
+                return;
+            }
+        }
+        // There is no need for other threads to wait for us to release
+        JspRuntimeLibrary.releaseTag(handler, annotationProcessor);
+    }
+
+    /**
+     * Calls the release() method of all available tag handlers in this tag
+     * handler pool.
+     */
+    public synchronized void release() {
+        for (int i = current; i >= 0; i--) {
+        	JspRuntimeLibrary.releaseTag(handlers[i], annotationProcessor);
+        }
+    }

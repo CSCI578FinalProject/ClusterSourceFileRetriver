@@ -1,0 +1,57 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Gracefully terminate the active use of the public methods of this
+     * component. This method should be the last one called on a given instance
+     * of this component.
+     * 
+     * @exception LifecycleException
+     *                if this component detects a fatal error that needs to be
+     *                reported
+     */
+    public void stop() throws LifecycleException {
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("deltaManager.stopped", getName()));
+
+
+        // Validate and update our current component state
+        if (!started)
+            throw new LifecycleException(sm.getString("deltaManager.notStarted"));
+        lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+        started = false;
+
+        // Expire all active sessions
+        if (log.isInfoEnabled()) log.info(sm.getString("deltaManager.expireSessions", getName()));
+        Session sessions[] = findSessions();
+        for (int i = 0; i < sessions.length; i++) {
+            DeltaSession session = (DeltaSession) sessions[i];
+            if (!session.isValid())
+                continue;
+            try {
+                session.expire(true, isExpireSessionsOnShutdown());
+            } catch (Throwable ignore) {
+                ;
+            } 
+        }
+
+        // Require a new random number generator if we are restarted
+        this.random = null;
+        getCluster().removeManager(this);
+        replicationValve = null;
+        if (initialized) {
+            destroy();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    public boolean isExpireSessionsOnShutdown() {
+        return expireSessionsOnShutdown;
+    }
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,42 @@
+2
+-----CSCI578-----
+
+
+    public String getWrappersString( String host, String context ) {
+        String names[]=getWrapperNames(host, context);
+        StringBuffer sb=new StringBuffer();
+        for( int i=0; i<names.length; i++ ) {
+            sb.append(names[i]).append(":");
+        }
+        return sb.toString();
+    }
+-----CSCI578-----
+
+
+    public String[] getWrapperNames( String host, String context ) {
+        List<String> list = new ArrayList<String>();
+        if( host==null ) host="";
+        if( context==null ) context="";
+        for( int i=0; i<hosts.length; i++ ) {
+            if( ! host.equals( hosts[i].name ))
+                continue;
+            for( int j=0; j<hosts[i].contextList.contexts.length; j++ ) {
+                if( ! context.equals( hosts[i].contextList.contexts[j].name))
+                    continue;
+                // found the context
+                Context ctx=hosts[i].contextList.contexts[j];
+                list.add( ctx.defaultWrapper.path);
+                for( int k=0; k<ctx.exactWrappers.length; k++ ) {
+                    list.add( ctx.exactWrappers[k].path);
+                }
+                for( int k=0; k<ctx.wildcardWrappers.length; k++ ) {
+                    list.add( ctx.wildcardWrappers[k].path + "*");
+                }
+                for( int k=0; k<ctx.extensionWrappers.length; k++ ) {
+                    list.add( "*." + ctx.extensionWrappers[k].path);
+                }
+            }
+        }
+        String res[]=new String[list.size()];
+        return list.toArray(res);
+    }

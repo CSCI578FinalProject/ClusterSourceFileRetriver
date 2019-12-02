@@ -1,0 +1,99 @@
+12
+-----CSCI578-----
+
+
+
+    /**
+     * Stop the endpoint. This will cause all processing threads to stop.
+     */
+    @Override
+    public void stopInternal() {
+        releaseConnectionLatch();
+        if (!paused) {
+            pause();
+        }
+        if (running) {
+            running = false;
+            poller.stop();
+            for (SocketWrapperBase<Long> socketWrapper : connections.values()) {
+                try {
+                    socketWrapper.close();
+                    getHandler().release(socketWrapper);
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+            for (AbstractEndpoint.Acceptor acceptor : acceptors) {
+                long waitLeft = 10000;
+                while (waitLeft > 0 &&
+                        acceptor.getState() != AcceptorState.ENDED &&
+                        serverSock != 0) {
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException e) {
+                        // Ignore
+                    }
+                    waitLeft -= 50;
+                }
+                if (waitLeft == 0) {
+                    log.warn(sm.getString("endpoint.warn.unlockAcceptorFailed",
+                            acceptor.getThreadName()));
+                   // If the Acceptor is still running force
+                   // the hard socket close.
+                   if (serverSock != 0) {
+                       Socket.shutdown(serverSock, Socket.APR_SHUTDOWN_READ);
+                       serverSock = 0;
+                   }
+                }
+            }
+            try {
+                poller.destroy();
+            } catch (Exception e) {
+                // Ignore
+            }
+            poller = null;
+            connections.clear();
+            if (getUseSendfile()) {
+                try {
+                    sendfile.destroy();
+                } catch (Exception e) {
+                    // Ignore
+                }
+                sendfile = null;
+            }
+        }
+        shutdownExecutor();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Shutdown either reading, writing, or both sides of a socket.
+     * <br>
+     * This does not actually close the socket descriptor, it just
+     *      controls which calls are still valid on the socket.
+     * @param thesocket The socket to close
+     * @param how How to shutdown the socket.  One of:
+     * <PRE>
+     * APR_SHUTDOWN_READ         no longer allow read requests
+     * APR_SHUTDOWN_WRITE        no longer allow write requests
+     * APR_SHUTDOWN_READWRITE    no longer allow read or write requests
+     * </PRE>
+     * @return the operation status
+     */
+    public static native int shutdown(long thesocket, int how);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public abstract void close() throws IOException;
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

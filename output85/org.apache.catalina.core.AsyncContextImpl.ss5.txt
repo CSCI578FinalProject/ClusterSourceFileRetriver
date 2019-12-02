@@ -1,0 +1,77 @@
+5
+-----CSCI578-----
+
+
+
+    private void logDebug(String method) {
+        String rHashCode;
+        String crHashCode;
+        String rpHashCode;
+        String stage;
+        StringBuilder uri = new StringBuilder();
+        if (request == null) {
+            rHashCode = "null";
+            crHashCode = "null";
+            rpHashCode = "null";
+            stage = "-";
+            uri.append("N/A");
+        } else {
+            rHashCode = Integer.toHexString(request.hashCode());
+            org.apache.coyote.Request coyoteRequest = request.getCoyoteRequest();
+            if (coyoteRequest == null) {
+                crHashCode = "null";
+                rpHashCode = "null";
+                stage = "-";
+            } else {
+                crHashCode = Integer.toHexString(coyoteRequest.hashCode());
+                RequestInfo rp = coyoteRequest.getRequestProcessor();
+                if (rp == null) {
+                    rpHashCode = "null";
+                    stage = "-";
+                } else {
+                    rpHashCode = Integer.toHexString(rp.hashCode());
+                    stage = Integer.toString(rp.getStage());
+                }
+            }
+            uri.append(request.getRequestURI());
+            if (request.getQueryString() != null) {
+                uri.append('?');
+                uri.append(request.getQueryString());
+            }
+        }
+        String threadName = Thread.currentThread().getName();
+        int len = threadName.length();
+        if (len > 20) {
+            threadName = threadName.substring(len - 20, len);
+        }
+        String msg = String.format(
+                "Req: %1$8s  CReq: %2$8s  RP: %3$8s  Stage: %4$s  " +
+                "Thread: %5$20s  State: %6$20s  Method: %7$11s  URI: %8$s",
+                rHashCode, crHashCode, rpHashCode, stage,
+                threadName, "N/A", method, uri);
+        if (log.isTraceEnabled()) {
+            log.trace(msg, new DebugException());
+        } else {
+            log.debug(msg);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public int getStage() {
+        return stage;
+    }
+-----CSCI578-----
+
+
+    public boolean isProcessing() {
+        return reqProcessorMX.getStage()==org.apache.coyote.Constants.STAGE_SERVICE;
+    }
+-----CSCI578-----
+
+
+    public long getRequestProcessingTime() {
+        if ( getStage() == org.apache.coyote.Constants.STAGE_ENDED ) return 0;
+        else return (System.currentTimeMillis() - req.getStartTime());
+    }

@@ -1,0 +1,200 @@
+14
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isCommitted() {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        return (response.isAppCommitted());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the content length that was set or calculated for this Response.
+     */
+    public int getContentLength() {
+        return getCoyoteResponse().getContentLength();
+    }
+-----CSCI578-----
+
+
+    public int getContentLength() {
+        long length = getContentLengthLong();
+
+        if (length < Integer.MAX_VALUE) {
+            return (int) length;
+        }
+        return -1;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Application commit flag accessor.
+     *
+     * @return <code>true</code> if the application has committed the response
+     */
+    public boolean isAppCommitted() {
+        return (this.appCommitted || isCommitted() || isSuspended()
+                || ((getContentLength() > 0)
+                    && (getContentWritten() >= getContentLength())));
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setContentLength(int len) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        response.setContentLength(len);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * TODO SERVLET 3.1
+     */
+    @Override
+    public void setContentLengthLong(long length) {
+        if (isCommitted()) {
+            return;
+        }
+
+        response.setContentLengthLong(length);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setLocale(Locale loc) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        response.setLocale(loc);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void addCookie(Cookie cookie) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        response.addCookie(cookie);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setDateHeader(String name, long date) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        if(Globals.IS_SECURITY_ENABLED) {
+            AccessController.doPrivileged(new DateHeaderPrivilegedAction
+                                             (name, date, false));
+        } else {
+            response.setDateHeader(name, date);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void addDateHeader(String name, long date) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        if(Globals.IS_SECURITY_ENABLED) {
+            AccessController.doPrivileged(new DateHeaderPrivilegedAction
+                                             (name, date, true));
+        } else {
+            response.addDateHeader(name, date);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setHeader(String name, String value) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        response.setHeader(name, value);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void addHeader(String name, String value) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        response.addHeader(name, value);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setStatus(int sc) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        response.setStatus(sc);
+
+    }
+
+
+
+    @Override
+    public void setStatus(int sc, String sm) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        response.setStatus(sc, sm);
+    }
+-----CSCI578-----

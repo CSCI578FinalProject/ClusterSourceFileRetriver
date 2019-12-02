@@ -1,0 +1,37 @@
+5
+-----CSCI578-----
+
+
+
+    //-------------------------------------------------------- Lifecycle methods
+    @Override
+    protected void initInternal() throws LifecycleException {
+
+        try (JarFile warFile = new JarFile(getBase())) {
+            JarEntry jarFileInWar = warFile.getJarEntry(archivePath);
+            InputStream jarFileIs = warFile.getInputStream(jarFileInWar);
+
+            try (JarInputStream jarIs = new JarInputStream(jarFileIs)) {
+                setManifest(jarIs.getManifest());
+            }
+        } catch (IOException ioe) {
+            throw new IllegalArgumentException(ioe);
+        }
+
+        try {
+            setBaseUrl(UriUtil.buildJarSafeUrl(new File(getBase())));
+        } catch (MalformedURLException e) {
+            throw new IllegalArgumentException(e);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public static URL buildJarSafeUrl(File file) throws MalformedURLException {
+        String safe = makeSafeForJarUrl(file.toURI().toString());
+        return new URL(safe);
+    }
+-----CSCI578-----

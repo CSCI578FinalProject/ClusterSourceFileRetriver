@@ -1,0 +1,26 @@
+4
+    
+    public void heartbeat() {
+        try {
+            Set set = fragpieces.keySet(); 
+            Object[] keys = set.toArray();
+            for ( int i=0; i<keys.length; i++ ) {
+                FragKey key = (FragKey)keys[i];
+                if ( key != null && key.expired(getExpire()) ) 
+                    removeFragCollection(key);
+            }
+        }catch ( Exception x ) {
+            if ( log.isErrorEnabled() ) {
+                log.error("Unable to perform heartbeat clean up in the frag interceptor",x);
+            }
+        }
+        super.heartbeat();
+    }
+
+    public long getExpire() {
+        return expire;
+    }
+    
+    public void removeFragCollection(FragKey key) {
+        fragpieces.remove(key);
+    }

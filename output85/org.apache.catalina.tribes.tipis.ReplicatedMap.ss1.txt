@@ -1,0 +1,33 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void mapMemberAdded(Member member) {
+        if ( member.equals(getChannel().getLocalMember(false)) ) return;
+        boolean memberAdded = false;
+        synchronized (mapMembers) {
+            if (!mapMembers.containsKey(member) ) {
+                mapMembers.put(member, Long.valueOf(System.currentTimeMillis()));
+                memberAdded = true;
+            }
+        }
+        if ( memberAdded ) {
+            synchronized (stateMutex) {
+                Member[] backup = getMapMembers();
+                Iterator<Map.Entry<K,MapEntry<K,V>>> i = innerMap.entrySet().iterator();
+                while (i.hasNext()) {
+                    Map.Entry<K,MapEntry<K,V>> e = i.next();
+                    MapEntry<K,V> entry = innerMap.get(e.getKey());
+                    if ( entry == null ) continue;
+                    if (entry.isPrimary() && !inSet(member,entry.getBackupNodes())) {
+                        entry.setBackupNodes(backup);
+                    }
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

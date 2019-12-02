@@ -1,0 +1,49 @@
+7
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Locale getLocale() {
+        return locale;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Parse accept-language header value.
+     *
+     * @param value the header value
+     * @param locales the map that will hold the result
+     */
+    protected void parseLocalesHeader(String value, TreeMap<Double, ArrayList<Locale>> locales) {
+
+        List<AcceptLanguage> acceptLanguages;
+        try {
+            acceptLanguages = AcceptLanguage.parse(new StringReader(value));
+        } catch (IOException e) {
+            // Mal-formed headers are ignore. Do the same in the unlikely event
+            // of an IOException.
+            return;
+        }
+
+        for (AcceptLanguage acceptLanguage : acceptLanguages) {
+            // Add a new Locale to the list of Locales for this quality level
+            Double key = Double.valueOf(-acceptLanguage.getQuality());  // Reverse the order
+            ArrayList<Locale> values = locales.get(key);
+            if (values == null) {
+                values = new ArrayList<>();
+                locales.put(key, values);
+            }
+            values.add(acceptLanguage.getLocale());
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public double getQuality() {
+        return quality;
+    }
+-----CSCI578-----

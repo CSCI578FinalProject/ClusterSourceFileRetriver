@@ -1,0 +1,135 @@
+4
+-----CSCI578-----
+
+
+    public void destroy() {
+        if( controller==oname ) {
+            // Self-registration, undo it
+            Registry.getRegistry(null, null).unregisterComponent(oname);
+            oname = null;
+        }
+        initialized = false;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Stop this component, finalizing our associated class loader.
+     *
+     * @exception LifecycleException if a lifecycle error occurs
+     */
+    public void stop() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (!started)
+            throw new LifecycleException
+                (sm.getString("webappLoader.notStarted"));
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("webappLoader.stopping"));
+        lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+        started = false;
+
+        // Remove context attributes as appropriate
+        if (container instanceof Context) {
+            ServletContext servletContext =
+                ((Context) container).getServletContext();
+            servletContext.removeAttribute(Globals.CLASS_PATH_ATTR);
+        }
+
+        // Throw away our current class loader
+        if (classLoader instanceof Lifecycle)
+            ((Lifecycle) classLoader).stop();
+        DirContextURLStreamHandler.unbind((ClassLoader) classLoader);
+
+        try {
+            StandardContext ctx=(StandardContext)container;
+            Engine eng=(Engine)ctx.getParent().getParent();
+            String path = ctx.getPath();
+            if (path.equals("")) {
+                path = "/";
+            }
+            ObjectName cloname = new ObjectName
+                (ctx.getEngineName() + ":type=WebappClassLoader,path="
+                 + path + ",host=" + ctx.getParent().getName());
+            Registry.getRegistry(null, null).unregisterComponent(cloname);
+        } catch (Throwable t) {
+            log.error( "LifecycleException ", t );
+        }
+
+        classLoader = null;
+
+        destroy();
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Unbinds a directory context to a class loader.
+     */
+    public static void unbind() {
+        ClassLoader currentCL = 
+            Thread.currentThread().getContextClassLoader();
+        if (currentCL != null)
+            clBindings.remove(currentCL);
+    }
+
+    
+    
+    /**
+     * Unbinds a directory context to a class loader.
+     */
+    public static void unbind(ClassLoader cl) {
+        clBindings.remove(cl);
+    }
+-----CSCI578-----
+    
+
+    /** Unregister a component. We'll first check if it is registered,
+     * and mask all errors. This is mostly a helper.
+     * 
+     * @param oname
+     * 
+     * @since 1.1
+     */ 
+    public void unregisterComponent( String oname ) {
+        try {
+            unregisterComponent(new ObjectName(oname));
+        } catch (MalformedObjectNameException e) {
+            log.info("Error creating object name " + e );
+        }
+    }
+
+
+    /** Unregister a component. This is just a helper that
+     * avoids exceptions by checking if the mbean is already registered
+     *
+     * @param oname
+     */
+    public void unregisterComponent( ObjectName oname ) {
+        try {
+            if( getMBeanServer().isRegistered(oname)) {
+                getMBeanServer().unregisterMBean(oname);
+            }
+        } catch( Throwable t ) {
+            log.error( "Error unregistering mbean ", t);
+        }
+    }
+
+
+    
+
+    // should be removed
+    public void unregisterComponent( String domain, String name ) {
+        try {
+            ObjectName oname=new ObjectName( domain + ":" + name );
+
+            // XXX remove from our tables.
+            getMBeanServer().unregisterMBean( oname );
+        } catch( Throwable t ) {
+            log.error( "Error unregistering mbean ", t );
+        }
+    }

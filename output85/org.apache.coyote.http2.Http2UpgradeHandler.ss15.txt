@@ -1,0 +1,145 @@
+11
+-----CSCI578-----
+
+
+
+    void push(Request request, Stream associatedStream) throws IOException {
+        Stream pushStream  = createLocalStream(request);
+
+        // TODO: Is 1k the optimal value?
+        writePushHeaders(associatedStream, pushStream.getIdentifier().intValue(), request, 1024);
+
+        pushStream.sentPushPromise();
+
+        // Process this stream on a container thread
+        StreamProcessor streamProcessor = new StreamProcessor(pushStream, adapter, socketWrapper);
+        streamProcessor.setSslSupport(sslSupport);
+        socketWrapper.getEndpoint().getExecutor().execute(streamProcessor);
+    }
+-----CSCI578-----
+
+
+
+    private Stream createLocalStream(Request request) {
+        int streamId = nextLocalStreamId.getAndAdd(2);
+
+        Integer key = Integer.valueOf(streamId);
+
+        Stream result = new Stream(key, this, request);
+        streams.put(key, result);
+        maxRemoteStreamId = streamId;
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    void writePushHeaders(Stream stream, int pushedStreamId, Request coyoteRequest, int payloadSize)
+            throws IOException {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("upgradeHandler.writePushHeaders", connectionId,
+                    stream.getIdentifier(), Integer.toString(pushedStreamId)));
+        }
+        // This ensures the Stream processing thread has control of the socket.
+        synchronized (socketWrapper) {
+            byte[] header = new byte[9];
+            ByteBuffer target = ByteBuffer.allocate(payloadSize);
+            boolean first = true;
+            State state = null;
+            byte[] pushedStreamIdBytes = new byte[4];
+            ByteUtil.set31Bits(pushedStreamIdBytes, 0, pushedStreamId);
+            target.put(pushedStreamIdBytes);
+            while (state != State.COMPLETE) {
+                state = getHpackEncoder().encode(coyoteRequest.getMimeHeaders(), target);
+                target.flip();
+                ByteUtil.setThreeBytes(header, 0, target.limit());
+                if (first) {
+                    first = false;
+                    header[3] = FrameType.PUSH_PROMISE.getIdByte();
+                } else {
+                    header[3] = FrameType.CONTINUATION.getIdByte();
+                }
+                if (state == State.COMPLETE) {
+                    header[4] += FLAG_END_OF_HEADERS;
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug(target.limit() + " bytes");
+                }
+                ByteUtil.set31Bits(header, 5, stream.getIdentifier().intValue());
+                socketWrapper.write(true, header, 0, header.length);
+                socketWrapper.write(true, target.array(), target.arrayOffset(), target.limit());
+                socketWrapper.flush(true);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    public static void setThreeBytes(byte[] output, int firstByte, int value) {
+        output[firstByte] = (byte) ((value & 0xFF0000) >> 16);
+        output[firstByte + 1] = (byte) ((value & 0xFF00) >> 8);
+        output[firstByte + 2] = (byte) (value & 0xFF);
+    }
+-----CSCI578-----
+
+
+
+    public byte getIdByte() {
+        return (byte) id;
+    }
+-----CSCI578-----
+
+
+
+    public static void set31Bits(byte[] output, int firstByte, int value) {
+        output[firstByte] = (byte) ((value & 0x7F000000) >> 24);
+        output[firstByte + 1] = (byte) ((value & 0xFF0000) >> 16);
+        output[firstByte + 2] = (byte) ((value & 0xFF00) >> 8);
+        output[firstByte + 3] = (byte) (value & 0xFF);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /*
+     * Needs to know if this was application initiated since that affects the
+     * error handling.
+     */
+    void writeWindowUpdate(Stream stream, int increment, boolean applicationInitiated)
+            throws IOException {
+        synchronized (socketWrapper) {
+            // Build window update frame for stream 0
+            byte[] frame = new byte[13];
+            ByteUtil.setThreeBytes(frame, 0,  4);
+            frame[3] = FrameType.WINDOW_UPDATE.getIdByte();
+            ByteUtil.set31Bits(frame, 9, increment);
+            socketWrapper.write(true, frame, 0, frame.length);
+            // Change stream Id and re-use
+            ByteUtil.set31Bits(frame, 5, stream.getIdentifier().intValue());
+            try {
+                socketWrapper.write(true, frame, 0, frame.length);
+                socketWrapper.flush(true);
+            } catch (IOException ioe) {
+                if (applicationInitiated) {
+                    handleAppInitiatedIOException(ioe);
+                } else {
+                    throw ioe;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void swallowedPadding(int streamId, int paddingLength) throws
+            ConnectionException, IOException {
+        Stream stream = getStream(streamId, true);
+        // +1 is for the payload byte used to define the padding length
+        writeWindowUpdate(stream, paddingLength + 1, false);
+    }
+-----CSCI578-----

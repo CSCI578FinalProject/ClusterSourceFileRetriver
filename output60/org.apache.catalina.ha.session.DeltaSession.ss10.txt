@@ -1,0 +1,122 @@
+6
+-----CSCI578-----
+
+
+
+    /**
+     * Set the session identifier for this session.
+     *
+     * @param id The new session identifier
+     */
+    public void setId(String id) {
+        setId(id, true);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the session identifier for this session.
+     *
+     * @param id
+     *            The new session identifier
+     */
+    public void setId(String id) {
+        super.setId(id, true);
+        resetDeltaRequest();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove this Session from the active Sessions for this Manager.
+     *
+     * @param session Session to be removed
+     */
+    public void remove(Session session);
+-----CSCI578-----
+
+
+
+    /**
+     * Inform the listeners about the new session.
+     *
+     */
+    public void tellNew() {
+
+        // Notify interested session event listeners
+        fireSessionEvent(Session.SESSION_CREATED_EVENT, null);
+
+        // Notify interested application event listeners
+        Context context = (Context) manager.getContainer();
+        Object listeners[] = context.getApplicationLifecycleListeners();
+        if (listeners != null) {
+            HttpSessionEvent event =
+                new HttpSessionEvent(getSession());
+            for (int i = 0; i < listeners.length; i++) {
+                if (!(listeners[i] instanceof HttpSessionListener))
+                    continue;
+                HttpSessionListener listener =
+                    (HttpSessionListener) listeners[i];
+                try {
+                    fireContainerEvent(context,
+                                       "beforeSessionCreated",
+                                       listener);
+                    listener.sessionCreated(event);
+                    fireContainerEvent(context,
+                                       "afterSessionCreated",
+                                       listener);
+                } catch (Throwable t) {
+                    try {
+                        fireContainerEvent(context,
+                                           "afterSessionCreated",
+                                           listener);
+                    } catch (Exception e) {
+                        ;
+                    }
+                    manager.getContainer().getLogger().error
+                        (sm.getString("standardSession.sessionEvent"), t);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of initialized application lifecycle listener objects,
+     * in the order they were specified in the web application deployment
+     * descriptor, for this application.
+     *
+     * @exception IllegalStateException if this method is called before
+     *  this application has started, or after it has been stopped
+     */
+    public Object[] getApplicationLifecycleListeners();
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Fire container events if the Context implementation is the
+     * <code>org.apache.catalina.core.StandardContext</code>.
+     *
+     * @param context Context for which to fire events
+     * @param type Event type
+     * @param data Event data
+     *
+     * @exception Exception occurred during event firing
+     */
+    protected void fireContainerEvent(Context context,
+                                    String type, Object data)
+        throws Exception {
+
+        if (context instanceof StandardContext) {
+            ((StandardContext) context).fireContainerEvent(type, data);
+        }
+    }

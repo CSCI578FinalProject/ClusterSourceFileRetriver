@@ -1,0 +1,41 @@
+3
+
+    public long getContentLengthLong() {
+        if( contentLength > -1 ) return contentLength;
+
+        MessageBytes clB = headers.getUniqueValue("content-length");
+        contentLength = (clB == null || clB.isNull()) ? -1 : clB.getLong();
+
+        return contentLength;
+    }
+
+    /**
+     * Finds and returns a unique header field with the given name. If no such
+     * field exists, null is returned. If the specified header field is not
+     * unique then an {@link IllegalArgumentException} is thrown. 
+     */
+    public MessageBytes getUniqueValue(String name) {
+        MessageBytes result = null;
+        for (int i = 0; i < count; i++) {
+            if (headers[i].getName().equalsIgnoreCase(name)) {
+                if (result == null) {
+                    result = headers[i].getValue();
+                } else {
+                    throw new IllegalArgumentException();
+                }
+            }
+        }
+        return result;
+    }
+
+
+    // ---------------------------------------------------- InputFilter Methods
+
+
+    /**
+     * Read the content length from the request.
+     */
+    public void setRequest(Request request) {
+        contentLength = request.getContentLengthLong();
+        remaining = contentLength;
+    }

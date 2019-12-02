@@ -1,0 +1,53 @@
+2
+-----CSCI578-----
+
+
+    /** Convert a buffer of bytes into a chars
+     * @deprecated
+     */
+    public  void convert( ByteChunk bb, CharChunk cb )
+        throws IOException
+    {
+        // Set the ByteChunk as input to the Intermediate reader
+        convert(bb, cb, cb.getBuffer().length - cb.getEnd());
+    }
+
+
+    /**
+     * Convert a buffer of bytes into a chars.
+     *
+     * @param bb    Input byte buffer
+     * @param cb    Output char buffer
+     * @param limit Number of bytes to convert
+     * @throws IOException
+     */    
+    public void convert( ByteChunk bb, CharChunk cb, int limit) 
+        throws IOException
+    {
+        iis.setByteChunk( bb );
+        try {
+            // read from the reader
+            int bbLengthBeforeRead  = 0;
+            while( limit > 0 ) {
+                int size = limit < BUFFER_SIZE ? limit : BUFFER_SIZE;
+                bbLengthBeforeRead = bb.getLength();
+                int cnt=conv.read( result, 0, size );
+                if( cnt <= 0 ) {
+                    // End of stream ! - we may be in a bad state
+                    if( debug>0)
+                        log( "EOF" );
+                    return;
+                }
+                if( debug > 1 )
+                    log("Converted: " + new String( result, 0, cnt ));
+                cb.append( result, 0, cnt );
+                limit = limit - (bbLengthBeforeRead - bb.getLength());
+            }
+        } catch( IOException ex) {
+            if( debug>0)
+                log( "Reseting the converter " + ex.toString() );
+            reset();
+            throw ex;
+        }
+    }
+-----CSCI578-----

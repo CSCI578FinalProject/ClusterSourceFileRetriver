@@ -1,0 +1,87 @@
+5
+
+    /**
+     * returns true if the network buffer has
+     * been flushed out and is empty
+     * @return boolean
+     */
+    public boolean flush(boolean block, Selector s, long timeout,MutableInteger lastWrite) throws IOException {
+        if (lastWrite!=null) lastWrite.set(1);
+        return true; //no network buffer in the regular channel
+    }
+
+    /**
+     * Return true if the buffer wrote data.
+     * @throws IOException
+     */
+    public boolean flushOutbound() throws IOException {
+        return false;
+    }
+    
+    protected static Log log = LogFactory.getLog(NioSelectorPool.class);
+
+    protected Selector getSharedSelector() throws IOException {
+        if (SHARED && SHARED_SELECTOR == null) {
+            synchronized ( NioSelectorPool.class ) {
+                if ( SHARED_SELECTOR == null )  {
+                    SHARED_SELECTOR = Selector.open();
+                    log.info("Using a shared selector for servlet write/read");
+                }
+            }
+        }
+        return  SHARED_SELECTOR;
+    }
+
+    public Selector get() throws IOException{
+        if ( SHARED ) {
+            return getSharedSelector();
+        }
+        if ( (!enabled) || active.incrementAndGet() >= maxSelectors ) {
+            if ( enabled ) active.decrementAndGet();
+            return null;
+        }
+        Selector s = null;
+        try {
+            s = selectors.size()>0?selectors.poll():null;
+            if (s == null) s = Selector.open();
+            else spare.decrementAndGet();
+
+        }catch (NoSuchElementException x ) {
+            try {s = Selector.open();}catch (IOException iox){}
+        } finally {
+            if ( s == null ) active.decrementAndGet();//we were unable to find a selector
+        }
+        return s;
+    }
+
+    public int getMaxSelectors() {
+        return maxSelectors;
+    }
+
+    public int getMaxSpareSelectors() {
+        return maxSpareSelectors;
+    }
+
+    public long getSharedSelectorTimeout() {
+        return sharedSelectorTimeout;
+    }
+
+    public ConcurrentLinkedQueue getSelectors() {
+        return selectors;
+    }
+
+    public AtomicInteger getSpare() {
+        return spare;
+    }
+
+
+
+    public void put(Selector s) throws IOException {
+        if ( SHARED ) return;
+        if ( enabled ) active.decrementAndGet();
+        if ( enabled && (maxSpareSelectors==-1 || spare.get() < Math.min(maxSpareSelectors,maxSelectors)) ) {
+            spare.incrementAndGet();
+            selectors.offer(s);
+        }
+        else s.close();
+    }

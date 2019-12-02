@@ -1,0 +1,57 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Send create session event to all backup node
+     * @param sessionId The session id of the session
+     * @param session The session object
+     */
+    protected void sendCreateSession(String sessionId, DeltaSession session) {
+        if(cluster.getMembers().length > 0 ) {
+            SessionMessage msg =
+                new SessionMessageImpl(getName(),
+                                       SessionMessage.EVT_SESSION_CREATED,
+                                       null,
+                                       sessionId,
+                                       sessionId + "-" + System.currentTimeMillis());
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("deltaManager.sendMessage.newSession", name, sessionId));
+            }
+            msg.setTimestamp(session.getCreationTime());
+            counterSend_EVT_SESSION_CREATED++;
+            send(msg);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    @Override
+    public Session createSession(String sessionId) {
+        return createSession(sessionId, true);
+    }
+
+
+    /**
+     * Create new session with check maxActiveSessions and send session creation
+     * to other cluster nodes.
+     *
+     * @param sessionId The session id that should be used for the session
+     * @param distribute <code>true</code> to replicate the new session
+     * @return The session
+     */
+    public Session createSession(String sessionId, boolean distribute) {
+        DeltaSession session = (DeltaSession) super.createSession(sessionId) ;
+        if (distribute) {
+            sendCreateSession(session.getId(), session);
+        }
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("deltaManager.createSession.newSession",
+                    session.getId(), Integer.valueOf(sessions.size())));
+        return (session);
+    }
+-----CSCI578-----

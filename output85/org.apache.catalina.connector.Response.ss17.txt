@@ -1,0 +1,107 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Convert (if necessary) and return the absolute URL that represents the
+     * resource referenced by this possibly relative URL.  If this URL is
+     * already absolute, return it unchanged.
+     *
+     * @param location URL to be (possibly) converted and then returned
+     * @return the encoded URL
+     *
+     * @exception IllegalArgumentException if a MalformedURLException is
+     *  thrown when converting the relative URL to an absolute one
+     */
+    protected String toAbsolute(String location) {
+
+        if (location == null) {
+            return (location);
+        }
+
+        boolean leadingSlash = location.startsWith("/");
+
+        if (location.startsWith("//")) {
+            // Scheme relative
+            redirectURLCC.recycle();
+            // Add the scheme
+            String scheme = request.getScheme();
+            try {
+                redirectURLCC.append(scheme, 0, scheme.length());
+                redirectURLCC.append(':');
+                redirectURLCC.append(location, 0, location.length());
+                return redirectURLCC.toString();
+            } catch (IOException e) {
+                IllegalArgumentException iae =
+                    new IllegalArgumentException(location);
+                iae.initCause(e);
+                throw iae;
+            }
+
+        } else if (leadingSlash || !UriUtil.hasScheme(location)) {
+
+            redirectURLCC.recycle();
+
+            String scheme = request.getScheme();
+            String name = request.getServerName();
+            int port = request.getServerPort();
+
+            try {
+                redirectURLCC.append(scheme, 0, scheme.length());
+                redirectURLCC.append("://", 0, 3);
+                redirectURLCC.append(name, 0, name.length());
+                if ((scheme.equals("http") && port != 80)
+                    || (scheme.equals("https") && port != 443)) {
+                    redirectURLCC.append(':');
+                    String portS = port + "";
+                    redirectURLCC.append(portS, 0, portS.length());
+                }
+                if (!leadingSlash) {
+                    String relativePath = request.getDecodedRequestURI();
+                    int pos = relativePath.lastIndexOf('/');
+                    CharChunk encodedURI = null;
+                    final String frelativePath = relativePath;
+                    final int fend = pos;
+                    if (SecurityUtil.isPackageProtectionEnabled() ){
+                        try{
+                            encodedURI = AccessController.doPrivileged(
+                                new PrivilegedExceptionAction<CharChunk>(){
+                                    @Override
+                                    public CharChunk run() throws IOException{
+                                        return urlEncoder.encodeURL(frelativePath, 0, fend);
+                                    }
+                           });
+                        } catch (PrivilegedActionException pae){
+                            IllegalArgumentException iae =
+                                new IllegalArgumentException(location);
+                            iae.initCause(pae.getException());
+                            throw iae;
+                        }
+                    } else {
+                        encodedURI = urlEncoder.encodeURL(relativePath, 0, pos);
+                    }
+                    redirectURLCC.append(encodedURI);
+                    encodedURI.recycle();
+                    redirectURLCC.append('/');
+                }
+                redirectURLCC.append(location, 0, location.length());
+
+                normalize(redirectURLCC);
+            } catch (IOException e) {
+                IllegalArgumentException iae =
+                    new IllegalArgumentException(location);
+                iae.initCause(e);
+                throw iae;
+            }
+
+            return redirectURLCC.toString();
+
+        } else {
+
+            return (location);
+
+        }
+
+    }
+-----CSCI578-----

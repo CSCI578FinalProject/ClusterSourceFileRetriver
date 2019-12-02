@@ -1,0 +1,65 @@
+5
+-----CSCI578-----
+
+
+    public ELContext getELContext() {
+        if (this.elContext == null) {
+            this.elContext = this.applicationContext.createELContext(this);
+        }
+        return this.elContext;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+	public ELContextImpl createELContext(JspContext context) {
+		if (context == null) {
+			throw new IllegalArgumentException("JspContext was null");
+		}
+
+		// create ELContext for JspContext
+		final ELResolver r = this.createELResolver();
+		ELContextImpl ctx;
+		if (Constants.IS_SECURITY_ENABLED) {
+		    ctx = AccessController.doPrivileged(
+		            new PrivilegedAction<ELContextImpl>() {
+		                public ELContextImpl run() {
+		                    return new ELContextImpl(r);
+		                }
+		            });
+		} else {
+		    ctx = new ELContextImpl(r);
+		}
+
+		ctx.putContext(JspContext.class, context);
+
+		// alert all ELContextListeners
+		ELContextEvent event = new ELContextEvent(ctx);
+		for (int i = 0; i < this.contextListeners.size(); i++) {
+			this.contextListeners.get(i).contextCreated(event);
+		}
+
+		return ctx;
+	}
+-----CSCI578-----
+
+
+	private ELResolver createELResolver() {
+		this.instantiated = true;
+		if (this.resolver == null) {
+			CompositeELResolver r = new CompositeELResolver();
+			r.add(new ImplicitObjectELResolver());
+			for (Iterator itr = this.resolvers.iterator(); itr.hasNext();) {
+				r.add((ELResolver) itr.next());
+			}
+			r.add(new MapELResolver());
+			r.add(new ResourceBundleELResolver());
+			r.add(new ListELResolver());
+			r.add(new ArrayELResolver());	
+			r.add(new BeanELResolver());
+			r.add(new ScopedAttributeELResolver());
+			this.resolver = r;
+		}
+		return this.resolver;
+	}
+-----CSCI578-----

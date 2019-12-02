@@ -1,0 +1,425 @@
+13
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Prints out an error report.
+     *
+     * @param request The request being processed
+     * @param response The response being generated
+     * @param throwable The exception that occurred (which possibly wraps
+     *  a root cause exception
+     */
+    protected void report(Request request, Response response,
+                          Throwable throwable) {
+
+        // Do nothing on non-HTTP responses
+        int statusCode = response.getStatus();
+
+        // Do nothing on a 1xx, 2xx and 3xx status
+        // Do nothing if anything has been written already
+        if (statusCode < 400 || response.getContentCount() > 0 ||
+                !response.isError()) {
+            return;
+        }
+
+        String message = RequestUtil.filter(response.getMessage());
+        if (message == null) {
+            if (throwable != null) {
+                String exceptionMessage = throwable.getMessage();
+                if (exceptionMessage != null && exceptionMessage.length() > 0) {
+                    message = RequestUtil.filter(
+                            (new Scanner(exceptionMessage)).nextLine());
+                }
+            }
+            if (message == null) {
+                message = "";
+            }
+        }
+        
+        // Do nothing if there is no report for the specified status code
+        String report = null;
+        try {
+            report = sm.getString("http." + statusCode);
+        } catch (Throwable t) {
+            ;
+        }
+        if (report == null)
+            return;
+
+        StringBuffer sb = new StringBuffer();
+
+        sb.append("<html><head><title>");
+        sb.append(ServerInfo.getServerInfo()).append(" - ");
+        sb.append(sm.getString("errorReportValve.errorReport"));
+        sb.append("</title>");
+        sb.append("<style><!--");
+        sb.append(org.apache.catalina.util.TomcatCSS.TOMCAT_CSS);
+        sb.append("--></style> ");
+        sb.append("</head><body>");
+        sb.append("<h1>");
+        sb.append(sm.getString("errorReportValve.statusHeader",
+                               "" + statusCode, message)).append("</h1>");
+        sb.append("<HR size=\"1\" noshade=\"noshade\">");
+        sb.append("<p><b>type</b> ");
+        if (throwable != null) {
+            sb.append(sm.getString("errorReportValve.exceptionReport"));
+        } else {
+            sb.append(sm.getString("errorReportValve.statusReport"));
+        }
+        sb.append("</p>");
+        sb.append("<p><b>");
+        sb.append(sm.getString("errorReportValve.message"));
+        sb.append("</b> <u>");
+        sb.append(message).append("</u></p>");
+        sb.append("<p><b>");
+        sb.append(sm.getString("errorReportValve.description"));
+        sb.append("</b> <u>");
+        sb.append(report);
+        sb.append("</u></p>");
+
+        if (throwable != null) {
+
+            String stackTrace = getPartialServletStackTrace(throwable);
+            sb.append("<p><b>");
+            sb.append(sm.getString("errorReportValve.exception"));
+            sb.append("</b> <pre>");
+            sb.append(RequestUtil.filter(stackTrace));
+            sb.append("</pre></p>");
+
+            int loops = 0;
+            Throwable rootCause = throwable.getCause();
+            while (rootCause != null && (loops < 10)) {
+                stackTrace = getPartialServletStackTrace(rootCause);
+                sb.append("<p><b>");
+                sb.append(sm.getString("errorReportValve.rootCause"));
+                sb.append("</b> <pre>");
+                sb.append(RequestUtil.filter(stackTrace));
+                sb.append("</pre></p>");
+                // In case root cause is somehow heavily nested
+                rootCause = rootCause.getCause();
+                loops++;
+            }
+
+            sb.append("<p><b>");
+            sb.append(sm.getString("errorReportValve.note"));
+            sb.append("</b> <u>");
+            sb.append(sm.getString("errorReportValve.rootCauseInLogs",
+                                   ServerInfo.getServerInfo()));
+            sb.append("</u></p>");
+
+        }
+
+        sb.append("<HR size=\"1\" noshade=\"noshade\">");
+        sb.append("<h3>").append(ServerInfo.getServerInfo()).append("</h3>");
+        sb.append("</body></html>");
+
+        try {
+            try {
+                response.setContentType("text/html");
+                response.setCharacterEncoding("utf-8");
+            } catch (Throwable t) {
+                if (container.getLogger().isDebugEnabled())
+                    container.getLogger().debug("status.setContentType", t);
+            }
+            Writer writer = response.getReporter();
+            if (writer != null) {
+                // If writer is null, it's an indication that the response has
+                // been hard committed already, which should never happen
+                writer.write(sb.toString());
+            }
+        } catch (IOException e) {
+            ;
+        } catch (IllegalStateException e) {
+            ;
+        }
+        
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Invoke the next Valve in the sequence. When the invoke returns, check
+     * the response state, and output an error report is necessary.
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be created
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        // Perform the request
+        getNext().invoke(request, response);
+
+        Throwable throwable =
+            (Throwable) request.getAttribute(Globals.EXCEPTION_ATTR);
+
+        if (response.isCommitted()) {
+            return;
+        }
+
+        if (throwable != null) {
+
+            // The response is an error
+            response.setError();
+
+            // Reset the response (if possible)
+            try {
+                response.reset();
+            } catch (IllegalStateException e) {
+                ;
+            }
+
+            response.sendError
+                (HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+
+        }
+
+        response.setSuspended(false);
+
+        try {
+            report(request, response, throwable);
+        } catch (Throwable tt) {
+            ;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Print out a partial servlet stack trace (truncating at the last 
+     * occurrence of javax.servlet.).
+     */
+    protected String getPartialServletStackTrace(Throwable t) {
+        StringBuffer trace = new StringBuffer();
+        trace.append(t.toString()).append('\n');
+        StackTraceElement[] elements = t.getStackTrace();
+        int pos = elements.length;
+        for (int i = 0; i < elements.length; i++) {
+            if ((elements[i].getClassName().startsWith
+                 ("org.apache.catalina.core.ApplicationFilterChain"))
+                && (elements[i].getMethodName().equals("internalDoFilter"))) {
+                pos = i;
+            }
+        }
+        for (int i = 0; i < pos; i++) {
+            if (!(elements[i].getClassName().startsWith
+                  ("org.apache.catalina.core."))) {
+                trace.append('\t').append(elements[i].toString()).append('\n');
+            }
+        }
+        return trace.toString();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return a PrintWriter that can be used to render error messages,
+     * regardless of whether a stream or writer has already been acquired.
+     *
+     * @return Writer which can be used for error reports. If the response is
+     * not an error report returned using sendError or triggered by an
+     * unexpected exception thrown during the servlet processing
+     * (and only in that case), null will be returned if the response stream
+     * has already been used.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public PrintWriter getReporter() throws IOException {
+        if (outputBuffer.isNew()) {
+            outputBuffer.checkConverter();
+            if (writer == null) {
+                writer = new CoyoteWriter(outputBuffer);
+            }
+            return writer;
+        } else {
+            return null;
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Error flag accessor.
+     */
+    public boolean isError() {
+        return error;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return the server identification for this version of Tomcat.
+     */
+    public static String getServerInfo() {
+
+        return (serverInfo);
+
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * Overrides the name of the character encoding used in the body
+     * of the request. This method must be called prior to reading
+     * request parameters or reading input using getReader().
+     *
+     * @param charset String containing the name of the chararacter encoding.
+     */
+    public void setCharacterEncoding(String charset) {
+
+        if (isCommitted())
+            return;
+        
+        // Ignore any call from an included servlet
+        if (included)
+            return;     
+        
+        // Ignore any call made after the getWriter has been invoked
+        // The default should be used
+        if (usingWriter)
+            return;
+
+        coyoteResponse.setCharacterEncoding(charset);
+        isCharacterEncodingSet = true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the content type for this Response.
+     *
+     * @param type The new content type
+     */
+    public void setContentType(String type) {
+
+        if (isCommitted())
+            return;
+
+        // Ignore any call from an included servlet
+        if (included)
+            return;
+
+        // Ignore charset if getWriter() has already been called
+        if (usingWriter) {
+            if (type != null) {
+                int index = type.indexOf(";");
+                if (index != -1) {
+                    type = type.substring(0, index);
+                }
+            }
+        }
+
+        coyoteResponse.setContentType(type);
+
+        // Check to see if content type contains charset
+        if (type != null) {
+            int index = type.indexOf(";");
+            if (index != -1) {
+                int len = type.length();
+                index++;
+                while (index < len && Character.isSpace(type.charAt(index))) {
+                    index++;
+                }
+                if (index+7 < len
+                        && type.charAt(index) == 'c'
+                        && type.charAt(index+1) == 'h'
+                        && type.charAt(index+2) == 'a'
+                        && type.charAt(index+3) == 'r'
+                        && type.charAt(index+4) == 's'
+                        && type.charAt(index+5) == 'e'
+                        && type.charAt(index+6) == 't'
+                        && type.charAt(index+7) == '=') {
+                    isCharacterEncodingSet = true;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the content type.
+     *
+     * This method must preserve any response charset that may already have
+     * been set via a call to response.setContentType(), response.setLocale(),
+     * or response.setCharacterEncoding().
+     *
+     * @param type the content type
+     */
+    public void setContentType(String type) {
+
+        if (type == null) {
+            this.contentType = null;
+            return;
+        }
+
+        MediaType m = null;
+        try {
+             m = HttpParser.parseMediaType(new StringReader(type));
+        } catch (IOException e) {
+            // Ignore - null test below handles this
+        }
+        if (m == null) {
+            // Invalid - Assume no charset and just pass through whatever
+            // the user provided.
+            this.contentType = type;
+            return;
+        }
+
+        this.contentType = m.toStringNoCharset();
+
+        String charsetValue = m.getCharset();
+
+        if (charsetValue != null) {
+            charsetValue = charsetValue.trim();
+            if (charsetValue.length() > 0) {
+                charsetSet = true;
+                this.characterEncoding = charsetValue;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the error flag.
+     */
+    public void setError() {
+        error = true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Report the current Tomcat Server Release number
+     * @return Tomcat release identifier
+     */
+    public String getServerInfo() {
+
+        return ServerInfo.getServerInfo();
+    }

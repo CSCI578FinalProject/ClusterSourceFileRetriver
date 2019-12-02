@@ -1,0 +1,32 @@
+2
+-----CSCI578-----
+
+    protected void checkExpired() {
+        synchronized (expiredMutex) {
+            Member[] expired = membership.expire(timeToExpiration);
+            for (int i = 0; i < expired.length; i++) {
+                final Member member = expired[i];
+                if (log.isDebugEnabled())
+                    log.debug("Mcast expire  member " + expired[i]);
+                try {
+                    Runnable t = new Runnable() {
+                        @Override
+                        public void run() {
+                            String name = Thread.currentThread().getName();
+                            try {
+                                Thread.currentThread().setName("Membership-MemberExpired.");
+                                service.memberDisappeared(member);
+                            }finally {
+                                Thread.currentThread().setName(name);
+                            }
+
+                        }
+                    };
+                    executor.execute(t);
+                } catch (Exception x) {
+                    log.error(sm.getString("mcastServiceImpl.memberDisappeared.failed"), x);
+                }
+            }
+        }
+    }
+-----CSCI578-----

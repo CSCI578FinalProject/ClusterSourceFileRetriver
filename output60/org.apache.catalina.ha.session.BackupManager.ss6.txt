@@ -1,0 +1,39 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called after <code>configure()</code>,
+     * and before any of the public methods of the component are utilized.<BR>
+     * Starts the cluster communication channel, this will connect with the other nodes
+     * in the cluster, and request the current session state to be transferred to this node.
+     * @exception IllegalStateException if this component has already been
+     *  started
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+        if ( this.started ) return;
+        
+        try {
+            cluster.registerManager(this);
+            CatalinaCluster catclust = (CatalinaCluster)cluster;
+            LazyReplicatedMap map = new LazyReplicatedMap(this,
+                                                          catclust.getChannel(),
+                                                          rpcTimeout,
+                                                          getMapName(),
+                                                          getClassLoaders());
+            map.setChannelSendOptions(mapSendOptions);
+            this.sessions = map;
+            super.start();
+            this.started = true;
+        }  catch ( Exception x ) {
+            log.error("Unable to start BackupManager",x);
+            throw new LifecycleException("Failed to start BackupManager",x);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    public Channel getChannel();

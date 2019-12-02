@@ -1,0 +1,147 @@
+7
+-----CSCI578-----
+
+
+    public void init() {
+        dispatch=(HandlerDispatch)wEnv.getHandler( "dispatch" );
+        if( dispatch != null ) {
+            // register incoming message handlers
+            dispatch.registerMessageType( AjpConstants.JK_AJP13_FORWARD_REQUEST,
+                                          "JK_AJP13_FORWARD_REQUEST",
+                                          this, null); // 2
+            
+            dispatch.registerMessageType( AjpConstants.JK_AJP13_SHUTDOWN,
+                                          "JK_AJP13_SHUTDOWN",
+                                          this, null); // 7
+            
+            dispatch.registerMessageType( AjpConstants.JK_AJP13_CPING_REQUEST,
+                                          "JK_AJP13_CPING_REQUEST",
+                                           this, null); // 10
+            dispatch.registerMessageType( HANDLE_THREAD_END,
+                                         "HANDLE_THREAD_END",
+                                         this, null);
+            // register outgoing messages handler
+            dispatch.registerMessageType( AjpConstants.JK_AJP13_SEND_BODY_CHUNK, // 3
+                                          "JK_AJP13_SEND_BODY_CHUNK",
+                                          this,null );
+        }
+
+        tmpBufNote=wEnv.getNoteId( WorkerEnv.ENDPOINT_NOTE, "tmpBuf" );
+        secretNote=wEnv.getNoteId( WorkerEnv.ENDPOINT_NOTE, "secret" );
+        
+        if( next==null )
+            next=wEnv.getHandler( "container" );
+        if( log.isDebugEnabled() )
+            log.debug( "Container handler " + next + " " + next.getName() +
+                       " " + next.getClass().getName());
+
+        // should happen on start()
+        generateAjp13Id();
+    }
+-----CSCI578-----
+
+
+    // -------------------- Ajp13.id --------------------
+
+    private void generateAjp13Id() {
+        int portInt=8009; // tcpCon.getPort();
+        InetAddress address=null; // tcpCon.getAddress();
+
+        if( requiredSecret == null || !shutdownEnabled )
+            return;
+        
+        File f1=new File( wEnv.getJkHome() );
+        File f2=new File( f1, "conf" );
+        
+        if( ! f2.exists() ) {
+            log.error( "No conf dir for ajp13.id " + f2 );
+            return;
+        }
+        
+        File sf=new File( f2, "ajp13.id");
+        
+        if( log.isDebugEnabled())
+            log.debug( "Using stop file: "+sf);
+
+        try {
+            Properties props=new Properties();
+
+            props.put( "port", Integer.toString( portInt ));
+            if( address!=null ) {
+                props.put( "address", address.getHostAddress() );
+            }
+            if( requiredSecret !=null ) {
+                props.put( "secret", requiredSecret );
+            }
+
+            FileOutputStream stopF=new FileOutputStream( sf );
+            props.store( stopF, "Automatically generated, don't edit" );
+        } catch( IOException ex ) {
+            if(log.isDebugEnabled())
+                log.debug( "Can't create stop file: "+sf,ex );
+        }
+    }
+-----CSCI578-----
+
+
+    public int registerMessageType( int id, String name, JkHandler h,
+                                    String sig[] )
+    {
+        if( log.isDebugEnabled() )
+            log.debug( "Register message " + id + " " + h.getName() +
+                 " " + h.getClass().getName());
+	if( id < 0 ) {
+	    // try to find it by name
+	    for( int i=0; i< handlerNames.length; i++ ) {
+                if( handlerNames[i]==null ) continue;
+                if( name.equals( handlerNames[i] ) )
+                    return i;
+            }
+	    handlers[currentId]=h;
+            handlerNames[currentId]=name;
+	    currentId++;
+	    return currentId;
+	}
+	handlers[id]=h;
+        handlerNames[currentId]=name;
+	return id;
+    }
+-----CSCI578-----
+
+
+    public int getNoteId( int type, String name ) {
+        for( int i=0; i<noteId[type]; i++ ) {
+            if( name.equals( noteName[type][i] ))
+                return i;
+        }
+        int id=noteId[type]++;
+        noteName[type][id]=name;
+        return id;
+    }
+-----CSCI578-----
+
+
+    public String getName() {
+        return name;
+    }
+-----CSCI578-----
+
+
+    /* ==================== Start/stop ==================== */
+
+    /** Initialize the worker. After this call the worker will be
+     *  ready to accept new requests.
+     */
+    public void init() throws IOException {
+        headersMsgNote=wEnv.getNoteId( WorkerEnv.ENDPOINT_NOTE, "headerMsg" );
+    }
+-----CSCI578-----
+
+
+    public String getNext() {
+        if( nextName==null ) {
+            if( next!=null)
+                nextName=next.getName();
+        }
+        return nextName;
+    }

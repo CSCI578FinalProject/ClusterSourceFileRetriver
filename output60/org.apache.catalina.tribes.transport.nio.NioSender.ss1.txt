@@ -1,0 +1,56 @@
+6
+-----CSCI578-----
+
+    
+    
+
+    protected boolean read(SelectionKey key) throws IOException {
+        //if there is no message here, we are done
+        if ( current == null ) return true;
+        int read = socketChannel.read(readbuf);
+        //end of stream
+        if ( read == -1 ) throw new IOException("Unable to receive an ack message. EOF on socket channel has been reached.");
+        //no data read
+        else if ( read == 0 ) return false;
+        readbuf.flip();
+        ackbuf.append(readbuf,read);
+        readbuf.clear();
+        if (ackbuf.doesPackageExist() ) {
+            byte[] ackcmd = ackbuf.extractDataPackage(true).getBytes();
+            boolean ack = Arrays.equals(ackcmd,org.apache.catalina.tribes.transport.Constants.ACK_DATA);
+            boolean fack = Arrays.equals(ackcmd,org.apache.catalina.tribes.transport.Constants.FAIL_ACK_DATA);
+            if ( fack && getThrowOnFailedAck() ) throw new RemoteProcessException("Received a failed ack:org.apache.catalina.tribes.transport.Constants.FAIL_ACK_DATA");
+            return ack || fack;
+        } else {
+            return false;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the bytes in the buffer, in its exact length
+     */
+    public byte[] getBytes() {
+        byte[] b = new byte[bufSize];
+        System.arraycopy(buf,0,b,0,bufSize);
+        return b;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Method to check if a package exists in this byte buffer.
+     * @return - true if a complete package (header,options,size,data,footer) exists within the buffer
+     */
+    public boolean doesPackageExist()  {
+        return (countPackages(true)>0);
+    }
+-----CSCI578-----
+
+    
+    public byte[] getArray() {
+        return buffer.getBytes();
+    }

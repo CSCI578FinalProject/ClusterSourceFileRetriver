@@ -1,0 +1,133 @@
+5
+-----CSCI578-----
+
+    
+    public void doTag(TagPluginContext ctxt) {
+        
+        String index = null;
+        
+        boolean hasVarStatus = ctxt.isAttributeSpecified("varStatus");
+        if (hasVarStatus) {
+            ctxt.dontUseTagPlugin();
+            return;
+        }
+        
+        hasVar = ctxt.isAttributeSpecified("var");
+        hasBegin = ctxt.isAttributeSpecified("begin");
+        hasEnd = ctxt.isAttributeSpecified("end");
+        hasStep = ctxt.isAttributeSpecified("step");
+        
+        boolean hasItems = ctxt.isAttributeSpecified("items");
+        if (hasItems) {
+            doCollection(ctxt);
+            return;
+        }
+        
+        // We must have a begin and end attributes
+        index = ctxt.getTemporaryVariableName();
+        ctxt.generateJavaSource("for (int " + index + " = ");
+        ctxt.generateAttribute("begin");
+        ctxt.generateJavaSource("; " + index + " <= ");
+        ctxt.generateAttribute("end");
+        if (hasStep) {
+            ctxt.generateJavaSource("; " + index + "+=");
+            ctxt.generateAttribute("step");
+            ctxt.generateJavaSource(") {");
+        }
+        else {
+            ctxt.generateJavaSource("; " + index + "++) {");
+        }
+        
+        // If var is specified and the body contains an EL, then sycn
+        // the var attribute
+        if (hasVar /* && ctxt.hasEL() */) {
+            ctxt.generateJavaSource("_jspx_page_context.setAttribute(");
+            ctxt.generateAttribute("var");
+            ctxt.generateJavaSource(", String.valueOf(" + index + "));");
+        }
+        ctxt.generateBody();
+        ctxt.generateJavaSource("}");
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param attribute Name of the attribute
+     * @return true if the attribute is specified in the tag
+     */
+    boolean isAttributeSpecified(String attribute);
+-----CSCI578-----
+
+
+    /**
+     * @return An unique temporary variable name that the plugin can use.
+     */
+    String getTemporaryVariableName();
+-----CSCI578-----
+
+    
+    public void doTag(TagPluginContext ctxt) {
+        
+        //flag for the existence of the var attribute
+        boolean hasVar = ctxt.isAttributeSpecified("var");
+        
+        //temp name for exception and caught
+        String exceptionName = ctxt.getTemporaryVariableName();
+        String caughtName = ctxt.getTemporaryVariableName();
+        
+        //main part to generate code
+        ctxt.generateJavaSource("boolean " + caughtName + " = false;");
+        ctxt.generateJavaSource("try{");
+        ctxt.generateBody();
+        ctxt.generateJavaSource("}");
+        
+        //do catch
+        ctxt.generateJavaSource("catch(Throwable " + exceptionName + "){");
+        
+        //if the var specified, the exception object should 
+        //be set to the attribute "var" defines in page scope 
+        if(hasVar){
+            String strVar = ctxt.getConstantAttribute("var");
+            ctxt.generateJavaSource("    pageContext.setAttribute(\"" + strVar + "\", " 
+                    + exceptionName + ", PageContext.PAGE_SCOPE);");
+        }
+        
+        //whenever there's exception caught, 
+        //the flag caught should be set true;
+        ctxt.generateJavaSource("    " + caughtName + " = true;");
+        ctxt.generateJavaSource("}");
+        
+        //do finally
+        ctxt.generateJavaSource("finally{");
+        
+        //if var specified, the attribute it defines 
+        //in page scope should be removed
+        if(hasVar){
+            String strVar = ctxt.getConstantAttribute("var");
+            ctxt.generateJavaSource("    if(!" + caughtName + "){");
+            ctxt.generateJavaSource("        pageContext.removeAttribute(\"" + strVar + "\", PageContext.PAGE_SCOPE);");
+            ctxt.generateJavaSource("    }");
+        }
+        
+        ctxt.generateJavaSource("}");
+    }
+-----CSCI578-----
+
+    
+    public void doTag(TagPluginContext ctxt) {
+        
+        //scope flag
+        boolean hasScope = ctxt.isAttributeSpecified("scope");
+        
+        //the value of the "var"
+        String strVar = ctxt.getConstantAttribute("var");
+        
+        //remove attribute from certain scope.
+        //default scope is "page".
+        if(hasScope){
+            int iScope = Util.getScope(ctxt.getConstantAttribute("scope"));
+            ctxt.generateJavaSource("pageContext.removeAttribute(\"" + strVar + "\"," + iScope + ");");
+        }else{
+            ctxt.generateJavaSource("pageContext.removeAttribute(\"" + strVar + "\");");
+        }
+    }

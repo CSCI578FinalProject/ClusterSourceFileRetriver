@@ -1,0 +1,52 @@
+2
+-----CSCI578-----
+
+
+
+    @Override
+    public void removeMessageHandler(MessageHandler listener) {
+        checkState();
+        if (listener == null) {
+            return;
+        }
+
+        MessageHandler wrapped = null;
+
+        if (listener instanceof WrappedMessageHandler) {
+            wrapped = ((WrappedMessageHandler) listener).getWrappedHandler();
+        }
+
+        if (wrapped == null) {
+            wrapped = listener;
+        }
+
+        boolean removed = false;
+        if (wrapped.equals(textMessageHandler) ||
+                listener.equals(textMessageHandler)) {
+            textMessageHandler = null;
+            removed = true;
+        }
+
+        if (wrapped.equals(binaryMessageHandler) ||
+                listener.equals(binaryMessageHandler)) {
+            binaryMessageHandler = null;
+            removed = true;
+        }
+
+        if (wrapped.equals(pongMessageHandler) ||
+                listener.equals(pongMessageHandler)) {
+            pongMessageHandler = null;
+            removed = true;
+        }
+
+        if (!removed) {
+            // ISE for now. Could swallow this silently / log this if the ISE
+            // becomes a problem
+            throw new IllegalStateException(
+                    sm.getString("wsSession.removeHandlerFailed", listener));
+        }
+    }
+-----CSCI578-----
+
+
+    MessageHandler getWrappedHandler();

@@ -1,0 +1,48 @@
+2
+-----CSCI578-----
+
+
+    public final void destroy() throws Exception {
+        if (bindState == BindState.BOUND_ON_INIT) {
+            unbind();
+            bindState = BindState.UNBOUND;
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void destroy() {
+        if(getLog().isInfoEnabled()) {
+            getLog().info(sm.getString("abstractProtocolHandler.destroy",
+                    getName()));
+        }
+        try {
+            endpoint.destroy();
+        } catch (Exception e) {
+            getLog().error(sm.getString("abstractProtocolHandler.destroyError",
+                    getName()), e);
+        }
+
+        if (oname != null) {
+            if (mserver == null) {
+                Registry.getRegistry(null, null).unregisterComponent(oname);
+            } else {
+                // Possibly registered with a different MBeanServer
+                try {
+                    mserver.unregisterMBean(oname);
+                } catch (MBeanRegistrationException |
+                        InstanceNotFoundException e) {
+                    getLog().info(sm.getString(
+                            "abstractProtocol.mbeanDeregistrationFailed",
+                            oname, mserver));
+                }
+            }
+        }
+
+        if (tpOname != null)
+            Registry.getRegistry(null, null).unregisterComponent(tpOname);
+        if (rgOname != null)
+            Registry.getRegistry(null, null).unregisterComponent(rgOname);
+    }

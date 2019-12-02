@@ -1,0 +1,202 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+ // setValues(XMLString)
+
+    /** Resets all of the values to their defaults. */
+    public void clear() {
+        this.ch = null;
+        this.offset = 0;
+        this.length = -1;
+    }
+ // clear()
+
+    /**
+     * Returns true if the contents of this XMLString structure and
+     * the specified array are equal.
+     * 
+     * @param ch     The character array.
+     * @param offset The offset into the character array.
+     * @param length The length of characters from the offset.
+     */
+    public boolean equals(char[] ch, int offset, int length) {
+        if (ch == null) {
+            return false;
+        }
+        if (this.length != length) {
+            return false;
+        }
+
+        for (int i=0; i<length; i++) {
+            if (this.ch[this.offset+i] != ch[offset+i] ) {
+                return false;
+            }
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Scans a range of character data up to the specified delimiter,
+     * setting the fields of the XMLString structure, appropriately.
+     * <p>
+     * <strong>Note:</strong> The characters are consumed.
+     * <p>
+     * <strong>Note:</strong> This assumes that the internal buffer is
+     * at least the same size, or bigger, than the length of the delimiter
+     * and that the delimiter contains at least one character.
+     * <p>
+     * <strong>Note:</strong> This method does not guarantee to return
+     * the longest run of character data. This method may return before
+     * the delimiter due to reaching the end of the input buffer or any
+     * other reason.
+     * <p>
+     * <strong>Note:</strong> The fields contained in the XMLString
+     * structure are not guaranteed to remain valid upon subsequent calls
+     * to the entity scanner. Therefore, the caller is responsible for
+     * immediately using the returned character data or making a copy of
+     * the character data.
+     *
+     * @param delimiter The string that signifies the end of the character
+     *                  data to be scanned.
+     * @param buffer    The data structure to fill.
+     *
+     * @return Returns true if there is more data to scan, false otherwise.
+     *
+     * @throws IOException  Thrown if i/o error occurs.
+     * @throws EOFException Thrown on end of file.
+     */
+    public boolean scanData(String delimiter, XMLStringBuffer buffer)
+	throws IOException {
+
+	boolean done = false;
+	int delimLen = delimiter.length();
+	char charAt0 = delimiter.charAt(0);
+	boolean external = fCurrentEntity.isExternal();
+	do {
+    
+	    // load more characters, if needed
+    
+	    if (fCurrentEntity.position == fCurrentEntity.count) {
+		load(0, true);
+	    }
+	    else if (fCurrentEntity.position >= fCurrentEntity.count - delimLen) {
+		System.arraycopy(fCurrentEntity.ch, fCurrentEntity.position,
+				 fCurrentEntity.ch, 0, fCurrentEntity.count - fCurrentEntity.position);
+		load(fCurrentEntity.count - fCurrentEntity.position, false);
+		fCurrentEntity.position = 0;
+	    } 
+	    if (fCurrentEntity.position >= fCurrentEntity.count - delimLen) {
+		// something must be wrong with the input: e.g., file ends an
+		// unterminated comment
+		int length = fCurrentEntity.count - fCurrentEntity.position;
+		buffer.append (fCurrentEntity.ch, fCurrentEntity.position,
+			       length); 
+		fCurrentEntity.columnNumber += fCurrentEntity.count;
+		fCurrentEntity.position = fCurrentEntity.count;
+		load(0,true);
+		return false;
+	    }
+    
+	    // normalize newlines
+	    int offset = fCurrentEntity.position;
+	    int c = fCurrentEntity.ch[offset];
+	    int newlines = 0;
+	    if (c == '\n' || (c == '\r' && external)) {
+		do {
+		    c = fCurrentEntity.ch[fCurrentEntity.position++];
+		    if (c == '\r' && external) {
+			newlines++;
+			fCurrentEntity.lineNumber++;
+			fCurrentEntity.columnNumber = 1;
+			if (fCurrentEntity.position == fCurrentEntity.count) {
+			    offset = 0;
+			    fCurrentEntity.position = newlines;
+			    if (load(newlines, false)) {
+				break;
+			    }
+			}
+			if (fCurrentEntity.ch[fCurrentEntity.position] == '\n') {
+			    fCurrentEntity.position++;
+			    offset++;
+			}
+			/*** NEWLINE NORMALIZATION ***/
+			else {
+			    newlines++;
+			}
+		    }
+		    else if (c == '\n') {
+			newlines++;
+			fCurrentEntity.lineNumber++;
+			fCurrentEntity.columnNumber = 1;
+			if (fCurrentEntity.position == fCurrentEntity.count) {
+			    offset = 0;
+			    fCurrentEntity.position = newlines;
+			    fCurrentEntity.count = newlines;
+			    if (load(newlines, false)) {
+				break;
+			    }
+			}
+		    }
+		    else {
+			fCurrentEntity.position--;
+			break;
+		    }
+		} while (fCurrentEntity.position < fCurrentEntity.count - 1);
+		for (int i = offset; i < fCurrentEntity.position; i++) {
+		    fCurrentEntity.ch[i] = '\n';
+		}
+		int length = fCurrentEntity.position - offset;
+		if (fCurrentEntity.position == fCurrentEntity.count - 1) {
+		    buffer.append(fCurrentEntity.ch, offset, length);
+		    return true;
+		}
+	    }
+    
+	    // iterate over buffer looking for delimiter
+	OUTER: while (fCurrentEntity.position < fCurrentEntity.count) {
+	    c = fCurrentEntity.ch[fCurrentEntity.position++];
+	    if (c == charAt0) {
+		// looks like we just hit the delimiter
+		int delimOffset = fCurrentEntity.position - 1;
+		for (int i = 1; i < delimLen; i++) {
+		    if (fCurrentEntity.position == fCurrentEntity.count) {
+			fCurrentEntity.position -= i;
+			break OUTER;
+		    }
+		    c = fCurrentEntity.ch[fCurrentEntity.position++];
+		    if (delimiter.charAt(i) != c) {
+			fCurrentEntity.position--;
+			break;
+		    }
+		}
+		if (fCurrentEntity.position == delimOffset + delimLen) {
+		    done = true;
+		    break;
+		}
+	    }
+	    else if (c == '\n' || (external && c == '\r')) {
+		fCurrentEntity.position--;
+		break;
+	    }
+	    else if (XMLChar.isInvalid(c)) {
+		fCurrentEntity.position--;
+		int length = fCurrentEntity.position - offset;
+		fCurrentEntity.columnNumber += length - newlines;
+		buffer.append(fCurrentEntity.ch, offset, length); 
+		return true;
+	    }
+	}
+	    int length = fCurrentEntity.position - offset;
+	    fCurrentEntity.columnNumber += length - newlines;
+	    if (done) {
+		length -= delimLen;
+	    }
+	    buffer.append (fCurrentEntity.ch, offset, length);
+    
+	    // return true if string was skipped
+	} while (!done);
+	return !done;
+
+    }

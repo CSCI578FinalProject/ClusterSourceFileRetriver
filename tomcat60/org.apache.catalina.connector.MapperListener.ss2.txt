@@ -1,0 +1,68 @@
+5
+
+
+    /**
+     * Add a new Context to an existing Host.
+     *
+     * @param hostName Virtual host name this context belongs to
+     * @param path Context path
+     * @param context Context object
+     * @param welcomeResources Welcome files defined for this context
+     * @param resources Static resources of the context
+     * @deprecated Use {@link #addContext(String, String, Object, String[],
+     *             javax.naming.Context, boolean, boolean)}
+     */
+    @Deprecated
+    public void addContext(String hostName, String path, Object context,
+            String[] welcomeResources, javax.naming.Context resources) {
+        addContext(hostName, path, context, welcomeResources, resources, false, false);
+    }
+    
+    /**
+     * Add a new Context to an existing Host.
+     *
+     * @param hostName Virtual host name this context belongs to
+     * @param path Context path
+     * @param context Context object
+     * @param welcomeResources Welcome files defined for this context
+     * @param resources Static resources of the context
+     * @param mapperContextRootRedirectEnabled Mapper does context root redirects
+     * @param mapperDirectoryRedirectEnabled Mapper does directory redirects
+     */
+    public void addContext(String hostName, String path, Object context, String[] welcomeResources,
+            javax.naming.Context resources, boolean mapperContextRootRedirectEnabled,
+            boolean mapperDirectoryRedirectEnabled) {
+
+        Host[] hosts = this.hosts;
+        int pos = find(hosts, hostName);
+        if( pos <0 ) {
+            addHost(hostName, new String[0], "");
+            hosts = this.hosts;
+            pos = find(hosts, hostName);
+        }
+        if (pos < 0) {
+            logger.error("No host found: " + hostName);
+        }
+        Host host = hosts[pos];
+        if (host.name.equals(hostName)) {
+            int slashCount = slashCount(path);
+            synchronized (host) {
+                Context[] contexts = host.contextList.contexts;
+                // Update nesting
+                if (slashCount > host.contextList.nesting) {
+                    host.contextList.nesting = slashCount;
+                }
+                Context[] newContexts = new Context[contexts.length + 1];
+                Context newContext = new Context();
+                newContext.name = path;
+                newContext.object = context;
+                newContext.welcomeResources = welcomeResources;
+                newContext.resources = resources;
+                if (insertMap(contexts, newContexts, newContext)) {
+                    host.contextList.contexts = newContexts;
+                }
+                newContext.mapperContextRootRedirectEnabled = mapperContextRootRedirectEnabled;
+                newContext.mapperDirectoryRedirectEnabled = mapperDirectoryRedirectEnabled;
+            }
+        }
+    }

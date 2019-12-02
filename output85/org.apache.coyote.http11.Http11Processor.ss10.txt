@@ -1,0 +1,50 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Get the name of the encoding handled by this filter.
+     *
+     * @return The encoding name as a byte chunk to facilitate comparison with
+     *         the value read from the HTTP headers which will also be a
+     *         ByteChunk
+     */
+    public ByteChunk getEncodingName();
+-----CSCI578-----
+
+
+
+    /**
+     * Add an input filter to the current request. If the encoding is not
+     * supported, a 501 response will be returned to the client.
+     */
+    private void addInputFilter(InputFilter[] inputFilters, String encodingName) {
+
+        // Trim provided encoding name and convert to lower case since transfer
+        // encoding names are case insensitive. (RFC2616, section 3.6)
+        encodingName = encodingName.trim().toLowerCase(Locale.ENGLISH);
+
+        if (encodingName.equals("identity")) {
+            // Skip
+        } else if (encodingName.equals("chunked")) {
+            inputBuffer.addActiveFilter
+                (inputFilters[Constants.CHUNKED_FILTER]);
+            contentDelimitation = true;
+        } else {
+            for (int i = pluggableFilterIndex; i < inputFilters.length; i++) {
+                if (inputFilters[i].getEncodingName().toString().equals(encodingName)) {
+                    inputBuffer.addActiveFilter(inputFilters[i]);
+                    return;
+                }
+            }
+            // Unsupported transfer encoding
+            // 501 - Unimplemented
+            response.setStatus(501);
+            setErrorState(ErrorState.CLOSE_CLEAN, null);
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("http11processor.request.prepare") +
+                          " Unsupported transfer encoding [" + encodingName + "]");
+            }
+        }
+    }

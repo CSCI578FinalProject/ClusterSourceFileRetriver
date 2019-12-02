@@ -1,0 +1,144 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Generate codes for Collections
+     * The pseudo code is:
+     */
+    private void doCollection(TagPluginContext ctxt) {
+
+        ctxt.generateImport("java.util.*");
+        generateIterators(ctxt);
+
+        String itemsV = ctxt.getTemporaryVariableName();
+        ctxt.generateJavaSource("Object " + itemsV + "= ");
+        ctxt.generateAttribute("items");
+        ctxt.generateJavaSource(";");
+
+        String indexV=null, beginV=null, endV=null, stepV=null;
+        if (hasBegin) {
+            beginV = ctxt.getTemporaryVariableName();
+            ctxt.generateJavaSource("int " + beginV + " = ");
+            ctxt.generateAttribute("begin");
+            ctxt.generateJavaSource(";");
+        }
+        if (hasEnd) {
+            indexV = ctxt.getTemporaryVariableName();
+            ctxt.generateJavaSource("int " + indexV + " = 0;");
+            endV = ctxt.getTemporaryVariableName();
+            ctxt.generateJavaSource("int " + endV + " = ");
+            ctxt.generateAttribute("end");
+            ctxt.generateJavaSource(";");
+        }
+        if (hasStep) {
+            stepV = ctxt.getTemporaryVariableName();
+            ctxt.generateJavaSource("int " + stepV + " = ");
+            ctxt.generateAttribute("step");
+            ctxt.generateJavaSource(";");
+        }
+
+        String iterV = ctxt.getTemporaryVariableName();
+        ctxt.generateJavaSource("Iterator " + iterV + " = null;");
+        // Object[]
+        ctxt.generateJavaSource("if (" + itemsV + " instanceof Object[])");
+        ctxt.generateJavaSource(iterV + "=toIterator((Object[])" + itemsV + ");");
+        // boolean[]
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof boolean[])");
+        ctxt.generateJavaSource(iterV + "=toIterator((boolean[])" + itemsV + ");");
+        // byte[]
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof byte[])");
+        ctxt.generateJavaSource(iterV + "=toIterator((byte[])" + itemsV + ");");
+        // char[]
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof char[])");
+        ctxt.generateJavaSource(iterV + "=toIterator((char[])" + itemsV + ");");
+        // short[]
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof short[])");
+        ctxt.generateJavaSource(iterV + "=toIterator((short[])" + itemsV + ");");
+        // int[]
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof int[])");
+        ctxt.generateJavaSource(iterV + "=toIterator((int[])" + itemsV + ");");
+        // long[]
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof long[])");
+        ctxt.generateJavaSource(iterV + "=toIterator((long[])" + itemsV + ");");
+        // float[]
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof float[])");
+        ctxt.generateJavaSource(iterV + "=toIterator((float[])" + itemsV + ");");
+        // double[]
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof double[])");
+        ctxt.generateJavaSource(iterV + "=toIterator((double[])" + itemsV + ");");
+
+        // Collection
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof Collection)");
+        ctxt.generateJavaSource(iterV + "=((Collection)" + itemsV + ").iterator();");
+
+        // Iterator
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof Iterator)");
+        ctxt.generateJavaSource(iterV + "=(Iterator)" + itemsV + ";");
+
+        // Enumeration
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof Enumeration)");
+        ctxt.generateJavaSource(iterV + "=toIterator((Enumeration)" + itemsV + ");");
+
+        // Map
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof Map)");
+        ctxt.generateJavaSource(iterV + "=((Map)" + itemsV + ").entrySet().iterator();");
+
+        // String
+        ctxt.generateJavaSource("else if (" + itemsV + " instanceof String)");
+        ctxt.generateJavaSource(iterV + "=toIterator(new StringTokenizer((String)" + itemsV + ", \",\"));");
+
+        // Not null
+        ctxt.generateJavaSource("if (" + iterV + " != null) {");
+
+        if (hasBegin) {
+            String tV = ctxt.getTemporaryVariableName();
+            ctxt.generateJavaSource("for (int " + tV + "=" + beginV + ";" +
+                    tV + ">0 && " + iterV + ".hasNext(); " +
+                    tV + "--)");
+            ctxt.generateJavaSource(iterV + ".next();");
+        }
+
+        ctxt.generateJavaSource("while (" + iterV + ".hasNext()){");
+        if (hasVar) {
+            ctxt.generateJavaSource("_jspx_page_context.setAttribute(");
+            ctxt.generateAttribute("var");
+            ctxt.generateJavaSource(", " + iterV + ".next());");
+        }
+
+        ctxt.generateBody();
+
+        if (hasStep) {
+            String tV = ctxt.getTemporaryVariableName();
+            ctxt.generateJavaSource("for (int " + tV + "=" + stepV + "-1;" +
+                    tV + ">0 && " + iterV + ".hasNext(); " +
+                    tV + "--)");
+            ctxt.generateJavaSource(iterV + ".next();");
+        }
+        if (hasEnd) {
+            if (hasStep) {
+                ctxt.generateJavaSource(indexV + "+=" + stepV + ";");
+            }
+            else {
+                ctxt.generateJavaSource(indexV + "++;");
+            }
+            if (hasBegin) {
+                ctxt.generateJavaSource("if(" + beginV + "+" + indexV +
+                        ">"+ endV + ")");
+            }
+            else {
+                ctxt.generateJavaSource("if(" + indexV + ">" + endV + ")");
+            }
+            ctxt.generateJavaSource("break;");
+        }
+        ctxt.generateJavaSource("}"); // while
+        ctxt.generateJavaSource("}"); // Not Null
+    }
+-----CSCI578-----
+
+
+    /**
+     * Generate an import statement
+     * @param s Name of the import class, '*' allowed.
+     */
+    void generateImport(String s);

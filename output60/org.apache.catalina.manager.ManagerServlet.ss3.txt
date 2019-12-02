@@ -1,0 +1,420 @@
+12
+-----CSCI578-----
+
+
+
+    /**
+     * Process a GET request for the specified resource.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    public void doGet(HttpServletRequest request,
+                      HttpServletResponse response)
+        throws IOException, ServletException {
+
+        // Verify that we were not accessed using the invoker servlet
+        if (request.getAttribute(Globals.INVOKED_ATTR) != null)
+            throw new UnavailableException
+                (sm.getString("managerServlet.cannotInvoke"));
+
+        // Identify the request parameters that we need
+        String command = request.getPathInfo();
+        if (command == null)
+            command = request.getServletPath();
+        String config = request.getParameter("config");
+        String path = request.getParameter("path");
+        String type = request.getParameter("type");
+        String war = request.getParameter("war");
+        String tag = request.getParameter("tag");
+        boolean update = false;
+        if ((request.getParameter("update") != null) 
+            && (request.getParameter("update").equals("true"))) {
+            update = true;
+        }
+
+        // Prepare our output writer to generate the response message
+        response.setContentType("text/plain; charset=" + Constants.CHARSET);
+        PrintWriter writer = response.getWriter();
+
+        // Process the requested command (note - "/deploy" is not listed here)
+        if (command == null) {
+            writer.println(sm.getString("managerServlet.noCommand"));
+        } else if (command.equals("/deploy")) {
+            if (war != null || config != null) {
+                deploy(writer, config, path, war, update);
+            } else {
+                deploy(writer, path, tag);
+            }
+        } else if (command.equals("/install")) {
+            // Deprecated
+            deploy(writer, config, path, war, false);
+        } else if (command.equals("/list")) {
+            list(writer);
+        } else if (command.equals("/reload")) {
+            reload(writer, path);
+        } else if (command.equals("/remove")) {
+            // Deprecated
+            undeploy(writer, path);
+        } else if (command.equals("/resources")) {
+            resources(writer, type);
+        } else if (command.equals("/roles")) {
+            roles(writer);
+        } else if (command.equals("/save")) {
+            save(writer, path);
+        } else if (command.equals("/serverinfo")) {
+            serverinfo(writer);
+        } else if (command.equals("/sessions")) {
+            expireSessions(writer, path, request);
+        } else if (command.equals("/expire")) {
+            expireSessions(writer, path, request);
+        } else if (command.equals("/start")) {
+            start(writer, path);
+        } else if (command.equals("/stop")) {
+            stop(writer, path);
+        } else if (command.equals("/undeploy")) {
+            undeploy(writer, path);
+        } else if (command.equals("/findleaks")) {
+            findleaks(writer);
+        } else {
+            writer.println(sm.getString("managerServlet.unknownCommand",
+                                        command));
+        }
+
+        // Finish up the response
+        writer.flush();
+        writer.close();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Writes System OS and JVM properties.
+     * @param writer Writer to render to
+     */
+    protected void serverinfo(PrintWriter writer) {
+        if (debug >= 1)
+            log("serverinfo");
+        try {
+            StringBuffer props = new StringBuffer();
+            props.append("OK - Server info");
+            props.append("\nTomcat Version: ");
+            props.append(ServerInfo.getServerInfo());
+            props.append("\nOS Name: ");
+            props.append(System.getProperty("os.name"));
+            props.append("\nOS Version: ");
+            props.append(System.getProperty("os.version"));
+            props.append("\nOS Architecture: ");
+            props.append(System.getProperty("os.arch"));
+            props.append("\nJVM Version: ");
+            props.append(System.getProperty("java.runtime.version"));
+            props.append("\nJVM Vendor: ");
+            props.append(System.getProperty("java.vm.vendor"));
+            writer.println(props.toString());
+        } catch (Throwable t) {
+            getServletContext().log("ManagerServlet.serverinfo",t);
+            writer.println(sm.getString("managerServlet.exception",
+                                        t.toString()));
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Render a list of the currently active Contexts in our virtual host.
+     *
+     * @param writer Writer to render to
+     */
+    protected void list(PrintWriter writer) {
+
+        if (debug >= 1)
+            log("list: Listing contexts for virtual host '" +
+                host.getName() + "'");
+
+        writer.println(sm.getString("managerServlet.listed",
+                                    host.getName()));
+        Container[] contexts = host.findChildren();
+        for (int i = 0; i < contexts.length; i++) {
+            Context context = (Context) contexts[i];
+            String displayPath = context.getPath();
+            if( displayPath.equals("") )
+                displayPath = "/";
+            if (context != null ) {
+                if (context.getAvailable()) {
+                    writer.println(sm.getString("managerServlet.listitem",
+                                                displayPath,
+                                                "running",
+                                      "" + context.getManager().findSessions().length,
+                                                context.getDocBase()));
+                } else {
+                    writer.println(sm.getString("managerServlet.listitem",
+                                                displayPath,
+                                                "stopped",
+                                                "0",
+                                                context.getDocBase()));
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     *
+     * Extract the expiration request parameter
+     *
+     * @param path
+     * @param req
+     */
+    protected void expireSessions(PrintWriter writer, String path, HttpServletRequest req) {
+        int idle = -1;
+        String idleParam = req.getParameter("idle");
+        if (idleParam != null) {
+            try {
+                idle = Integer.parseInt(idleParam);
+            } catch (NumberFormatException e) {
+                log("Could not parse idle parameter to an int: " + idleParam);
+            }
+        }
+        sessions(writer, path, idle);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the application available flag for this Context.
+     */
+    public boolean getAvailable();
+-----CSCI578-----
+
+
+    /**
+     * Session information for the web application at the specified context path.
+     * Displays a profile of session lastAccessedTime listing number
+     * of sessions for each 10 minute interval up to 10 hours.
+     *
+     * @param writer Writer to render to
+     * @param path Context path of the application to list session information for
+     * @param idle Expire all sessions with idle time &ge; idle for this context
+     */
+    protected void sessions(PrintWriter writer, String path, int idle) {
+
+        if (debug >= 1) {
+            log("sessions: Session information for web application at '" + path + "'");
+            if (idle >= 0)
+                log("sessions: Session expiration for " + idle + " minutes '" + path + "'");
+        }
+
+        if ((path == null) || (!path.startsWith("/") && path.equals(""))) {
+            writer.println(sm.getString("managerServlet.invalidPath",
+                                        RequestUtil.filter(path)));
+            return;
+        }
+        String displayPath = path;
+        if( path.equals("/") )
+            path = "";
+        try {
+            Context context = (Context) host.findChild(path);
+            if (context == null) {
+                writer.println(sm.getString("managerServlet.noContext",
+                                            RequestUtil.filter(displayPath)));
+                return;
+            }
+            Manager manager = context.getManager() ;
+            if(manager == null) {
+               writer.println(sm.getString("managerServlet.noManager",
+               RequestUtil.filter(displayPath)));
+               return;               
+            }
+            int maxCount = 60;
+            int maxInactiveInterval = context.getSessionTimeout();
+            int histoInterval = maxInactiveInterval / maxCount;
+            if ( histoInterval * maxCount < maxInactiveInterval ) 
+                histoInterval++;
+            if (0==histoInterval)
+                histoInterval=1;
+            maxCount = maxInactiveInterval / histoInterval;
+            if ( histoInterval * maxCount < maxInactiveInterval ) 
+                maxCount++;
+
+            writer.println(sm.getString("managerServlet.sessions", displayPath));
+            writer.println(sm.getString("managerServlet.sessiondefaultmax",
+                                "" + maxInactiveInterval));
+            Session [] sessions = manager.findSessions();
+            int [] timeout = new int[maxCount];
+            int notimeout = 0;
+            int expired = 0;
+            long now = System.currentTimeMillis();
+            for (int i = 0; i < sessions.length; i++) {
+                int time = (int)((now-sessions[i].getLastAccessedTimeInternal())/1000);
+                if (idle >= 0 && time >= idle*60) {
+                    sessions[i].expire();
+                    expired++;
+                }
+                time=time/60/histoInterval;
+                if (time < 0)
+                    notimeout++;
+                else if (time >= maxCount)
+                    timeout[maxCount-1]++;
+                else
+                    timeout[time]++;
+            }
+            if (timeout[0] > 0)
+                writer.println(sm.getString("managerServlet.sessiontimeout",
+                                            "<" + histoInterval, "" + timeout[0]));
+            for (int i = 1; i < maxCount-1; i++) {
+                if (timeout[i] > 0)
+                    writer.println(sm.getString("managerServlet.sessiontimeout",
+                                     "" + (i)*histoInterval + " - <" + (i+1)*histoInterval,
+                                                "" + timeout[i]));
+            }
+            if (timeout[maxCount-1] > 0)
+                writer.println(sm.getString("managerServlet.sessiontimeout",
+                                            ">=" + maxCount*histoInterval,
+                                            "" + timeout[maxCount-1]));
+            if (notimeout > 0)
+                writer.println(sm.getString("managerServlet.sessiontimeout.unlimited",
+                                            "" + notimeout));
+            if (idle >= 0)
+                writer.println(sm.getString("managerServlet.sessiontimeout.expired",
+                                            "" + idle,"" + expired));
+        } catch (Throwable t) {
+            log("ManagerServlet.sessions[" + displayPath + "]", t);
+            writer.println(sm.getString("managerServlet.exception",
+                                        t.toString()));
+        }
+
+    }
+
+
+
+    /**
+     * Session information for the web application at the specified context path.
+     * Displays a profile of session lastAccessedTime listing number
+     * of sessions for each 10 minute interval up to 10 hours.
+     *
+     * @param writer Writer to render to
+     * @param path Context path of the application to list session information for
+     */
+    protected void sessions(PrintWriter writer, String path) {
+        sessions(writer, path, -1);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Start the web application at the specified context path.
+     *
+     * @param writer Writer to render to
+     * @param path Context path of the application to be started
+     */
+    protected void start(PrintWriter writer, String path) {
+
+        if (debug >= 1)
+            log("start: Starting web application at '" + path + "'");
+
+        if ((path == null) || (!path.startsWith("/") && path.equals(""))) {
+            writer.println(sm.getString("managerServlet.invalidPath",
+                                        RequestUtil.filter(path)));
+            return;
+        }
+        String displayPath = path;
+        if( path.equals("/") )
+            path = "";
+
+        try {
+            Context context = (Context) host.findChild(path);
+            if (context == null) {
+                writer.println(sm.getString("managerServlet.noContext", 
+                                            RequestUtil.filter(displayPath)));
+                return;
+            }
+            ((Lifecycle) context).start();
+            if (context.getAvailable())
+                writer.println
+                    (sm.getString("managerServlet.started", displayPath));
+            else
+                writer.println
+                    (sm.getString("managerServlet.startFailed", displayPath));
+        } catch (Throwable t) {
+            getServletContext().log
+                (sm.getString("managerServlet.startFailed", displayPath), t);
+            writer.println
+                (sm.getString("managerServlet.startFailed", displayPath));
+            writer.println(sm.getString("managerServlet.exception",
+                                        t.toString()));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Stop the web application at the specified context path.
+     *
+     * @param writer Writer to render to
+     * @param path Context path of the application to be stopped
+     */
+    protected void stop(PrintWriter writer, String path) {
+
+        if (debug >= 1)
+            log("stop: Stopping web application at '" + path + "'");
+
+        if ((path == null) || (!path.startsWith("/") && path.equals(""))) {
+            writer.println(sm.getString("managerServlet.invalidPath",
+                                        RequestUtil.filter(path)));
+            return;
+        }
+        String displayPath = path;
+        if( path.equals("/") )
+            path = "";
+
+        try {
+            Context context = (Context) host.findChild(path);
+            if (context == null) {
+                writer.println(sm.getString("managerServlet.noContext", 
+                                            RequestUtil.filter(displayPath)));
+                return;
+            }
+            // It isn't possible for the manager to stop itself
+            if (context.getPath().equals(this.context.getPath())) {
+                writer.println(sm.getString("managerServlet.noSelf"));
+                return;
+            }
+            ((Lifecycle) context).stop();
+            writer.println(sm.getString("managerServlet.stopped", displayPath));
+        } catch (Throwable t) {
+            log("ManagerServlet.stop[" + displayPath + "]", t);
+            writer.println(sm.getString("managerServlet.exception",
+                                        t.toString()));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of active Sessions associated with this Manager.
+     * If this Manager has no active Sessions, a zero-length array is returned.
+     */
+    public Session[] findSessions();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Return the last client access time without invalidation check
+     * @see #getLastAccessedTime().
+     */
+    public long getLastAccessedTimeInternal();

@@ -1,0 +1,68 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Retrieve the configuration associated with the specified classloader. If
+     * it does not exist, it will be created.
+     * 
+     * @param classLoader The classloader for which we will retrieve or build the 
+     *                    configuration
+     */
+    protected ClassLoaderLogInfo getClassLoaderInfo(ClassLoader classLoader) {
+        
+        if (classLoader == null) {
+            classLoader = ClassLoader.getSystemClassLoader();
+        }
+        ClassLoaderLogInfo info = classLoaderLoggers.get(classLoader);
+        if (info == null) {
+            final ClassLoader classLoaderParam = classLoader;
+            AccessController.doPrivileged(new PrivilegedAction() {
+                public Object run() {
+                    try {
+                        readConfiguration(classLoaderParam);
+                    } catch (IOException e) {
+                        // Ignore
+                    }
+                    return null;
+                }
+            });
+            info = classLoaderLoggers.get(classLoader);
+        }
+        return info;
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Get the logger associated with the specified name inside 
+     * the classloader local configuration. If this returns null,
+     * and the call originated for Logger.getLogger, a new
+     * logger with the specified name will be instantiated and
+     * added using addLogger.
+     * 
+     * @param name The name of the logger to retrieve
+     */
+    public synchronized Logger getLogger(final String name) {
+        ClassLoader classLoader = Thread.currentThread()
+                .getContextClassLoader();
+        return getClassLoaderInfo(classLoader).loggers.get(name);
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Get an enumeration of the logger names currently defined in the 
+     * classloader local configuration.
+     */
+    public synchronized Enumeration<String> getLoggerNames() {
+        ClassLoader classLoader = Thread.currentThread()
+                .getContextClassLoader();
+        return Collections.enumeration(getClassLoaderInfo(classLoader).loggers.keySet());
+    }

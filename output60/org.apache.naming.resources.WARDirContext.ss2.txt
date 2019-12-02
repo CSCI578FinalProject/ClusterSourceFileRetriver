@@ -1,0 +1,108 @@
+9
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Context Methods
+
+
+    /**
+     * Retrieves the named object.
+     * 
+     * @param name the name of the object to look up
+     * @return the object bound to name
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Object lookup(String name)
+        throws NamingException {
+        return lookup(new CompositeName(name));
+    }
+
+
+
+    /**
+     * Retrieves the named object. If name is empty, returns a new instance 
+     * of this context (which represents the same naming context as this 
+     * context, but its environment may be modified independently and it may 
+     * be accessed concurrently).
+     * 
+     * @param name the name of the object to look up
+     * @return the object bound to name
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Object lookup(Name name)
+        throws NamingException {
+        if (name.isEmpty())
+            return this;
+        Entry entry = treeLookup(name);
+        if (entry == null)
+            throw new NamingException
+                (sm.getString("resources.notFound", name));
+        ZipEntry zipEntry = entry.getEntry();
+        if (zipEntry.isDirectory())
+            return new WARDirContext(base, entry);
+        else
+            return new WARResource(entry.getEntry());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Retrieves the named object, following links except for the terminal 
+     * atomic component of the name. If the object bound to name is not a 
+     * link, returns the object itself.
+     * 
+     * @param name the name of the object to look up
+     * @return the object bound to name, not following the terminal link 
+     * (if any).
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Object lookupLink(String name)
+        throws NamingException {
+        // Note : Links are not supported
+        return lookup(name);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Retrieves the parser associated with the named context. In a 
+     * federation of namespaces, different naming systems will parse names 
+     * differently. This method allows an application to get a parser for 
+     * parsing names into their atomic components using the naming convention 
+     * of a particular naming system. Within any single naming system, 
+     * NameParser objects returned by this method must be equal (using the 
+     * equals() test).
+     * 
+     * @param name the name of the context from which to get the parser
+     * @return a name parser that can parse compound names into their atomic 
+     * components
+     * @exception NamingException if a naming exception is encountered
+     */
+    public NameParser getNameParser(Name name)
+        throws NamingException {
+        return new NameParserImpl();
+    }
+
+
+
+    /**
+     * Retrieves the parser associated with the named context.
+     * 
+     * @param name the name of the context from which to get the parser
+     * @return a name parser that can parse compound names into their atomic 
+     * components
+     * @exception NamingException if a naming exception is encountered
+     */
+    public NameParser getNameParser(String name)
+        throws NamingException {
+        return new NameParserImpl();
+    }

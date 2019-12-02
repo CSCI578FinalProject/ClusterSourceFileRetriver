@@ -1,0 +1,73 @@
+43
+    /**
+     * Clear all application-created attributes.
+     */
+    protected void clearAttributes() {
+
+        // Create list of attributes to be removed
+        ArrayList list = new ArrayList();
+        Iterator iter = attributes.keySet().iterator();
+        while (iter.hasNext()) {
+            list.add(iter.next());
+        }
+
+        // Remove application originated attributes
+        // (read only attributes will be left in place)
+        Iterator keys = list.iterator();
+        while (keys.hasNext()) {
+            String key = (String) keys.next();
+            removeAttribute(key);
+        }
+
+    }
+
+
+    /**
+     * Remove the context attribute with the specified name, if any.
+     *
+     * @param name Name of the context attribute to be removed
+     */
+    public void removeAttribute(String name) {
+
+        Object value = null;
+        boolean found = false;
+
+        // Remove the specified attribute
+        // Check for read only attribute
+        if (readOnlyAttributes.containsKey(name))
+            return;
+        found = attributes.containsKey(name);
+        if (found) {
+            value = attributes.get(name);
+            attributes.remove(name);
+        } else {
+            return;
+        }
+
+        // Notify interested application event listeners
+        Object listeners[] = context.getApplicationEventListeners();
+        if ((listeners == null) || (listeners.length == 0))
+            return;
+        ServletContextAttributeEvent event =
+          new ServletContextAttributeEvent(context.getServletContext(),
+                                            name, value);
+        for (int i = 0; i < listeners.length; i++) {
+            if (!(listeners[i] instanceof ServletContextAttributeListener))
+                continue;
+            ServletContextAttributeListener listener =
+                (ServletContextAttributeListener) listeners[i];
+            try {
+                context.fireContainerEvent("beforeContextAttributeRemoved",
+                                           listener);
+                listener.attributeRemoved(event);
+                context.fireContainerEvent("afterContextAttributeRemoved",
+                                           listener);
+            } catch (Throwable t) {
+                context.fireContainerEvent("afterContextAttributeRemoved",
+                                           listener);
+                // FIXME - should we do anything besides log these?
+                log(sm.getString("applicationContext.attributeEvent"), t);
+            }
+        }
+
+    }

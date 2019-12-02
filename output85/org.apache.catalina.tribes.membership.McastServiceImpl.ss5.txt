@@ -1,0 +1,62 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Start the service
+     * @param level 1 starts the receiver, level 2 starts the sender
+     * @throws IOException if the service fails to start
+     * @throws IllegalStateException if the service is already started
+     */
+    public synchronized void start(int level) throws IOException {
+        boolean valid = false;
+        if ( (level & Channel.MBR_RX_SEQ)==Channel.MBR_RX_SEQ ) {
+            if ( receiver != null ) throw new IllegalStateException(sm.getString("mcastServiceImpl.receive.running"));
+            try {
+                if ( sender == null ) socket.joinGroup(address);
+            }catch (IOException iox) {
+                log.error(sm.getString("mcastServiceImpl.unable.join"));
+                throw iox;
+            }
+            doRunReceiver = true;
+            receiver = new ReceiverThread();
+            receiver.setDaemon(true);
+            receiver.start();
+            valid = true;
+        }
+        if ( (level & Channel.MBR_TX_SEQ)==Channel.MBR_TX_SEQ ) {
+            if ( sender != null ) throw new IllegalStateException(sm.getString("mcastServiceImpl.send.running"));
+            if ( receiver == null ) socket.joinGroup(address);
+            //make sure at least one packet gets out there
+            send(false);
+            doRunSender = true;
+            sender = new SenderThread(sendFrequency);
+            sender.setDaemon(true);
+            sender.start();
+            //we have started the receiver, but not yet waited for membership to establish
+            valid = true;
+        }
+        if (!valid) {
+            throw new IllegalArgumentException(sm.getString("mcastServiceImpl.invalid.startLevel"));
+        }
+        //pause, once or twice
+        waitForMembers(level);
+        startLevel = (startLevel | level);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void waitForMembers(int level) {
+        long memberwait = sendFrequency*2;
+        if(log.isInfoEnabled())
+            log.info(sm.getString("mcastServiceImpl.waitForMembers.start",
+                    Long.toString(memberwait), Integer.toString(level)));
+        try {Thread.sleep(memberwait);}catch (InterruptedException ignore){}
+        if(log.isInfoEnabled())
+            log.info(sm.getString("mcastServiceImpl.waitForMembers.done", Integer.toString(level)));
+    }
+-----CSCI578-----
+-----CSCI578-----

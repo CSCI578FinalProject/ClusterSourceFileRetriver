@@ -1,0 +1,61 @@
+5
+-----CSCI578-----
+
+
+    @Override
+    public boolean isDone() {
+        return latch.getCount() == 0;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Void get() throws InterruptedException,
+            ExecutionException {
+        try {
+            wsSession.registerFuture(this);
+            latch.await();
+        } finally {
+            wsSession.unregisterFuture(this);
+        }
+        if (result.getException() != null) {
+            throw new ExecutionException(result.getException());
+        }
+        return null;
+    }
+
+
+    @Override
+    public Void get(long timeout, TimeUnit unit)
+            throws InterruptedException, ExecutionException,
+            TimeoutException {
+        boolean retval = false;
+        try {
+            wsSession.registerFuture(this);
+            retval = latch.await(timeout, unit);
+        } finally {
+            wsSession.unregisterFuture(this);
+
+        }
+        if (retval == false) {
+            throw new TimeoutException();
+        }
+        if (result.getException() != null) {
+            throw new ExecutionException(result.getException());
+        }
+        return null;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- SendHandler
+
+    @Override
+    public void onResult(SendResult result) {
+
+        this.result = result;
+        latch.countDown();
+    }

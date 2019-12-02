@@ -1,0 +1,590 @@
+21
+-----CSCI578-----
+
+
+    /**
+     * Subclasses may override this method to perform additional processing of the 
+     * invoked method's result.
+     *
+     * @param result the Object returned by the method invoked, possibly null
+     */
+    protected void processMethodCallResult(Object result) {
+        // do nothing
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process the end of this element.
+     */
+    public void end() throws Exception {
+
+        // Retrieve or construct the parameter values array
+        Object parameters[] = null;
+        if (paramCount > 0) {
+
+            parameters = (Object[]) digester.popParams();
+            
+            if (digester.log.isTraceEnabled()) {
+                for (int i=0,size=parameters.length;i<size;i++) {
+                    digester.log.trace("[CallMethodRule](" + i + ")" + parameters[i]) ;
+                }
+            }
+            
+            // In the case where the parameter for the method
+            // is taken from an attribute, and that attribute
+            // isn't actually defined in the source XML file,
+            // skip the method call
+            if (paramCount == 1 && parameters[0] == null) {
+                return;
+            }
+
+        } else if (paramTypes != null && paramTypes.length != 0) {
+
+            // In the case where the parameter for the method
+            // is taken from the body text, but there is no
+            // body text included in the source XML file,
+            // skip the method call
+            if (bodyText == null) {
+                return;
+            }
+
+            parameters = new Object[1];
+            parameters[0] = bodyText;
+            if (paramTypes.length == 0) {
+                paramTypes = new Class[1];
+                paramTypes[0] = "abc".getClass();
+            }
+
+        }
+
+        // Construct the parameter values array we will need
+        // We only do the conversion if the param value is a String and
+        // the specified paramType is not String. 
+        Object paramValues[] = new Object[paramTypes.length];
+        for (int i = 0; i < paramTypes.length; i++) {
+            // convert nulls and convert stringy parameters 
+            // for non-stringy param types
+            if(
+                parameters[i] == null ||
+                 (parameters[i] instanceof String && 
+                   !String.class.isAssignableFrom(paramTypes[i]))) {
+                
+                paramValues[i] =
+                        IntrospectionUtils.convert((String) parameters[i], paramTypes[i]);
+            } else {
+                paramValues[i] = parameters[i];
+            }
+        }
+
+        // Determine the target object for the method call
+        Object target;
+        if (targetOffset >= 0) {
+            target = digester.peek(targetOffset);
+        } else {
+            target = digester.peek( digester.getCount() + targetOffset );
+        }
+        
+        if (target == null) {
+            StringBuffer sb = new StringBuffer();
+            sb.append("[CallMethodRule]{");
+            sb.append(digester.match);
+            sb.append("} Call target is null (");
+            sb.append("targetOffset=");
+            sb.append(targetOffset);
+            sb.append(",stackdepth=");
+            sb.append(digester.getCount());
+            sb.append(")");
+            throw new org.xml.sax.SAXException(sb.toString());
+        }
+        
+        // Invoke the required method on the top object
+        if (digester.log.isDebugEnabled()) {
+            StringBuffer sb = new StringBuffer("[CallMethodRule]{");
+            sb.append(digester.match);
+            sb.append("} Call ");
+            sb.append(target.getClass().getName());
+            sb.append(".");
+            sb.append(methodName);
+            sb.append("(");
+            for (int i = 0; i < paramValues.length; i++) {
+                if (i > 0) {
+                    sb.append(",");
+                }
+                if (paramValues[i] == null) {
+                    sb.append("null");
+                } else {
+                    sb.append(paramValues[i].toString());
+                }
+                sb.append("/");
+                if (paramTypes[i] == null) {
+                    sb.append("null");
+                } else {
+                    sb.append(paramTypes[i].getName());
+                }
+            }
+            sb.append(")");
+            digester.log.debug(sb.toString());
+        }
+        Object result = IntrospectionUtils.callMethodN(target, methodName,
+                paramValues, paramTypes);   
+        processMethodCallResult(result);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public static Object convert(String object, Class paramType) {
+        Object result = null;
+        if ("java.lang.String".equals(paramType.getName())) {
+            result = object;
+        } else if ("java.lang.Integer".equals(paramType.getName())
+                || "int".equals(paramType.getName())) {
+            try {
+                result = new Integer(object);
+            } catch (NumberFormatException ex) {
+            }
+            // Try a setFoo ( boolean )
+        } else if ("java.lang.Boolean".equals(paramType.getName())
+                || "boolean".equals(paramType.getName())) {
+            result = new Boolean(object);
+
+            // Try a setFoo ( InetAddress )
+        } else if ("java.net.InetAddress".equals(paramType
+                .getName())) {
+            try {
+                result = InetAddress.getByName(object);
+            } catch (UnknownHostException exc) {
+                d("Unable to resolve host name:" + object);
+            }
+
+            // Unknown type
+        } else {
+            d("Unknown type " + paramType.getName());
+        }
+        if (result == null) {
+            throw new IllegalArgumentException("Can't convert argument: " + object);
+        }
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public static Object callMethodN(Object target, String methodN,
+            Object params[], Class typeParams[]) throws Exception {
+        Method m = null;
+        m = findMethod(target.getClass(), methodN, typeParams);
+        if (m == null) {
+            d("Can't find method " + methodN + " in " + target + " CLASS "
+                    + target.getClass());
+            return null;
+        }
+        Object o = m.invoke(target, params);
+
+        if (dbg > 0) {
+            // debug
+            StringBuffer sb = new StringBuffer();
+            sb.append("" + target.getClass().getName() + "." + methodN + "( ");
+            for (int i = 0; i < params.length; i++) {
+                if (i > 0)
+                    sb.append(", ");
+                sb.append(params[i]);
+            }
+            sb.append(")");
+            d(sb.toString());
+        }
+        return o;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the current depth of the element stack.
+     */
+    public int getCount() {
+
+        return (stack.size());
+
+    }
+
+
+
+    /**
+     * Return the n'th object down the stack, where 0 is the top element
+     * and [getCount()-1] is the bottom element.  If the specified index
+     * is out of range, return <code>null</code>.
+     *
+     * @param n Index of the desired element, where 0 is the top of the stack,
+     *  1 is the next element down, and so on.
+     */
+    public Object peek(int n) {
+
+        try {
+            return (stack.peek(n));
+        } catch (EmptyStackException e) {
+            log.warn("Empty stack (returning null)");
+            return (null);
+        }
+
+    }
+
+
+
+    /**
+     * <p>Return the n'th object down the parameters stack, where 0 is the top element
+     * and [getCount()-1] is the bottom element.  If the specified index
+     * is out of range, return <code>null</code>.</p>
+     *
+     * <p>The parameters stack is used to store <code>CallMethodRule</code> parameters.
+     * See {@link #params}.</p>
+     *
+     * @param n Index of the desired element, where 0 is the top of the stack,
+     *  1 is the next element down, and so on.
+     */
+    public Object peekParams(int n) {
+
+        try {
+            return (params.peek(n));
+        } catch (EmptyStackException e) {
+            log.warn("Empty stack (returning null)");
+            return (null);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the top object on the stack without removing it.  If there are
+     * no objects on the stack, return <code>null</code>.
+     */
+    public Object peek() {
+
+        try {
+            return (stack.peek());
+        } catch (EmptyStackException e) {
+            log.warn("Empty stack (returning null)");
+            return (null);
+        }
+
+    }
+
+
+
+    /**
+     * Return the n'th object down the stack, where 0 is the top element
+     * and [getCount()-1] is the bottom element.  If the specified index
+     * is out of range, return <code>null</code>.
+     *
+     * @param n Index of the desired element, where 0 is the top of the stack,
+     *  1 is the next element down, and so on.
+     */
+    public Object peek(int n) {
+
+        try {
+            return (stack.peek(n));
+        } catch (EmptyStackException e) {
+            log.warn("Empty stack (returning null)");
+            return (null);
+        }
+
+    }
+
+
+    /**
+     * <p>Gets the top object from the stack with the given name.
+     * This method does not remove the object from the stack.
+     * </p>
+     * <p><strong>Note:</strong> a stack is considered empty
+     * if no objects have been pushed onto it yet.</p>
+     *
+     * @param stackName the name of the stack to be peeked
+     * @return the top <code>Object</code> on the stack or null if the stack is either
+     * empty or has not been created yet
+     * @throws EmptyStackException if the named stack is empty
+     *
+     * @since 1.6
+     */
+    public Object peek(String stackName) {
+        Object result = null;
+        ArrayStack namedStack = (ArrayStack) stacksByName.get(stackName);
+        if (namedStack == null ) {
+            if (log.isDebugEnabled()) {
+                log.debug("Stack '" + stackName + "' is empty");
+            }
+            throw new EmptyStackException();
+
+        } else {
+
+            result = namedStack.peek();
+        }
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Adds classpath entries from a vector of URL's to the "tc_path_add" System
+     * property. This System property lists the classpath entries common to web
+     * applications. This System property is currently used by Jasper when its
+     * JSP servlet compiles the Java file for a JSP.
+     */
+    public static String classPathAdd(URL urls[], String cp) {
+        if (urls == null)
+            return cp;
+
+        for (int i = 0; i < urls.length; i++) {
+            if (cp != null)
+                cp += PATH_SEPARATOR + urls[i].getFile();
+            else
+                cp = urls[i].getFile();
+        }
+        return cp;
+    }
+
+
+    public static Method findMethod(Class c, String name, Class params[]) {
+        Method methods[] = findMethods(c);
+        if (methods == null)
+            return null;
+        for (int i = 0; i < methods.length; i++) {
+            if (methods[i].getName().equals(name)) {
+                Class methodParams[] = methods[i].getParameterTypes();
+                if (methodParams == null)
+                    if (params == null || params.length == 0)
+                        return methods[i];
+                if (params == null)
+                    if (methodParams == null || methodParams.length == 0)
+                        return methods[i];
+                if (params.length != methodParams.length)
+                    continue;
+                boolean found = true;
+                for (int j = 0; j < params.length; j++) {
+                    if (params[j] != methodParams[j]) {
+                        found = false;
+                        break;
+                    }
+                }
+                if (found)
+                    return methods[i];
+            }
+        }
+        return null;
+    }
+
+
+    static void d(String s) {
+        if (log.isDebugEnabled())
+            log.debug("IntrospectionUtils: " + s);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the end of this element.
+     */
+    public void end() throws Exception {
+
+        // Identify the objects to be used
+        Object child = digester.peek(0);
+        Object parent = digester.peek(1);
+
+        NamingResources namingResources = null;
+        if (parent instanceof Context) {
+            namingResources = ((Context) parent).getNamingResources();
+        } else {
+            namingResources = (NamingResources) parent;
+        }
+        
+        // Call the specified method
+        IntrospectionUtils.callMethod1(namingResources, methodName,
+                child, paramType, digester.getClassLoader());
+
+    }
+-----CSCI578-----
+
+
+    public static Object callMethod1(Object target, String methodN,
+            Object param1, String typeParam1, ClassLoader cl) throws Exception {
+        if (target == null || param1 == null) {
+            d("Assert: Illegal params " + target + " " + param1);
+        }
+        if (dbg > 0)
+            d("callMethod1 " + target.getClass().getName() + " "
+                    + param1.getClass().getName() + " " + typeParam1);
+
+        Class params[] = new Class[1];
+        if (typeParam1 == null)
+            params[0] = param1.getClass();
+        else
+            params[0] = cl.loadClass(typeParam1);
+        Method m = findMethod(target.getClass(), methodN, params);
+        if (m == null)
+            throw new NoSuchMethodException(target.getClass().getName() + " "
+                    + methodN);
+        return m.invoke(target, new Object[] { param1 });
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Resolve the requested external entity.
+     *
+     * @param publicId The public identifier of the entity being referenced
+     * @param systemId The system identifier of the entity being referenced
+     *
+     * @exception SAXException if a parsing exception occurs
+     *
+     */
+    public InputSource resolveEntity(String publicId, String systemId)
+        throws SAXException {
+
+        if (publicId != null) {
+            this.publicId = publicId;
+            digester.setPublicId(publicId);
+        }
+
+        // Has this system identifier been registered?
+        String entityURL = null;
+        if (publicId != null) {
+            entityURL = (String) entityValidator.get(publicId);
+        }
+
+        // Redirect the schema location to a local destination
+        String key = null;
+        if (entityURL == null && systemId != null) {
+            key = systemId.substring(systemId.lastIndexOf('/')+1);
+            entityURL = (String)entityValidator.get(key);
+        }
+
+        if (entityURL == null) {
+           return (null);
+        }
+
+        try {
+            return (new InputSource(entityURL));
+        } catch (Exception e) {
+            throw new SAXException(e);
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Process the end of this element.
+     */
+    public void end() throws Exception {
+
+        // Identify the objects to be used
+        Object child = digester.peek(0);
+        Object parent = digester.peek(1);
+        if (digester.log.isDebugEnabled()) {
+            if (parent == null) {
+                digester.log.debug("[SetNextRule]{" + digester.match +
+                        "} Call [NULL PARENT]." +
+                        methodName + "(" + child + ")");
+            } else {
+                digester.log.debug("[SetNextRule]{" + digester.match +
+                        "} Call " + parent.getClass().getName() + "." +
+                        methodName + "(" + child + ")");
+            }
+        }
+
+        // Call the specified method
+        IntrospectionUtils.callMethod1(parent, methodName,
+                child, paramType, digester.getClassLoader());
+                
+    }
+-----CSCI578-----
+
+
+    /**
+     * Process the end of this element.
+     */
+    public void end() throws Exception {
+
+        // Identify the objects to be used
+        Object child = digester.peek(0);
+        Object parent = digester.root;
+        if (digester.log.isDebugEnabled()) {
+            if (parent == null) {
+                digester.log.debug("[SetRootRule]{" + digester.match +
+                        "} Call [NULL ROOT]." +
+                        methodName + "(" + child + ")");
+            } else {
+                digester.log.debug("[SetRootRule]{" + digester.match +
+                        "} Call " + parent.getClass().getName() + "." +
+                        methodName + "(" + child + ")");
+            }
+        }
+
+        // Call the specified method
+        IntrospectionUtils.callMethod1(parent, methodName,
+                child, paramType, digester.getClassLoader());
+
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Process the end of this element.
+     */
+    public void end() throws Exception {
+
+        // Identify the objects to be used
+        Object child = digester.peek(0);
+        Object parent = digester.peek(1);
+        
+        if (digester.log.isDebugEnabled()) {
+            if (child == null) {
+                digester.log.debug("[SetTopRule]{" + digester.match +
+                        "} Call [NULL CHILD]." +
+                        methodName + "(" + parent + ")");
+            } else {
+                digester.log.debug("[SetTopRule]{" + digester.match +
+                        "} Call " + child.getClass().getName() + "." +
+                        methodName + "(" + parent + ")");
+            }
+        }
+
+        // Call the specified method
+        IntrospectionUtils.callMethod1(child, methodName,
+                parent, paramType, digester.getClassLoader());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the public id of the current file being parse.
+     * @param publicId the DTD/Schema public's id.
+     */
+    public void setPublicId(String publicId){
+        this.publicId = publicId;
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------- LexicalHandler Methods
+
+    @Override
+    public void startDTD(String name, String publicId, String systemId)
+            throws SAXException {
+        setPublicId(publicId);
+    }

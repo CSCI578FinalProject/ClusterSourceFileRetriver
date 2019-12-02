@@ -1,0 +1,95 @@
+3
+-----CSCI578-----
+
+
+    public void init() {
+        try {
+            initialize();
+        } catch( Throwable t ) {
+            log.error(sm.getString("standardService.initialize.failed",domain),t);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Invoke a pre-startup initialization. This is used to allow connectors
+     * to bind to restricted ports under Unix operating environments.
+     */
+    public void initialize()
+            throws LifecycleException
+    {
+        // Service shouldn't be used with embeded, so it doesn't matter
+        if (initialized) {
+            if(log.isInfoEnabled())
+                log.info(sm.getString("standardService.initialize.initialized"));
+            return;
+        }
+        initialized = true;
+
+        if( oname==null ) {
+            try {
+                // Hack - Server should be deprecated...
+                Container engine=this.getContainer();
+                domain=engine.getName();
+                oname=new ObjectName(domain + ":type=Service,serviceName="+name);
+                this.controller=oname;
+                Registry.getRegistry(null, null)
+                    .registerComponent(this, oname, null);
+                
+                Executor[] executors = findExecutors();
+                for (int i = 0; i < executors.length; i++) {
+                    ObjectName executorObjectName = 
+                        new ObjectName(domain + ":type=Executor,name=" + executors[i].getName());
+                    Registry.getRegistry(null, null)
+                        .registerComponent(executors[i], executorObjectName, null);
+                }
+                
+            } catch (Exception e) {
+                log.error(sm.getString("standardService.register.failed",domain),e);
+            }
+            
+            
+        }
+        if( server==null ) {
+            // Register with the server 
+            // HACK: ServerFactory should be removed...
+            
+            ServerFactory.getServer().addService(this);
+        }
+               
+
+        // Initialize our defined Connectors
+        synchronized (connectors) {
+            for (int i = 0; i < connectors.length; i++) {
+                try {
+                    connectors[i].initialize();
+                } catch (Exception e) {
+                    String message = sm.getString(
+                            "standardService.connector.initFailed",
+                            connectors[i]);
+                    log.error(message, e);
+
+                    if (Boolean.getBoolean("org.apache.catalina.startup.EXIT_ON_INIT_FAILURE"))
+                        throw new LifecycleException(message);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Return the <code>Container</code> that handles requests for all
+     * <code>Connectors</code> associated with this Service.
+     */
+    public Container getContainer() {
+
+        return (this.container);
+
+    }

@@ -1,0 +1,76 @@
+6
+-----CSCI578-----
+
+
+
+    /**
+     * Create and return a new processor suitable for processing HTTP
+     * requests and returning the corresponding responses.
+     */
+    protected Worker newWorkerThread() {
+
+        Worker workerThread = new Worker();
+        workerThread.start();
+        return (workerThread);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a new worker thread, and block while to worker is available.
+     */
+    protected Worker getWorkerThread() {
+        // Allocate a new worker thread
+        synchronized (workers) {
+            Worker workerThread;
+            while ((workerThread = createWorkerThread()) == null) {
+                try {
+                    workers.wait();
+                } catch (InterruptedException e) {
+                    // Ignore
+                }
+            }
+            return workerThread;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    
+    /**
+     * Create (or allocate) and return an available processor for use in
+     * processing a specific HTTP request, if possible.  If the maximum
+     * allowed processors have already been created and are in use, return
+     * <code>null</code> instead.
+     */
+    protected Worker createWorkerThread() {
+
+        synchronized (workers) {
+            if (workers.size() > 0) {
+                curThreadsBusy++;
+                return workers.pop();
+            }
+            if ((maxThreads > 0) && (curThreads < maxThreads)) {
+                curThreadsBusy++;
+                if (curThreadsBusy == maxThreads) {
+                    log.info(sm.getString("endpoint.info.maxThreads",
+                            Integer.toString(maxThreads), address,
+                            Integer.toString(getLocalPort())));
+                }
+                return (newWorkerThread());
+            } else {
+                if (maxThreads < 0) {
+                    curThreadsBusy++;
+                    return (newWorkerThread());
+                } else {
+                    return (null);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----

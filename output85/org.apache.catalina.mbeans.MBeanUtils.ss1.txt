@@ -1,0 +1,247 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>ContextEnvironment</code> object.
+     *
+     * @param environment The ContextEnvironment to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    public static void destroyMBean(ContextEnvironment environment)
+        throws Exception {
+
+        String mname = createManagedName(environment);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, environment);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>ContextResource</code> object.
+     *
+     * @param resource The ContextResource to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    public static void destroyMBean(ContextResource resource)
+        throws Exception {
+
+        // If this is a user database resource need to destroy groups, roles,
+        // users and UserDatabase mbean
+        if ("org.apache.catalina.UserDatabase".equals(resource.getType())) {
+            destroyMBeanUserDatabase(resource.getName());
+        }
+
+        String mname = createManagedName(resource);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, resource);
+        if( mserver.isRegistered(oname ))
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>ContextResourceLink</code> object.
+     *
+     * @param resourceLink The ContextResourceLink to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    public static void destroyMBean(ContextResourceLink resourceLink)
+        throws Exception {
+
+        String mname = createManagedName(resourceLink);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, resourceLink);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Group</code> object.
+     *
+     * @param group The Group to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Group group)
+        throws Exception {
+
+        String mname = createManagedName(group);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, group);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Role</code> object.
+     *
+     * @param role The Role to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Role role)
+        throws Exception {
+
+        String mname = createManagedName(role);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, role);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>User</code> object.
+     *
+     * @param user The User to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(User user)
+        throws Exception {
+
+        String mname = createManagedName(user);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, user);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Deregister the MBean for the
+     * <code>UserDatabase</code> object with this name.
+     *
+     * @param userDatabase The UserDatabase to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBeanUserDatabase(String userDatabase)
+        throws Exception {
+
+        ObjectName query = null;
+        Set<ObjectName> results = null;
+
+        // Groups
+        query = new ObjectName(
+                "Users:type=Group,database=" + userDatabase + ",*");
+        results = mserver.queryNames(query, null);
+        for(ObjectName result : results) {
+            mserver.unregisterMBean(result);
+        }
+
+        // Roles
+        query = new ObjectName(
+                "Users:type=Role,database=" + userDatabase + ",*");
+        results = mserver.queryNames(query, null);
+        for(ObjectName result : results) {
+            mserver.unregisterMBean(result);
+        }
+
+        // Users
+        query = new ObjectName(
+                "Users:type=User,database=" + userDatabase + ",*");
+        results = mserver.queryNames(query, null);
+        for(ObjectName result : results) {
+            mserver.unregisterMBean(result);
+        }
+
+        // The database itself
+        ObjectName db = new ObjectName(
+                "Users:type=UserDatabase,database=" + userDatabase);
+        if( mserver.isRegistered(db) ) {
+            mserver.unregisterMBean(db);
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Static Methods
+
+    /**
+     * Create and return the name of the <code>ManagedBean</code> that
+     * corresponds to this Catalina component.
+     *
+     * @param component The component for which to create a name
+     */
+    static String createManagedName(Object component) {
+
+        // Deal with exceptions to the standard rule
+        String className = component.getClass().getName();
+        for (int i = 0; i < exceptions.length; i++) {
+            if (className.equals(exceptions[i][0])) {
+                return (exceptions[i][1]);
+            }
+        }
+
+        // Perform the standard transformation
+        int period = className.lastIndexOf('.');
+        if (period >= 0)
+            className = className.substring(period + 1);
+        return (className);
+
+    }

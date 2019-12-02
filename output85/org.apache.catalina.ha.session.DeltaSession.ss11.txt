@@ -1,0 +1,105 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Set the session identifier for this session.
+     *
+     * @param id The new session identifier
+     */
+    @Override
+    public void setId(String id) {
+        setId(id, true);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the session identifier for this session.
+     *
+     * @param id
+     *            The new session identifier
+     */
+    @Override
+    public void setId(String id) {
+        super.setId(id, true);
+        resetDeltaRequest();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Inform the listeners about the new session.
+     *
+     */
+    public void tellNew() {
+
+        // Notify interested session event listeners
+        fireSessionEvent(Session.SESSION_CREATED_EVENT, null);
+
+        // Notify interested application event listeners
+        Context context = manager.getContext();
+        Object listeners[] = context.getApplicationLifecycleListeners();
+        if (listeners != null && listeners.length > 0) {
+            HttpSessionEvent event =
+                new HttpSessionEvent(getSession());
+            for (int i = 0; i < listeners.length; i++) {
+                if (!(listeners[i] instanceof HttpSessionListener))
+                    continue;
+                HttpSessionListener listener =
+                    (HttpSessionListener) listeners[i];
+                try {
+                    context.fireContainerEvent("beforeSessionCreated",
+                            listener);
+                    listener.sessionCreated(event);
+                    context.fireContainerEvent("afterSessionCreated", listener);
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    try {
+                        context.fireContainerEvent("afterSessionCreated",
+                                listener);
+                    } catch (Exception e) {
+                        // Ignore
+                    }
+                    manager.getContext().getLogger().error
+                        (sm.getString("standardSession.sessionEvent"), t);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove this Session from the active Sessions for this Manager.
+     *
+     * @param session Session to be removed
+     */
+    public void remove(Session session);
+
+
+
+    /**
+     * Remove this Session from the active Sessions for this Manager.
+     *
+     * @param session   Session to be removed
+     * @param update    Should the expiration statistics be updated
+     */
+    public void remove(Session session, boolean update);
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain the registered application lifecycle listeners.
+     *
+     * @return An array containing the application lifecycle listener instances
+     *         for this web application in the order they were specified in the
+     *         web application deployment descriptor
+     */
+    public Object[] getApplicationLifecycleListeners();

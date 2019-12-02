@@ -1,0 +1,259 @@
+11
+-----CSCI578-----
+
+
+    private void doForward(ServletRequest request, ServletResponse response)
+        throws ServletException, IOException
+    {
+        
+        // Reset any output that has been buffered, but keep headers/cookies
+        if (response.isCommitted()) {
+            throw new IllegalStateException
+                (sm.getString("applicationDispatcher.forward.ise"));
+        }
+        try {
+            response.resetBuffer();
+        } catch (IllegalStateException e) {
+            throw e;
+        }
+
+        // Set up to handle the specified request and response
+        State state = new State(request, response, false);
+
+        if (Globals.STRICT_SERVLET_COMPLIANCE) {
+            // Check SRV.8.2 / SRV.14.2.5.1 compliance
+            checkSameObjects(request, response);
+        }
+
+        wrapResponse(state);
+        // Handle an HTTP named dispatcher forward
+        if ((servletPath == null) && (pathInfo == null)) {
+
+            ApplicationHttpRequest wrequest =
+                (ApplicationHttpRequest) wrapRequest(state);
+            HttpServletRequest hrequest = state.hrequest;
+            wrequest.setRequestURI(hrequest.getRequestURI());
+            wrequest.setContextPath(hrequest.getContextPath());
+            wrequest.setServletPath(hrequest.getServletPath());
+            wrequest.setPathInfo(hrequest.getPathInfo());
+            wrequest.setQueryString(hrequest.getQueryString());
+
+            processRequest(request,response,state);
+        }
+
+        // Handle an HTTP path-based forward
+        else {
+
+            ApplicationHttpRequest wrequest =
+                (ApplicationHttpRequest) wrapRequest(state);
+            String contextPath = context.getPath();
+            HttpServletRequest hrequest = state.hrequest;
+            if (hrequest.getAttribute(Globals.FORWARD_REQUEST_URI_ATTR) == null) {
+                wrequest.setAttribute(Globals.FORWARD_REQUEST_URI_ATTR,
+                                      hrequest.getRequestURI());
+                wrequest.setAttribute(Globals.FORWARD_CONTEXT_PATH_ATTR,
+                                      hrequest.getContextPath());
+                wrequest.setAttribute(Globals.FORWARD_SERVLET_PATH_ATTR,
+                                      hrequest.getServletPath());
+                wrequest.setAttribute(Globals.FORWARD_PATH_INFO_ATTR,
+                                      hrequest.getPathInfo());
+                wrequest.setAttribute(Globals.FORWARD_QUERY_STRING_ATTR,
+                                      hrequest.getQueryString());
+            }
+ 
+            wrequest.setContextPath(contextPath);
+            wrequest.setRequestURI(requestURI);
+            wrequest.setServletPath(servletPath);
+            wrequest.setPathInfo(pathInfo);
+            if (queryString != null) {
+                wrequest.setQueryString(queryString);
+                wrequest.setQueryParams(queryString);
+            }
+
+            processRequest(request,response,state);
+        }
+
+        // This is not a real close in order to support error processing
+        if (wrapper.getLogger().isDebugEnabled() )
+            wrapper.getLogger().debug(" Disabling the response for futher output");
+
+        if  (response instanceof ResponseFacade) {
+            ((ResponseFacade) response).finish();
+        } else {
+            // Servlet SRV.6.2.2. The Resquest/Response may have been wrapped
+            // and may no longer be instance of RequestFacade 
+            if (wrapper.getLogger().isDebugEnabled()){
+                wrapper.getLogger().debug( " The Response is vehiculed using a wrapper: " 
+                           + response.getClass().getName() );
+            }
+
+            // Close anyway
+            try {
+                PrintWriter writer = response.getWriter();
+                writer.close();
+            } catch (IllegalStateException e) {
+                try {
+                    ServletOutputStream stream = response.getOutputStream();
+                    stream.close();
+                } catch (IllegalStateException f) {
+                    ;
+                } catch (IOException f) {
+                    ;
+                }
+            } catch (IOException e) {
+                ;
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public void finish() {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        response.setSuspended(true);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the context path for this request.
+     *
+     * @param contextPath The new context path
+     */
+    void setContextPath(String contextPath) {
+
+        this.contextPath = contextPath;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the request URI for this request.
+     *
+     * @param requestURI The new request URI
+     */
+    void setRequestURI(String requestURI) {
+
+        this.requestURI = requestURI;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the path information for this request.
+     *
+     * @param pathInfo The new path info
+     */
+    void setPathInfo(String pathInfo) {
+
+        this.pathInfo = pathInfo;
+
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Prepare the request based on the filter configuration.
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     * @param state The RD state
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    private void processRequest(ServletRequest request, 
+                                ServletResponse response,
+                                State state)
+        throws IOException, ServletException {
+                
+        Integer disInt = (Integer) request.getAttribute
+            (ApplicationFilterFactory.DISPATCHER_TYPE_ATTR);
+        if (disInt != null) {
+            if (disInt.intValue() != ApplicationFilterFactory.ERROR) {
+                state.outerRequest.setAttribute
+                    (ApplicationFilterFactory.DISPATCHER_REQUEST_PATH_ATTR,
+                     getCombinedPath());
+                state.outerRequest.setAttribute
+                    (ApplicationFilterFactory.DISPATCHER_TYPE_ATTR,
+                     Integer.valueOf(ApplicationFilterFactory.FORWARD));
+                invoke(state.outerRequest, response, state);
+            } else {
+                invoke(state.outerRequest, response, state);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the query string for this request.
+     *
+     * @param queryString The new query string
+     */
+    void setQueryString(String queryString) {
+
+        this.queryString = queryString;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the servlet path for this request.
+     *
+     * @param servletPath The new servlet path
+     */
+    void setServletPath(String servletPath) {
+
+        this.servletPath = servletPath;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Save query parameters for this request.
+     *
+     * @param queryString The query string containing parameters for this
+     *                    request
+     */
+    void setQueryParams(String queryString) {
+        this.queryParamString = queryString;
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Combine the servletPath and the pathInfo. If pathInfo is
+     * <code>null</code> it is ignored. If servletPath is <code>null</code> then
+     * <code>null</code> is returned.
+     * @return The combined path with pathInfo appended to servletInfo
+     */
+    private String getCombinedPath() {
+        if (servletPath == null) {
+            return null;
+        }
+        if (pathInfo == null) {
+            return servletPath;
+        }
+        return servletPath + pathInfo;
+    }

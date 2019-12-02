@@ -1,0 +1,73 @@
+2
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Protected Methods
+
+    /**
+     * Check the connection associated with this store, if it's
+     * <code>null</code> or closed try to reopen it.
+     * Returns <code>null</code> if the connection could not be established.
+     *
+     * @return <code>Connection</code> if the connection suceeded
+     */
+    protected Connection getConnection() {
+        try {
+            if (dbConnection == null || dbConnection.isClosed()) {
+                manager.getContainer().getLogger().info(sm.getString(getStoreName() + ".checkConnectionDBClosed"));
+                open();
+                if (dbConnection == null || dbConnection.isClosed()) {
+                    manager.getContainer().getLogger().info(sm.getString(getStoreName() + ".checkConnectionDBReOpenFail"));
+                }
+            }
+        } catch (SQLException ex) {
+            manager.getContainer().getLogger().error(sm.getString(getStoreName() + ".checkConnectionSQLException",
+                    ex.toString()));
+        }
+
+        return dbConnection;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Open (if necessary) and return a database connection for use by
+     * this Realm.
+     *
+     * @exception SQLException if a database error occurs
+     */
+    protected Connection open() throws SQLException {
+
+        // Do nothing if there is a database connection already open
+        if (dbConnection != null)
+            return (dbConnection);
+
+        // Instantiate our database driver if necessary
+        if (driver == null) {
+            try {
+                Class<?> clazz = Class.forName(driverName);
+                driver = (Driver) clazz.newInstance();
+            } catch (ClassNotFoundException ex) {
+                manager.getContainer().getLogger().error(sm.getString(getStoreName() + ".checkConnectionClassNotFoundException",
+                        ex.toString()));
+            } catch (InstantiationException ex) {
+                manager.getContainer().getLogger().error(sm.getString(getStoreName() + ".checkConnectionClassNotFoundException",
+                        ex.toString()));
+            } catch (IllegalAccessException ex) {
+                manager.getContainer().getLogger().error(sm.getString(getStoreName() + ".checkConnectionClassNotFoundException",
+                        ex.toString()));
+            }
+        }
+
+        // Open a new connection
+        Properties props = new Properties();
+        if (connectionName != null)
+            props.put("user", connectionName);
+        if (connectionPassword != null)
+            props.put("password", connectionPassword);
+        dbConnection = driver.connect(connectionURL, props);
+        dbConnection.setAutoCommit(true);
+        return (dbConnection);
+
+    }

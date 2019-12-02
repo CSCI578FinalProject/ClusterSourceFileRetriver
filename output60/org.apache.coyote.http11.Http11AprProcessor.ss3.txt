@@ -1,0 +1,262 @@
+14
+-----CSCI578-----
+
+
+
+    /**
+     * Set no compression user agent list (this method is best when used with
+     * a large number of connectors, where it would be better to have all of
+     * them referenced a single array).
+     */
+    public void setNoCompressionUserAgents(Pattern[] noCompressionUserAgents) {
+        this.noCompressionUserAgents = noCompressionUserAgents;
+    }
+
+
+
+    /**
+     * Set no compression user agent list.
+     * List contains users agents separated by ',' :
+     *
+     * ie: "gorilla,desesplorer,tigrus"
+     */
+    public void setNoCompressionUserAgents(String noCompressionUserAgents) {
+        if (noCompressionUserAgents != null) {
+            StringTokenizer st = new StringTokenizer(noCompressionUserAgents, ",");
+
+            while (st.hasMoreTokens()) {
+                addNoCompressionUserAgent(st.nextToken().trim());
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add user-agent for which gzip compression didn't works
+     * The user agent String given will be exactly matched
+     * to the user-agent header submitted by the client.
+     *
+     * @param userAgent user-agent string
+     */
+    public void addNoCompressionUserAgent(String userAgent) {
+        try {
+            Pattern nRule = Pattern.compile(userAgent);
+            noCompressionUserAgents =
+                addREArray(noCompressionUserAgents, nRule);
+        } catch (PatternSyntaxException pse) {
+            log.error(sm.getString("http11processor.regexp.error", userAgent), pse);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Initialize standard input and output filters.
+     */
+    protected void initializeFilters() {
+
+        // Create and add the identity filters.
+        inputBuffer.addFilter(new IdentityInputFilter());
+        outputBuffer.addFilter(new IdentityOutputFilter());
+
+        // Create and add the chunked filters.
+        inputBuffer.addFilter(new ChunkedInputFilter());
+        outputBuffer.addFilter(new ChunkedOutputFilter());
+
+        // Create and add the void filters.
+        inputBuffer.addFilter(new VoidInputFilter());
+        outputBuffer.addFilter(new VoidOutputFilter());
+
+        // Create and add buffered input filter
+        inputBuffer.addFilter(new BufferedInputFilter());
+
+        // Create and add the chunked filters.
+        //inputBuffer.addFilter(new GzipInputFilter());
+        outputBuffer.addFilter(new GzipOutputFilter());
+
+        pluggableFilterIndex = inputBuffer.filterLibrary.length;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    public boolean isSSLEnabled() { return SSLEnabled; }
+-----CSCI578-----
+
+
+
+    /**
+     * Add an input filter to the filter library.
+     */
+    public void addFilter(InputFilter filter) {
+
+        InputFilter[] newFilterLibrary =
+            new InputFilter[filterLibrary.length + 1];
+        for (int i = 0; i < filterLibrary.length; i++) {
+            newFilterLibrary[i] = filterLibrary[i];
+        }
+        newFilterLibrary[filterLibrary.length] = filter;
+        filterLibrary = newFilterLibrary;
+
+        activeFilters = new InputFilter[filterLibrary.length];
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add an output filter to the filter library.
+     */
+    public void addFilter(OutputFilter filter) {
+
+        OutputFilter[] newFilterLibrary = 
+            new OutputFilter[filterLibrary.length + 1];
+        for (int i = 0; i < filterLibrary.length; i++) {
+            newFilterLibrary[i] = filterLibrary[i];
+        }
+        newFilterLibrary[filterLibrary.length] = filter;
+        filterLibrary = newFilterLibrary;
+
+        activeFilters = new OutputFilter[filterLibrary.length];
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add input or output filter.
+     *
+     * @param className class name of the filter
+     */
+    protected void addFilter(String className) {
+        try {
+            Class<?> clazz = Class.forName(className);
+            Object obj = clazz.newInstance();
+            if (obj instanceof InputFilter) {
+                inputBuffer.addFilter((InputFilter) obj);
+            } else if (obj instanceof OutputFilter) {
+                outputBuffer.addFilter((OutputFilter) obj);
+            } else {
+                log.warn(sm.getString("http11processor.filter.unknown", className));
+            }
+        } catch (Exception e) {
+            log.error(sm.getString("http11processor.filter.error", className), e);
+        }
+    }
+-----CSCI578-----
+
+
+    // --------------------  SSL related properties --------------------
+
+    /**
+     * SSL engine.
+     */
+    public boolean isSSLEnabled() { return endpoint.isSSLEnabled(); }
+-----CSCI578-----
+
+
+
+    /**
+     * Set restricted user agent list (this method is best when used with
+     * a large number of connectors, where it would be better to have all of
+     * them referenced a single array).
+     */
+    public void setRestrictedUserAgents(Pattern[] restrictedUserAgents) {
+        this.restrictedUserAgents = restrictedUserAgents;
+    }
+
+
+
+    /**
+     * Set restricted user agent list (which will downgrade the connector
+     * to HTTP/1.0 mode). List contains users agents separated by ',' :
+     *
+     * ie: "gorilla,desesplorer,tigrus"
+     */
+    public void setRestrictedUserAgents(String restrictedUserAgents) {
+        if (restrictedUserAgents != null) {
+            StringTokenizer st =
+                new StringTokenizer(restrictedUserAgents, ",");
+            while (st.hasMoreTokens()) {
+                addRestrictedUserAgent(st.nextToken().trim());
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add restricted user-agent (which will downgrade the connector
+     * to HTTP/1.0 mode). The user agent String given will be matched
+     * via regexp to the user-agent header submitted by the client.
+     *
+     * @param userAgent user-agent string
+     */
+    public void addRestrictedUserAgent(String userAgent) {
+        try {
+            Pattern nRule = Pattern.compile(userAgent);
+            restrictedUserAgents = addREArray(restrictedUserAgents, nRule);
+        } catch (PatternSyntaxException pse) {
+            log.error(sm.getString("http11processor.regexp.error", userAgent), pse);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the socket buffer size.
+     */
+    public void setSocketBuffer(int socketBufferSize) {
+        // FIXME: Remove
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the socket buffer flag.
+     */
+    public void setSocketBuffer(int socketBuffer) {
+        this.socketBuffer = socketBuffer;
+        outputBuffer.setSocketBuffer(socketBuffer);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set compressable mime-type list (this method is best when used with
+     * a large number of connectors, where it would be better to have all of
+     * them referenced a single array).
+     */
+    public void setCompressableMimeTypes(String[] compressableMimeTypes) {
+        this.compressableMimeTypes = compressableMimeTypes;
+    }
+
+
+
+    /**
+     * Set compressable mime-type list
+     * List contains users agents separated by ',' :
+     *
+     * ie: "text/html,text/xml,text/plain"
+     */
+    public void setCompressableMimeTypes(String compressableMimeTypes) {
+        if (compressableMimeTypes != null) {
+            this.compressableMimeTypes = null;
+            StringTokenizer st = new StringTokenizer(compressableMimeTypes, ",");
+
+            while (st.hasMoreTokens()) {
+                addCompressableMimeType(st.nextToken().trim());
+            }
+        }
+    }

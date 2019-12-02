@@ -1,0 +1,115 @@
+6
+-----CSCI578-----
+
+
+    public String getContextPath() {
+        return contextPath;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Callback from the cluster, when a message is received, The cluster will
+     * broadcast it invoking the messageReceived on the receiver.
+     * 
+     * @param msg
+     *            ClusterMessage - the message received from the cluster
+     */
+    public void messageReceived(ClusterMessage msg) {
+        try {
+            if (msg instanceof FileMessage && msg != null) {
+                FileMessage fmsg = (FileMessage) msg;
+                if (log.isDebugEnabled())
+                    log.debug("receive cluster deployment [ path: "
+                            + fmsg.getContextPath() + " war:  "
+                            + fmsg.getFileName() + " ]");
+                FileMessageFactory factory = getFactory(fmsg);
+                // TODO correct second try after app is in service!
+                if (factory.writeMessage(fmsg)) {
+                    //last message received war file is completed
+                    String name = factory.getFile().getName();
+                    if (!name.endsWith(".war"))
+                        name = name + ".war";
+                    File deployable = new File(getDeployDir(), name);
+                    try {
+                        String path = fmsg.getContextPath();
+                        if (!isServiced(path)) {
+                            addServiced(path);
+                            try {
+                                remove(path);
+                                factory.getFile().renameTo(deployable);
+                                check(path);
+                            } finally {
+                                removeServiced(path);
+                            }
+                            if (log.isDebugEnabled())
+                                log.debug("deployment from " + path
+                                        + " finished.");
+                        } else
+                            log.error("Application " + path
+                                    + " in used. touch war file " + name
+                                    + " again!");
+                    } catch (Exception ex) {
+                        log.error(ex);
+                    } finally {
+                        removeFactory(fmsg);
+                    }
+                }
+            } else if (msg instanceof UndeployMessage && msg != null) {
+                try {
+                    UndeployMessage umsg = (UndeployMessage) msg;
+                    String path = umsg.getContextPath();
+                    if (log.isDebugEnabled())
+                        log.debug("receive cluster undeployment from " + path);
+                    if (!isServiced(path)) {
+                        addServiced(path);
+                        try {
+                            remove(path);
+                        } finally {
+                            removeServiced(path);
+                        }
+                        if (log.isDebugEnabled())
+                            log.debug("undeployment from " + path
+                                    + " finished.");
+                    } else
+                        log.error("Application "
+                            + path
+                            + " in used. Sorry not remove from backup cluster nodes!");
+                } catch (Exception ex) {
+                    log.error(ex);
+                }
+            }
+        } catch (java.io.IOException x) {
+            log.error("Unable to read farm deploy file message.", x);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Remove file (war) from messages)
+     * 
+     * @param msg
+     */
+    public void removeFactory(FileMessage msg) {
+        fileFactories.remove(msg.getFileName());
+    }
+-----CSCI578-----
+///main
+
+    public File getFile() {
+        return file;
+    }
+-----CSCI578-----
+
+
+    
+    public String getFileName() {
+        return fileName;
+    }
+-----CSCI578-----
+
+
+    public String getDeployDir() {
+        return deployDir;
+    }

@@ -1,0 +1,39 @@
+2
+-----CSCI578-----
+
+
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        Object obj0 = this.children[0].getValue(ctx);
+        Object obj1 = this.children[1].getValue(ctx);
+        return ELArithmetic.add(obj0, obj1);
+    }
+-----CSCI578-----
+
+
+    public final static Number add(final Object obj0, final Object obj1) {
+        if (obj0 == null && obj1 == null) {
+            return new Long(0);
+        }
+
+        final ELArithmetic delegate;
+        if (BIGDECIMAL.matches(obj0, obj1))
+            delegate = BIGDECIMAL;
+        else if (DOUBLE.matches(obj0, obj1)) {
+            if (BIGINTEGER.matches(obj0, obj1))
+                delegate = BIGDECIMAL;
+            else
+                delegate = DOUBLE;
+        } else if (BIGINTEGER.matches(obj0, obj1))
+            delegate = BIGINTEGER;
+        else
+            delegate = LONG;
+
+        Number num0 = delegate.coerce(obj0);
+        Number num1 = delegate.coerce(obj1);
+
+        return delegate.add(num0, num1);
+    }
+
+
+    protected abstract Number add(final Number num0, final Number num1);

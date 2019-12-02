@@ -1,0 +1,182 @@
+5
+-----CSCI578-----
+
+
+
+    //---------------------------------------------------------- Public Methods
+
+
+    /**
+     * Returns the message associated with this exception, if any.
+     */
+    public String getMessage() {
+
+        return (message);
+
+    }
+-----CSCI578-----
+
+
+    public String getContainerSuffix() {
+        Container container=this;
+        Container context=null;
+        Container host=null;
+        Container servlet=null;
+
+        StringBuffer suffix=new StringBuffer();
+
+        if( container instanceof StandardHost ) {
+            host=container;
+        } else if( container instanceof StandardContext ) {
+            host=container.getParent();
+            context=container;
+        } else if( container instanceof StandardWrapper ) {
+            context=container.getParent();
+            host=context.getParent();
+            servlet=container;
+        }
+        if( context!=null ) {
+            String path=((StandardContext)context).getPath();
+            suffix.append(",path=").append((path.equals("")) ? "/" : path);
+        }
+        if( host!=null ) suffix.append(",host=").append( host.getName() );
+        if( servlet != null ) {
+            String name=container.getName();
+            suffix.append(",servlet=");
+            suffix.append((name=="") ? "/" : name);
+        }
+        return suffix.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called before any of the public
+     * methods of this component are utilized.  It should also send a
+     * LifecycleEvent of type START_EVENT to any registered listeners.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (started) {
+            if(log.isInfoEnabled())
+                log.info(sm.getString("realmBase.alreadyStarted"));
+            return;
+        }
+        if( !initialized ) {
+            init();
+        }
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+        started = true;
+
+        // Create a MessageDigest instance for credentials, if desired
+        if (digest != null) {
+            try {
+                md = MessageDigest.getInstance(digest);
+            } catch (NoSuchAlgorithmException e) {
+                throw new LifecycleException
+                    (sm.getString("realmBase.algorithm", digest), e);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+    
+    public void init() {
+        if( initialized && container != null ) return;
+
+        // We want logger as soon as possible
+        if (container != null) {
+            this.containerLog = container.getLogger();
+        }
+
+        try {
+            x509UsernameRetriever =
+                    createUsernameRetriever(x509UsernameRetrieverClassName);
+        } catch (LifecycleException ex) {
+            log.error(ex.getMessage(), ex);
+        }
+
+        initialized=true;
+        if( container== null ) {
+            ObjectName parent=null;
+            // Register with the parent
+            try {
+                if( host == null ) {
+                    // global
+                    parent=new ObjectName(domain +":type=Engine");
+                } else if( path==null ) {
+                    parent=new ObjectName(domain +
+                            ":type=Host,host=" + host);
+                } else {
+                    parent=new ObjectName(domain +":j2eeType=WebModule,name=//" +
+                            host + path);
+                }
+                if( mserver.isRegistered(parent ))  {
+                    if(log.isDebugEnabled())
+                        log.debug("Register with " + parent);
+                    mserver.setAttribute(parent, new Attribute("realm", this));
+                }
+            } catch (Exception e) {
+                log.error("Parent not available yet: " + parent);  
+            }
+        }
+        
+        if( oname==null ) {
+            // register
+            try {
+                ContainerBase cb=(ContainerBase)container;
+                oname=new ObjectName(cb.getDomain()+":type=Realm" +
+                        getRealmSuffix() + cb.getContainerSuffix());
+                Registry.getRegistry(null, null).registerComponent(this, oname, null );
+                if(log.isDebugEnabled())
+                    log.debug("Register Realm "+oname);
+            } catch (Throwable e) {
+                log.error( "Can't register " + oname, e);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Lifecycle Methods
+
+    /**
+     *
+     * Prepare for active use of the public methods of this Component.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents it from being started
+     */
+    public void start() throws LifecycleException {
+
+        // Perform normal superclass initialization
+        super.start();
+
+        // Create the roles PreparedStatement string
+        StringBuffer temp = new StringBuffer("SELECT ");
+        temp.append(roleNameCol);
+        temp.append(" FROM ");
+        temp.append(userRoleTable);
+        temp.append(" WHERE ");
+        temp.append(userNameCol);
+        temp.append(" = ?");
+        preparedRoles = temp.toString();
+
+        // Create the credentials PreparedStatement string
+        temp = new StringBuffer("SELECT ");
+        temp.append(userCredCol);
+        temp.append(" FROM ");
+        temp.append(userTable);
+        temp.append(" WHERE ");
+        temp.append(userNameCol);
+        temp.append(" = ?");
+        preparedCredentials = temp.toString();
+    }

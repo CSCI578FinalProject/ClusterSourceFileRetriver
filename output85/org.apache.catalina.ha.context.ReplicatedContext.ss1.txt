@@ -1,0 +1,832 @@
+54
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Deallocate resources and destroy proxy.
+     * @return <code>true</code> if no error occurred
+     */
+    public boolean resourcesStop() {
+
+        boolean ok = true;
+
+        Lock writeLock = resourcesLock.writeLock();
+        writeLock.lock();
+        try {
+            if (resources != null) {
+                resources.stop();
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            log.error(sm.getString("standardContext.resourcesStop"), t);
+            ok = false;
+        } finally {
+            writeLock.unlock();
+        }
+
+        return ok;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Finalize and release the set of filters for this Context.
+     * @return <code>true</code> if all filter finalization completed
+     * successfully, or <code>false</code> otherwise.
+     */
+    public boolean filterStop() {
+
+        if (getLogger().isDebugEnabled())
+            getLogger().debug("Stopping filters");
+
+        // Release all Filter and FilterConfig instances
+        synchronized (filterConfigs) {
+            for (Entry<String, ApplicationFilterConfig> entry : filterConfigs.entrySet()) {
+                if (getLogger().isDebugEnabled())
+                    getLogger().debug(" Stopping filter '" + entry.getKey() + "'");
+                ApplicationFilterConfig filterConfig = entry.getValue();
+                filterConfig.release();
+            }
+            filterConfigs.clear();
+        }
+        return true;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Locale to character set mapper for this Context.
+     *
+     * @param mapper The new mapper
+     */
+    public void setCharsetMapper(CharsetMapper mapper) {
+
+        CharsetMapper oldCharsetMapper = this.charsetMapper;
+        this.charsetMapper = mapper;
+        if( mapper != null )
+            this.charsetMapperClass= mapper.getClass().getName();
+        support.firePropertyChange("charsetMapper", oldCharsetMapper,
+                                   this.charsetMapper);
+
+    }
+-----CSCI578-----
+
+    public static final void unbind(ClassLoader classLoader) {
+        bindings.remove(classLoader);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Send an application stop event to all interested listeners.
+     * @return <code>true</code> if all events were sent successfully,
+     * or <code>false</code> otherwise.
+     */
+    public boolean listenerStop() {
+
+        if (log.isDebugEnabled())
+            log.debug("Sending application stop events");
+
+        boolean ok = true;
+        Object listeners[] = getApplicationLifecycleListeners();
+        if (listeners != null && listeners.length > 0) {
+            ServletContextEvent event = new ServletContextEvent(getServletContext());
+            ServletContextEvent tldEvent = null;
+            if (noPluggabilityServletContext != null) {
+                tldEvent = new ServletContextEvent(noPluggabilityServletContext);
+            }
+            for (int i = 0; i < listeners.length; i++) {
+                int j = (listeners.length - 1) - i;
+                if (listeners[j] == null)
+                    continue;
+                if (listeners[j] instanceof ServletContextListener) {
+                    ServletContextListener listener =
+                        (ServletContextListener) listeners[j];
+                    try {
+                        fireContainerEvent("beforeContextDestroyed", listener);
+                        if (noPluggabilityListeners.contains(listener)) {
+                            listener.contextDestroyed(tldEvent);
+                        } else {
+                            listener.contextDestroyed(event);
+                        }
+                        fireContainerEvent("afterContextDestroyed", listener);
+                    } catch (Throwable t) {
+                        ExceptionUtils.handleThrowable(t);
+                        fireContainerEvent("afterContextDestroyed", listener);
+                        getLogger().error
+                            (sm.getString("standardContext.listenerStop",
+                                listeners[j].getClass().getName()), t);
+                        ok = false;
+                    }
+                }
+                try {
+                    if (getInstanceManager() != null) {
+                        getInstanceManager().destroyInstance(listeners[j]);
+                    }
+                } catch (Throwable t) {
+                    t = ExceptionUtils.unwrapInvocationTargetException(t);
+                    ExceptionUtils.handleThrowable(t);
+                    getLogger().error
+                       (sm.getString("standardContext.listenerStop",
+                            listeners[j].getClass().getName()), t);
+                    ok = false;
+                }
+            }
+        }
+
+        // Annotation processing
+        listeners = getApplicationEventListeners();
+        if (listeners != null) {
+            for (int i = 0; i < listeners.length; i++) {
+                int j = (listeners.length - 1) - i;
+                if (listeners[j] == null)
+                    continue;
+                try {
+                    if (getInstanceManager() != null) {
+                        getInstanceManager().destroyInstance(listeners[j]);
+                    }
+                } catch (Throwable t) {
+                    t = ExceptionUtils.unwrapInvocationTargetException(t);
+                    ExceptionUtils.handleThrowable(t);
+                    getLogger().error
+                        (sm.getString("standardContext.listenerStop",
+                            listeners[j].getClass().getName()), t);
+                    ok = false;
+                }
+            }
+        }
+
+        setApplicationEventListeners(null);
+        setApplicationLifecycleListeners(null);
+
+        noPluggabilityServletContext = null;
+        noPluggabilityListeners.clear();
+
+        return ok;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Clear all application-created attributes.
+     */
+    protected void clearAttributes() {
+
+        // Create list of attributes to be removed
+        ArrayList<String> list = new ArrayList<>();
+        Iterator<String> iter = attributes.keySet().iterator();
+        while (iter.hasNext()) {
+            list.add(iter.next());
+        }
+
+        // Remove application originated attributes
+        // (read only attributes will be left in place)
+        Iterator<String> keys = list.iterator();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            removeAttribute(key);
+        }
+
+    }
+-----CSCI578-----
+
+
+    private void unregisterJMX() {
+        // unregister this component
+        if (oname != null) {
+            try {
+                Registry.getRegistry(null, null).unregisterComponent(oname);
+                if (log.isDebugEnabled())
+                    log.debug(sm.getString(
+                            "applicationFilterConfig.jmxUnregister",
+                            getFilterClass(), getFilterName()));
+            } catch(Exception ex) {
+                log.error(sm.getString(
+                        "applicationFilterConfig.jmxUnregisterFail",
+                        getFilterClass(), getFilterName()), ex);
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void resetContext() throws Exception {
+        // Restore the original state ( pre reading web.xml in start )
+        // If you extend this - override this method and make sure to clean up
+
+        // Don't reset anything that is read from a <Context.../> element since
+        // <Context .../> elements are read at initialisation will not be read
+        // again for this object
+        for (Container child : findChildren()) {
+            removeChild(child);
+        }
+        startupTime = 0;
+        startTime = 0;
+        tldScanTime = 0;
+
+        // Bugzilla 32867
+        distributable = false;
+
+        applicationListeners = new String[0];
+        applicationEventListenersList.clear();
+        applicationLifecycleListenersObjects = new Object[0];
+        jspConfigDescriptor = null;
+
+        initializers.clear();
+
+        createdServlets.clear();
+
+        postConstructMethods.clear();
+        preDestroyMethods.clear();
+
+        if(log.isDebugEnabled())
+            log.debug("resetContext " + getObjectName());
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Release the Filter instance associated with this FilterConfig,
+     * if there is one.
+     */
+    void release() {
+
+        unregisterJMX();
+
+        if (this.filter != null)
+        {
+            try {
+                if (Globals.IS_SECURITY_ENABLED) {
+                    try {
+                        SecurityUtil.doAsPrivilege("destroy", filter);
+                    } finally {
+                        SecurityUtil.remove(filter);
+                    }
+                } else {
+                    filter.destroy();
+                }
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                context.getLogger().error(sm.getString(
+                        "applicationFilterConfig.release",
+                        filterDef.getFilterName(),
+                        filterDef.getFilterClass()), t);
+            }
+            if (!context.getIgnoreAnnotations()) {
+                try {
+                    ((StandardContext) context).getInstanceManager().destroyInstance(this.filter);
+                } catch (Exception e) {
+                    Throwable t = ExceptionUtils
+                            .unwrapInvocationTargetException(e);
+                    ExceptionUtils.handleThrowable(t);
+                    context.getLogger().error(
+                            sm.getString("applicationFilterConfig.preDestroy",
+                                    filterDef.getFilterName(), filterDef.getFilterClass()), t);
+                }
+            }
+        }
+        this.filter = null;
+
+     }
+-----CSCI578-----
+
+
+
+    /**
+     * <p> Log a message with error log level. </p>
+     *
+     * @param message log this message
+     */
+    public void error(Object message);
+
+
+
+    /**
+     * <p> Log an error with error log level. </p>
+     *
+     * @param message log this message
+     * @param t log this cause
+     */
+    public void error(Object message, Throwable t);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public Object[] getApplicationEventListeners() {
+        return applicationEventListenersList.toArray();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public InstanceManager getInstanceManager() {
+       return instanceManager;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // --------------------------------------------------- FilterConfig Methods
+
+
+    /**
+     * Return the name of the filter we are configuring.
+     */
+    @Override
+    public String getFilterName() {
+        return (filterDef.getFilterName());
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return The class of the filter we are configuring.
+     */
+    public String getFilterClass() {
+        return filterDef.getFilterClass();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the object from the cache.
+     *
+     * @param cachedObject The object to remove
+     */
+    public static void remove(Object cachedObject){
+        classCache.remove(cachedObject);
+    }
+-----CSCI578-----
+
+
+    public void destroyInstance(Object o)
+        throws IllegalAccessException, InvocationTargetException;
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain the current state of the source component.
+     *
+     * @return The current state of the source component.
+     */
+    public LifecycleState getState();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Add a child Container, only if the proposed child is an implementation
+     * of Wrapper.
+     *
+     * @param child Child container to be added
+     *
+     * @exception IllegalArgumentException if the proposed container is
+     *  not an implementation of Wrapper
+     */
+    @Override
+    public void removeChild(Container child) {
+
+        if (!(child instanceof Wrapper)) {
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.notWrapper"));
+        }
+
+        super.removeChild(child);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public Object[] getApplicationLifecycleListeners() {
+        return (applicationLifecycleListenersObjects);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Store the set of initialized application lifecycle listener objects,
+     * in the order they were specified in the web application deployment
+     * descriptor, for this application.
+     *
+     * @param listeners The set of instantiated listener objects.
+     */
+    @Override
+    public void setApplicationLifecycleListeners(Object listeners[]) {
+        applicationLifecycleListenersObjects = listeners;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void setInstanceManager(InstanceManager instanceManager) {
+       this.instanceManager = instanceManager;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Stop broadcasting and listening to membership pings
+     */
+    @Override
+    public void stop(int svc) {
+        try  {
+            if ( impl != null && impl.stop(svc) ) impl = null;
+        } catch ( Exception x)  {
+            log.error(sm.getString(
+                    "McastService.stopFail", Integer.valueOf(svc)), x);
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setPayload(byte[] payload) {
+        this.payload = payload;
+        if ( localMember != null ) {
+            localMember.setPayload(payload);
+            try {
+                if (impl != null) impl.send(false);
+            }catch ( Exception x ) {
+                log.error(sm.getString("McastService.payload"), x);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setDomain(byte[] domain) {
+        this.domain = domain;
+        if ( localMember != null ) {
+            localMember.setDomain(domain);
+            try {
+                if (impl != null) impl.send(false);
+            }catch ( Exception x ) {
+                log.error(sm.getString("McastService.domain"), x);
+            }
+        }
+    }
+
+
+    public void setDomain(String domain) {
+        if ( domain == null ) return;
+        if ( domain.startsWith("{") ) setDomain(Arrays.fromString(domain));
+        else setDomain(Arrays.convert(domain));
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the Realm with which this Container is associated.
+     *
+     * @param realm The newly associated Realm
+     */
+    @Override
+    public void setRealm(Realm realm) {
+
+        Lock l = realmLock.writeLock();
+        l.lock();
+        try {
+            // Change components if necessary
+            Realm oldRealm = this.realm;
+            if (oldRealm == realm)
+                return;
+            this.realm = realm;
+
+            // Stop the old component if necessary
+            if (getState().isAvailable() && (oldRealm != null) &&
+                (oldRealm instanceof Lifecycle)) {
+                try {
+                    ((Lifecycle) oldRealm).stop();
+                } catch (LifecycleException e) {
+                    log.error("ContainerBase.setRealm: stop: ", e);
+                }
+            }
+
+            // Start the new component if necessary
+            if (realm != null)
+                realm.setContainer(this);
+            if (getState().isAvailable() && (realm != null) &&
+                (realm instanceof Lifecycle)) {
+                try {
+                    ((Lifecycle) realm).start();
+                } catch (LifecycleException e) {
+                    log.error("ContainerBase.setRealm: start: ", e);
+                }
+            }
+
+            // Report this property change to interested listeners
+            support.firePropertyChange("realm", oldRealm, this.realm);
+        } finally {
+            l.unlock();
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean fireRequestInitEvent(ServletRequest request) {
+
+        Object instances[] = getApplicationEventListeners();
+
+        if ((instances != null) && (instances.length > 0)) {
+
+            ServletRequestEvent event =
+                    new ServletRequestEvent(getServletContext(), request);
+
+            for (int i = 0; i < instances.length; i++) {
+                if (instances[i] == null)
+                    continue;
+                if (!(instances[i] instanceof ServletRequestListener))
+                    continue;
+                ServletRequestListener listener =
+                    (ServletRequestListener) instances[i];
+
+                try {
+                    listener.requestInitialized(event);
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    getLogger().error(sm.getString(
+                            "standardContext.requestListener.requestInit",
+                            instances[i].getClass().getName()), t);
+                    request.setAttribute(RequestDispatcher.ERROR_EXCEPTION, t);
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean fireRequestDestroyEvent(ServletRequest request) {
+        Object instances[] = getApplicationEventListeners();
+
+        if ((instances != null) && (instances.length > 0)) {
+
+            ServletRequestEvent event =
+                new ServletRequestEvent(getServletContext(), request);
+
+            for (int i = 0; i < instances.length; i++) {
+                int j = (instances.length -1) -i;
+                if (instances[j] == null)
+                    continue;
+                if (!(instances[j] instanceof ServletRequestListener))
+                    continue;
+                ServletRequestListener listener =
+                    (ServletRequestListener) instances[j];
+
+                try {
+                    listener.requestDestroyed(event);
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    getLogger().error(sm.getString(
+                            "standardContext.requestListener.requestInit",
+                            instances[j].getClass().getName()), t);
+                    request.setAttribute(RequestDispatcher.ERROR_EXCEPTION, t);
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Adds a named executor to the service
+     * @param ex Executor
+     */
+    @Override
+    public void addExecutor(Executor ex) {
+        synchronized (executors) {
+            if (!executors.contains(ex)) {
+                executors.add(ex);
+                if (getState().isAvailable()) {
+                    try {
+                        ex.start();
+                    } catch (LifecycleException x) {
+                        log.error("Executor.start", x);
+                    }
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Removes an executor from the service
+     * @param ex Executor
+     */
+    @Override
+    public void removeExecutor(Executor ex) {
+        synchronized (executors) {
+            if ( executors.remove(ex) && getState().isAvailable() ) {
+                try {
+                    ex.stop();
+                } catch (LifecycleException e) {
+                    log.error("Executor.stop", e);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Adds the given tag handler to this tag handler pool, unless this tag
+     * handler pool has already reached its capacity, in which case the tag
+     * handler's release() method is called.
+     *
+     * @param handler
+     *            Tag handler to add to this tag handler pool
+     */
+    public void reuse(Tag handler) {
+        synchronized (this) {
+            if (current < (handlers.length - 1)) {
+                handlers[++current] = handler;
+                return;
+            }
+        }
+        // There is no need for other threads to wait for us to release
+        handler.release();
+        try {
+            instanceManager.destroyInstance(handler);
+        } catch (Exception e) {
+            Throwable t = ExceptionUtils.unwrapInvocationTargetException(e);
+            ExceptionUtils.handleThrowable(t);
+            log.warn("Error processing preDestroy on tag instance of " +
+                    handler.getClass().getName(), t);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Adds the given tag handler to this tag handler pool, unless this tag
+     * handler pool has already reached its capacity, in which case the tag
+     * handler's release() method is called.
+     *
+     * @param handler
+     *            Tag handler to add to this tag handler pool
+     */
+    public void reuse(Tag handler) {
+        synchronized (this) {
+            if (current < (handlers.length - 1)) {
+                handlers[++current] = handler;
+                return;
+            }
+        }
+        // There is no need for other threads to wait for us to release
+        handler.release();
+        try {
+            instanceManager.destroyInstance(handler);
+        } catch (Exception e) {
+            Throwable t = ExceptionUtils.unwrapInvocationTargetException(e);
+            ExceptionUtils.handleThrowable(t);
+            log.warn("Error processing preDestroy on tag instance of " +
+                    handler.getClass().getName(), t);
+        }
+    }
+
+
+    /**
+     * Calls the release() method of all available tag handlers in this tag
+     * handler pool.
+     */
+    public synchronized void release() {
+        for (int i = current; i >= 0; i--) {
+            Tag handler = handlers[i];
+            handler.release();
+            try {
+                instanceManager.destroyInstance(handler);
+            } catch (Exception e) {
+                Throwable t = ExceptionUtils.unwrapInvocationTargetException(e);
+                ExceptionUtils.handleThrowable(t);
+                log.warn("Error processing preDestroy on tag instance of "
+                        + handler.getClass().getName(), t);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Enable or disable thread contention monitoring via the ThreadMxMXBean.
+     *
+     * @param enable whether to enable thread contention monitoring
+     */
+    public static void setThreadContentionMonitoringEnabled(boolean enable) {
+        threadMXBean.setThreadContentionMonitoringEnabled(enable);
+        boolean checkValue = threadMXBean.isThreadContentionMonitoringEnabled();
+        if (enable != checkValue) {
+            log.error("Could not set threadContentionMonitoringEnabled to " +
+                      enable + ", got " + checkValue + " instead");
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Enable or disable thread cpu time measurement via the ThreadMxMXBean.
+     *
+     * @param enable whether to enable thread cpu time measurement
+     */
+    public static void setThreadCpuTimeEnabled(boolean enable) {
+        threadMXBean.setThreadCpuTimeEnabled(enable);
+        boolean checkValue = threadMXBean.isThreadCpuTimeEnabled();
+        if (enable != checkValue) {
+            log.error("Could not set threadCpuTimeEnabled to " + enable +
+                      ", got " + checkValue + " instead");
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set verbose class loading
+     *
+     * @param verbose whether to enable verbose class loading
+     */
+    public static void setVerboseClassLoading(boolean verbose) {
+        classLoadingMXBean.setVerbose(verbose);
+        boolean checkValue = classLoadingMXBean.isVerbose();
+        if (verbose != checkValue) {
+            log.error("Could not set verbose class loading to " + verbose +
+                      ", got " + checkValue + " instead");
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set logger level
+     *
+     * @param loggerName the name of the logger
+     * @param levelName the level to set
+     */
+    public static void setLoggerLevel(String loggerName, String levelName) {
+        loggingMXBean.setLoggerLevel(loggerName, levelName);
+        String checkValue = loggingMXBean.getLoggerLevel(loggerName);
+        if (!checkValue.equals(levelName)) {
+            log.error("Could not set logger level for logger '" +
+                      loggerName + "' to '" + levelName +
+                      "', got '" + checkValue + "' instead");
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set verbose garbage collection logging
+     *
+     * @param verbose whether to enable verbose gc logging
+     */
+    public static void setVerboseGarbageCollection(boolean verbose) {
+        memoryMXBean.setVerbose(verbose);
+        boolean checkValue = memoryMXBean.isVerbose();
+        if (verbose != checkValue) {
+            log.error("Could not set verbose garbage collection logging to " + verbose +
+                      ", got " + checkValue + " instead");
+        }
+    }

@@ -1,0 +1,54 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private Session getSession(String sessionId, String ctxname) {
+	
+	Map managers = clusterSSO.getCluster().getManagers() ;
+	Session session = null;
+
+	if (ctxname == null) {
+	    java.util.Iterator i = managers.keySet().iterator();
+	    while (i.hasNext()) {
+		String key = (String) i.next();
+		ClusterManager mgr = (ClusterManager) managers.get(key);
+		if (mgr != null) {
+		    try {
+			session = mgr.findSession(sessionId);
+		    } catch (IOException io) {
+			log.error("Session doesn't exist:" + io);
+		    }
+		    return session;
+		} else {
+		    //this happens a lot before the system has started
+		    // up
+		    if (log.isDebugEnabled())
+			log.debug("Context manager doesn't exist:"
+				  + key);
+		}
+	    }
+	} else {
+	    ClusterManager mgr = (ClusterManager) managers.get(ctxname);
+	    if (mgr != null) {
+		try {
+		    session = mgr.findSession(sessionId);
+		} catch (IOException io) {
+		    log.error("Session doesn't exist:" + io);
+		}
+		return session;
+	    } else if (log.isErrorEnabled())
+		log.error("Context manager doesn't exist:" + ctxname);
+	}
+
+	return null;
+    }
+-----CSCI578-----
+
+
+    public CatalinaCluster getCluster() {
+
+        return cluster;
+
+    }

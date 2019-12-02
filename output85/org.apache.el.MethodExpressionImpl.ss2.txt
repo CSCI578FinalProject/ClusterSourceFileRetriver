@@ -1,0 +1,42 @@
+2
+-----CSCI578-----
+
+  public MethodInfo getMethodInfo(EvaluationContext ctx, Class<?>[] paramTypes)
+          throws ELException;
+-----CSCI578-----
+
+
+    /**
+     * Evaluates the expression relative to the provided context, and returns
+     * information about the actual referenced method.
+     *
+     * @param context
+     *            The context of this evaluation
+     * @return an instance of <code>MethodInfo</code> containing information
+     *         about the method the expression evaluated to.
+     * @throws NullPointerException
+     *             if context is <code>null</code> or the base object is
+     *             <code>null</code> on the last resolution.
+     * @throws PropertyNotFoundException
+     *             if one of the property resolutions failed because a specified
+     *             variable or property does not exist or is not readable.
+     * @throws MethodNotFoundException
+     *             if no suitable method can be found.
+     * @throws ELException
+     *             if an exception was thrown while performing property or
+     *             variable resolution. The thrown exception must be included as
+     *             the cause property of this exception, if available.
+     * @see javax.el.MethodExpression#getMethodInfo(javax.el.ELContext)
+     */
+    @Override
+    public MethodInfo getMethodInfo(ELContext context)
+            throws PropertyNotFoundException, MethodNotFoundException,
+            ELException {
+        Node n = this.getNode();
+        EvaluationContext ctx = new EvaluationContext(context, this.fnMapper,
+                this.varMapper);
+        ctx.notifyBeforeEvaluation(getExpressionString());
+        MethodInfo result = n.getMethodInfo(ctx, this.paramTypes);
+        ctx.notifyAfterEvaluation(getExpressionString());
+        return result;
+    }

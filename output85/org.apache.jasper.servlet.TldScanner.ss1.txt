@@ -1,0 +1,557 @@
+19
+-----CSCI578-----
+
+
+    /**
+     * Scan web application resources for TLDs, recursively.
+     *
+     * @param startPath the directory resource to scan
+     * @throws IOException  if there was a problem scanning for or loading a TLD
+     * @throws SAXException if there was a problem parsing a TLD
+     */
+    protected void scanResourcePaths(String startPath)
+            throws IOException, SAXException {
+
+        boolean found = false;
+        Set<String> dirList = context.getResourcePaths(startPath);
+        if (dirList != null) {
+            for (String path : dirList) {
+                if (path.startsWith("/WEB-INF/classes/")) {
+                    // Skip: JSP.7.3.1
+                } else if (path.startsWith("/WEB-INF/lib/")) {
+                    // Skip: JSP.7.3.1
+                } else if (path.endsWith("/")) {
+                    scanResourcePaths(path);
+                } else if (path.startsWith("/WEB-INF/tags/")) {
+                    // JSP 7.3.1: in /WEB-INF/tags only consider implicit.tld
+                    if (path.endsWith("/implicit.tld")) {
+                        found = true;
+                        parseTld(path);
+                    }
+                } else if (path.endsWith(TLD_EXT)) {
+                    found = true;
+                    parseTld(path);
+                }
+            }
+        }
+        if (found) {
+            if (log.isDebugEnabled()) {
+                log.debug(Localizer.getMessage("jsp.tldCache.tldInResourcePath", startPath));
+            }
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug(Localizer.getMessage("jsp.tldCache.noTldInResourcePath", startPath));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Scan for TLDs defined in &lt;jsp-config&gt;.
+     * @throws IOException Error reading resources
+     * @throws SAXException XML parsing error
+     */
+    protected void scanJspConfig() throws IOException, SAXException {
+        JspConfigDescriptor jspConfigDescriptor = context.getJspConfigDescriptor();
+        if (jspConfigDescriptor == null) {
+            return;
+        }
+
+        Collection<TaglibDescriptor> descriptors = jspConfigDescriptor.getTaglibs();
+        for (TaglibDescriptor descriptor : descriptors) {
+            String taglibURI = descriptor.getTaglibURI();
+            String resourcePath = descriptor.getTaglibLocation();
+            // Note: Whilst the Servlet 2.4 DTD implies that the location must
+            // be a context-relative path starting with '/', JSP.7.3.6.1 states
+            // explicitly how paths that do not start with '/' should be
+            // handled.
+            if (!resourcePath.startsWith("/")) {
+                resourcePath = WEB_INF + resourcePath;
+            }
+            if (uriTldResourcePathMap.containsKey(taglibURI)) {
+                log.warn(Localizer.getMessage(MSG + ".webxmlSkip",
+                        resourcePath,
+                        taglibURI));
+                continue;
+            }
+
+            if (log.isTraceEnabled()) {
+                log.trace(Localizer.getMessage(MSG + ".webxmlAdd",
+                        resourcePath,
+                        taglibURI));
+            }
+
+            URL url = context.getResource(resourcePath);
+            if (url != null) {
+                TldResourcePath tldResourcePath;
+                if (resourcePath.endsWith(".jar")) {
+                    // if the path points to a jar file, the TLD is presumed to be
+                    // inside at META-INF/taglib.tld
+                    tldResourcePath = new TldResourcePath(url, resourcePath, "META-INF/taglib.tld");
+                } else {
+                    tldResourcePath = new TldResourcePath(url, resourcePath);
+                }
+                // parse TLD but store using the URI supplied in the descriptor
+                TaglibXml tld = tldParser.parse(tldResourcePath);
+                uriTldResourcePathMap.put(taglibURI, tldResourcePath);
+                tldResourcePathTaglibXmlMap.put(tldResourcePath, tld);
+                if (tld.getListeners() != null) {
+                    listeners.addAll(tld.getListeners());
+                }
+            } else {
+                log.warn(Localizer.getMessage(MSG + ".webxmlFailPathDoesNotExist",
+                        resourcePath,
+                        taglibURI));
+                continue;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Scan for TLDs in JARs in /WEB-INF/lib.
+     */
+    public void scanJars() {
+        JarScanner scanner = JarScannerFactory.getJarScanner(context);
+        TldScannerCallback callback = new TldScannerCallback();
+        scanner.scan(JarScanType.TLD, context, callback);
+        if (callback.scanFoundNoTLDs()) {
+            log.info(Localizer.getMessage("jsp.tldCache.noTldSummary"));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Scan for TLDs in all places defined by the specification:
+     * <ol>
+     * <li>Tag libraries defined by the platform</li>
+     * <li>Entries from &lt;jsp-config&gt; in web.xml</li>
+     * <li>A resources under /WEB-INF</li>
+     * <li>In jar files from /WEB-INF/lib</li>
+     * <li>Additional entries from the container</li>
+     * </ol>
+     *
+     * @throws IOException  if there was a problem scanning for or loading a TLD
+     * @throws SAXException if there was a problem parsing a TLD
+     */
+    public void scan() throws IOException, SAXException {
+        scanPlatform();
+        scanJspConfig();
+        scanResourcePaths(WEB_INF);
+        scanJars();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Scan for TLDs required by the platform specification.
+     */
+    protected void scanPlatform() {
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Scan the provided ServletContext and classloader for JAR files. Each JAR
+     * file found will be passed to the callback handler to be processed.
+     *
+     * @param scanType      The type of JAR scan to perform. This is passed to
+     *                          the filter which uses it to determine how to
+     *                          filter the results
+     * @param context       The ServletContext - used to locate and access
+     *                      WEB-INF/lib
+     * @param callback      The handler to process any JARs found
+     */
+    public void scan(JarScanType scanType, ServletContext context,
+            JarScannerCallback callback);
+-----CSCI578-----
+
+
+    /*
+     * Returns the localized error message corresponding to the given error
+     * code.
+     *
+     * If the given error code is not defined in the resource bundle for
+     * localized error messages, it is used as the error message.
+     *
+     * @param errCode Error code to localize
+     *
+     * @return Localized error message
+     */
+    public static String getMessage(String errCode) {
+        String errMsg = errCode;
+        try {
+            errMsg = bundle.getString(errCode);
+        } catch (MissingResourceException e) {
+        }
+        return errMsg;
+    }
+
+
+    /*
+     * Returns the localized error message corresponding to the given error
+     * code.
+     *
+     * If the given error code is not defined in the resource bundle for
+     * localized error messages, it is used as the error message.
+     *
+     * @param errCode Error code to localize
+     * @param arg Argument for parametric replacement
+     *
+     * @return Localized error message
+     */
+    public static String getMessage(String errCode, String arg) {
+        return getMessage(errCode, new Object[] {arg});
+    }
+
+
+    /*
+     * Returns the localized error message corresponding to the given error
+     * code.
+     *
+     * If the given error code is not defined in the resource bundle for
+     * localized error messages, it is used as the error message.
+     *
+     * @param errCode Error code to localize
+     * @param arg1 First argument for parametric replacement
+     * @param arg2 Second argument for parametric replacement
+     *
+     * @return Localized error message
+     */
+    public static String getMessage(String errCode, String arg1, String arg2) {
+        return getMessage(errCode, new Object[] {arg1, arg2});
+    }
+
+
+    /*
+     * Returns the localized error message corresponding to the given error
+     * code.
+     *
+     * If the given error code is not defined in the resource bundle for
+     * localized error messages, it is used as the error message.
+     *
+     * @param errCode Error code to localize
+     * @param arg1 First argument for parametric replacement
+     * @param arg2 Second argument for parametric replacement
+     * @param arg3 Third argument for parametric replacement
+     *
+     * @return Localized error message
+     */
+    public static String getMessage(String errCode, String arg1, String arg2,
+                                    String arg3) {
+        return getMessage(errCode, new Object[] {arg1, arg2, arg3});
+    }
+
+
+    /*
+     * Returns the localized error message corresponding to the given error
+     * code.
+     *
+     * If the given error code is not defined in the resource bundle for
+     * localized error messages, it is used as the error message.
+     *
+     * @param errCode Error code to localize
+     * @param arg1 First argument for parametric replacement
+     * @param arg2 Second argument for parametric replacement
+     * @param arg3 Third argument for parametric replacement
+     * @param arg4 Fourth argument for parametric replacement
+     *
+     * @return Localized error message
+     */
+    public static String getMessage(String errCode, String arg1, String arg2,
+                                    String arg3, String arg4) {
+        return getMessage(errCode, new Object[] {arg1, arg2, arg3, arg4});
+    }
+
+
+    /*
+     * Returns the localized error message corresponding to the given error
+     * code.
+     *
+     * If the given error code is not defined in the resource bundle for
+     * localized error messages, it is used as the error message.
+     *
+     * @param errCode Error code to localize
+     * @param args Arguments for parametric replacement
+     *
+     * @return Localized error message
+     */
+    public static String getMessage(String errCode, Object[] args) {
+        String errMsg = errCode;
+        try {
+            errMsg = bundle.getString(errCode);
+            if (args != null && args.length > 0) {
+                MessageFormat formatter = new MessageFormat(errMsg);
+                errMsg = formatter.format(args);
+            }
+        } catch (MissingResourceException e) {
+        }
+
+        return errMsg;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected void parseTld(String resourcePath) throws IOException, SAXException {
+        TldResourcePath tldResourcePath =
+                new TldResourcePath(context.getResource(resourcePath), resourcePath);
+        parseTld(tldResourcePath);
+    }
+
+
+    protected void parseTld(TldResourcePath path) throws IOException, SAXException {
+        if (tldResourcePathTaglibXmlMap.containsKey(path)) {
+            // TLD has already been parsed as a result of processing web.xml
+            return;
+        }
+        TaglibXml tld = tldParser.parse(path);
+        String uri = tld.getUri();
+        if (uri != null) {
+            if (!uriTldResourcePathMap.containsKey(uri)) {
+                uriTldResourcePathMap.put(uri, path);
+            }
+        }
+        tldResourcePathTaglibXmlMap.put(path, tld);
+        if (tld.getListeners() != null) {
+            listeners.addAll(tld.getListeners());
+        }
+    }
+-----CSCI578-----
+
+
+    public List<String> getListeners() {
+        return listeners;
+    }
+-----CSCI578-----
+
+
+    /*
+     * Processes the given JSP parse error.
+     *
+     * @param fname Name of the JSP file in which the parse error occurred
+     * @param line Parse error line number
+     * @param column Parse error column number
+     * @param errMsg Parse error message
+     * @param exception Parse exception
+     */
+    @Override
+    public void jspError(String fname, int line, int column, String errMsg,
+            Exception ex) throws JasperException {
+        throw new JasperException(fname + " (" +
+                Localizer.getMessage("jsp.error.location",
+                        Integer.toString(line), Integer.toString(column)) +
+                ") " + errMsg, ex);
+    }
+
+
+    /*
+     * Processes the given JSP parse error.
+     *
+     * @param errMsg Parse error message
+     * @param exception Parse exception
+     */
+    @Override
+    public void jspError(String errMsg, Exception ex) throws JasperException {
+        throw new JasperException(errMsg, ex);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String getServletInfo() {
+        return Localizer.getMessage("jsp.engine.info");
+    }
+-----CSCI578-----
+
+
+    @Override
+    public int getAttributesScope(String name) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        if (pageAttributes.get(name) != null) {
+            return PAGE_SCOPE;
+        } else {
+            return rootJspCtxt.getAttributesScope(name);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    //
+    // Reader methods
+    //
+
+    /**
+     * Read a single character.  This method will block until a character is
+     * available, an I/O error occurs, or the end of the stream is reached.
+     *
+     * <p> Subclasses that intend to support efficient single-character input
+     * should override this method.
+     *
+     * @return     The character read, as an integer in the range 0 to 127
+     *             (<tt>0x00-0x7f</tt>), or -1 if the end of the stream has
+     *             been reached
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    @Override
+    public int read() throws IOException {
+        int b0 = fInputStream.read();
+        if (b0 > 0x80) {
+            throw new IOException(Localizer.getMessage("jsp.error.xml.invalidASCII",
+                                                       Integer.toString(b0)));
+        }
+        return b0;
+    }
+ // read():int
+
+    /**
+     * Read characters into a portion of an array.  This method will block
+     * until some input is available, an I/O error occurs, or the end of the
+     * stream is reached.
+     *
+     * @param      ch     Destination buffer
+     * @param      offset Offset at which to start storing characters
+     * @param      length Maximum number of characters to read
+     *
+     * @return     The number of characters read, or -1 if the end of the
+     *             stream has been reached
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    @Override
+    public int read(char ch[], int offset, int length) throws IOException {
+        if (length > fBuffer.length) {
+            length = fBuffer.length;
+        }
+        int count = fInputStream.read(fBuffer, 0, length);
+        for (int i = 0; i < count; i++) {
+            int b0 = (0xff & fBuffer[i]); // Convert to unsigned
+            if (b0 > 0x80) {
+                throw new IOException(Localizer.getMessage("jsp.error.xml.invalidASCII",
+                                                           Integer.toString(b0)));
+            }
+            ch[offset + i] = (char)b0;
+        }
+        return count;
+    }
+ // read(char[],int,int)
+
+    /**
+     * Skip characters.  This method will block until some characters are
+     * available, an I/O error occurs, or the end of the stream is reached.
+     *
+     * @param  n  The number of characters to skip
+     *
+     * @return    The number of characters actually skipped
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    @Override
+    public long skip(long n) throws IOException {
+        return fInputStream.skip(n);
+    }
+ // skip(long):long
+
+    /**
+     * Tell whether this stream is ready to be read.
+     *
+     * @return True if the next read() is guaranteed not to block for input,
+     * false otherwise.  Note that returning false does not guarantee that the
+     * next read will block.
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    @Override
+    public boolean ready() throws IOException {
+        return false;
+    }
+ // reset()
+
+    /**
+     * Close the stream.  Once a stream has been closed, further read(),
+     * ready(), mark(), or reset() invocations will throw an IOException.
+     * Closing a previously-closed stream, however, has no effect.
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+     @Override
+    public void close() throws IOException {
+         fInputStream.close();
+     }
+-----CSCI578-----
+ // ready()
+
+    /**
+     * Tell whether this stream supports the mark() operation.
+     */
+    @Override
+    public boolean markSupported() {
+        return false;
+    }
+ // markSupported()
+
+    /**
+     * Mark the present position in the stream.  Subsequent calls to reset()
+     * will attempt to reposition the stream to this point.  Not all
+     * character-input streams support the mark() operation.
+     *
+     * @param  readAheadLimit  Limit on the number of characters that may be
+     *                         read while still preserving the mark.  After
+     *                         reading this many characters, attempting to
+     *                         reset the stream may fail.
+     *
+     * @exception  IOException  If the stream does not support mark(),
+     *                          or if some other I/O error occurs
+     */
+    @Override
+    public void mark(int readAheadLimit) throws IOException {
+        throw new IOException(
+                Localizer.getMessage("jsp.error.xml.operationNotSupported",
+                                     "mark()", "UTF-8"));
+    }
+
+
+    /**
+     * Reset the stream.  If the stream has been marked, then attempt to
+     * reposition it at the mark.  If the stream has not been marked, then
+     * attempt to reset it in some way appropriate to the particular stream,
+     * for example by repositioning it to its starting point.  Not all
+     * character-input streams support the reset() operation, and some support
+     * reset() without supporting mark().
+     *
+     * @exception  IOException  If the stream has not been marked,
+     *                          or if the mark has been invalidated,
+     *                          or if the stream does not support reset(),
+     *                          or if some other I/O error occurs
+     */
+    @Override
+    public void reset() throws IOException {
+        fOffset = 0;
+        fSurrogate = -1;
+    }
+ // reset()
+
+    /**
+     * Close the stream.  Once a stream has been closed, further read(),
+     * ready(), mark(), or reset() invocations will throw an IOException.
+     * Closing a previously-closed stream, however, has no effect.
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    @Override
+    public void close() throws IOException {
+        fInputStream.close();
+    }

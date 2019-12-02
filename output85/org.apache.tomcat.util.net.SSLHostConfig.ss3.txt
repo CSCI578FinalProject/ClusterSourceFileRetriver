@@ -1,0 +1,65 @@
+5
+-----CSCI578-----
+
+
+
+    public void setCertificateKeystoreType(String certificateKeystoreType) {
+        sslHostConfig.setProperty(
+                "Certificate.certificateKeystoreType", SSLHostConfig.Type.JSSE);
+        this.certificateKeystoreType = certificateKeystoreType;
+    }
+-----CSCI578-----
+
+
+
+    public void setCertificateKeystoreType(String certificateKeystoreType) {
+        registerDefaultCertificate();
+        defaultCertificate.setCertificateKeystoreType(certificateKeystoreType);
+    }
+-----CSCI578-----
+
+
+
+    void setProperty(String name, Type configType) {
+        if (this.configType == null) {
+            Set<String> properties = configuredProperties.get(configType);
+            if (properties == null) {
+                properties = new HashSet<>();
+                configuredProperties.put(configType, properties);
+            }
+            properties.add(name);
+        } else if (this.configType == Type.EITHER) {
+            if (currentConfigType == null) {
+                currentConfigType = configType;
+            } else if (currentConfigType != configType) {
+                log.warn(sm.getString("sslHostConfig.mismatch",
+                        name, getHostName(), configType, currentConfigType));
+            }
+        } else {
+            if (configType != this.configType) {
+                log.warn(sm.getString("sslHostConfig.mismatch",
+                        name, getHostName(), configType, this.configType));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------- Nested configuration elements
+
+    private void registerDefaultCertificate() {
+        if (defaultCertificate == null) {
+            defaultCertificate = new SSLHostConfigCertificate(
+                    this, SSLHostConfigCertificate.Type.UNDEFINED);
+            certificates.add(defaultCertificate);
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void setInsecureRenegotiation(boolean insecureRenegotiation) {
+        setProperty("insecureRenegotiation", Type.OPENSSL);
+        this.insecureRenegotiation = insecureRenegotiation;
+    }

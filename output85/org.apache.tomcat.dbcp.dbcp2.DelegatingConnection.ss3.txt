@@ -1,0 +1,66 @@
+4
+-----CSCI578-----
+
+
+
+    @Override
+    public DatabaseMetaData getMetaData() throws SQLException {
+        checkOpen();
+        try {
+            return new DelegatingDatabaseMetaData(this, _conn.getMetaData());
+        } catch (SQLException e) {
+            handleException(e);
+            return null;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected void checkOpen() throws SQLException {
+        if(_closed) {
+            if (null != _conn) {
+                String label = "";
+                try {
+                    label = _conn.toString();
+                } catch (Exception ex) {
+                    // ignore, leave label empty
+                }
+                throw new SQLException
+                    ("Connection " + label + " is closed.");
+            }
+            throw new SQLException
+                ("Connection is null.");
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setClientInfo(String name, String value) throws SQLClientInfoException {
+        try {
+            checkOpen();
+            _conn.setClientInfo(name, value);
+        }
+        catch (SQLClientInfoException e) {
+            throw e;
+        }
+        catch (SQLException e) {
+            throw new SQLClientInfoException("Connection is closed.", EMPTY_FAILED_PROPERTIES, e);
+        }
+    }
+
+
+    @Override
+    public void setClientInfo(Properties properties) throws SQLClientInfoException {
+        try {
+            checkOpen();
+            _conn.setClientInfo(properties);
+        }
+        catch (SQLClientInfoException e) {
+            throw e;
+        }
+        catch (SQLException e) {
+            throw new SQLClientInfoException("Connection is closed.", EMPTY_FAILED_PROPERTIES, e);
+        }
+    }

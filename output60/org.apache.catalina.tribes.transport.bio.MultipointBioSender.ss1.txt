@@ -1,0 +1,101 @@
+7
+-----CSCI578-----
+
+
+
+    public synchronized void disconnect() {
+        try {close(); }catch (Exception x){}
+        setConnected(false);
+    }
+-----CSCI578-----
+
+
+    public void finalize() {
+        try {disconnect(); }catch ( Exception ignore){}
+    }
+-----CSCI578-----
+
+
+
+    private synchronized void close() throws ChannelException  {
+        ChannelException x = null;
+        Object[] members = bioSenders.keySet().toArray();
+        for (int i=0; i<members.length; i++ ) {
+            Member mbr = (Member)members[i];
+            try {
+                BioSender sender = (BioSender)bioSenders.get(mbr);
+                sender.disconnect();
+            }catch ( Exception e ) {
+                if ( x == null ) x = new ChannelException(e);
+                x.addFaultyMember(mbr,e);
+            }
+            bioSenders.remove(mbr);
+        }
+        if ( x != null ) throw x;
+    }
+-----CSCI578-----
+
+
+ 
+    /**
+     * disconnect and close socket
+     * 
+     * @see DataSender#disconnect()
+     */
+    public  void disconnect() {
+        boolean connect = isConnected();
+        closeSocket();
+        if (connect) {
+            if (log.isDebugEnabled())
+                log.debug(sm.getString("IDataSender.disconnect", getAddress().getHostAddress(), new Integer(getPort()), new Long(0)));
+        }
+        
+    }
+
+
+    /**
+     * close socket
+     * 
+     * @see DataSender#disconnect()
+     */
+    protected void closeSocket() {
+        if(isConnected()) {
+             if (socket != null) {
+                try {
+                    socket.close();
+                } catch (IOException x) {
+                } finally {
+                    socket = null;
+                    soOut = null;
+                    soIn = null;
+                }
+            }
+            setRequestCount(0);
+            setConnected(false);
+            if (log.isDebugEnabled())
+                log.debug(sm.getString("IDataSender.closeSocket",getAddress().getHostAddress(), new Integer(getPort()),new Long(0)));
+       }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void connect() throws IOException {
+        //do nothing, we connect on demand
+        setConnected(true);
+    }
+
+
+
+    public synchronized void disconnect() {
+        try {close(); }catch (Exception x){}
+        setConnected(false);
+    }
+-----CSCI578-----
+
+
+    public void remove(Member member) {
+        //disconnect senders
+        BioSender sender = (BioSender)bioSenders.remove(member);
+        if ( sender != null ) sender.disconnect();
+    }

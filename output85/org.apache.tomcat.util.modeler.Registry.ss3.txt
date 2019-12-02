@@ -1,0 +1,87 @@
+3
+-----CSCI578-----
+
+
+    private ModelerSource getModelerSource( String type )
+            throws Exception
+    {
+        if( type==null ) type="MbeansDescriptorsDigesterSource";
+        if( type.indexOf( ".") < 0 ) {
+            type="org.apache.tomcat.util.modeler.modules." + type;
+        }
+
+        Class<?> c = Class.forName(type);
+        ModelerSource ds=(ModelerSource)c.newInstance();
+        return ds;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Experimental. Load descriptors.
+     *
+     * @param sourceType The source type
+     * @param source The bean
+     * @param param A type to load
+     * @return List of descriptors
+     * @throws Exception Error loading descriptors
+     */
+    public List<ObjectName> load( String sourceType, Object source,
+            String param) throws Exception {
+        if( log.isTraceEnabled()) {
+            log.trace("load " + source );
+        }
+        String location=null;
+        String type=null;
+        Object inputsource=null;
+
+        if( source instanceof URL ) {
+            URL url=(URL)source;
+            location=url.toString();
+            type=param;
+            inputsource=url.openStream();
+            if (sourceType == null && location.endsWith(".xml")) {
+                sourceType = "MbeansDescriptorsDigesterSource";
+            }
+        } else if( source instanceof File ) {
+            location=((File)source).getAbsolutePath();
+            inputsource=new FileInputStream((File)source);
+            type=param;
+            if (sourceType == null && location.endsWith(".xml")) {
+                sourceType = "MbeansDescriptorsDigesterSource";
+            }
+        } else if( source instanceof InputStream ) {
+            type=param;
+            inputsource=source;
+        } else if( source instanceof Class<?> ) {
+            location=((Class<?>)source).getName();
+            type=param;
+            inputsource=source;
+            if( sourceType== null ) {
+                sourceType="MbeansDescriptorsIntrospectionSource";
+            }
+        }
+
+        if( sourceType==null ) {
+            sourceType="MbeansDescriptorsDigesterSource";
+        }
+        ModelerSource ds=getModelerSource(sourceType);
+        List<ObjectName> mbeans =
+            ds.loadDescriptors(this, type, inputsource);
+
+        return mbeans;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Load data, returns a list of items.
+     *
+     * @param registry The registry
+     * @param type The bean registry type
+     * @param source Introspected object or some other source
+     * @return a list of object names
+     * @throws Exception Error loading descriptors
+     */
+    public abstract List<ObjectName> loadDescriptors(Registry registry,
+            String type, Object source) throws Exception;

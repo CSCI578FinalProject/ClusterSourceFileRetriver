@@ -1,0 +1,226 @@
+5
+-----CSCI578-----
+
+
+    // -------------------- Adding data --------------------
+
+    public void append( char b )
+        throws IOException
+    {
+        makeSpace( 1 );
+
+        // couldn't make space
+        if( limit >0 && end >= limit ) {
+            flushBuffer();
+        }
+        buff[end++]=b;
+    }
+
+
+    public void append( CharChunk src )
+        throws IOException
+    {
+        append( src.getBuffer(), src.getOffset(), src.getLength());
+    }
+
+
+    /**
+     * Add data to the buffer.
+     * @param src Char array
+     * @param off Offset
+     * @param len Length
+     * @throws IOException Writing overflow data to the output channel failed
+     */
+    public void append( char src[], int off, int len )
+        throws IOException
+    {
+        // will grow, up to limit
+        makeSpace( len );
+
+        // if we don't have limit: makeSpace can grow as it wants
+        if( limit < 0 ) {
+            // assert: makeSpace made enough space
+            System.arraycopy( src, off, buff, end, len );
+            end+=len;
+            return;
+        }
+
+        // Optimize on a common case.
+        // If the source is going to fill up all the space in buffer, may
+        // as well write it directly to the output, and avoid an extra copy
+        if ( optimizedWrite && len == limit && end == start && out != null ) {
+            out.realWriteChars( src, off, len );
+            return;
+        }
+
+        // if we have limit and we're below
+        if( len <= limit - end ) {
+            // makeSpace will grow the buffer to the limit,
+            // so we have space
+            System.arraycopy( src, off, buff, end, len );
+
+            end+=len;
+            return;
+        }
+
+        // need more space than we can afford, need to flush
+        // buffer
+
+        // the buffer is already at ( or bigger than ) limit
+
+        // Optimization:
+        // If len-avail < length ( i.e. after we fill the buffer with
+        // what we can, the remaining will fit in the buffer ) we'll just
+        // copy the first part, flush, then copy the second part - 1 write
+        // and still have some space for more. We'll still have 2 writes, but
+        // we write more on the first.
+
+        if( len + end < 2 * limit ) {
+            /* If the request length exceeds the size of the output buffer,
+               flush the output buffer and then write the data directly.
+               We can't avoid 2 writes, but we can write more on the second
+            */
+            int avail=limit-end;
+            System.arraycopy(src, off, buff, end, avail);
+            end += avail;
+
+            flushBuffer();
+
+            System.arraycopy(src, off+avail, buff, end, len - avail);
+            end+= len - avail;
+
+        } else {        // len > buf.length + avail
+            // long write - flush the buffer and write the rest
+            // directly from source
+            flushBuffer();
+
+            out.realWriteChars( src, off, len );
+        }
+    }
+
+
+
+    /**
+     * Append a string to the buffer.
+     * @param s The string
+     * @throws IOException Writing overflow data to the output channel failed
+     */
+    public void append(String s) throws IOException {
+        append(s, 0, s.length());
+    }
+
+
+    /**
+     * Append a string to the buffer.
+     * @param s The string
+     * @param off Offset
+     * @param len Length
+     * @throws IOException Writing overflow data to the output channel failed
+     */
+    public void append(String s, int off, int len) throws IOException {
+        if (s==null) {
+            return;
+        }
+
+        // will grow, up to limit
+        makeSpace( len );
+
+        // if we don't have limit: makeSpace can grow as it wants
+        if( limit < 0 ) {
+            // assert: makeSpace made enough space
+            s.getChars(off, off+len, buff, end );
+            end+=len;
+            return;
+        }
+
+        int sOff = off;
+        int sEnd = off + len;
+        while (sOff < sEnd) {
+            int d = min(limit - end, sEnd - sOff);
+            s.getChars( sOff, sOff+d, buff, end);
+            sOff += d;
+            end += d;
+            if (end >= limit) {
+                flushBuffer();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    // -------------------- utils
+    private int min(int a, int b) {
+        if (a < b) {
+            return a;
+        }
+        return b;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Make space for len chars. If len is small, allocate
+     * a reserve space too. Never grow bigger than limit.
+     * @param count The size
+     */
+    public void makeSpace(int count)
+    {
+        char[] tmp = null;
+
+        int newSize;
+        int desiredSize=end + count;
+
+        // Can't grow above the limit
+        if( limit > 0 &&
+            desiredSize > limit) {
+            desiredSize=limit;
+        }
+
+        if( buff==null ) {
+            if( desiredSize < 256 )
+             {
+                desiredSize=256; // take a minimum
+            }
+            buff=new char[desiredSize];
+        }
+
+        // limit < buf.length ( the buffer is already big )
+        // or we already have space XXX
+        if( desiredSize <= buff.length) {
+            return;
+        }
+        // grow in larger chunks
+        if( desiredSize < 2 * buff.length ) {
+            newSize= buff.length * 2;
+            if( limit >0 &&
+                newSize > limit ) {
+                newSize=limit;
+            }
+            tmp=new char[newSize];
+        } else {
+            newSize= buff.length * 2 + count ;
+            if( limit > 0 &&
+                newSize > limit ) {
+                newSize=limit;
+            }
+            tmp=new char[newSize];
+        }
+
+        System.arraycopy(buff, 0, tmp, 0, end);
+        buff = tmp;
+        tmp = null;
+    }
+-----CSCI578-----
+
+
+
+    public void flushBuffer() throws IOException {
+        //assert out!=null
+        if( out==null ) {
+            throw new IOException( "Buffer overflow, no sink " + limit + " " +
+                                   buff.length  );
+        }
+        out.realWriteChars( buff, start, end - start );
+        end=start;
+    }
+-----CSCI578-----

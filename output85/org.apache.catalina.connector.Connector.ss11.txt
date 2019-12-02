@@ -1,0 +1,135 @@
+11
+-----CSCI578-----
+
+
+
+    /**
+     * @return the HTTP methods which will support body parameters parsing
+     */
+    public String getParseBodyMethods() {
+
+        return this.parseBodyMethods;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public static boolean getUseOpenSSL() {
+        return useOpenSSL;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Initialise the protocol.
+     *
+     * @throws Exception If the protocol handler fails to initialise
+     */
+    public void init() throws Exception;
+-----CSCI578-----
+
+
+
+    public String getSslImplementationName() { return getEndpoint().getSslImplementationName(); }
+-----CSCI578-----
+
+
+
+    @Override
+    protected void initInternal() throws LifecycleException {
+
+        super.initInternal();
+
+        // Initialize adapter
+        adapter = new CoyoteAdapter(this);
+        protocolHandler.setAdapter(adapter);
+
+        // Make sure parseBodyMethodsSet has a default
+        if( null == parseBodyMethodsSet ) {
+            setParseBodyMethods(getParseBodyMethods());
+        }
+
+        if (protocolHandler.isAprRequired() &&
+                !AprLifecycleListener.isAprAvailable()) {
+            throw new LifecycleException(
+                    sm.getString("coyoteConnector.protocolHandlerNoApr",
+                            getProtocolHandlerClassName()));
+        }
+        if (AprLifecycleListener.isAprAvailable() &&
+                AprLifecycleListener.getUseOpenSSL() &&
+                protocolHandler instanceof AbstractHttp11JsseProtocol) {
+            AbstractHttp11JsseProtocol<?> jsseProtocolHandler =
+                    (AbstractHttp11JsseProtocol<?>) protocolHandler;
+            if (jsseProtocolHandler.isSSLEnabled() && jsseProtocolHandler.getSslImplementationName() == null) {
+                // OpenSSL is compatible with the JSSE configuration, so use it if APR is available
+                jsseProtocolHandler.setSslImplementationName(OpenSSLImplementation.class.getName());
+            }
+        }
+
+        try {
+            protocolHandler.init();
+        } catch (Exception e) {
+            throw new LifecycleException(
+                    sm.getString("coyoteConnector.protocolHandlerInitializationFailed"), e);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Requires APR/native library
+     *
+     * @return <code>true</code> if this Protocol Handler requires the
+     *         APR/native library, otherwise <code>false</code>
+     */
+    public boolean isAprRequired();
+-----CSCI578-----
+
+
+    /**
+     * The adapter, used to call the connector.
+     *
+     * @param adapter The adapter to associate
+     */
+    public void setAdapter(Adapter adapter);
+-----CSCI578-----
+
+
+    /**
+     * Set list of HTTP methods which should allow body parameter
+     * parsing. This defaults to <code>POST</code>.
+     *
+     * @param methods Comma separated list of HTTP method names
+     */
+    public void setParseBodyMethods(String methods) {
+
+        HashSet<String> methodSet = new HashSet<>();
+
+        if( null != methods ) {
+            methodSet.addAll(Arrays.asList(methods.split("\\s*,\\s*")));
+        }
+
+        if( methodSet.contains("TRACE") ) {
+            throw new IllegalArgumentException(sm.getString("coyoteConnector.parseBodyMethodNoTrace"));
+        }
+
+        this.parseBodyMethods = methods;
+        this.parseBodyMethodsSet = methodSet;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the class name of the Coyote protocol handler in use.
+     */
+    public String getProtocolHandlerClassName() {
+
+        return (this.protocolHandlerClassName);
+
+    }

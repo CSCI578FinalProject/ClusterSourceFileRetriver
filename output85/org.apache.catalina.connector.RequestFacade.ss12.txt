@@ -1,0 +1,75 @@
+3
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isUserInRole(String role) {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.isUserInRole(role);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Check if the specified Principal has the specified
+     * security role, within the context of this Realm.
+     *
+     * @param wrapper wrapper context for evaluating role
+     * @param principal Principal for whom the role is to be checked
+     * @param role Security role to be checked
+     * @return <code>true</code> if the specified Principal has the specified
+     *         security role, within the context of this Realm; otherwise return
+     *         <code>false</code>.
+     */
+    public boolean hasRole(Wrapper wrapper, Principal principal, String role);
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if the authenticated user principal
+     * possesses the specified role name.
+     *
+     * @param role Role name to be validated
+     */
+    @Override
+    public boolean isUserInRole(String role) {
+
+        // Have we got an authenticated principal at all?
+        if (userPrincipal == null) {
+            return false;
+        }
+
+        // Identify the Realm we will use for checking role assignments
+        Context context = getContext();
+        if (context == null) {
+            return false;
+        }
+
+        // If the role is "*" then the return value must be false
+        // Servlet 31, section 13.3
+        if ("*".equals(role)) {
+            return false;
+        }
+
+        // If the role is "**" then, unless the application defines a role with
+        // that name, only check if the user is authenticated
+        if ("**".equals(role) && !context.findSecurityRole("**")) {
+            return userPrincipal != null;
+        }
+
+        Realm realm = context.getRealm();
+        if (realm == null) {
+            return false;
+        }
+
+        // Check for a role defined directly as a <security-role>
+        return (realm.hasRole(getWrapper(), userPrincipal, role));
+    }

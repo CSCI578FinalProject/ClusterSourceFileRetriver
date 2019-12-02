@@ -1,0 +1,95 @@
+6
+-----CSCI578-----
+
+
+    /**
+     * Starts the sendfile process. It is expected that if the sendfile process
+     * does not complete during this call that the caller <b>will not</b> add
+     * the socket to the poller (or equivalent). That is the responsibility of
+     * this method.
+     *
+     * @param sendfileData Data representing the file to send
+     *
+     * @return The state of the sendfile process after the first write.
+     */
+    public abstract SendfileState processSendfile(SendfileDataBase sendfileData);
+-----CSCI578-----
+
+
+
+    /**
+     * Checks to see if the keep-alive loop should be broken, performing any
+     * processing (e.g. sendfile handling) that may have an impact on whether
+     * or not the keep-alive loop should be broken.
+     *
+     * @return true if the keep-alive loop should be broken
+     */
+    private boolean breakKeepAliveLoop(SocketWrapperBase<?> socketWrapper) {
+        openSocket = keepAlive;
+        // Do sendfile as needed: add socket to sendfile and end
+        if (sendfileData != null && !getErrorState().isError()) {
+            sendfileData.keepAlive = keepAlive;
+            switch (socketWrapper.processSendfile(sendfileData)) {
+            case DONE:
+                // If sendfile is complete, no need to break keep-alive loop
+                sendfileData = null;
+                return false;
+            case PENDING:
+                return true;
+            case ERROR:
+                // Write failed
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("http11processor.sendfile.error"));
+                }
+                setErrorState(ErrorState.CLOSE_CONNECTION_NOW, null);
+                return true;
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private Request cloneRequest(Request source) throws IOException {
+        Request dest = new Request();
+
+        // Transfer the minimal information required for the copy of the Request
+        // that is passed to the HTTP upgrade process
+
+        dest.decodedURI().duplicate(source.decodedURI());
+        dest.method().duplicate(source.method());
+        dest.getMimeHeaders().duplicate(source.getMimeHeaders());
+        dest.requestURI().duplicate(source.requestURI());
+
+        return dest;
+
+    }
+-----CSCI578-----
+
+
+
+    public void duplicate(MimeHeaders source) throws IOException {
+        for (int i = 0; i < source.size(); i++) {
+            MimeHeaderField mhf = createHeader();
+            mhf.getName().duplicate(source.getName(i));
+            mhf.getValue().duplicate(source.getValue(i));
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param n The header index
+     * @return the Nth header name, or null if there is no such header.
+     * This may be used to iterate through all header fields.
+     */
+    public MessageBytes getName(int n) {
+        return n >= 0 && n < count ? headers[n].getName() : null;
+    }
+
+
+    public MessageBytes getName() {
+        return nameB;
+    }

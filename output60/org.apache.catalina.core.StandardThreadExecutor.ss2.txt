@@ -1,0 +1,41 @@
+7
+-----CSCI578-----
+
+    
+
+    
+    // ---------------------------------------------- Public Methods
+    public void start() throws LifecycleException {
+        lifecycle.fireLifecycleEvent(BEFORE_START_EVENT, null);
+        TaskQueue taskqueue = new TaskQueue(maxQueueSize);
+        TaskThreadFactory tf = new TaskThreadFactory(namePrefix);
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+        executor = new ThreadPoolExecutor(getMinSpareThreads(), getMaxThreads(), maxIdleTime, TimeUnit.MILLISECONDS,taskqueue, tf) {
+			@Override
+			protected void afterExecute(Runnable r, Throwable t) {
+				AtomicInteger atomic = submittedTasksCount;
+				if(atomic!=null) {
+					atomic.decrementAndGet();
+				}
+			}
+        };
+        taskqueue.setParent( (ThreadPoolExecutor) executor);
+        submittedTasksCount = new AtomicInteger();
+        lifecycle.fireLifecycleEvent(AFTER_START_EVENT, null);
+    }
+-----CSCI578-----
+
+
+    public int getMaxThreads() {
+        return maxThreads;
+    }
+-----CSCI578-----
+
+
+    public int getMinSpareThreads() {
+        return minSpareThreads;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,69 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>Container</code> that handles requests for all
+     * <code>Connectors</code> associated with this Service.
+     *
+     * @param container The new Container
+     */
+    public void setContainer(Container container) {
+
+        Container oldContainer = this.container;
+        if ((oldContainer != null) && (oldContainer instanceof Engine))
+            ((Engine) oldContainer).setService(null);
+        this.container = container;
+        if ((this.container != null) && (this.container instanceof Engine))
+            ((Engine) this.container).setService(this);
+        if (started && (this.container != null) &&
+            (this.container instanceof Lifecycle)) {
+            try {
+                ((Lifecycle) this.container).start();
+            } catch (LifecycleException e) {
+                ;
+            }
+        }
+        synchronized (connectors) {
+            for (int i = 0; i < connectors.length; i++)
+                connectors[i].setContainer(this.container);
+        }
+        if (started && (oldContainer != null) &&
+            (oldContainer instanceof Lifecycle)) {
+            try {
+                ((Lifecycle) oldContainer).stop();
+            } catch (LifecycleException e) {
+                ;
+            }
+        }
+
+        // Report this property change to interested listeners
+        support.firePropertyChange("container", oldContainer, this.container);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>Service</code> with which we are associated (if any).
+     *
+     * @param service The service that owns this Engine
+     */
+    public void setService(Service service);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Container used for processing requests received by this
+     * Connector.
+     *
+     * @param container The new Container to use
+     */
+    public void setContainer(Container container) {
+
+        this.container = container;
+
+    }

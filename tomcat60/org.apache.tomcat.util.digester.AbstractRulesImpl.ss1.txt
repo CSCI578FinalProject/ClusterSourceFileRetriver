@@ -1,0 +1,48 @@
+4
+
+
+    /**
+     * Set the namespace URI for which this Rule is relevant, if any.
+     *
+     * @param namespaceURI Namespace URI for which this Rule is relevant,
+     *  or <code>null</code> to match independent of namespace.
+     */
+    public void setNamespaceURI(String namespaceURI) {
+
+        this.namespaceURI = namespaceURI;
+
+    }
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Register a new Rule instance matching the specified pattern.
+     *
+     * @param pattern Nesting pattern to be matched for this Rule
+     * @param rule Rule instance to be registered
+     */
+    public void add(String pattern, Rule rule) {
+        // to help users who accidently add '/' to the end of their patterns
+        int patternLength = pattern.length();
+        if (patternLength>1 && pattern.endsWith("/")) {
+            pattern = pattern.substring(0, patternLength-1);
+        }
+        
+        
+        List list = (List) cache.get(pattern);
+        if (list == null) {
+            list = new ArrayList();
+            cache.put(pattern, list);
+        }
+        list.add(rule);
+        rules.add(rule);
+        if (this.digester != null) {
+            rule.setDigester(this.digester);
+        }
+        if (this.namespaceURI != null) {
+            rule.setNamespaceURI(this.namespaceURI);
+        }
+
+    }

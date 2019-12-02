@@ -1,0 +1,77 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Begin processing requests via this Connector.
+     *
+     * @exception LifecycleException if a fatal startup error occurs
+     */
+    @Override
+    protected void startInternal() throws LifecycleException {
+
+        // Validate settings before starting
+        if (getPort() < 0) {
+            throw new LifecycleException(sm.getString(
+                    "coyoteConnector.invalidPort", Integer.valueOf(getPort())));
+        }
+
+        setState(LifecycleState.STARTING);
+
+        try {
+            protocolHandler.start();
+        } catch (Exception e) {
+            String errPrefix = "";
+            if(this.service != null) {
+                errPrefix += "service.getName(): \"" + this.service.getName() + "\"; ";
+            }
+
+            throw new LifecycleException
+                (errPrefix + " " + sm.getString
+                 ("coyoteConnector.protocolHandlerStartFailed"), e);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Start the protocol.
+     *
+     * @throws Exception If the protocol handler fails to start
+     */
+    public void start() throws Exception;
+-----CSCI578-----
+
+
+    /**
+     * @return the name of this Service.
+     */
+    public String getName();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the specified Service (if it exists); otherwise return
+     * <code>null</code>.
+     *
+     * @param name Name of the Service to be returned
+     */
+    @Override
+    public Service findService(String name) {
+
+        if (name == null) {
+            return (null);
+        }
+        synchronized (servicesLock) {
+            for (int i = 0; i < services.length; i++) {
+                if (name.equals(services[i].getName())) {
+                    return (services[i]);
+                }
+            }
+        }
+        return (null);
+
+    }

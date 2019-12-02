@@ -1,0 +1,552 @@
+14
+-----CSCI578-----
+
+
+
+    /**
+     * End request (consumes leftover bytes).
+     *
+     * @throws IOException an undelying I/O error occured
+     */
+    public void endRequest()
+        throws IOException {
+
+        if (swallowInput && (lastActiveFilter != -1)) {
+            int extraBytes = (int) activeFilters[lastActiveFilter].end();
+            pos = pos - extraBytes;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public void endRequest() {
+
+        // Finish the handling of the request
+        try {
+            inputBuffer.endRequest();
+        } catch (IOException e) {
+            error = true;
+        } catch (Throwable t) {
+            log.error(sm.getString("http11processor.request.finish"), t);
+            // 500 - Internal Server Error
+            // Can't add a 500 to the access log since that has already been
+            // written in the Adapter.service method.
+            response.setStatus(500);
+            error = true;
+        }
+        try {
+            outputBuffer.endRequest();
+        } catch (IOException e) {
+            error = true;
+        } catch (Throwable t) {
+            log.error(sm.getString("http11processor.response.finish"), t);
+            error = true;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add an output filter to the filter library.
+     */
+    public void addActiveFilter(OutputFilter filter) {
+
+        if (lastActiveFilter == -1) {
+            filter.setBuffer(outputStreamOutputBuffer);
+        } else {
+            for (int i = 0; i <= lastActiveFilter; i++) {
+                if (activeFilters[i] == filter)
+                    return;
+            }
+            filter.setBuffer(activeFilters[lastActiveFilter]);
+        }
+
+        activeFilters[++lastActiveFilter] = filter;
+
+        filter.setResponse(response);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Send the response status line.
+     */
+    public void sendStatus() {
+
+        // Write protocol name
+        write(Constants.HTTP_11_BYTES);
+        buf[pos++] = Constants.SP;
+
+        // Write status code
+        int status = response.getStatus();
+        switch (status) {
+        case 200:
+            write(Constants._200_BYTES);
+            break;
+        case 400:
+            write(Constants._400_BYTES);
+            break;
+        case 404:
+            write(Constants._404_BYTES);
+            break;
+        default:
+            write(status);
+        }
+
+        buf[pos++] = Constants.SP;
+
+        // Write message
+        String message = null;
+        if (org.apache.coyote.Constants.USE_CUSTOM_STATUS_MSG_IN_HEADER &&
+                HttpMessages.isSafeInHttpHeader(response.getMessage())) {
+            message = response.getMessage();
+        }
+        if (message == null) {
+            write(HttpMessages.getMessage(status));
+        } else {
+            write(message);
+        }
+
+        // End the response status line
+        buf[pos++] = Constants.CR;
+        buf[pos++] = Constants.LF;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * This method will write the contents of the specyfied message bytes 
+     * buffer to the output stream, without filtering. This method is meant to
+     * be used to write the response header.
+     * 
+     * @param mb data to be written
+     */
+    protected void write(MessageBytes mb) {
+
+        if (mb.getType() == MessageBytes.T_BYTES) {
+            ByteChunk bc = mb.getByteChunk();
+            write(bc);
+        } else if (mb.getType() == MessageBytes.T_CHARS) {
+            CharChunk cc = mb.getCharChunk();
+            write(cc);
+        } else {
+            write(mb.toString());
+        }
+
+    }
+
+
+
+    /**
+     * This method will write the contents of the specyfied message bytes 
+     * buffer to the output stream, without filtering. This method is meant to
+     * be used to write the response header.
+     * 
+     * @param bc data to be written
+     */
+    protected void write(ByteChunk bc) {
+
+        // Writing the byte chunk to the output buffer
+        int length = bc.getLength();
+        System.arraycopy(bc.getBytes(), bc.getStart(), buf, pos, length);
+        pos = pos + length;
+
+    }
+
+
+
+    /**
+     * This method will write the contents of the specyfied char 
+     * buffer to the output stream, without filtering. This method is meant to
+     * be used to write the response header.
+     * 
+     * @param cc data to be written
+     */
+    protected void write(CharChunk cc) {
+
+        int start = cc.getStart();
+        int end = cc.getEnd();
+        char[] cbuf = cc.getBuffer();
+        for (int i = start; i < end; i++) {
+            char c = cbuf[i];
+            // Note:  This is clearly incorrect for many strings,
+            // but is the only consistent approach within the current
+            // servlet framework.  It must suffice until servlet output
+            // streams properly encode their output.
+            if (((c <= 31) && (c != 9)) || c == 127 || c > 255) {
+                c = ' ';
+            }
+            buf[pos++] = (byte) c;
+        }
+
+    }
+
+
+
+    /**
+     * This method will write the contents of the specyfied byte 
+     * buffer to the output stream, without filtering. This method is meant to
+     * be used to write the response header.
+     * 
+     * @param b data to be written
+     */
+    public void write(byte[] b) {
+
+        // Writing the byte chunk to the output buffer
+        System.arraycopy(b, 0, buf, pos, b.length);
+        pos = pos + b.length;
+
+    }
+
+
+
+    /**
+     * This method will write the contents of the specyfied String to the 
+     * output stream, without filtering. This method is meant to be used to 
+     * write the response header.
+     * 
+     * @param s data to be written
+     */
+    protected void write(String s) {
+
+        if (s == null)
+            return;
+
+        // From the Tomcat 3.3 HTTP/1.0 connector
+        int len = s.length();
+        for (int i = 0; i < len; i++) {
+            char c = s.charAt (i);
+            // Note:  This is clearly incorrect for many strings,
+            // but is the only consistent approach within the current
+            // servlet framework.  It must suffice until servlet output
+            // streams properly encode their output.
+            if (((c <= 31) && (c != 9)) || c == 127 || c > 255) {
+                c = ' ';
+            }
+            buf[pos++] = (byte) c;
+        }
+
+    }
+
+
+
+    /**
+     * This method will print the specified integer to the output stream, 
+     * without filtering. This method is meant to be used to write the 
+     * response header.
+     * 
+     * @param i data to be written
+     */
+    protected void write(int i) {
+
+        write(String.valueOf(i));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Send a header.
+     * 
+     * @param name Header name
+     * @param value Header value
+     */
+    public void sendHeader(MessageBytes name, MessageBytes value) {
+
+        write(name);
+        buf[pos++] = Constants.COLON;
+        buf[pos++] = Constants.SP;
+        write(value);
+        buf[pos++] = Constants.CR;
+        buf[pos++] = Constants.LF;
+
+    }
+
+
+
+    /**
+     * Send a header.
+     * 
+     * @param name Header name
+     * @param value Header value
+     */
+    public void sendHeader(ByteChunk name, ByteChunk value) {
+
+        write(name);
+        buf[pos++] = Constants.COLON;
+        buf[pos++] = Constants.SP;
+        write(value);
+        buf[pos++] = Constants.CR;
+        buf[pos++] = Constants.LF;
+
+    }
+
+
+
+    /**
+     * Send a header.
+     * 
+     * @param name Header name
+     * @param value Header value
+     */
+    public void sendHeader(String name, String value) {
+
+        write(name);
+        buf[pos++] = Constants.COLON;
+        buf[pos++] = Constants.SP;
+        write(value);
+        buf[pos++] = Constants.CR;
+        buf[pos++] = Constants.LF;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * End the header block.
+     */
+    public void endHeaders() {
+
+        buf[pos++] = Constants.CR;
+        buf[pos++] = Constants.LF;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get filters.
+     */
+    public OutputFilter[] getFilters() {
+
+        return filterLibrary;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Check if compression should be used for this resource. Already checked
+     * that the resource could be compressed if the client supports it.
+     */
+    private boolean useCompression() {
+
+        // Check if browser support gzip encoding
+        MessageBytes acceptEncodingMB =
+            request.getMimeHeaders().getValue("accept-encoding");
+
+        if ((acceptEncodingMB == null)
+            || (acceptEncodingMB.indexOf("gzip") == -1))
+            return false;
+
+        // If force mode, always compress (test purposes only)
+        if (compressionLevel == 2)
+           return true;
+
+        // Check for incompatible Browser
+        if (noCompressionUserAgents != null) {
+            MessageBytes userAgentValueMB =
+                request.getMimeHeaders().getValue("user-agent");
+            if(userAgentValueMB != null) {
+                String userAgentValue = userAgentValueMB.toString();
+
+                // If one Regexp rule match, disable compression
+                for (int i = 0; i < noCompressionUserAgents.length; i++)
+                    if (noCompressionUserAgents[i].matcher(userAgentValue).matches())
+                        return false;
+            }
+        }
+
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * When committing the response, we have to validate the set of headers, as
+     * well as setup the response filters.
+     */
+    protected void prepareResponse() {
+
+        boolean entityBody = true;
+        contentDelimitation = false;
+
+        OutputFilter[] outputFilters = outputBuffer.getFilters();
+
+        if (http09 == true) {
+            // HTTP/0.9
+            outputBuffer.addActiveFilter
+                (outputFilters[Constants.IDENTITY_FILTER]);
+            return;
+        }
+
+        int statusCode = response.getStatus();
+        if ((statusCode == 204) || (statusCode == 205)
+            || (statusCode == 304)) {
+            // No entity body
+            outputBuffer.addActiveFilter
+                (outputFilters[Constants.VOID_FILTER]);
+            entityBody = false;
+            contentDelimitation = true;
+        }
+
+        MessageBytes methodMB = request.method();
+        if (methodMB.equals("HEAD")) {
+            // No entity body
+            outputBuffer.addActiveFilter
+                (outputFilters[Constants.VOID_FILTER]);
+            contentDelimitation = true;
+        }
+
+        // Sendfile support
+        if (endpoint.getUseSendfile()) {
+            String fileName = (String) request.getAttribute("org.apache.tomcat.sendfile.filename");
+            if (fileName != null) {
+                // No entity body sent here
+                outputBuffer.addActiveFilter
+                    (outputFilters[Constants.VOID_FILTER]);
+                contentDelimitation = true;
+                sendfileData = new AprEndpoint.SendfileData();
+                sendfileData.fileName = fileName;
+                sendfileData.start =
+                    ((Long) request.getAttribute("org.apache.tomcat.sendfile.start")).longValue();
+                sendfileData.end =
+                    ((Long) request.getAttribute("org.apache.tomcat.sendfile.end")).longValue();
+            }
+        }
+
+        // Check for compression
+        boolean isCompressable = false;
+        boolean useCompression = false;
+        if (entityBody && (compressionLevel > 0) && (sendfileData == null)) {
+            isCompressable = isCompressable();
+            if (isCompressable) {
+                useCompression = useCompression();
+            }
+            // Change content-length to -1 to force chunking
+            if (useCompression) {
+                response.setContentLength(-1);
+            }
+        }
+
+        MimeHeaders headers = response.getMimeHeaders();
+        if (!entityBody) {
+            response.setContentLength(-1);
+        } else {
+            String contentType = response.getContentType();
+            if (contentType != null) {
+                headers.setValue("Content-Type").setString(contentType);
+            }
+            String contentLanguage = response.getContentLanguage();
+            if (contentLanguage != null) {
+                headers.setValue("Content-Language")
+                    .setString(contentLanguage);
+            }
+        }
+
+        long contentLength = response.getContentLengthLong();
+        if (contentLength != -1) {
+            headers.setValue("Content-Length").setLong(contentLength);
+            outputBuffer.addActiveFilter
+                (outputFilters[Constants.IDENTITY_FILTER]);
+            contentDelimitation = true;
+        } else {
+            if (entityBody && http11) {
+                outputBuffer.addActiveFilter
+                    (outputFilters[Constants.CHUNKED_FILTER]);
+                contentDelimitation = true;
+                headers.addValue(Constants.TRANSFERENCODING).setString(Constants.CHUNKED);
+            } else {
+                outputBuffer.addActiveFilter
+                    (outputFilters[Constants.IDENTITY_FILTER]);
+            }
+        }
+
+        if (useCompression) {
+            outputBuffer.addActiveFilter(outputFilters[Constants.GZIP_FILTER]);
+            headers.setValue("Content-Encoding").setString("gzip");
+        }
+        // If it might be compressed, set the Vary header
+        if (isCompressable) {
+            // Make Proxies happy via Vary (from mod_deflate)
+            MessageBytes vary = headers.getValue("Vary");
+            if (vary == null) {
+                // Add a new Vary header
+                headers.setValue("Vary").setString("Accept-Encoding");
+            } else if (vary.equals("*")) {
+                // No action required
+            } else {
+                // Merge into current header
+                headers.setValue("Vary").setString(
+                        vary.getString() + ",Accept-Encoding");
+            }
+        }
+
+        // Add date header unless application has already set one (e.g. in a
+        // Caching Filter)
+        if (headers.getValue("Date") == null) {
+            headers.setValue("Date").setString(
+                    FastHttpDateFormat.getCurrentDate());
+        }
+
+        // FIXME: Add transfer encoding header
+
+        if ((entityBody) && (!contentDelimitation)) {
+            // Mark as close the connection after the request, and add the
+            // connection: close header
+            keepAlive = false;
+        }
+
+        // If we know that the request is bad this early, add the
+        // Connection: close header.
+        keepAlive = keepAlive && !statusDropsConnection(statusCode);
+        if (!keepAlive) {
+            headers.addValue(Constants.CONNECTION).setString(Constants.CLOSE);
+        } else if (!http11 && !error) {
+            headers.addValue(Constants.CONNECTION).setString(Constants.KEEPALIVE);
+        }
+
+        // Build the response header
+        outputBuffer.sendStatus();
+
+        // Add server header
+        if (server != null) {
+            // Always overrides anything the app might set
+            headers.setValue("Server").setString(server);
+        } else if (headers.getValue("Server") == null) {
+            // If app didn't set the header, use the default
+            outputBuffer.write(Constants.SERVER_BYTES);
+        }
+
+        int size = headers.size();
+        for (int i = 0; i < size; i++) {
+            outputBuffer.sendHeader(headers.getName(i), headers.getValue(i));
+        }
+        outputBuffer.endHeaders();
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    public boolean getUseSendfile() { return useSendfile; }
+-----CSCI578-----
+
+
+    public boolean getUseSendfile() { return endpoint.getUseSendfile(); }
+-----CSCI578-----
+
+
+    public boolean getUseSendfile() { return endpoint.getUseSendfile(); }

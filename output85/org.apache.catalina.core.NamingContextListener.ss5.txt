@@ -1,0 +1,44 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified resource link in the naming context.
+     *
+     * @param resourceLink the resource link
+     */
+    public void addResourceLink(ContextResourceLink resourceLink) {
+
+        // Create a reference to the resource.
+        Reference ref = new ResourceLinkRef
+            (resourceLink.getType(), resourceLink.getGlobal(), resourceLink.getFactory(), null);
+        Iterator<String> i = resourceLink.listProperties();
+        while (i.hasNext()) {
+            String key = i.next();
+            Object val = resourceLink.getProperty(key);
+            if (val!=null) {
+                StringRefAddr refAddr = new StringRefAddr(key, val.toString());
+                ref.add(refAddr);
+            }
+        }
+        javax.naming.Context ctx =
+            "UserTransaction".equals(resourceLink.getName())
+            ? compCtx : envCtx;
+        try {
+            if (logger.isDebugEnabled())
+                log.debug("  Adding resource link " + resourceLink.getName());
+            createSubcontexts(envCtx, resourceLink.getName());
+            ctx.bind(resourceLink.getName(), ref);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.bindFailed", e));
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getFactory() {
+        return factory;
+    }

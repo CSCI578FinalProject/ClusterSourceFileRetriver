@@ -1,0 +1,42 @@
+4
+-----CSCI578-----
+
+
+
+    @Override
+    public void backgroundProcess() {
+        cache.backgroundProcess();
+        gc();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Context getContext() {
+        return context;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected void backgroundProcess() {
+        // Create an ordered set of all cached resources with the least recently
+        // used first. This is a background process so we can afford to take the
+        // time to order the elements first
+        TreeSet<CachedResource> orderedResources =
+                new TreeSet<>(new EvictionOrder());
+        orderedResources.addAll(resourceCache.values());
+
+        Iterator<CachedResource> iter = orderedResources.iterator();
+
+        long targetSize =
+                maxSize * (100 - TARGET_FREE_PERCENT_BACKGROUND) / 100;
+        long newSize = evict(targetSize, iter);
+
+        if (newSize > targetSize) {
+            log.info(sm.getString("cache.backgroundEvictFail",
+                    Long.valueOf(TARGET_FREE_PERCENT_BACKGROUND),
+                    root.getContext().getName(),
+                    Long.valueOf(newSize / 1024)));
+        }
+    }

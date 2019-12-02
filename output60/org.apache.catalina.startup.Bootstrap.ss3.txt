@@ -1,0 +1,140 @@
+3
+-----CSCI578-----
+
+
+
+    private ClassLoader createClassLoader(String name, ClassLoader parent)
+        throws Exception {
+
+        String value = CatalinaProperties.getProperty(name + ".loader");
+        if ((value == null) || (value.equals("")))
+            return parent;
+
+        ArrayList repositoryLocations = new ArrayList();
+        ArrayList repositoryTypes = new ArrayList();
+        int i;
+ 
+        StringTokenizer tokenizer = new StringTokenizer(value, ",");
+        while (tokenizer.hasMoreElements()) {
+            String repository = tokenizer.nextToken();
+
+            // Local repository
+            boolean replace = false;
+            String before = repository;
+            while ((i=repository.indexOf(CATALINA_HOME_TOKEN))>=0) {
+                replace=true;
+                if (i>0) {
+                repository = repository.substring(0,i) + getCatalinaHome() 
+                    + repository.substring(i+CATALINA_HOME_TOKEN.length());
+                } else {
+                    repository = getCatalinaHome() 
+                        + repository.substring(CATALINA_HOME_TOKEN.length());
+                }
+            }
+            while ((i=repository.indexOf(CATALINA_BASE_TOKEN))>=0) {
+                replace=true;
+                if (i>0) {
+                repository = repository.substring(0,i) + getCatalinaBase() 
+                    + repository.substring(i+CATALINA_BASE_TOKEN.length());
+                } else {
+                    repository = getCatalinaBase() 
+                        + repository.substring(CATALINA_BASE_TOKEN.length());
+                }
+            }
+            if (replace && log.isDebugEnabled())
+                log.debug("Expanded " + before + " to " + repository);
+
+            // Check for a JAR URL repository
+            try {
+                URL url=new URL(repository);
+                repositoryLocations.add(repository);
+                repositoryTypes.add(ClassLoaderFactory.IS_URL);
+                continue;
+            } catch (MalformedURLException e) {
+                // Ignore
+            }
+
+            if (repository.endsWith("*.jar")) {
+                repository = repository.substring
+                    (0, repository.length() - "*.jar".length());
+                repositoryLocations.add(repository);
+                repositoryTypes.add(ClassLoaderFactory.IS_GLOB);
+            } else if (repository.endsWith(".jar")) {
+                repositoryLocations.add(repository);
+                repositoryTypes.add(ClassLoaderFactory.IS_JAR);
+            } else {
+                repositoryLocations.add(repository);
+                repositoryTypes.add(ClassLoaderFactory.IS_DIR);
+            }
+        }
+
+        String[] locations = (String[]) repositoryLocations.toArray(new String[0]);
+        Integer[] types = (Integer[]) repositoryTypes.toArray(new Integer[0]);
+ 
+        ClassLoader classLoader = ClassLoaderFactory.createClassLoader
+            (locations, types, parent);
+
+        // Retrieving MBean server
+        MBeanServer mBeanServer = null;
+        if (MBeanServerFactory.findMBeanServer(null).size() > 0) {
+            mBeanServer =
+                (MBeanServer) MBeanServerFactory.findMBeanServer(null).get(0);
+        } else {
+            mBeanServer = ManagementFactory.getPlatformMBeanServer();
+        }
+
+        // Register the server classloader
+        ObjectName objectName =
+            new ObjectName("Catalina:type=ServerClassLoader,name=" + name);
+        mBeanServer.registerMBean(classLoader, objectName);
+
+        return classLoader;
+
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    private void initClassLoaders() {
+        try {
+            commonLoader = createClassLoader("common", null);
+            if( commonLoader == null ) {
+                // no config file, default to this loader - we might be in a 'single' env.
+                commonLoader=this.getClass().getClassLoader();
+            }
+            catalinaLoader = createClassLoader("server", commonLoader);
+            sharedLoader = createClassLoader("shared", commonLoader);
+        } catch (Throwable t) {
+            log.error("Class loader creation threw exception", t);
+            System.exit(1);
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return specified property value.
+     */
+    public static String getProperty(String name) {
+	
+        return properties.getProperty(name);
+
+    }
+
+
+
+    /**
+     * Return specified property value.
+     */
+    public static String getProperty(String name, String defaultValue) {
+
+        return properties.getProperty(name, defaultValue);
+
+    }

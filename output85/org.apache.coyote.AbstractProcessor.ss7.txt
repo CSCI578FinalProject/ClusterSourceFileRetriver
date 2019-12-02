@@ -1,0 +1,45 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Update the current error state to the new error state if the new error
+     * state is more severe than the current error state.
+     * @param errorState The error status details
+     * @param t The error which occurred
+     */
+    protected void setErrorState(ErrorState errorState, Throwable t) {
+        boolean blockIo = this.errorState.isIoAllowed() && !errorState.isIoAllowed();
+        this.errorState = this.errorState.getMostSevere(errorState);
+        if (blockIo && !ContainerThreadMarker.isContainerThread() && isAsync()) {
+            // The error occurred on a non-container thread during async
+            // processing which means not all of the necessary clean-up will
+            // have been completed. Dispatch to a container thread to do the
+            // clean-up. Need to do it this way to ensure that all the necessary
+            // clean-up is performed.
+            if (response.getStatus() < 400) {
+                response.setStatus(500);
+            }
+            getLog().info(sm.getString("abstractProcessor.nonContainerThreadError"), t);
+            socketWrapper.processSocket(SocketEvent.ERROR, true);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Compare this ErrorState with the provided ErrorState and return the most
+     * severe.
+     *
+     * @param input The error state to compare to this one
+     *
+     * @return The most severe error state from the the provided error state and
+     *         this one
+     */
+    public ErrorState getMostSevere(ErrorState input) {
+        if (input.severity > this.severity) {
+            return input;
+        } else {
+            return this;
+        }
+    }

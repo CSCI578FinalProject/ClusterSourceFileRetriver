@@ -1,0 +1,199 @@
+8
+
+
+
+    /**
+     * Check whether the credentials presented by the user match those
+     * retrieved from the directory.
+     *
+     * @param context The directory context
+     * @param info The User to be authenticated
+     * @param credentials Authentication credentials
+     *
+     * @exception NamingException if a directory server error occurs
+     */
+    protected boolean compareCredentials(DirContext context,
+                                         User info,
+                                         String credentials)
+        throws NamingException {
+
+        if (info == null || credentials == null)
+            return (false);
+
+        String password = info.getPassword();
+        if (password == null)
+            return (false);
+
+        // Validate the credentials specified by the user
+        if (containerLog.isTraceEnabled())
+            containerLog.trace("  validating credentials");
+
+        boolean validated = false;
+        if (hasMessageDigest()) {
+            // Some directories prefix the password with the hash type
+            // The string is in a format compatible with Base64.encode not
+            // the Hex encoding of the parent class.
+            if (password.startsWith("{MD5}") || password.startsWith("{SHA}")) {
+                /* sync since super.digest() does this same thing */
+                synchronized (this) {
+                    password = password.substring(5);
+                    md.reset();
+                    md.update(credentials.getBytes());
+                    String digestedPassword =
+                        new String(Base64.encode(md.digest()));
+                    validated = password.equals(digestedPassword);
+                }
+            } else if (password.startsWith("{SSHA}")) {
+                // Bugzilla 32938
+                /* sync since super.digest() does this same thing */
+                synchronized (this) {
+                    password = password.substring(6);
+
+                    md.reset();
+                    md.update(credentials.getBytes());
+
+                    // Decode stored password.
+                    ByteChunk pwbc = new ByteChunk(password.length());
+                    try {
+                        pwbc.append(password.getBytes(), 0, password.length());
+                    } catch (IOException e) {
+                        // Should never happen
+                        containerLog.error("Could not append password bytes to chunk: ", e);
+                    }
+
+                    CharChunk decoded = new CharChunk();
+                    Base64.decode(pwbc, decoded);
+                    char[] pwarray = decoded.getBuffer();
+
+                    // Split decoded password into hash and salt.
+                    final int saltpos = 20;
+                    byte[] hash = new byte[saltpos];
+                    for (int i=0; i< hash.length; i++) {
+                        hash[i] = (byte) pwarray[i];
+                    }
+
+                    byte[] salt = new byte[pwarray.length - saltpos];
+                    for (int i=0; i< salt.length; i++)
+                        salt[i] = (byte)pwarray[i+saltpos];
+
+                    md.update(salt);
+                    byte[] dp = md.digest();
+
+                    validated = Arrays.equals(dp, hash);
+                } // End synchronized(this) block
+            } else {
+                // Hex hashes should be compared case-insensitive
+                validated = (digest(credentials).equalsIgnoreCase(password));
+            }
+        } else
+            validated = (digest(credentials).equals(password));
+        return (validated);
+
+    }
+
+
+
+    /**
+     * Check credentials by binding to the directory as the user
+     *
+     * @param context The directory context
+     * @param user The User to be authenticated
+     * @param credentials Authentication credentials
+     *
+     * @exception NamingException if a directory server error occurs
+     */
+     protected boolean bindAsUser(DirContext context,
+                                  User user,
+                                  String credentials)
+         throws NamingException {
+
+         if (credentials == null || user == null)
+             return (false);
+
+         String dn = user.getDN();
+         if (dn == null)
+             return (false);
+
+         // Validate the credentials specified by the user
+         if (containerLog.isTraceEnabled()) {
+             containerLog.trace("  validating credentials by binding as the user");
+        }
+
+        // Set up security environment to bind as the user
+        context.addToEnvironment(Context.SECURITY_PRINCIPAL, dn);
+        context.addToEnvironment(Context.SECURITY_CREDENTIALS, credentials);
+
+        // Elicit an LDAP bind operation
+        boolean validated = false;
+        try {
+            if (containerLog.isTraceEnabled()) {
+                containerLog.trace("  binding as "  + dn);
+            }
+            context.getAttributes("", null);
+            validated = true;
+        }
+        catch (AuthenticationException e) {
+            if (containerLog.isTraceEnabled()) {
+                containerLog.trace("  bind attempt failed");
+            }
+        }
+
+        // Restore the original security environment
+        if (connectionName != null) {
+            context.addToEnvironment(Context.SECURITY_PRINCIPAL,
+                                     connectionName);
+        } else {
+            context.removeFromEnvironment(Context.SECURITY_PRINCIPAL);
+        }
+
+        if (connectionPassword != null) {
+            context.addToEnvironment(Context.SECURITY_CREDENTIALS,
+                                     connectionPassword);
+        }
+        else {
+            context.removeFromEnvironment(Context.SECURITY_CREDENTIALS);
+        }
+
+        return (validated);
+     }
+
+
+    /**
+     * Check whether the given User can be authenticated with the
+     * given credentials. If the <code>userPassword</code>
+     * configuration attribute is specified, the credentials
+     * previously retrieved from the directory are compared explicitly
+     * with those presented by the user. Otherwise the presented
+     * credentials are checked by binding to the directory as the
+     * user.
+     *
+     * @param context The directory context
+     * @param user The User to be authenticated
+     * @param credentials The credentials presented by the user
+     *
+     * @exception NamingException if a directory server error occurs
+     */
+    protected boolean checkCredentials(DirContext context,
+                                     User user,
+                                     String credentials)
+         throws NamingException {
+
+         boolean validated = false;
+
+         if (userPassword == null) {
+             validated = bindAsUser(context, user, credentials);
+         } else {
+             validated = compareCredentials(context, user, credentials);
+         }
+
+         if (containerLog.isTraceEnabled()) {
+             if (validated) {
+                 containerLog.trace(sm.getString("jndiRealm.authenticateSuccess",
+                                  user.getUserName()));
+             } else {
+                 containerLog.trace(sm.getString("jndiRealm.authenticateFailure",
+                                  user.getUserName()));
+             }
+         }
+         return (validated);
+     }

@@ -1,0 +1,97 @@
+8
+-----CSCI578-----
+
+
+    protected void processCoordMessage(CoordinationMessage msg) throws ChannelException {
+        if ( !coordMsgReceived.get() ) {
+            coordMsgReceived.set(true);
+            synchronized (electionMutex) { electionMutex.notifyAll();}
+        }
+        Membership merged = mergeOnArrive(msg);
+        if (isViewConf(msg)) handleViewConf(msg, merged);
+        else handleToken(msg, merged);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get all current cluster members
+     * @return all members or empty array
+     */
+    @Override
+    public Member[] getMembers() {
+
+        return membership.getMembers();
+    }
+-----CSCI578-----
+
+
+    protected Membership mergeOnArrive(CoordinationMessage msg) {
+        fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_PRE_MERGE,this,"Pre merge"));
+        Member local = getLocalMember(false);
+        Membership merged = new Membership(local,AbsoluteOrder.comp,true);
+        Arrays.fill(merged,msg.getMembers());
+        Arrays.fill(merged,getMembers());
+        Member[] diff = Arrays.diff(merged,membership,local);
+        for ( int i=0; i<diff.length; i++ ) {
+            if (!alive(diff[i])) merged.removeMember(diff[i]);
+            else memberAdded(diff[i],false);
+        }
+        fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_POST_MERGE,this,"Post merge"));
+        return merged;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void memberAdded(Member member) {
+        memberAdded(member,true);
+    }
+
+
+    public void memberAdded(Member member,boolean elect) {
+        if (membership == null) setupMembership();
+        if (membership.memberAlive(member)) super.memberAdded(member);
+        try {
+            fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_MBR_ADD,this,"Member add("+member.getName()+")"));
+            if (started && elect) startElection(false);
+        } catch (ChannelException x) {
+            log.error(sm.getString("nonBlockingCoordinator.memberAdded.failed"),x);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void fireInterceptorEvent(InterceptorEvent event) {
+        if (event instanceof CoordinationEvent &&
+            ((CoordinationEvent)event).type == CoordinationEvent.EVT_CONF_RX)
+            log.info(event);
+    }
+-----CSCI578-----
+
+
+    protected synchronized void setupMembership() {
+        if ( membership == null ) {
+            membership  = new Membership(super.getLocalMember(true),AbsoluteOrder.comp,false);
+        }
+    }
+-----CSCI578-----
+
+
+
+//============================================================================================================
+//              OVERRIDDEN METHODS FROM CHANNEL INTERCEPTOR BASE
+//============================================================================================================
+    @Override
+    public void start(int svc) throws ChannelException {
+            if (membership == null) setupMembership();
+            if (started)return;
+            fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_START, this, "Before start"));
+            super.start(startsvc);
+            started = true;
+            if (view == null) view = new Membership(super.getLocalMember(true), AbsoluteOrder.comp, true);
+            fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_START, this, "After start"));
+            startElection(false);
+    }

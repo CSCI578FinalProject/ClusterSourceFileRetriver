@@ -1,0 +1,34 @@
+3
+-----CSCI578-----
+
+
+    public void memberDisappeared(Member member) {
+        try {
+            
+            membership.removeMember((MemberImpl)member);
+            super.memberDisappeared(member);
+            try {
+                fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_MBR_DEL,this,"Member remove("+member.getName()+")"));
+                if ( started && (isCoordinator() || isHighest()) ) 
+                    startElection(true); //to do, if a member disappears, only the coordinator can start
+            }catch ( ChannelException x ) {
+                log.error("Unable to start election when member was removed.",x);
+            }
+        }finally {
+        }
+    }
+-----CSCI578-----
+
+    
+    public boolean isCoordinator() {
+        Member coord = getCoordinator();
+        return coord != null && getLocalMember(false).equals(coord);
+    }
+-----CSCI578-----
+
+    
+    public boolean isHighest() {
+        Member local = getLocalMember(false);
+        if ( membership.getMembers().length == 0 ) return true;
+        else return AbsoluteOrder.comp.compare(local,membership.getMembers()[0])<=0;
+    }

@@ -1,0 +1,86 @@
+9
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean isExternalOnly() {
+        return externalOnly;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Store a Context without backup add separate file or when configFile =
+     * null a aWriter.
+     *
+     * @param aWriter Current output writer
+     * @param indent Indentation level
+     * @param aContext The context which will be stored
+     * @throws Exception Configuration storing error
+     */
+    protected void storeContextSeparate(PrintWriter aWriter, int indent,
+            StandardContext aContext) throws Exception {
+        URL configFile = aContext.getConfigFile();
+        if (configFile != null) {
+            File config = new File(configFile.toURI());
+            if (!config.isAbsolute()) {
+                config = new File(System.getProperty("catalina.base"),
+                        config.getPath());
+            }
+            if( (!config.isFile()) || (!config.canWrite())) {
+                log.error("Cannot write context output file at "
+                            + configFile + ", not saving.");
+                throw new IOException("Context save file at "
+                                      + configFile
+                                      + " not a file, or not writable.");
+            }
+            if (log.isInfoEnabled())
+                log.info("Store Context " + aContext.getPath()
+                        + " separate at file " + config);
+            try (FileOutputStream fos = new FileOutputStream(config);
+                    PrintWriter writer = new PrintWriter(new OutputStreamWriter(
+                            fos , getRegistry().getEncoding()))) {
+                storeXMLHead(writer);
+                super.store(writer, -2, aContext);
+            }
+        } else {
+            super.store(aWriter, indent, aContext);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return a default configuration path of this Host. The file will be
+     * canonical if possible.
+     */
+    public File getConfigBaseFile();
+-----CSCI578-----
+
+
+
+    @Override
+    public URL getConfigFile() {
+        return this.configFile;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the backup.
+     */
+    public boolean isBackup() {
+        return backup;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the URL of the XML descriptor for this context.
+     *
+     * @param configFile The URL of the XML descriptor for this context.
+     */
+    public void setConfigFile(URL configFile);

@@ -1,0 +1,221 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void readConfiguration()
+        throws IOException, SecurityException {
+
+        checkAccess();
+
+        readConfiguration(Thread.currentThread().getContextClassLoader());
+
+    }
+
+
+    @Override
+    public void readConfiguration(InputStream is)
+        throws IOException, SecurityException {
+
+        checkAccess();
+        reset();
+
+        readConfiguration(is, Thread.currentThread().getContextClassLoader());
+
+    }
+
+
+
+    /**
+     * Read configuration for the specified classloader.
+     *
+     * @param classLoader The classloader
+     * @throws IOException Error reading configuration
+     */
+    protected synchronized void readConfiguration(ClassLoader classLoader)
+        throws IOException {
+
+        InputStream is = null;
+        // Special case for URL classloaders which are used in containers:
+        // only look in the local repositories to avoid redefining loggers 20 times
+        try {
+            if (classLoader instanceof URLClassLoader) {
+                URL logConfig = ((URLClassLoader)classLoader).findResource("logging.properties");
+
+                if(null != logConfig) {
+                    if(Boolean.getBoolean(DEBUG_PROPERTY))
+                        System.err.println(getClass().getName()
+                                           + ".readConfiguration(): "
+                                           + "Found logging.properties at "
+                                           + logConfig);
+
+                    is = classLoader.getResourceAsStream("logging.properties");
+                } else {
+                    if(Boolean.getBoolean(DEBUG_PROPERTY))
+                        System.err.println(getClass().getName()
+                                           + ".readConfiguration(): "
+                                           + "Found no logging.properties");
+                }
+            }
+        } catch (AccessControlException ace) {
+            // No permission to configure logging in context
+            // Log and carry on
+            ClassLoaderLogInfo info = classLoaderLoggers.get(ClassLoader.getSystemClassLoader());
+            if (info != null) {
+                Logger log = info.loggers.get("");
+                if (log != null) {
+                    Permission perm = ace.getPermission();
+                    if (perm instanceof FilePermission && perm.getActions().equals("read")) {
+                        log.warning("Reading " + perm.getName() + " is not permitted. See \"per context logging\" in the default catalina.policy file.");
+                    }
+                    else {
+                        log.warning("Reading logging.properties is not permitted in some context. See \"per context logging\" in the default catalina.policy file.");
+                        log.warning("Original error was: " + ace.getMessage());
+                    }
+                }
+            }
+        }
+        if ((is == null) && (classLoader == ClassLoader.getSystemClassLoader())) {
+            String configFileStr = System.getProperty("java.util.logging.config.file");
+            if (configFileStr != null) {
+                try {
+                    is = new FileInputStream(replace(configFileStr));
+                } catch (IOException e) {
+                    System.err.println("Configuration error");
+                    e.printStackTrace();
+                }
+            }
+            // Try the default JVM configuration
+            if (is == null) {
+                File defaultFile = new File(new File(System.getProperty("java.home"), "lib"),
+                    "logging.properties");
+                try {
+                    is = new FileInputStream(defaultFile);
+                } catch (IOException e) {
+                    System.err.println("Configuration error");
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        Logger localRootLogger = new RootLogger();
+        if (is == null) {
+            // Retrieve the root logger of the parent classloader instead
+            ClassLoader current = classLoader.getParent();
+            ClassLoaderLogInfo info = null;
+            while (current != null && info == null) {
+                info = getClassLoaderInfo(current);
+                current = current.getParent();
+            }
+            if (info != null) {
+                localRootLogger.setParent(info.rootNode.logger);
+            }
+        }
+        ClassLoaderLogInfo info =
+            new ClassLoaderLogInfo(new LogNode(null, localRootLogger));
+        classLoaderLoggers.put(classLoader, info);
+
+        if (is != null) {
+            readConfiguration(is, classLoader);
+        }
+        addLogger(localRootLogger);
+
+    }
+
+
+
+    /**
+     * Load specified configuration.
+     *
+     * @param is InputStream to the properties file
+     * @param classLoader for which the configuration will be loaded
+     * @throws IOException If something wrong happens during loading
+     */
+    protected synchronized void readConfiguration(InputStream is, ClassLoader classLoader)
+        throws IOException {
+
+        ClassLoaderLogInfo info = classLoaderLoggers.get(classLoader);
+
+        try {
+            info.props.load(is);
+        } catch (IOException e) {
+            // Report error
+            System.err.println("Configuration error");
+            e.printStackTrace();
+        } finally {
+            try {
+                is.close();
+            } catch (IOException ioe) {
+                // Ignore
+            }
+        }
+
+        // Create handlers for the root logger of this classloader
+        String rootHandlers = info.props.getProperty(".handlers");
+        String handlers = info.props.getProperty("handlers");
+        Logger localRootLogger = info.rootNode.logger;
+        if (handlers != null) {
+            StringTokenizer tok = new StringTokenizer(handlers, ",");
+            while (tok.hasMoreTokens()) {
+                String handlerName = (tok.nextToken().trim());
+                String handlerClassName = handlerName;
+                String prefix = "";
+                if (handlerClassName.length() <= 0) {
+                    continue;
+                }
+                // Parse and remove a prefix (prefix start with a digit, such as
+                // "10WebappFooHanlder.")
+                if (Character.isDigit(handlerClassName.charAt(0))) {
+                    int pos = handlerClassName.indexOf('.');
+                    if (pos >= 0) {
+                        prefix = handlerClassName.substring(0, pos + 1);
+                        handlerClassName = handlerClassName.substring(pos + 1);
+                    }
+                }
+                try {
+                    this.prefix.set(prefix);
+                    Handler handler =
+                        (Handler) classLoader.loadClass(handlerClassName).newInstance();
+                    // The specification strongly implies all configuration should be done
+                    // during the creation of the handler object.
+                    // This includes setting level, filter, formatter and encoding.
+                    this.prefix.set(null);
+                    info.handlers.put(handlerName, handler);
+                    if (rootHandlers == null) {
+                        localRootLogger.addHandler(handler);
+                    }
+                } catch (Exception e) {
+                    // Report error
+                    System.err.println("Handler error");
+                    e.printStackTrace();
+                }
+            }
+
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void reset() throws SecurityException {
+        Thread thread = Thread.currentThread();
+        if (thread.getClass().getName().startsWith(
+                "java.util.logging.LogManager$")) {
+            // Ignore the call from java.util.logging.LogManager.Cleaner,
+            // because we have our own shutdown hook
+            return;
+        }
+        ClassLoader classLoader = thread.getContextClassLoader();
+        ClassLoaderLogInfo clLogInfo = getClassLoaderInfo(classLoader);
+        resetLoggers(clLogInfo);
+        // Do not call super.reset(). It should be a NO-OP as all loggers should
+        // have been registered via this manager. Very rarely a
+        // ConcurrentModificationException has been seen in the unit tests when
+        // calling super.reset() and that exception could cause the stop of a
+        // web application to fail.
+    }

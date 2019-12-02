@@ -1,0 +1,82 @@
+4
+-----CSCI578-----
+
+
+    public void setWriteListener(WriteListener listener) {
+        if (listener == null) {
+            throw new NullPointerException(
+                    sm.getString("response.nullWriteListener"));
+        }
+        if (getWriteListener() != null) {
+            throw new IllegalStateException(
+                    sm.getString("response.writeListenerSet"));
+        }
+        // Note: This class is not used for HTTP upgrade so only need to test
+        //       for async
+        AtomicBoolean result = new AtomicBoolean(false);
+        action(ActionCode.ASYNC_IS_ASYNC, result);
+        if (!result.get()) {
+            throw new IllegalStateException(
+                    sm.getString("response.notAsync"));
+        }
+
+        this.listener = listener;
+
+        // The container is responsible for the first call to
+        // listener.onWritePossible(). If isReady() returns true, the container
+        // needs to call listener.onWritePossible() from a new thread. If
+        // isReady() returns false, the socket will be registered for write and
+        // the container will call listener.onWritePossible() once data can be
+        // written.
+        if (isReady()) {
+            synchronized (nonBlockingStateLock) {
+                // Ensure we don't get multiple write registrations if
+                // ServletOutputStream.isReady() returns false during a call to
+                // onDataAvailable()
+                registeredForWrite = true;
+                // Need to set the fireListener flag otherwise when the
+                // container tries to trigger onWritePossible, nothing will
+                // happen
+                fireListener = true;
+            }
+            action(ActionCode.DISPATCH_WRITE, null);
+            if (!ContainerThreadMarker.isContainerThread()) {
+                // Not on a container thread so need to execute the dispatch
+                action(ActionCode.DISPATCH_EXECUTE, null);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setWriteListener(WriteListener listener) {
+        ob.setWriteListener(listener);
+    }
+-----CSCI578-----
+
+
+
+    public void setWriteListener(WriteListener listener) {
+        coyoteResponse.setWriteListener(listener);
+    }
+-----CSCI578-----
+
+
+    public boolean isReady() {
+        if (listener == null) {
+            throw new IllegalStateException(sm.getString("response.notNonBlocking"));
+        }
+        // Assume write is not possible
+        boolean ready = false;
+        synchronized (nonBlockingStateLock) {
+            if (registeredForWrite) {
+                fireListener = true;
+                return false;
+            }
+            ready = checkRegisterForWrite();
+            fireListener = !ready;
+        }
+        return ready;
+    }

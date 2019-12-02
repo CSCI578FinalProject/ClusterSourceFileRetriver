@@ -1,0 +1,312 @@
+13
+-----CSCI578-----
+
+
+
+    /**
+     * Parse request parameters.
+     */
+    protected void parseParameters() {
+
+        parametersParsed = true;
+
+        Parameters parameters = coyoteRequest.getParameters();
+        boolean success = false;
+        try {
+            // Set this every time in case limit has been changed via JMX
+            parameters.setLimit(getConnector().getMaxParameterCount());
+
+            // getCharacterEncoding() may have been overridden to search for
+            // hidden form field containing request encoding
+            String enc = getCharacterEncoding();
+
+            boolean useBodyEncodingForURI = connector.getUseBodyEncodingForURI();
+            if (enc != null) {
+                parameters.setEncoding(enc);
+                if (useBodyEncodingForURI) {
+                    parameters.setQueryStringEncoding(enc);
+                }
+            } else {
+                parameters.setEncoding
+                    (org.apache.coyote.Constants.DEFAULT_CHARACTER_ENCODING);
+                if (useBodyEncodingForURI) {
+                    parameters.setQueryStringEncoding
+                        (org.apache.coyote.Constants.DEFAULT_CHARACTER_ENCODING);
+                }
+            }
+
+            parameters.handleQueryParameters();
+
+            if (usingInputStream || usingReader) {
+                success = true;
+                return;
+            }
+
+            if( !getConnector().isParseBodyMethod(getMethod()) ) {
+                success = true;
+                return;
+            }
+
+            String contentType = getContentType();
+            if (contentType == null) {
+                contentType = "";
+            }
+            int semicolon = contentType.indexOf(';');
+            if (semicolon >= 0) {
+                contentType = contentType.substring(0, semicolon).trim();
+            } else {
+                contentType = contentType.trim();
+            }
+
+            if ("multipart/form-data".equals(contentType)) {
+                parseParts(false);
+                success = true;
+                return;
+            }
+
+            if (!("application/x-www-form-urlencoded".equals(contentType))) {
+                success = true;
+                return;
+            }
+
+            int len = getContentLength();
+
+            if (len > 0) {
+                int maxPostSize = connector.getMaxPostSize();
+                if ((maxPostSize >= 0) && (len > maxPostSize)) {
+                    Context context = getContext();
+                    if (context != null && context.getLogger().isDebugEnabled()) {
+                        context.getLogger().debug(
+                                sm.getString("coyoteRequest.postTooLarge"));
+                    }
+                    checkSwallowInput();
+                    parameters.setParseFailedReason(FailReason.POST_TOO_LARGE);
+                    return;
+                }
+                byte[] formData = null;
+                if (len < CACHED_POST_LEN) {
+                    if (postData == null) {
+                        postData = new byte[CACHED_POST_LEN];
+                    }
+                    formData = postData;
+                } else {
+                    formData = new byte[len];
+                }
+                try {
+                    if (readPostBody(formData, len) != len) {
+                        parameters.setParseFailedReason(FailReason.REQUEST_BODY_INCOMPLETE);
+                        return;
+                    }
+                } catch (IOException e) {
+                    // Client disconnect
+                    Context context = getContext();
+                    if (context != null && context.getLogger().isDebugEnabled()) {
+                        context.getLogger().debug(
+                                sm.getString("coyoteRequest.parseParameters"),
+                                e);
+                    }
+                    parameters.setParseFailedReason(FailReason.CLIENT_DISCONNECT);
+                    return;
+                }
+                parameters.processParameters(formData, 0, len);
+            } else if ("chunked".equalsIgnoreCase(
+                    coyoteRequest.getHeader("transfer-encoding"))) {
+                byte[] formData = null;
+                try {
+                    formData = readChunkedPostBody();
+                } catch (IllegalStateException ise) {
+                    // chunkedPostTooLarge error
+                    parameters.setParseFailedReason(FailReason.POST_TOO_LARGE);
+                    Context context = getContext();
+                    if (context != null && context.getLogger().isDebugEnabled()) {
+                        context.getLogger().debug(
+                                sm.getString("coyoteRequest.parseParameters"),
+                                ise);
+                    }
+                    return;
+                } catch (IOException e) {
+                    // Client disconnect
+                    parameters.setParseFailedReason(FailReason.CLIENT_DISCONNECT);
+                    Context context = getContext();
+                    if (context != null && context.getLogger().isDebugEnabled()) {
+                        context.getLogger().debug(
+                                sm.getString("coyoteRequest.parseParameters"),
+                                e);
+                    }
+                    return;
+                }
+                if (formData != null) {
+                    parameters.processParameters(formData, 0, formData.length);
+                }
+            }
+            success = true;
+        } finally {
+            if (!success) {
+                parameters.setParseFailedReason(FailReason.UNKNOWN);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    protected boolean isParseBodyMethod(String method) {
+
+        return parseBodyMethodsSet.contains(method);
+
+    }
+-----CSCI578-----
+
+
+    public void setEncoding( String s ) {
+        encoding=s;
+        if(log.isDebugEnabled()) {
+            log.debug( "Set encoding to " + s );
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the input stream associated with this Request.
+     */
+    public InputStream getStream() {
+        if (inputStream == null) {
+            inputStream = new CoyoteInputStream(inputBuffer);
+        }
+        return inputStream;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read chunked post body.
+     *
+     * @return the post body as a bytes array
+     * @throws IOException if an IO exception occurred
+     */
+    protected byte[] readChunkedPostBody() throws IOException {
+        ByteChunk body = new ByteChunk();
+
+        byte[] buffer = new byte[CACHED_POST_LEN];
+
+        int len = 0;
+        while (len > -1) {
+            len = getStream().read(buffer, 0, CACHED_POST_LEN);
+            if (connector.getMaxPostSize() >= 0 &&
+                    (body.getLength() + len) > connector.getMaxPostSize()) {
+                // Too much data
+                checkSwallowInput();
+                throw new IllegalStateException(
+                        sm.getString("coyoteRequest.chunkedPostTooLarge"));
+            }
+            if (len > 0) {
+                body.append(buffer, 0, len);
+            }
+        }
+        if (body.getLength() == 0) {
+            return null;
+        }
+        if (body.getLength() < body.getBuffer().length) {
+            int length = body.getLength();
+            byte[] result = new byte[length];
+            System.arraycopy(body.getBuffer(), 0, result, 0, length);
+            return result;
+        }
+
+        return body.getBuffer();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read post body in an array.
+     *
+     * @param body The bytes array in which the body will be read
+     * @param len The body length
+     * @return the bytes count that has been read
+     * @throws IOException if an IO exception occurred
+     */
+    protected int readPostBody(byte[] body, int len)
+        throws IOException {
+
+        int offset = 0;
+        do {
+            int inputLen = getStream().read(body, offset, len - offset);
+            if (inputLen <= 0) {
+                return offset;
+            }
+            offset += inputLen;
+        } while ((len - offset) > 0);
+        return len;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the content type for this Request.
+     */
+    @Override
+    public String getContentType() {
+        return coyoteRequest.getContentType();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the content length for this Request.
+     */
+    @Override
+    public int getContentLength() {
+        return coyoteRequest.getContentLength();
+    }
+-----CSCI578-----
+
+
+
+    public int getContentLength() {
+        long length = getContentLengthLong();
+
+        if (length < Integer.MAX_VALUE) {
+            return (int) length;
+        }
+        return -1;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Disable swallowing of remaining input if configured
+     */
+    protected void checkSwallowInput() {
+        Context context = getContext();
+        if (context != null && !context.getSwallowAbortedUploads()) {
+            coyoteRequest.action(ActionCode.DISABLE_SWALLOW_INPUT, null);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the maximum size of a POST which will be automatically
+     * parsed by the container.
+     */
+    public int getMaxPostSize() {
+
+        return (maxPostSize);
+
+    }
+-----CSCI578-----
+
+
+    public int getContentLength() {
+        return req.getContentLength();
+    }

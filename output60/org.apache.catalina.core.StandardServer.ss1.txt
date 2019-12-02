@@ -1,0 +1,60 @@
+4
+-----CSCI578-----
+
+
+    public void init() throws Exception {
+        initialize();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Invoke a pre-startup initialization. This is used to allow connectors
+     * to bind to restricted ports under Unix operating environments.
+     */
+    public void initialize()
+        throws LifecycleException
+    {
+        if (initialized) {
+                log.info(sm.getString("standardServer.initialize.initialized"));
+            return;
+        }
+        lifecycle.fireLifecycleEvent(INIT_EVENT, null);
+        initialized = true;
+
+        if( oname==null ) {
+            try {
+                oname=new ObjectName( "Catalina:type=Server");
+                Registry.getRegistry(null, null)
+                    .registerComponent(this, oname, null );
+            } catch (Exception e) {
+                log.error("Error registering ",e);
+            }
+        }
+
+        // Register global String cache
+        try {
+            ObjectName oname2 =
+                new ObjectName(oname.getDomain() + ":type=StringCache");
+            Registry.getRegistry(null, null)
+                .registerComponent(new StringCache(), oname2, null );
+        } catch (Exception e) {
+            log.error("Error registering ",e);
+        }
+
+        // Initialize our defined Services
+        for (int i = 0; i < services.length; i++) {
+            services[i].initialize();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Invoke a pre-startup initialization. This is used to allow connectors
+     * to bind to restricted ports under Unix operating environments.
+     *
+     * @exception LifecycleException If this server was already initialized.
+     */
+    public void initialize() throws LifecycleException;

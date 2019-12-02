@@ -1,0 +1,137 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Write a serialized version of the contents of this session object to the
+     * specified object output stream, without requiring that the
+     * StandardSession itself have been serialized.
+     *
+     * @param stream
+     *            The object output stream to write to
+     *
+     * @exception IOException
+     *                if an input/output error occurs
+     */
+    @Override
+    public void writeObjectData(ObjectOutputStream stream) throws IOException {
+        writeObjectData((ObjectOutput)stream);
+    }
+
+    public void writeObjectData(ObjectOutput stream) throws IOException {
+        writeObject(stream);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Load sessions from other cluster node.
+     * FIXME replace currently sessions with same id without notifcation.
+     * FIXME SSO handling is not really correct with the session replacement!
+     * @exception ClassNotFoundException
+     *                if a serialized class cannot be found during the reload
+     * @exception IOException
+     *                if an input/output error occurs
+     */
+    protected void deserializeSessions(byte[] data) throws ClassNotFoundException,IOException {
+
+        // Initialize our internal data structures
+        //sessions.clear(); //should not do this
+        // Open an input stream to the specified pathname, if any
+        ClassLoader originalLoader = Thread.currentThread().getContextClassLoader();
+        ObjectInputStream ois = null;
+        // Load the previously unloaded active sessions
+        try {
+            ois = getReplicationStream(data);
+            Integer count = (Integer) ois.readObject();
+            int n = count.intValue();
+            for (int i = 0; i < n; i++) {
+                DeltaSession session = (DeltaSession) createEmptySession();
+                session.readObjectData(ois);
+                session.setManager(this);
+                session.setValid(true);
+                session.setPrimarySession(false);
+                //in case the nodes in the cluster are out of
+                //time synch, this will make sure that we have the
+                //correct timestamp, isValid returns true, cause
+                // accessCount=1
+                session.access();
+                //make sure that the session gets ready to expire if
+                // needed
+                session.setAccessCount(0);
+                session.resetDeltaRequest();
+                // FIXME How inform other session id cache like SingleSignOn
+                // increment sessionCounter to correct stats report
+                if (findSession(session.getIdInternal()) == null ) {
+                    sessionCounter++;
+                } else {
+                    sessionReplaceCounter++;
+                    // FIXME better is to grap this sessions again !
+                    if (log.isWarnEnabled()) log.warn(sm.getString("deltaManager.loading.existing.session",session.getIdInternal()));
+                }
+                add(session);
+                if (notifySessionListenersOnReplication) {
+                    session.tellNew();
+                }
+            }
+        } catch (ClassNotFoundException e) {
+            log.error(sm.getString("deltaManager.loading.cnfe", e), e);
+            throw e;
+        } catch (IOException e) {
+            log.error(sm.getString("deltaManager.loading.ioe", e), e);
+            throw e;
+        } finally {
+            // Close the input stream
+            try {
+                if (ois != null) ois.close();
+            } catch (IOException f) {
+                // ignored
+            }
+            ois = null;
+            if (originalLoader != null) Thread.currentThread().setContextClassLoader(originalLoader);
+        }
+
+    }
+
+
+    
+
+    /**
+     * Save any currently active sessions in the appropriate persistence
+     * mechanism, if any. If persistence is not supported, this method returns
+     * without doing anything.
+     * 
+     * @exception IOException
+     *                if an input/output error occurs
+     */
+    protected byte[] serializeSessions(Session[] currentSessions) throws IOException {
+
+        // Open an output stream to the specified pathname, if any
+        ByteArrayOutputStream fos = null;
+        ObjectOutputStream oos = null;
+
+        try {
+            fos = new ByteArrayOutputStream();
+            oos = new ObjectOutputStream(new BufferedOutputStream(fos));
+            oos.writeObject(new Integer(currentSessions.length));
+            for(int i=0 ; i < currentSessions.length;i++) {
+                ((DeltaSession)currentSessions[i]).writeObjectData(oos);                
+            }
+            // Flush and close the output stream
+            oos.flush();
+        } catch (IOException e) {
+            log.error(sm.getString("deltaManager.unloading.ioe", e), e);
+            throw e;
+        } finally {
+            if (oos != null) {
+                try {
+                    oos.close();
+                } catch (IOException f) {
+                    ;
+                }
+                oos = null;
+            }
+        }
+        // send object data as byte[]
+        return fos.toByteArray();
+    }

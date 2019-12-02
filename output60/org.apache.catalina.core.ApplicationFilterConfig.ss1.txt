@@ -1,0 +1,171 @@
+4
+-----CSCI578-----
+
+
+    // -------------------------------------------------------- Package Methods
+
+
+    /**
+     * Return the application Filter we are configured for.
+     *
+     * @exception ClassCastException if the specified class does not implement
+     *  the <code>javax.servlet.Filter</code> interface
+     * @exception ClassNotFoundException if the filter class cannot be found
+     * @exception IllegalAccessException if the filter class cannot be
+     *  publicly instantiated
+     * @exception InstantiationException if an exception occurs while
+     *  instantiating the filter object
+     * @exception ServletException if thrown by the filter's init() method
+     * @throws NamingException 
+     * @throws InvocationTargetException 
+     */
+    Filter getFilter() throws ClassCastException, ClassNotFoundException,
+        IllegalAccessException, InstantiationException, ServletException, 
+        InvocationTargetException, NamingException {
+
+        // Return the existing filter instance, if any
+        if (this.filter != null)
+            return (this.filter);
+
+        // Identify the class loader we will be using
+        String filterClass = filterDef.getFilterClass();
+        ClassLoader classLoader = null;
+        if (filterClass.startsWith("org.apache.catalina."))
+            classLoader = this.getClass().getClassLoader();
+        else
+            classLoader = context.getLoader().getClassLoader();
+
+        ClassLoader oldCtxClassLoader =
+            Thread.currentThread().getContextClassLoader();
+
+        // Instantiate a new instance of this filter and return it
+        Class clazz = classLoader.loadClass(filterClass);
+        if (!isFilterAllowed(clazz)) {
+            throw new SecurityException
+                (sm.getString("applicationFilterConfig.privilegedFilter",
+                        filterClass));
+        }
+        this.filter = (Filter) clazz.newInstance();
+        if (!context.getIgnoreAnnotations()) {
+            if (context instanceof StandardContext) {
+               AnnotationProcessor processor = ((StandardContext)context).getAnnotationProcessor();
+               processor.processAnnotations(this.filter);
+               processor.postConstruct(this.filter);
+            }
+        }
+        if (context instanceof StandardContext &&
+            ((StandardContext) context).getSwallowOutput()) {
+            try {
+                SystemLogHandler.startCapture();
+                filter.init(this);
+            } finally {
+                String log = SystemLogHandler.stopCapture();
+                if (log != null && log.length() > 0) {
+                    getServletContext().log(log);
+                }
+            }
+        } else {
+            filter.init(this);
+        }
+        
+        // Expose filter via JMX
+        registerJMX();
+        
+        return (this.filter);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return <code>true</code> if loading this filter is allowed.
+     */
+    protected boolean isFilterAllowed(Class filterClass) {
+
+        // Privileged webapps may load all servlets without restriction
+        if (context.getPrivileged()) {
+            return true;
+        }
+
+        Class clazz = filterClass;
+        while (clazz != null && !clazz.getName().equals("javax.servlet.Filter")) {
+            if ("restricted".equals(restrictedFilters.getProperty(clazz.getName()))) {
+                return (false);
+            }
+            clazz = clazz.getSuperclass();
+        }
+        
+        return (true);
+
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    private void registerJMX() {
+        String parentName = context.getName();
+        parentName = ("".equals(parentName)) ? "/" : parentName;
+
+        String hostName = context.getParent().getName();
+        hostName = (hostName == null) ? "DEFAULT" : hostName;
+
+        // domain == engine name
+        String domain = context.getParent().getParent().getName();
+
+        String webMod = "//" + hostName + parentName;
+        String onameStr = null;
+        if (context instanceof StandardContext) {
+            StandardContext standardContext = (StandardContext) context;
+            onameStr = domain + ":j2eeType=Filter,name=" +
+                 filterDef.getFilterName() + ",WebModule=" + webMod +
+                 ",J2EEApplication=" +
+                 standardContext.getJ2EEApplication() + ",J2EEServer=" +
+                 standardContext.getJ2EEServer();
+        } else {
+            onameStr = domain + ":j2eeType=Filter,name=" +
+                 filterDef.getFilterName() + ",WebModule=" + webMod;
+}
+        try {
+            oname = new ObjectName(onameStr);
+            Registry.getRegistry(null, null).registerComponent(this, oname,
+                    null);
+        } catch (Exception ex) {
+            log.info(sm.getString("applicationFilterConfig.jmxRegisterFail",
+                    getFilterClass(), getFilterName()), ex);
+        }
+    }
+
+    
+    private void unregisterJMX() {
+        // unregister this component
+        if (oname != null) {
+            try {
+                Registry.getRegistry(null, null).unregisterComponent(oname);
+                if (log.isDebugEnabled())
+                    log.debug(sm.getString(
+                            "applicationFilterConfig.jmxUnregister",
+                            getFilterClass(), getFilterName()));
+            } catch(Exception ex) {
+                log.error(sm.getString(
+                        "applicationFilterConfig.jmxUnregisterFail",
+                        getFilterClass(), getFilterName()), ex);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the ServletContext of our associated web application.
+     */
+    public ServletContext getServletContext() {
+
+        return (this.context.getServletContext());
+
+    }

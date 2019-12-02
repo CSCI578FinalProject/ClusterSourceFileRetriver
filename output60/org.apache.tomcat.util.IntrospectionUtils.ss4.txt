@@ -1,0 +1,291 @@
+11
+-----CSCI578-----
+
+
+    public static Object callMethod0(Object target, String methodN)
+            throws Exception {
+        if (target == null) {
+            d("Assert: Illegal params " + target);
+            return null;
+        }
+        if (dbg > 0)
+            d("callMethod0 " + target.getClass().getName() + "." + methodN);
+
+        Class params[] = new Class[0];
+        Method m = findMethod(target.getClass(), methodN, params);
+        if (m == null)
+            throw new NoSuchMethodException(target.getClass().getName() + " "
+                    + methodN);
+        return m.invoke(target, emptyArray);
+    }
+-----CSCI578-----
+
+
+    // -------------------- Mapping command line params to setters
+
+    public static boolean processArgs(Object proxy, String args[])
+            throws Exception {
+        String args0[] = null;
+        if (null != findMethod(proxy.getClass(), "getOptions1", new Class[] {})) {
+            args0 = (String[]) callMethod0(proxy, "getOptions1");
+        }
+
+        if (args0 == null) {
+            //args0=findVoidSetters(proxy.getClass());
+            args0 = findBooleanSetters(proxy.getClass());
+        }
+        Hashtable h = null;
+        if (null != findMethod(proxy.getClass(), "getOptionAliases",
+                new Class[] {})) {
+            h = (Hashtable) callMethod0(proxy, "getOptionAliases");
+        }
+        return processArgs(proxy, args, args0, null, h);
+    }
+
+
+    public static boolean processArgs(Object proxy, String args[],
+            String args0[], String args1[], Hashtable aliases) throws Exception {
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+            if (arg.startsWith("-"))
+                arg = arg.substring(1);
+            if (aliases != null && aliases.get(arg) != null)
+                arg = (String) aliases.get(arg);
+
+            if (args0 != null) {
+                boolean set = false;
+                for (int j = 0; j < args0.length; j++) {
+                    if (args0[j].equalsIgnoreCase(arg)) {
+                        setProperty(proxy, args0[j], "true");
+                        set = true;
+                        break;
+                    }
+                }
+                if (set)
+                    continue;
+            }
+            if (args1 != null) {
+                for (int j = 0; j < args1.length; j++) {
+                    if (args1[j].equalsIgnoreCase(arg)) {
+                        i++;
+                        if (i >= args.length)
+                            return false;
+                        setProperty(proxy, arg, args[i]);
+                        break;
+                    }
+                }
+            } else {
+                // if args1 is not specified,assume all other options have param
+                i++;
+                if (i >= args.length)
+                    return false;
+                setProperty(proxy, arg, args[i]);
+            }
+
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+    public static String[] findBooleanSetters(Class c) {
+        Method m[] = findMethods(c);
+        if (m == null)
+            return null;
+        Vector v = new Vector();
+        for (int i = 0; i < m.length; i++) {
+            if (m[i].getName().startsWith("set")
+                    && m[i].getParameterTypes().length == 1
+                    && "boolean".equalsIgnoreCase(m[i].getParameterTypes()[0]
+                            .getName())) {
+                String arg = m[i].getName().substring(3);
+                v.addElement(unCapitalize(arg));
+            }
+        }
+        String s[] = new String[v.size()];
+        for (int i = 0; i < s.length; i++) {
+            s[i] = (String) v.elementAt(i);
+        }
+        return s;
+    }
+-----CSCI578-----
+
+
+    public static Method findMethod(Class c, String name, Class params[]) {
+        Method methods[] = findMethods(c);
+        if (methods == null)
+            return null;
+        for (int i = 0; i < methods.length; i++) {
+            if (methods[i].getName().equals(name)) {
+                Class methodParams[] = methods[i].getParameterTypes();
+                if (methodParams == null)
+                    if (params == null || params.length == 0)
+                        return methods[i];
+                if (params == null)
+                    if (methodParams == null || methodParams.length == 0)
+                        return methods[i];
+                if (params.length != methodParams.length)
+                    continue;
+                boolean found = true;
+                for (int j = 0; j < params.length; j++) {
+                    if (params[j] != methodParams[j]) {
+                        found = false;
+                        break;
+                    }
+                }
+                if (found)
+                    return methods[i];
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    public static Method[] findMethods(Class c) {
+        Method methods[] = (Method[]) objectMethods.get(c);
+        if (methods != null)
+            return methods;
+
+        methods = c.getMethods();
+        objectMethods.put(c, methods);
+        return methods;
+    }
+-----CSCI578-----
+
+
+    public static String unCapitalize(String name) {
+        if (name == null || name.length() == 0) {
+            return name;
+        }
+        char chars[] = name.toCharArray();
+        chars[0] = Character.toLowerCase(chars[0]);
+        return new String(chars);
+    }
+-----CSCI578-----
+
+
+    public static void main(String args[]) {
+        try {
+            if( args.length == 1 &&
+                ( "-?".equals(args[0]) || "-h".equals( args[0])) ) {
+                System.out.println("Usage: ");
+                System.out.println("  JkMain [args]");
+                System.out.println();
+                System.out.println("  Each bean setter corresponds to an arg ( like -debug 10 )");
+                System.out.println("  System properties:");
+                System.out.println("    jk2.home    Base dir of jk2");
+                return;
+            }
+
+            jkMain=new JkMain();
+
+            IntrospectionUtils.processArgs( jkMain, args, new String[] {},
+                                            null, new Hashtable());
+
+            jkMain.init();
+            jkMain.start();
+        } catch( Exception ex ) {
+            log.warn("Error running",ex);
+        }
+    }
+
+
+    public String getDomain() {
+        return domain;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Call execute() - any ant-like task should work
+     */
+    public static void execute(Object proxy, String method) throws Exception {
+        Method executeM = null;
+        Class c = proxy.getClass();
+        Class params[] = new Class[0];
+        //	params[0]=args.getClass();
+        executeM = findMethod(c, method, params);
+        if (executeM == null) {
+            throw new RuntimeException("No execute in " + proxy.getClass());
+        }
+        executeM.invoke(proxy, (Object[]) null);//new Object[] { args });
+    }
+-----CSCI578-----
+
+
+    /**
+     * Construct a URLClassLoader. Will compile and work in JDK1.1 too.
+     */
+    public static ClassLoader getURLClassLoader(URL urls[], ClassLoader parent) {
+        try {
+            Class urlCL = Class.forName("java.net.URLClassLoader");
+            Class paramT[] = new Class[2];
+            paramT[0] = urls.getClass();
+            paramT[1] = ClassLoader.class;
+            Method m = findMethod(urlCL, "newInstance", paramT);
+            if (m == null)
+                return null;
+
+            ClassLoader cl = (ClassLoader) m.invoke(urlCL, new Object[] { urls,
+                    parent });
+            return cl;
+        } catch (ClassNotFoundException ex) {
+            // jdk1.1
+            return null;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return null;
+        }
+    }
+-----CSCI578-----
+
+    
+    public static String[] findVoidSetters(Class c) {
+        Method m[] = findMethods(c);
+        if (m == null)
+            return null;
+        Vector v = new Vector();
+        for (int i = 0; i < m.length; i++) {
+            if (m[i].getName().startsWith("set")
+                    && m[i].getParameterTypes().length == 0) {
+                String arg = m[i].getName().substring(3);
+                v.addElement(unCapitalize(arg));
+            }
+        }
+        String s[] = new String[v.size()];
+        for (int i = 0; i < s.length; i++) {
+            s[i] = (String) v.elementAt(i);
+        }
+        return s;
+    }
+-----CSCI578-----
+
+
+    /** Test if the object implements a particular
+     *  method
+     */
+    public static boolean hasHook(Object obj, String methodN) {
+        try {
+            Method myMethods[] = findMethods(obj.getClass());
+            for (int i = 0; i < myMethods.length; i++) {
+                if (methodN.equals(myMethods[i].getName())) {
+                    // check if it's overriden
+                    Class declaring = myMethods[i].getDeclaringClass();
+                    Class parentOfDeclaring = declaring.getSuperclass();
+                    // this works only if the base class doesn't extend
+                    // another class.
+
+                    // if the method is declared in a top level class
+                    // like BaseInterceptor parent is Object, otherwise
+                    // parent is BaseInterceptor or an intermediate class
+                    if (!"java.lang.Object".equals(parentOfDeclaring.getName())) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return false;
+    }

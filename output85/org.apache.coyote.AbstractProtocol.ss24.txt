@@ -1,0 +1,43 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Unique ID for this connector. Only used if the connector is configured
+     * to use a random port as the port will change if stop(), start() is
+     * called.
+     */
+    private int nameIndex = 0;
+
+
+
+    @Override
+    public void start() throws Exception {
+        if (getLog().isInfoEnabled())
+            getLog().info(sm.getString("abstractProtocolHandler.start",
+                    getNameInternal()));
+        try {
+            endpoint.start();
+        } catch (Exception ex) {
+            getLog().error(sm.getString("abstractProtocolHandler.startError",
+                    getNameInternal()), ex);
+            throw ex;
+        }
+
+        // Start async timeout thread
+        asyncTimeout = new AsyncTimeout();
+        Thread timeoutThread = new Thread(asyncTimeout, getNameInternal() + "-AsyncTimeout");
+        timeoutThread.setPriority(endpoint.getThreadPriority());
+        timeoutThread.setDaemon(true);
+        timeoutThread.start();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    public int getThreadPriority() { return threadPriority; }
+-----CSCI578-----
+
+
+
+    public int getThreadPriority() { return endpoint.getThreadPriority(); }

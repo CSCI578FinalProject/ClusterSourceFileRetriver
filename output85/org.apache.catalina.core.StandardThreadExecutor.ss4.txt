@@ -1,0 +1,69 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Executes the given command at some time in the future.  The command
+     * may execute in a new thread, in a pooled thread, or in the calling
+     * thread, at the discretion of the <tt>Executor</tt> implementation.
+     * If no threads are available, it will be added to the work queue.
+     * If the work queue is full, the system will wait for the specified
+     * time and it throw a RejectedExecutionException if the queue is still
+     * full after that.
+     *
+     * @param command the runnable task
+     * @param timeout A timeout for the completion of the task
+     * @param unit The timeout time unit
+     * @throws RejectedExecutionException if this task cannot be
+     * accepted for execution - the queue is full
+     * @throws NullPointerException if command or unit is null
+     */
+    public void execute(Runnable command, long timeout, TimeUnit unit) {
+        submittedCount.incrementAndGet();
+        try {
+            super.execute(command);
+        } catch (RejectedExecutionException rx) {
+            if (super.getQueue() instanceof TaskQueue) {
+                final TaskQueue queue = (TaskQueue)super.getQueue();
+                try {
+                    if (!queue.force(command, timeout, unit)) {
+                        submittedCount.decrementAndGet();
+                        throw new RejectedExecutionException("Queue capacity is full.");
+                    }
+                } catch (InterruptedException x) {
+                    submittedCount.decrementAndGet();
+                    throw new RejectedExecutionException(x);
+                }
+            } else {
+                submittedCount.decrementAndGet();
+                throw rx;
+            }
+
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void execute(Runnable command, long timeout, TimeUnit unit) {
+        if ( executor != null ) {
+            executor.execute(command,timeout,unit);
+        } else {
+            throw new IllegalStateException("StandardThreadExecutor not started.");
+        }
+    }
+
+
+
+    @Override
+    public void execute(Runnable command) {
+        if ( executor != null ) {
+            try {
+                executor.execute(command);
+            } catch (RejectedExecutionException rx) {
+                //there could have been contention around the queue
+                if ( !( (TaskQueue) executor.getQueue()).force(command) ) throw new RejectedExecutionException("Work queue full.");
+            }
+        } else throw new IllegalStateException("StandardThreadPool not started.");
+    }

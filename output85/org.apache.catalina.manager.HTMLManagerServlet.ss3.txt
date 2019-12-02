@@ -1,0 +1,217 @@
+9
+-----CSCI578-----
+
+
+    /**
+     * Stop the web application at the specified context path.
+     *
+     * @see ManagerServlet#stop(PrintWriter, ContextName, StringManager)
+     *
+     * @param cn Name of the application to be stopped
+     * @param smClient  StringManager for the client's locale
+     * @return message String
+     */
+    protected String stop(ContextName cn, StringManager smClient) {
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.stop(printWriter, cn, smClient);
+
+        return stringWriter.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Find potential memory leaks caused by web application reload.
+     *
+     * @see ManagerServlet#findleaks(boolean, PrintWriter, StringManager)
+     *
+     * @param smClient  StringManager for the client's locale
+     *
+     * @return message String
+     */
+    protected String findleaks(StringManager smClient) {
+
+        StringBuilder msg = new StringBuilder();
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.findleaks(false, printWriter, smClient);
+
+        String writerText = stringWriter.toString();
+
+        if (writerText.length() > 0) {
+            if (!writerText.startsWith("FAIL -")) {
+                msg.append(smClient.getString(
+                        "htmlManagerServlet.findleaksList"));
+            }
+            msg.append(writerText);
+        } else {
+            msg.append(smClient.getString("htmlManagerServlet.findleaksNone"));
+        }
+
+        return msg.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Deploy an application for the specified path from the specified
+     * web application archive.
+     *
+     * @param config URL of the context configuration file to be deployed
+     * @param cn Name of the application to be deployed
+     * @param war URL of the web application archive to be deployed
+     * @param smClient internationalized strings
+     * @return message String
+     */
+    protected String deployInternal(String config, ContextName cn, String war,
+            StringManager smClient) {
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.deploy(printWriter, config, cn, war, false, smClient);
+
+        return stringWriter.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Undeploy the web application at the specified context path.
+     *
+     * @see ManagerServlet#undeploy(PrintWriter, ContextName, StringManager)
+     *
+     * @param cn Name of the application to be undeployed
+     * @param smClient  StringManager for the client's locale
+     * @return message String
+     */
+    protected String undeploy(ContextName cn, StringManager smClient) {
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.undeploy(printWriter, cn, smClient);
+
+        return stringWriter.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Start the web application at the specified context path.
+     *
+     * @see ManagerServlet#start(PrintWriter, ContextName, StringManager)
+     *
+     * @param cn Name of the application to be started
+     * @param smClient  StringManager for the client's locale
+     * @return message String
+     */
+    protected String start(ContextName cn, StringManager smClient) {
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.start(printWriter, cn, smClient);
+
+        return stringWriter.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Reload the web application at the specified context path.
+     *
+     * @see ManagerServlet#reload(PrintWriter, ContextName, StringManager)
+     *
+     * @param cn Name of the application to be restarted
+     * @param smClient  StringManager for the client's locale
+     * @return message String
+     */
+    protected String reload(ContextName cn, StringManager smClient) {
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.reload(printWriter, cn, smClient);
+
+        return stringWriter.toString();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Process a POST request for the specified resource.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    @Override
+    public void doPost(HttpServletRequest request,
+                      HttpServletResponse response)
+        throws IOException, ServletException {
+
+        StringManager smClient = StringManager.getManager(
+                Constants.Package, request.getLocales());
+
+        // Identify the request parameters that we need
+        // By obtaining the command from the pathInfo, per-command security can
+        // be configured in web.xml
+        String command = request.getPathInfo();
+
+        String path = request.getParameter("path");
+        ContextName cn = null;
+        if (path != null) {
+            cn = new ContextName(path, request.getParameter("version"));
+        }
+        String deployPath = request.getParameter("deployPath");
+        ContextName deployCn = null;
+        if (deployPath != null) {
+            deployCn = new ContextName(deployPath,
+                    request.getParameter("deployVersion"));
+        }
+        String deployConfig = request.getParameter("deployConfig");
+        String deployWar = request.getParameter("deployWar");
+
+        // Prepare our output writer to generate the response message
+        response.setContentType("text/html; charset=" + Constants.CHARSET);
+
+        String message = "";
+
+        if (command == null || command.length() == 0) {
+            // No command == list
+            // List always displayed -> do nothing
+        } else if (command.equals("/upload")) {
+            message = upload(request, smClient);
+        } else if (command.equals("/deploy")) {
+            message = deployInternal(deployConfig, deployCn, deployWar,
+                    smClient);
+        } else if (command.equals("/reload")) {
+            message = reload(cn, smClient);
+        } else if (command.equals("/undeploy")) {
+            message = undeploy(cn, smClient);
+        } else if (command.equals("/expire")) {
+            message = expireSessions(cn, request, smClient);
+        } else if (command.equals("/start")) {
+            message = start(cn, smClient);
+        } else if (command.equals("/stop")) {
+            message = stop(cn, smClient);
+        } else if (command.equals("/findleaks")) {
+            message = findleaks(smClient);
+        } else {
+            // Try GET
+            doGet(request,response);
+            return;
+        }
+
+        list(request, response, message, smClient);
+    }
+-----CSCI578-----

@@ -1,0 +1,53 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Create an <code>ObjectName</code> for this
+     * <code>ContextResource</code> object.
+     *
+     * @param resource The resource
+     * @return ObjectName The object name
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    protected ObjectName createObjectName(ContextResource resource)
+        throws MalformedObjectNameException {
+
+        String domain = null;
+        if (container instanceof StandardServer) {
+            domain = ((StandardServer) container).getDomain();
+        } else if (container instanceof ContainerBase) {
+            domain = ((ContainerBase) container).getDomain();
+        }
+        if (domain == null) {
+            domain = "Catalina";
+        }
+
+        ObjectName name = null;
+        String quotedResourceName = ObjectName.quote(resource.getName());
+        if (container instanceof Server) {
+            name = new ObjectName(domain + ":type=DataSource" +
+                        ",class=" + resource.getType() +
+                        ",name=" + quotedResourceName);
+        } else if (container instanceof Context) {
+            String path = ((Context)container).getPath();
+            if (path.length() < 1)
+                path = "/";
+            Host host = (Host) ((Context)container).getParent();
+            name = new ObjectName(domain + ":type=DataSource" +
+                        ",path=" + path + 
+                        ",host=" + host.getName() +
+                        ",class=" + resource.getType() +
+                        ",name=" + quotedResourceName);
+        }
+
+        return (name);
+
+    }
+-----CSCI578-----
+
+
+    public String getDomain() {
+        return domain;
+    }

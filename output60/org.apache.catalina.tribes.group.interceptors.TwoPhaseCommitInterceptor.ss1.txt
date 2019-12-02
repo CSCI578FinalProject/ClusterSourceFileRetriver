@@ -1,0 +1,23 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    public void heartbeat() {
+        try {
+            long now = System.currentTimeMillis();
+            Map.Entry[] entries = (Map.Entry[])messages.entrySet().toArray(new Map.Entry[messages.size()]);
+            for (int i=0; i<entries.length; i++ ) {
+                MapEntry entry = (MapEntry)entries[i].getValue();
+                if ( entry.expired(now,expire) ) {
+                    if(log.isInfoEnabled())
+                        log.info("Message ["+entry.id+"] has expired. Removing.");
+                    messages.remove(entry.id);
+                }//end if
+            }
+        } catch ( Exception x ) {
+            log.warn("Unable to perform heartbeat on the TwoPhaseCommit interceptor.",x);
+        } finally {
+            super.heartbeat();
+        }
+    }

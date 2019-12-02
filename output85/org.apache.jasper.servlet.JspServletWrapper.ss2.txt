@@ -1,0 +1,109 @@
+6
+-----CSCI578-----
+
+
+    public Servlet getServlet() throws ServletException {
+        // DCL on 'reload' requires that 'reload' be volatile
+        // (this also forces a read memory barrier, ensuring the
+        // new servlet object is read consistently)
+        if (reload) {
+            synchronized (this) {
+                // Synchronizing on jsw enables simultaneous loading
+                // of different pages, but not the same page.
+                if (reload) {
+                    // This is to maintain the original protocol.
+                    destroy();
+
+                    final Servlet servlet;
+
+                    try {
+                        InstanceManager instanceManager = InstanceManagerFactory.getInstanceManager(config);
+                        servlet = (Servlet) instanceManager.newInstance(ctxt.getFQCN(), ctxt.getJspLoader());
+                    } catch (Exception e) {
+                        Throwable t = ExceptionUtils
+                                .unwrapInvocationTargetException(e);
+                        ExceptionUtils.handleThrowable(t);
+                        throw new JasperException(t);
+                    }
+
+                    servlet.init(config);
+
+                    if (!firstTime) {
+                        ctxt.getRuntimeContext().incrementJspReloadCount();
+                    }
+
+                    theServlet = servlet;
+                    reload = false;
+                    // Volatile 'reload' forces in order write of 'theServlet' and new servlet object
+                }
+            }
+        }
+        return theServlet;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Increments the JSP reload counter.
+     */
+    public void incrementJspReloadCount() {
+        jspReloadCount.incrementAndGet();
+    }
+-----CSCI578-----
+
+
+    public String getFQCN() {
+        String name;
+        if (isTagFile()) {
+            name = tagInfo.getTagClassName();
+        } else {
+            name = getServletPackageName() + "." + getServletClassName();
+        }
+        return name;
+    }
+-----CSCI578-----
+
+
+    public void destroy() {
+        if (theServlet != null) {
+            theServlet.destroy();
+            InstanceManager instanceManager = InstanceManagerFactory.getInstanceManager(config);
+            try {
+                instanceManager.destroyInstance(theServlet);
+            } catch (Exception e) {
+                Throwable t = ExceptionUtils.unwrapInvocationTargetException(e);
+                ExceptionUtils.handleThrowable(t);
+                // Log any exception, since it can't be passed along
+                log.error(Localizer.getMessage("jsp.error.file.not.found",
+                        e.getMessage()), t);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Checks whether the supplied Throwable is an instance of
+     * <code>InvocationTargetException</code> and returns the throwable that is
+     * wrapped by it, if there is any.
+     *
+     * @param t the Throwable to check
+     * @return <code>t</code> or <code>t.getCause()</code>
+     */
+    public static Throwable unwrapInvocationTargetException(Throwable t) {
+        if (t instanceof InvocationTargetException && t.getCause() != null) {
+            return t.getCause();
+        }
+        return t;
+    }
+-----CSCI578-----
+
+
+    public static InstanceManager getInstanceManager(ServletConfig config) {
+        InstanceManager instanceManager =
+                (InstanceManager) config.getServletContext().getAttribute(InstanceManager.class.getName());
+        if (instanceManager == null) {
+            throw new IllegalStateException("No org.apache.tomcat.InstanceManager set in ServletContext");
+        }
+        return instanceManager;
+    }

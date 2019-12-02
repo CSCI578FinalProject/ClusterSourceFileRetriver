@@ -1,0 +1,238 @@
+15
+-----CSCI578-----
+
+
+
+    protected String getHostConfigPath(String resourceName) {
+        StringBuffer result = new StringBuffer();
+        Container container = context;
+        Container host = null;
+        Container engine = null;
+        while (container != null) {
+            if (container instanceof Host)
+                host = container;
+            if (container instanceof Engine)
+                engine = container;
+            container = container.getParent();
+        }
+        if (engine != null) {
+            result.append(engine.getName()).append('/');
+        }
+        if (host != null) {
+            result.append(host.getName()).append('/');
+        }
+        result.append(resourceName);
+        return result.toString();
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Add a resource which will be watched for reloading by the host auto
+     * deployer. Note: this will not be used in embedded mode.
+     * 
+     * @param name Path to the resource, relative to docBase
+     */
+    public void addWatchedResource(String name);
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the "correctly configured" flag for this Context.  This can be
+     * set to false by startup listeners that detect a fatal configuration
+     * error to avoid the application from being made available.
+     *
+     * @param configured The new correctly configured flag
+     */
+    public void setConfigured(boolean configured);
+-----CSCI578-----
+
+
+
+    /**
+     * Process a "destroy" event for this Context.
+     */
+    protected synchronized void destroy() {
+        // Called from StandardContext.destroy()
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("contextConfig.destroy"));
+
+        // Changed to getWorkPath per Bugzilla 35819.
+        String workDir = ((StandardContext) context).getWorkPath();
+        if (workDir != null)
+            ExpandWar.delete(new File(workDir));
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process events for an associated Context.
+     *
+     * @param event The lifecycle event that has occurred
+     */
+    public void lifecycleEvent(LifecycleEvent event) {
+
+        // Identify the context we are associated with
+        try {
+            context = (Context) event.getLifecycle();
+        } catch (ClassCastException e) {
+            log.error(sm.getString("contextConfig.cce", event.getLifecycle()), e);
+            return;
+        }
+
+        // Process the event that has occurred
+        if (event.getType().equals(Lifecycle.START_EVENT)) {
+            start();
+        } else if (event.getType().equals(StandardContext.BEFORE_START_EVENT)) {
+            beforeStart();
+        } else if (event.getType().equals(StandardContext.AFTER_START_EVENT)) {
+            // Restore docBase for management tools
+            if (originalDocBase != null) {
+                context.setDocBase(originalDocBase);
+            }
+        } else if (event.getType().equals(Lifecycle.STOP_EVENT)) {
+            stop();
+        } else if (event.getType().equals(Lifecycle.INIT_EVENT)) {
+            init();
+        } else if (event.getType().equals(Lifecycle.DESTROY_EVENT)) {
+            destroy();
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of defined filters for this Context.
+     */
+    public FilterDef[] findFilterDefs();
+-----CSCI578-----
+
+
+
+    /**
+     * Get config base.
+     */
+    protected File getConfigBase() {
+        File configBase =
+            new File(System.getProperty("catalina.base"), "conf");
+        if (!configBase.exists()) {
+            return null;
+        } else {
+            return configBase;
+        }
+    }
+-----CSCI578-----
+
+
+
+    protected String getBaseDir() {
+        Container engineC=context.getParent().getParent();
+        if( engineC instanceof StandardEngine ) {
+            return ((StandardEngine)engineC).getBaseDir();
+        }
+        return System.getProperty("catalina.base");
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Container for which this Container is a child, if there is
+     * one.  If there is no defined parent, return <code>null</code>.
+     */
+    public Container getParent();
+-----CSCI578-----
+
+
+
+    /** Get the absolute path to the work dir.
+     *  To avoid duplication.
+     *
+     * @return The work path
+     */
+    public String getWorkPath() {
+        if (getWorkDir() == null) {
+            return null;
+        }
+        File workDir = new File(getWorkDir());
+        if (!workDir.isAbsolute()) {
+            File catalinaHome = engineBase();
+            String catalinaHomePath = null;
+            try {
+                catalinaHomePath = catalinaHome.getCanonicalPath();
+                workDir = new File(catalinaHomePath,
+                        getWorkDir());
+            } catch (IOException e) {
+                log.warn("Exception obtaining work path for " + getPath());
+            }
+        }
+        return workDir.getAbsolutePath();
+    }
+-----CSCI578-----
+
+
+    public String getBaseDir() {
+        if( baseDir==null ) {
+            baseDir=System.getProperty("catalina.base");
+        }
+        if( baseDir==null ) {
+            baseDir=System.getProperty("catalina.home");
+        }
+        return baseDir;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get config base.
+     */
+    public File getConfigBase() {
+        File configBase =
+            new File(System.getProperty("catalina.base"), "conf");
+        if (!configBase.exists()) {
+            return null;
+        }
+        Container container = this;
+        Container host = null;
+        Container engine = null;
+        while (container != null) {
+            if (container instanceof Host)
+                host = container;
+            if (container instanceof Engine)
+                engine = container;
+            container = container.getParent();
+        }
+        if (engine != null) {
+            configBase = new File(configBase, engine.getName());
+        }
+        if (host != null) {
+            configBase = new File(configBase, host.getName());
+        }
+        if (saveConfig) {
+            configBase.mkdirs();
+        }
+        return configBase;
+    }
+-----CSCI578-----
+
+
+    /** 
+     * Get the host associated with this Container (if any).
+     */
+    protected Host getHost(Container child) {
+        while(child != null && ! (child instanceof Host) ) {
+            child = child.getParent();
+        }
+        return (Host)child;
+    }

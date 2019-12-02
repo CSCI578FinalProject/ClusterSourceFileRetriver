@@ -1,0 +1,40 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // This method is not used by Tomcat 6, but is available in later versions
+    public void execute(Runnable command, long timeout, TimeUnit unit) {
+        if ( executor != null ) {
+            submittedTasksCount.incrementAndGet();
+            try {
+                executor.execute(command);
+            } catch (RejectedExecutionException rx) {
+                //there could have been contention around the queue
+                try {
+                    if ( !( (TaskQueue) executor.getQueue()).force(command,timeout,unit) ) {
+                        submittedTasksCount.decrementAndGet();
+                        throw new RejectedExecutionException("Work queue full.");
+                    }
+                }catch (InterruptedException x) {
+                    throw new RejectedExecutionException("Interrupted.",x);
+                }
+            }
+        } else throw new IllegalStateException("StandardThreadPool not started.");
+    }
+
+
+    public void execute(Runnable command) {
+        if ( executor != null ) {
+        	submittedTasksCount.incrementAndGet();
+            try {
+                executor.execute(command);
+            } catch (RejectedExecutionException rx) {
+                //there could have been contention around the queue
+                if ( !( (TaskQueue) executor.getQueue()).force(command) ) {
+                	submittedTasksCount.decrementAndGet();
+                	throw new RejectedExecutionException("Work queue full.");
+                }
+            }
+        } else throw new IllegalStateException("StandardThreadPool not started.");
+    }

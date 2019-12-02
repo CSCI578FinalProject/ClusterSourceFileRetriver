@@ -1,0 +1,211 @@
+8
+-----CSCI578-----
+
+
+    // -------------------- Private methods
+
+    Socket acceptSocket() {
+        if( !running || serverSocket==null ) return null;
+
+        Socket accepted = null;
+
+    	try {
+            if(factory==null) {
+                accepted = serverSocket.accept();
+            } else {
+                accepted = factory.acceptSocket(serverSocket);
+            }
+            if (null == accepted) {
+                log.warn(sm.getString("endpoint.warn.nullSocket"));
+            } else {
+                if (!running) {
+                    accepted.close();  // rude, but unlikely!
+                    accepted = null;
+                } else if (factory != null) {
+                    factory.initSocket( accepted );
+                }
+            }
+        }
+        catch(InterruptedIOException iioe) {
+            // normal part -- should happen regularly so
+            // that the endpoint can release if the server
+            // is shutdown.
+        }
+        catch (AccessControlException ace) {
+            // When using the Java SecurityManager this exception
+            // can be thrown if you are restricting access to the
+            // socket with SocketPermission's.
+            // Log the unauthorized access and continue
+            String msg = sm.getString("endpoint.warn.security",
+                                      serverSocket, ace);
+            log.warn(msg);
+        }
+        catch (IOException e) {
+
+            String msg = null;
+
+            if (running) {
+                msg = sm.getString("endpoint.err.nonfatal",
+                        serverSocket, e);
+                log.error(msg, e);
+            }
+
+            if (accepted != null) {
+                try {
+                    accepted.close();
+                } catch(Throwable ex) {
+                    msg = sm.getString("endpoint.err.nonfatal",
+                                       accepted, ex);
+                    log.warn(msg, ex);
+                }
+                accepted = null;
+            }
+
+            if( ! running ) return null;
+            reinitializing = true;
+            // Restart endpoint when getting an IOException during accept
+            synchronized (threadSync) {
+                if (reinitializing) {
+                    reinitializing = false;
+                    // 1) Attempt to close server socket
+                    closeServerSocket();
+                    initialized = false;
+                    // 2) Reinit endpoint (recreate server socket)
+                    try {
+                        msg = sm.getString("endpoint.warn.reinit");
+                        log.warn(msg);
+                        initEndpoint();
+                    } catch (Throwable t) {
+                        msg = sm.getString("endpoint.err.nonfatal",
+                                           serverSocket, t);
+                        log.error(msg, t);
+                    }
+                    // 3) If failed, attempt to restart endpoint
+                    if (!initialized) {
+                        msg = sm.getString("endpoint.warn.restart");
+                        log.warn(msg);
+                        try {
+                            stopEndpoint();
+                            initEndpoint();
+                            startEndpoint();
+                        } catch (Throwable t) {
+                            msg = sm.getString("endpoint.err.fatal",
+                                               serverSocket, t);
+                            log.error(msg, t);
+                        }
+                        // Current thread is now invalid: kill it
+                        throw new ThreadDeath();
+                    }
+                }
+            }
+
+        }
+
+        return accepted;
+    }
+-----CSCI578-----
+
+
+    protected void closeServerSocket() {
+        if (!paused)
+            unlockAccept();
+        try {
+            if( serverSocket!=null)
+                serverSocket.close();
+        } catch(Exception e) {
+            log.error(sm.getString("endpoint.err.close"), e);
+        }
+        serverSocket = null;
+    }
+-----CSCI578-----
+
+    
+    // -------------------- Public methods --------------------
+
+    public void initEndpoint() throws IOException, InstantiationException {
+        try {
+            if(factory==null)
+                factory=ServerSocketFactory.getDefault();
+            if(serverSocket==null) {
+                try {
+                    if (inet == null) {
+                        serverSocket = factory.createSocket(port, backlog);
+                    } else {
+                        serverSocket = factory.createSocket(port, backlog, inet);
+                    }
+                } catch (BindException orig) {
+                    String msg;
+                    if (inet == null)
+                        msg = orig.getMessage() + "<null>:" + port;
+                    else
+                        msg = orig.getMessage() + " " +
+                                inet.toString() + ":" + port;
+                    BindException be = new BindException(msg);
+                    be.initCause(orig);
+                    throw be;
+                }
+            }
+            if( serverTimeout >= 0 )
+                serverSocket.setSoTimeout( serverTimeout );
+        } catch( IOException ex ) {
+            throw ex;
+        } catch( InstantiationException ex1 ) {
+            throw ex1;
+        }
+        initialized = true;
+    }
+-----CSCI578-----
+
+ 
+     /**
+       Wrapper function for accept(). This allows us to trap and
+       translate exceptions if necessary
+ 
+       @exception IOException;
+     */ 
+     public abstract Socket acceptSocket(ServerSocket socket)
+ 	throws IOException;
+-----CSCI578-----
+
+
+    public void initSocket( Socket s ) {
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected void unlockAccept() {
+        Socket s = null;
+        try {
+            // Need to create a connection to unlock the accept();
+            if (inet == null) {
+                s = new Socket(InetAddress.getByName("localhost").getHostAddress(), port);
+            } else {
+                s = new Socket(inet, port);
+                    // setting soLinger to a small value will help shutdown the
+                    // connection quicker
+                s.setSoLinger(true, 0);
+            }
+        } catch(Exception e) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("endpoint.debug.unlock", "" + port), e);
+            }
+        } finally {
+            if (s != null) {
+                try {
+                    s.close();
+                } catch (Exception e) {
+                    // Ignore
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public void pauseEndpoint() {
+        if (running && !paused) {
+            paused = true;
+            unlockAccept();
+        }
+    }

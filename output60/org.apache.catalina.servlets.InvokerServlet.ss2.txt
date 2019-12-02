@@ -1,0 +1,474 @@
+23
+-----CSCI578-----
+
+
+
+    /**
+     * Set the servlet path for this request.
+     *
+     * @param servletPath The new servlet path
+     */
+    void setServletPath(String servletPath) {
+
+        this.servletPath = servletPath;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the request URI for this request.
+     *
+     * @param requestURI The new request URI
+     */
+    void setRequestURI(String requestURI) {
+
+        this.requestURI = requestURI;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the load-on-startup order value (negative value means
+     * load on first call).
+     *
+     * @param value New load-on-startup value
+     */
+    public void setLoadOnStartup(int value);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the path information for this request.
+     *
+     * @param pathInfo The new path info
+     */
+    void setPathInfo(String pathInfo) {
+
+        this.pathInfo = pathInfo;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the translated path info for this request.
+     *
+     * @param pathTranslated The new translated path info
+     */
+    void setPathTranslated(String pathTranslated) {
+
+        this.pathTranslated = pathTranslated;
+
+    }
+-----CSCI578-----
+
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Serve the specified request, creating the corresponding response.
+     * After the first time a particular servlet class is requested, it will
+     * be served directly (like any registered servlet) because it will have
+     * been registered and mapped in our associated Context.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    public void serveRequest(HttpServletRequest request,
+                             HttpServletResponse response)
+        throws IOException, ServletException {
+
+        // Disallow calling this servlet via a named dispatcher
+        if (request.getAttribute(Globals.NAMED_DISPATCHER_ATTR) != null)
+            throw new ServletException
+                (sm.getString("invokerServlet.notNamed"));
+
+        // Identify the input parameters and our "included" state
+        String inRequestURI = null;
+        String inServletPath = null;
+        String inPathInfo = null;
+        boolean included =
+            (request.getAttribute(Globals.INCLUDE_REQUEST_URI_ATTR) != null);
+
+        if (included) {
+            inRequestURI =
+                (String) request.getAttribute(Globals.INCLUDE_REQUEST_URI_ATTR);
+            inServletPath =
+                (String) request.getAttribute(Globals.INCLUDE_SERVLET_PATH_ATTR);
+            inPathInfo =
+                (String) request.getAttribute(Globals.INCLUDE_PATH_INFO_ATTR);
+        } else {
+            inRequestURI = request.getRequestURI();
+            inServletPath = request.getServletPath();
+            inPathInfo = request.getPathInfo();
+        }
+        if (debug >= 1) {
+            log("included='" + included + "', requestURI='" +
+                inRequestURI + "'");
+            log("  servletPath='" + inServletPath + "', pathInfo='" +
+                inPathInfo + "'");
+        }
+
+        // Make sure a servlet name or class name was specified
+        if (inPathInfo == null) {
+            if (debug >= 1)
+                log("Invalid pathInfo '" + inPathInfo + "'");
+            if (included)
+                throw new ServletException
+                    (sm.getString("invokerServlet.invalidPath", inRequestURI));
+            else {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                                   inRequestURI);
+                return;
+            }
+        }
+
+        // Identify the outgoing servlet name or class, and outgoing path info
+        String pathInfo = inPathInfo;
+        String servletClass = pathInfo.substring(1);
+        int slash = servletClass.indexOf('/');
+        if (slash >= 0) {
+            pathInfo = servletClass.substring(slash);
+            servletClass = servletClass.substring(0, slash);
+        } else {
+            pathInfo = "";
+        }
+
+        if (servletClass.startsWith("org.apache.catalina")) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                               inRequestURI);
+            return;
+        }
+
+        if (debug >= 1)
+            log("Processing servlet '" + servletClass +
+                "' with path info '" + pathInfo + "'");
+        String name = "org.apache.catalina.INVOKER." + servletClass;
+        String pattern = inServletPath + "/" + servletClass + "/*";
+        Wrapper wrapper = null;
+
+        // Synchronize to avoid race conditions when multiple requests
+        // try to initialize the same servlet at the same time
+        synchronized (this) {
+
+            // Are we referencing an existing servlet class or name?
+            wrapper = (Wrapper) context.findChild(servletClass);
+            if (wrapper == null)
+                wrapper = (Wrapper) context.findChild(name);
+            if (wrapper != null) {
+                String actualServletClass = wrapper.getServletClass();
+                if ((actualServletClass != null)
+                    && (actualServletClass.startsWith
+                        ("org.apache.catalina"))) {
+                    response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                                       inRequestURI);
+                    return;
+                }
+                if (debug >= 1)
+                    log("Using wrapper for servlet '" +
+                        wrapper.getName() + "' with mapping '" +
+                        pattern + "'");
+                context.addServletMapping(pattern, wrapper.getName());
+            }
+
+            // No, create a new wrapper for the specified servlet class
+            else {
+
+                if (debug >= 1)
+                    log("Creating wrapper for '" + servletClass +
+                        "' with mapping '" + pattern + "'");
+
+                try {
+                    wrapper = context.createWrapper();
+                    wrapper.setName(name);
+                    wrapper.setLoadOnStartup(1);
+                    wrapper.setServletClass(servletClass);
+                    context.addChild(wrapper);
+                    context.addServletMapping(pattern, name);
+                } catch (Exception e) {
+                    log(sm.getString("invokerServlet.cannotCreate",
+                                     inRequestURI), e);
+                    context.removeServletMapping(pattern);
+                    context.removeChild(wrapper);
+                    if (included)
+                        throw new ServletException
+                            (sm.getString("invokerServlet.cannotCreate",
+                                          inRequestURI), e);
+                    else {
+                        response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                                           inRequestURI);
+                        return;
+                    }
+                }
+            }
+
+        }
+
+        // Create a request wrapper to pass on to the invoked servlet
+        InvokerHttpRequest wrequest =
+            new InvokerHttpRequest(request);
+        wrequest.setRequestURI(inRequestURI);
+        StringBuffer sb = new StringBuffer(inServletPath);
+        sb.append("/");
+        sb.append(servletClass);
+        wrequest.setServletPath(sb.toString());
+        if ((pathInfo == null) || (pathInfo.length() < 1)) {
+            wrequest.setPathInfo(null);
+            wrequest.setPathTranslated(null);
+        } else {
+            wrequest.setPathInfo(pathInfo);
+            wrequest.setPathTranslated
+                (getServletContext().getRealPath(pathInfo));
+        }
+
+        // Allocate a servlet instance to perform this request
+        Servlet instance = null;
+        try {
+            instance = wrapper.allocate();
+        } catch (ServletException e) {
+            log(sm.getString("invokerServlet.allocate", inRequestURI), e);
+            context.removeServletMapping(pattern);
+            context.removeChild(wrapper);
+            Throwable rootCause = e.getRootCause();
+            if (rootCause == null)
+                rootCause = e;
+            if (rootCause instanceof ClassNotFoundException) {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                                   inRequestURI);
+                return;
+            } else if (rootCause instanceof IOException) {
+                throw (IOException) rootCause;
+            } else if (rootCause instanceof RuntimeException) {
+                throw (RuntimeException) rootCause;
+            } else if (rootCause instanceof ServletException) {
+                throw (ServletException) rootCause;
+            } else {
+                throw new ServletException
+                    (sm.getString("invokerServlet.allocate", inRequestURI),
+                     rootCause);
+            }
+        }
+
+        // After loading the wrapper, restore some of the fields when including
+        if (included) {
+            wrequest.setRequestURI(request.getRequestURI());
+            wrequest.setPathInfo(request.getPathInfo());
+            wrequest.setServletPath(request.getServletPath());
+        }
+
+        // Invoke the service() method of the allocated servlet
+        try {
+            String jspFile = wrapper.getJspFile();
+            if (jspFile != null)
+                request.setAttribute(Globals.JSP_FILE_ATTR, jspFile);
+            else
+                request.removeAttribute(Globals.JSP_FILE_ATTR);
+            request.setAttribute(Globals.INVOKED_ATTR,
+                                 request.getServletPath());
+            instance.service(wrequest, response);
+        } catch (UnavailableException e) {
+            context.removeServletMapping(pattern);
+            throw e;
+        } finally {
+            request.removeAttribute(Globals.INVOKED_ATTR);
+            request.removeAttribute(Globals.JSP_FILE_ATTR);
+            // Deallocate the allocated servlet instance
+            try {
+                wrapper.deallocate(instance);
+            } catch (ServletException e) {
+                log(sm.getString("invokerServlet.deallocate", inRequestURI), e);
+                throw e;
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new servlet mapping, replacing any existing mapping for
+     * the specified pattern.
+     *
+     * @param pattern URL pattern to be mapped
+     * @param name Name of the corresponding servlet to execute
+     */
+    public void addServletMapping(String pattern, String name);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the fully qualified servlet class name for this servlet.
+     *
+     * @param servletClass Servlet class name
+     */
+    public void setServletClass(String servletClass);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Allocate an initialized instance of this Servlet that is ready to have
+     * its <code>service()</code> method called.  If the servlet class does
+     * not implement <code>SingleThreadModel</code>, the (only) initialized
+     * instance may be returned immediately.  If the servlet class implements
+     * <code>SingleThreadModel</code>, the Wrapper implementation must ensure
+     * that this instance is not allocated again until it is deallocated by a
+     * call to <code>deallocate()</code>.
+     *
+     * @exception ServletException if the servlet init() method threw
+     *  an exception
+     * @exception ServletException if a loading error occurs
+     */
+    public Servlet allocate() throws ServletException;
+
+
+
+    /**
+     * Return this previously allocated servlet to the pool of available
+     * instances.  If this servlet class does not implement SingleThreadModel,
+     * no action is actually required.
+     *
+     * @param servlet The servlet to be returned
+     *
+     * @exception ServletException if a deallocation error occurs
+     */
+    public void deallocate(Servlet servlet) throws ServletException;
+-----CSCI578-----
+
+
+
+    /**
+     * Return the context-relative URI of the JSP file for this servlet.
+     */
+    public String getJspFile();
+-----CSCI578-----
+
+
+
+    /**
+     * Allocate an initialized instance of this Servlet that is ready to have
+     * its <code>service()</code> method called.  If the servlet class does
+     * not implement <code>SingleThreadModel</code>, the (only) initialized
+     * instance may be returned immediately.  If the servlet class implements
+     * <code>SingleThreadModel</code>, the Wrapper implementation must ensure
+     * that this instance is not allocated again until it is deallocated by a
+     * call to <code>deallocate()</code>.
+     *
+     * @exception ServletException if the servlet init() method threw
+     *  an exception
+     * @exception ServletException if a loading error occurs
+     */
+    public Servlet allocate() throws ServletException;
+
+
+
+    /**
+     * Return this previously allocated servlet to the pool of available
+     * instances.  If this servlet class does not implement SingleThreadModel,
+     * no action is actually required.
+     *
+     * @param servlet The servlet to be returned
+     *
+     * @exception ServletException if a deallocation error occurs
+     */
+    public void deallocate(Servlet servlet) throws ServletException;
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the fully qualified servlet class name for this servlet.
+     */
+    public String getServletClass();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Factory method to create and return a new Wrapper instance, of
+     * the Java implementation class appropriate for this Context
+     * implementation.  The constructor of the instantiated Wrapper
+     * will have been called, but no properties will have been set.
+     */
+    public Wrapper createWrapper();
+-----CSCI578-----
+
+
+
+    /**
+     * Process a GET request for the specified resource.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    public void doGet(HttpServletRequest request,
+                      HttpServletResponse response)
+        throws IOException, ServletException {
+
+        serveRequest(request, response);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process a HEAD request for the specified resource.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    public void doHead(HttpServletRequest request,
+                       HttpServletResponse response)
+        throws IOException, ServletException {
+
+        serveRequest(request, response);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process a POST request for the specified resource.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    public void doPost(HttpServletRequest request,
+                       HttpServletResponse response)
+        throws IOException, ServletException {
+
+        serveRequest(request, response);
+
+    }

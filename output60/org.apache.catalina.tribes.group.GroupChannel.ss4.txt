@@ -1,0 +1,51 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Adds an interceptor to the stack for message processing<br>
+     * Interceptors are ordered in the way they are added.<br>
+     * <code>channel.addInterceptor(A);</code><br>
+     * <code>channel.addInterceptor(C);</code><br>
+     * <code>channel.addInterceptor(B);</code><br>
+     * Will result in a interceptor stack like this:<br>
+     * <code>A -> C -> B</code><br>
+     * The complete stack will look like this:<br>
+     * <code>Channel -> A -> C -> B -> ChannelCoordinator</code><br>
+     * @param interceptor ChannelInterceptorBase
+     */
+    public void addInterceptor(ChannelInterceptor interceptor) {
+        if ( interceptors == null ) {
+            interceptors = interceptor;
+            interceptors.setNext(coordinator);
+            interceptors.setPrevious(null);
+            coordinator.setPrevious(interceptors);
+        } else {
+            ChannelInterceptor last = interceptors;
+            while ( last.getNext() != coordinator ) {
+                last = last.getNext();
+            }
+            last.setNext(interceptor);
+            interceptor.setNext(coordinator);
+            interceptor.setPrevious(last);
+            coordinator.setPrevious(interceptor);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Set the next interceptor in the list of interceptors
+     * @param next ChannelInterceptor
+     */
+    public void setNext(ChannelInterceptor next) ;
+-----CSCI578-----
+
+
+    /**
+     * Set the previous interceptor in the list
+     * @param previous ChannelInterceptor
+     */
+    public void setPrevious(ChannelInterceptor previous);

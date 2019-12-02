@@ -1,0 +1,99 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public void addWrapper(String hostName, String contextPath, String version,
+                           String path, Wrapper wrapper, boolean jspWildCard,
+                           boolean resourceOnly) {
+        ContextVersion contextVersion = findContextVersion(hostName,
+                contextPath, version, false);
+        if (contextVersion == null) {
+            return;
+        }
+        addWrapper(contextVersion, path, wrapper, jspWildCard, resourceOnly);
+    }
+
+
+    /**
+     * Adds a wrapper to the given context.
+     *
+     * @param context The context to which to add the wrapper
+     * @param path Wrapper mapping
+     * @param wrapper The Wrapper object
+     * @param jspWildCard true if the wrapper corresponds to the JspServlet
+     *   and the mapping path contains a wildcard; false otherwise
+     * @param resourceOnly true if this wrapper always expects a physical
+     *                     resource to be present (such as a JSP)
+     */
+    protected void addWrapper(ContextVersion context, String path,
+            Wrapper wrapper, boolean jspWildCard, boolean resourceOnly) {
+
+        synchronized (context) {
+            if (path.endsWith("/*")) {
+                // Wildcard wrapper
+                String name = path.substring(0, path.length() - 2);
+                MappedWrapper newWrapper = new MappedWrapper(name, wrapper,
+                        jspWildCard, resourceOnly);
+                MappedWrapper[] oldWrappers = context.wildcardWrappers;
+                MappedWrapper[] newWrappers = new MappedWrapper[oldWrappers.length + 1];
+                if (insertMap(oldWrappers, newWrappers, newWrapper)) {
+                    context.wildcardWrappers = newWrappers;
+                    int slashCount = slashCount(newWrapper.name);
+                    if (slashCount > context.nesting) {
+                        context.nesting = slashCount;
+                    }
+                }
+            } else if (path.startsWith("*.")) {
+                // Extension wrapper
+                String name = path.substring(2);
+                MappedWrapper newWrapper = new MappedWrapper(name, wrapper,
+                        jspWildCard, resourceOnly);
+                MappedWrapper[] oldWrappers = context.extensionWrappers;
+                MappedWrapper[] newWrappers =
+                    new MappedWrapper[oldWrappers.length + 1];
+                if (insertMap(oldWrappers, newWrappers, newWrapper)) {
+                    context.extensionWrappers = newWrappers;
+                }
+            } else if (path.equals("/")) {
+                // Default wrapper
+                MappedWrapper newWrapper = new MappedWrapper("", wrapper,
+                        jspWildCard, resourceOnly);
+                context.defaultWrapper = newWrapper;
+            } else {
+                // Exact wrapper
+                final String name;
+                if (path.length() == 0) {
+                    // Special case for the Context Root mapping which is
+                    // treated as an exact match
+                    name = "/";
+                } else {
+                    name = path;
+                }
+                MappedWrapper newWrapper = new MappedWrapper(name, wrapper,
+                        jspWildCard, resourceOnly);
+                MappedWrapper[] oldWrappers = context.exactWrappers;
+                MappedWrapper[] newWrappers = new MappedWrapper[oldWrappers.length + 1];
+                if (insertMap(oldWrappers, newWrappers, newWrapper)) {
+                    context.exactWrappers = newWrappers;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the slash count in a given string.
+     */
+    private static final int slashCount(String name) {
+        int pos = -1;
+        int count = 0;
+        while ((pos = name.indexOf('/', pos + 1)) != -1) {
+            count++;
+        }
+        return count;
+    }

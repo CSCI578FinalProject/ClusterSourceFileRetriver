@@ -1,0 +1,45 @@
+5
+-----CSCI578-----
+
+
+
+    protected Pattern getSessionAttributeNamePattern() {
+        return sessionAttributeNamePattern;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Create the object input stream to use to read a session from the store.
+     * Sub-classes <b>must</b> have set the thread context class loader before
+     * calling this method.
+     *
+     * @param is The input stream provided by the sub-class that will provide
+     *           the data for a session
+     *
+     * @return An appropriately configured ObjectInputStream from which the
+     *         session can be read.
+     *
+     * @throws IOException if a problem occurs creating the ObjectInputStream
+     */
+    protected ObjectInputStream getObjectInputStream(InputStream is) throws IOException {
+        BufferedInputStream bis = new BufferedInputStream(is);
+
+        CustomObjectInputStream ois;
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+
+        if (manager instanceof ManagerBase) {
+            ManagerBase managerBase = (ManagerBase) manager;
+            ois = new CustomObjectInputStream(bis, classLoader, manager.getContainer().getLogger(),
+                    managerBase.getSessionAttributeValueClassNamePattern(),
+                    managerBase.getWarnOnSessionAttributeFilterFailure());
+        } else {
+            ois = new CustomObjectInputStream(bis, classLoader);
+        }
+
+        return ois;
+    }

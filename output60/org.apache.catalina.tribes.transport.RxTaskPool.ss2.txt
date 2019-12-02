@@ -1,0 +1,31 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Find an idle worker thread, if any.  Could return null.
+     */
+    public AbstractRxTask getRxTask()
+    {
+        AbstractRxTask worker = null;
+        synchronized (mutex) {
+            while ( worker == null && running ) {
+                if (idle.size() > 0) {
+                    try {
+                        worker = (AbstractRxTask) idle.remove(0);
+                    } catch (java.util.NoSuchElementException x) {
+                        //this means that there are no available workers
+                        worker = null;
+                    }
+                } else if ( used.size() < this.maxTasks && creator != null) {
+                    worker = creator.createRxTask();
+                    configureTask(worker);
+                } else {
+                    try { mutex.wait(); } catch ( java.lang.InterruptedException x ) {Thread.currentThread().interrupted();}
+                }
+            }//while
+            if ( worker != null ) used.add(worker);
+        }
+        return (worker);
+    }

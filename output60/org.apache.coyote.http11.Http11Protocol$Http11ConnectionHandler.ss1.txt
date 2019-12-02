@@ -1,0 +1,154 @@
+11
+-----CSCI578-----
+
+
+    /**
+     * Determine if we must drop the connection because of the HTTP status
+     * code.  Use the same list of codes as Apache/httpd.
+     */
+    protected boolean statusDropsConnection(int status) {
+        return status == 400 /* SC_BAD_REQUEST */ ||
+               status == 408 /* SC_REQUEST_TIMEOUT */ ||
+               status == 411 /* SC_LENGTH_REQUIRED */ ||
+               status == 413 /* SC_REQUEST_ENTITY_TOO_LARGE */ ||
+               status == 414 /* SC_REQUEST_URI_TOO_LARGE */ ||
+               status == 500 /* SC_INTERNAL_SERVER_ERROR */ ||
+               status == 503 /* SC_SERVICE_UNAVAILABLE */ ||
+               status == 501 /* SC_NOT_IMPLEMENTED */;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get filters.
+     */
+    public InputFilter[] getFilters() {
+
+        return filterLibrary;
+
+    }
+-----CSCI578-----
+
+    abstract public SSLSupport getSSLSupport(Socket sock);
+
+    
+    /**
+     * @deprecated This method has been deprecated since it adds a JSSE
+     *             dependency to this interface. It will be removed in versions
+     *             after 6.0.x.
+     */
+    @Deprecated
+    abstract public SSLSupport getSSLSupport(SSLSession session);
+-----CSCI578-----
+
+
+
+    /**
+     * Add an input filter to the filter library.
+     */
+    public void addActiveFilter(InputFilter filter) {
+
+        if (lastActiveFilter == -1) {
+            filter.setBuffer(inputStreamInputBuffer);
+        } else {
+            for (int i = 0; i <= lastActiveFilter; i++) {
+                if (activeFilters[i] == filter)
+                    return;
+            }
+            filter.setBuffer(activeFilters[lastActiveFilter]);
+        }
+
+        activeFilters[++lastActiveFilter] = filter;
+
+        filter.setRequest(request);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the SSL information for this HTTP connection.
+     */
+    public void setSSLSupport(SSLSupport sslSupport) {
+        this.sslSupport = sslSupport;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * End request.
+     * 
+     * @throws IOException an undelying I/O error occured
+     */
+    public void endRequest()
+        throws IOException {
+
+        if (!committed) {
+
+            // Send the connector a request for commit. The connector should
+            // then validate the headers, send them (using sendHeader) and 
+            // set the filters accordingly.
+            response.action(ActionCode.ACTION_COMMIT, null);
+
+        }
+
+        if (finished)
+            return;
+
+        if (lastActiveFilter != -1)
+            activeFilters[lastActiveFilter].end();
+
+        if (useSocketBuffer) {
+            socketBuffer.flushBuffer();
+        }
+
+        finished = true;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the swallow input flag.
+     */
+    public void setSwallowInput(boolean swallowInput) {
+        this.swallowInput = swallowInput;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * End the current request. It is acceptable to write extra bytes using
+     * buffer.doWrite during the execution of this method.
+     * 
+     * @return Should return 0 unless the filter does some content length 
+     * delimitation, in which case the number is the amount of extra bytes or
+     * missing bytes, which would indicate an error. 
+     * Note: It is recommended that extra bytes be swallowed by the filter.
+     */
+    public long end()
+        throws IOException;
+-----CSCI578-----
+
+
+
+    /**
+     * End the current request. It is acceptable to write extra bytes using
+     * buffer.doWrite during the execution of this method.
+     */
+    public long end()
+        throws IOException {
+        if (compressionStream == null) {
+            compressionStream = new FlushableGZIPOutputStream(fakeOutputStream);
+        }
+        compressionStream.finish();
+        compressionStream.close();
+        return ((OutputFilter) buffer).end();
+    }
+-----CSCI578-----

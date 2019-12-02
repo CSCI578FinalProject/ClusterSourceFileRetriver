@@ -1,0 +1,70 @@
+2
+-----CSCI578-----
+
+
+
+    protected Method[] getAllDeclaredMethods(Class<?> c) {
+
+        if (c.equals(javax.servlet.http.HttpServlet.class)) {
+            return null;
+        }
+
+        Method[] parentMethods = getAllDeclaredMethods(c.getSuperclass());
+
+        Method[] thisMethods = c.getDeclaredMethods();
+        if (thisMethods.length == 0) {
+            return parentMethods;
+        }
+
+        if ((parentMethods != null) && (parentMethods.length > 0)) {
+            Method[] allMethods =
+                new Method[parentMethods.length + thisMethods.length];
+            System.arraycopy(parentMethods, 0, allMethods, 0,
+                             parentMethods.length);
+            System.arraycopy(thisMethods, 0, allMethods, parentMethods.length,
+                             thisMethods.length);
+
+            thisMethods = allMethods;
+        }
+
+        return thisMethods;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String[] getServletMethods() throws ServletException {
+
+        instance = loadServlet();
+
+        Class<? extends Servlet> servletClazz = instance.getClass();
+        if (!javax.servlet.http.HttpServlet.class.isAssignableFrom(
+                                                        servletClazz)) {
+            return DEFAULT_SERVLET_METHODS;
+        }
+
+        HashSet<String> allow = new HashSet<>();
+        allow.add("TRACE");
+        allow.add("OPTIONS");
+
+        Method[] methods = getAllDeclaredMethods(servletClazz);
+        for (int i=0; methods != null && i<methods.length; i++) {
+            Method m = methods[i];
+
+            if (m.getName().equals("doGet")) {
+                allow.add("GET");
+                allow.add("HEAD");
+            } else if (m.getName().equals("doPost")) {
+                allow.add("POST");
+            } else if (m.getName().equals("doPut")) {
+                allow.add("PUT");
+            } else if (m.getName().equals("doDelete")) {
+                allow.add("DELETE");
+            }
+        }
+
+        String[] methodNames = new String[allow.size()];
+        return allow.toArray(methodNames);
+
+    }

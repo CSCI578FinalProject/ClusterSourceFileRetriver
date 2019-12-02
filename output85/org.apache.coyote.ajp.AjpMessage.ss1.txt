@@ -1,0 +1,122 @@
+4
+-----CSCI578-----
+
+
+
+    private void dump(String prefix) {
+        if (log.isDebugEnabled()) {
+            log.debug(prefix + ": " + HexUtils.toHexString(buf) + " " + pos +"/" + (len + 4));
+        }
+        int max = pos;
+        if (len + 4 > pos)
+            max = len+4;
+        if (max > 1000)
+            max = 1000;
+        if (log.isDebugEnabled()) {
+            for (int j = 0; j < max; j += 16) {
+                log.debug(hexLine(buf, j, len));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    public static String toHexString(byte[] bytes) {
+        if (null == bytes) {
+            return null;
+        }
+
+        StringBuilder sb = new StringBuilder(bytes.length << 1);
+
+        for(int i = 0; i < bytes.length; ++i) {
+            sb.append(hex[(bytes[i] & 0xf0) >> 4])
+                .append(hex[(bytes[i] & 0x0f)])
+                ;
+        }
+
+        return sb.toString();
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+    protected boolean hasMessageDigest() {
+        CredentialHandler ch = credentialHandler;
+        if (ch instanceof MessageDigestCredentialHandler) {
+            return ((MessageDigestCredentialHandler) ch).getAlgorithm() != null;
+        }
+        return false;
+    }
+
+
+
+    /**
+     * Return the digest associated with given principal's user name.
+     * @param username the user name
+     * @param realmName the realm name
+     * @return the digest for the specified user
+     */
+    protected String getDigest(String username, String realmName) {
+        if (hasMessageDigest()) {
+            // Use pre-generated digest
+            return getPassword(username);
+        }
+
+        String digestValue = username + ":" + realmName + ":"
+            + getPassword(username);
+
+        byte[] valueBytes = null;
+        try {
+            valueBytes = digestValue.getBytes(getDigestCharset());
+        } catch (UnsupportedEncodingException uee) {
+            log.error("Illegal digestEncoding: " + getDigestEncoding(), uee);
+            throw new IllegalArgumentException(uee.getMessage());
+        }
+
+        return MD5Encoder.encode(ConcurrentMessageDigest.digestMD5(valueBytes));
+    }
+
+
+
+    // --------------------------------------------------------- Static Methods
+
+    /**
+     * Digest password using the algorithm specified and convert the result to a
+     * corresponding hex string.
+     *
+     * @param credentials Password or other credentials to use in authenticating
+     *                    this username
+     * @param algorithm   Algorithm used to do the digest
+     * @param encoding    Character encoding of the string to digest
+     *
+     * @return The digested credentials as a hex string or the original plain
+     *         text credentials if an error occurs.
+     */
+    public static final String Digest(String credentials, String algorithm,
+                                      String encoding) {
+
+        try {
+            // Obtain a new message digest with "digest" encryption
+            MessageDigest md =
+                (MessageDigest) MessageDigest.getInstance(algorithm).clone();
+
+            // encode the credentials
+            // Should use the digestEncoding, but that's not a static field
+            if (encoding == null) {
+                md.update(credentials.getBytes());
+            } else {
+                md.update(credentials.getBytes(encoding));
+            }
+
+            // Digest the credentials and return as hexadecimal
+            return (HexUtils.toHexString(md.digest()));
+        } catch(Exception ex) {
+            log.error(ex);
+            return credentials;
+        }
+
+    }
+-----CSCI578-----

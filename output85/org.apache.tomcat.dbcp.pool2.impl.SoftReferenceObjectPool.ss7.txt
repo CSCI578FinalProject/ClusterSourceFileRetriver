@@ -1,0 +1,238 @@
+22
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public E pollFirst() {
+        lock.lock();
+        try {
+            return unlinkFirst();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+
+    /**
+     * Unlinks the first element in the queue, waiting up to the specified time
+     * to do so if the queue is empty.
+     *
+     * @param timeout   length of time to wait
+     * @param unit      units that timeout is expressed in
+     *
+     * @return the unlinked element
+     * @throws InterruptedException if the current thread is interrupted
+     */
+    public E pollFirst(long timeout, TimeUnit unit)
+        throws InterruptedException {
+        long nanos = unit.toNanos(timeout);
+        lock.lockInterruptibly();
+        try {
+            E x;
+            while ( (x = unlinkFirst()) == null) {
+                if (nanos <= 0) {
+                    return null;
+                }
+                nanos = notEmpty.awaitNanos(nanos);
+            }
+            return x;
+        } finally {
+            lock.unlock();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Should the supplied Throwable be re-thrown (eg if it is an instance of
+     * one of the Throwables that should never be swallowed). Used by the pool
+     * error handling for operations that throw exceptions that normally need to
+     * be ignored.
+     *
+     * @param t
+     *            The Throwable to check
+     * @throws ThreadDeath
+     *             if that is passed in
+     * @throws VirtualMachineError
+     *             if that is passed in
+     */
+    public static void checkRethrow(Throwable t) {
+        if (t instanceof ThreadDeath) {
+            throw (ThreadDeath) t;
+        }
+        if (t instanceof VirtualMachineError) {
+            throw (VirtualMachineError) t;
+        }
+        // All other instances of Throwable will be silently swallowed
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Closes the PooledConnection and stops listening for events from it.
+     */
+    @Override
+    public void destroyObject(PooledObject<PooledConnectionAndInfo> p) throws Exception {
+        doDestroyObject(p.getObject());
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean validateObject(PooledObject<PooledConnectionAndInfo> p) {
+        try {
+            validateLifetime(p);
+        } catch (Exception e) {
+            return false;
+        }
+        boolean valid = false;
+        PooledConnection pconn = p.getObject().getPooledConnection();
+        Connection conn = null;
+        validatingSet.add(pconn);
+        if (null == _validationQuery) {
+            int timeout = _validationQueryTimeout;
+            if (timeout < 0) {
+                timeout = 0;
+            }
+            try {
+                conn = pconn.getConnection();
+                valid = conn.isValid(timeout);
+            } catch (SQLException e) {
+                valid = false;
+            } finally {
+                Utils.closeQuietly(conn);
+                validatingSet.remove(pconn);
+            }
+        } else {
+            Statement stmt = null;
+            ResultSet rset = null;
+            // logical Connection from the PooledConnection must be closed
+            // before another one can be requested and closing it will
+            // generate an event. Keep track so we know not to return
+            // the PooledConnection
+            validatingSet.add(pconn);
+            try {
+                conn = pconn.getConnection();
+                stmt = conn.createStatement();
+                rset = stmt.executeQuery(_validationQuery);
+                if (rset.next()) {
+                    valid = true;
+                } else {
+                    valid = false;
+                }
+                if (_rollbackAfterValidation) {
+                    conn.rollback();
+                }
+            } catch (Exception e) {
+                valid = false;
+            } finally {
+                Utils.closeQuietly(rset);
+                Utils.closeQuietly(stmt);
+                Utils.closeQuietly(conn);
+                validatingSet.remove(pconn);
+            }
+        }
+        return valid;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Closes the PooledConnection and stops listening for events from it.
+     */
+    @Override
+    public void destroyObject(UserPassKey key, PooledObject<PooledConnectionAndInfo> p)
+            throws Exception {
+        PooledConnection pc = p.getObject().getPooledConnection();
+        pc.removeConnectionEventListener(this);
+        pcMap.remove(pc);
+        pc.close();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public String getPooledObjectType() {
+        return pooledObject.getObject().getClass().getName();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String getPooledObjectToString() {
+        return pooledObject.getObject().toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create an object, and place it into the pool. addObject() is useful for
+     * "pre-loading" a pool with idle objects.
+     * <p>
+     * Before being added to the pool, the newly created instance is
+     * {@link PooledObjectFactory#validateObject(
+     * org.apache.tomcat.dbcp.pool2.PooledObject) validated} and
+     * {@link PooledObjectFactory#passivateObject(
+     * org.apache.tomcat.dbcp.pool2.PooledObject) passivated}. If
+     * validation fails, the new instance is
+     * {@link PooledObjectFactory#destroyObject(
+     * org.apache.tomcat.dbcp.pool2.PooledObject) destroyed}. Exceptions
+     * generated by the factory <code>makeObject</code> or
+     * <code>passivate</code> are propagated to the caller. Exceptions
+     * destroying instances are silently swallowed.
+     *
+     * @throws IllegalStateException
+     *             if invoked on a {@link #close() closed} pool
+     * @throws Exception
+     *             when the {@link #getFactory() factory} has a problem creating
+     *             or passivating an object.
+     */
+    @Override
+    public synchronized void addObject() throws Exception {
+        assertOpen();
+        if (factory == null) {
+            throw new IllegalStateException(
+                    "Cannot add objects without a factory.");
+        }
+        T obj = factory.makeObject().getObject();
+        createCount++;
+        // Create and register with the queue
+        PooledSoftReference<T> ref = new PooledSoftReference<>(
+                new SoftReference<>(obj, refQueue));
+        allReferences.add(ref);
+
+        boolean success = true;
+        if (!factory.validateObject(ref)) {
+            success = false;
+        } else {
+            factory.passivateObject(ref);
+        }
+
+        boolean shouldDestroy = !success;
+        if (success) {
+            idleReferences.add(ref);
+            notifyAll(); // numActive has changed
+        }
+
+        if (shouldDestroy) {
+            try {
+                destroy(ref);
+            } catch (Exception e) {
+                // ignored
+            }
+        }
+    }
+-----CSCI578-----

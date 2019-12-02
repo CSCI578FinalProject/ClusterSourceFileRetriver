@@ -1,0 +1,67 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public WsMappingResult findMapping(String path) {
+
+        // Prevent registering additional endpoints once the first attempt has
+        // been made to use one
+        if (addAllowed) {
+            addAllowed = false;
+        }
+
+        // Check an exact match. Simple case as there are no templates.
+        ServerEndpointConfig sec = configExactMatchMap.get(path);
+        if (sec != null) {
+            return new WsMappingResult(sec, Collections.<String, String>emptyMap());
+        }
+
+        // No exact match. Need to look for template matches.
+        UriTemplate pathUriTemplate = null;
+        try {
+            pathUriTemplate = new UriTemplate(path);
+        } catch (DeploymentException e) {
+            // Path is not valid so can't be matched to a WebSocketEndpoint
+            return null;
+        }
+
+        // Number of segments has to match
+        Integer key = Integer.valueOf(pathUriTemplate.getSegmentCount());
+        SortedSet<TemplatePathMatch> templateMatches =
+                configTemplateMatchMap.get(key);
+
+        if (templateMatches == null) {
+            // No templates with an equal number of segments so there will be
+            // no matches
+            return null;
+        }
+
+        // List is in alphabetical order of normalised templates.
+        // Correct match is the first one that matches.
+        Map<String,String> pathParams = null;
+        for (TemplatePathMatch templateMatch : templateMatches) {
+            pathParams = templateMatch.getUriTemplate().match(pathUriTemplate);
+            if (pathParams != null) {
+                sec = templateMatch.getConfig();
+                break;
+            }
+        }
+
+        if (sec == null) {
+            // No match
+            return null;
+        }
+
+        return new WsMappingResult(sec, pathParams);
+    }
+-----CSCI578-----
+
+
+
+    public int getSegmentCount() {
+        return segments.size();
+    }
+-----CSCI578-----

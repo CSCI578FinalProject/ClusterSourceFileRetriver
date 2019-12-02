@@ -1,0 +1,52 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Insert into the right place in a sorted MapElement array, and prevent
+     * duplicates.
+     */
+    private final boolean insertCache(CacheEntry newElement) {
+        CacheEntry[] oldCache = cache;
+        int pos = find(oldCache, newElement.name);
+        if ((pos != -1) && (newElement.name.equals(oldCache[pos].name))) {
+            return false;
+        }
+        CacheEntry[] newCache = new CacheEntry[cache.length + 1];
+        System.arraycopy(oldCache, 0, newCache, 0, pos + 1);
+        newCache[pos + 1] = newElement;
+        System.arraycopy
+            (oldCache, pos + 1, newCache, pos + 2, oldCache.length - pos - 1);
+        cache = newCache;
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    public void load(CacheEntry entry) {
+        if (entry.exists) {
+            if (insertCache(entry)) {
+                cacheSize += entry.size;
+            }
+        } else {
+            int sizeIncrement = (notFoundCache.get(entry.name) == null) ? 1 : 0;
+            notFoundCache.put(entry.name, entry);
+            cacheSize += sizeIncrement;
+        }
+    }
+
+
+
+    public boolean unload(String name) {
+        CacheEntry removedEntry = removeCache(name);
+        if (removedEntry != null) {
+            cacheSize -= removedEntry.size;
+            return true;
+        } else if (notFoundCache.remove(name) != null) {
+            cacheSize--;
+            return true;
+        }
+        return false;
+    }

@@ -1,0 +1,196 @@
+9
+-----CSCI578-----
+
+
+
+    /**
+     * Load any currently active sessions that were previously unloaded
+     * to the appropriate persistence mechanism, if any.  If persistence is not
+     * supported, this method returns without doing anything.
+     *
+     * @exception ClassNotFoundException if a serialized class cannot be
+     *  found during the reload
+     * @exception IOException if an input/output error occurs
+     */
+    protected void doLoad() throws ClassNotFoundException, IOException {
+        if (log.isDebugEnabled()) {
+            log.debug("Start: Loading persisted sessions");
+        }
+
+        // Initialize our internal data structures
+        sessions.clear();
+
+        // Open an input stream to the specified pathname, if any
+        File file = file();
+        if (file == null) {
+            return;
+        }
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("standardManager.loading", pathname));
+        }
+        FileInputStream fis = null;
+        BufferedInputStream bis = null;
+        ObjectInputStream ois = null;
+        Loader loader = null;
+        ClassLoader classLoader = null;
+        Log logger = null;
+        try {
+            fis = new FileInputStream(file.getAbsolutePath());
+            bis = new BufferedInputStream(fis);
+            loader = container.getLoader();
+            logger = container.getLogger();
+            if (loader != null) {
+                classLoader = loader.getClassLoader();
+            }
+            if (classLoader == null) {
+                classLoader = getClass().getClassLoader();
+            }
+            ois = new CustomObjectInputStream(bis, classLoader, logger,
+                    getSessionAttributeValueClassNamePattern(),
+                    getWarnOnSessionAttributeFilterFailure());
+        } catch (FileNotFoundException e) {
+            if (log.isDebugEnabled()) {
+                log.debug("No persisted data file found");
+            }
+            return;
+        } catch (IOException e) {
+            log.error(sm.getString("standardManager.loading.ioe", e), e);
+            if (bis != null) {
+                try {
+                    bis.close();
+                } catch (IOException f) {
+                    // Ignore
+                }
+            }  else if (fis != null) {
+                try {
+                    fis.close();
+                } catch (IOException f) {
+                    // Ignore
+                }
+            } 
+            throw e;
+        }
+
+        // Load the previously unloaded active sessions
+        synchronized (sessions) {
+            try {
+                Integer count = (Integer) ois.readObject();
+                int n = count.intValue();
+                if (log.isDebugEnabled())
+                    log.debug("Loading " + n + " persisted sessions");
+                for (int i = 0; i < n; i++) {
+                    StandardSession session = getNewSession();
+                    session.readObjectData(ois);
+                    session.setManager(this);
+                    sessions.put(session.getIdInternal(), session);
+                    session.activate();
+                    if (!session.isValidInternal()) {
+                        // If session is already invalid,
+                        // expire session to prevent memory leak.
+                        session.setValid(true);
+                        session.expire();
+                    }
+                    sessionCounter++;
+                }
+            } catch (ClassNotFoundException e) {
+                log.error(sm.getString("standardManager.loading.cnfe", e), e);
+                try {
+                    ois.close();
+                } catch (IOException f) {
+                    // Ignore
+                }
+                throw e;
+            } catch (IOException e) {
+                log.error(sm.getString("standardManager.loading.ioe", e), e);
+                try {
+                    ois.close();
+                } catch (IOException f) {
+                    // Ignore
+                }
+                throw e;
+            } finally {
+                // Close the input stream
+                try {
+                    ois.close();
+                } catch (IOException e) {
+                    // ignored
+                }
+
+                // Delete the persistent storage file
+                if (file.exists()) {
+                    file.delete();
+                }
+            }
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("Finish: Loading persisted sessions");
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Manager within which this Session is valid.
+     *
+     * @param manager The new Manager
+     */
+    public void setManager(Manager manager) {
+        this.manager = manager;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Perform internal processing required to activate this
+     * session.
+     */
+    public void activate() {
+
+        // Initialize access count
+        if (ACTIVITY_CHECK) {
+            accessCount = new AtomicInteger();
+        }
+        
+        // Notify interested session event listeners
+        fireSessionEvent(Session.SESSION_ACTIVATED_EVENT, null);
+
+        // Notify ActivationListeners
+        HttpSessionEvent event = null;
+        String keys[] = keys();
+        for (int i = 0; i < keys.length; i++) {
+            Object attribute = attributes.get(keys[i]);
+            if (attribute instanceof HttpSessionActivationListener) {
+                if (event == null)
+                    event = new HttpSessionEvent(getSession());
+                try {
+                    ((HttpSessionActivationListener)attribute)
+                        .sessionDidActivate(event);
+                } catch (Throwable t) {
+                    manager.getContainer().getLogger().error
+                        (sm.getString("standardSession.attributeEvent"), t);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Sets the manager for this session
+     * @param mgr - the servers InMemoryReplicationManager
+     */
+    public void setManager(SimpleTcpReplicationManager mgr)
+    {
+        mManager = mgr;
+        super.setManager(mgr);
+    }
+-----CSCI578-----

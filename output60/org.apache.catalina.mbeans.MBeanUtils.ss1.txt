@@ -1,0 +1,1034 @@
+24
+-----CSCI578-----
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Connector</code> object.
+     *
+     * @param connector The Connector to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Connector connector, Service service)
+        throws Exception {
+
+        // domain is engine name
+        String domain = service.getContainer().getName();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, connector);
+        connector.setService(null);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        // Unregister associated request processor
+        String worker = null;
+        ProtocolHandler handler = connector.getProtocolHandler();
+        if (handler instanceof Http11Protocol) {
+            worker = ((Http11Protocol)handler).getName();
+        } else if (handler instanceof Http11NioProtocol) {
+            worker = ((Http11NioProtocol)handler).getName();
+        } else if (handler instanceof Http11AprProtocol) {
+            worker = ((Http11AprProtocol)handler).getName();
+        } else if (handler instanceof AjpProtocol) {
+            worker = ((AjpProtocol)handler).getName();
+        } else if (handler instanceof AjpAprProtocol) {
+            worker = ((AjpAprProtocol)handler).getName();
+        }
+        ObjectName query = new ObjectName(
+                domain + ":type=RequestProcessor,worker=" + worker + ",*");
+        Set<ObjectName> results = mserver.queryNames(query, null);
+        for(ObjectName result : results) {
+            mserver.unregisterMBean(result);
+        }
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Context</code> object.
+     *
+     * @param context The Context to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Context context)
+        throws Exception {
+
+        String domain = context.getParent().getParent().getName();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, context);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+    
+    /**
+     * Deregister the MBean for this
+     * <code>ContextEnvironment</code> object.
+     *
+     * @param environment The ContextEnvironment to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(ContextEnvironment environment)
+        throws Exception {
+
+        String mname = createManagedName(environment);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, environment);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+    
+    
+    /**
+     * Deregister the MBean for this
+     * <code>ContextResource</code> object.
+     *
+     * @param resource The ContextResource to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(ContextResource resource)
+        throws Exception {
+
+        // If this is a user database resource need to destroy groups, roles,
+        // users and UserDatabase mbean
+        if ("org.apache.catalina.UserDatabase".equals(resource.getType())) {
+            destroyMBeanUserDatabase(resource.getName());
+        }
+
+        String mname = createManagedName(resource);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, resource);
+        if( mserver.isRegistered(oname ))
+            mserver.unregisterMBean(oname);
+
+    }
+
+     
+    
+    /**
+     * Deregister the MBean for this
+     * <code>ContextResourceLink</code> object.
+     *
+     * @param resourceLink The ContextResourceLink to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(ContextResourceLink resourceLink)
+        throws Exception {
+
+        String mname = createManagedName(resourceLink);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, resourceLink);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+   
+    
+    /**
+     * Deregister the MBean for this
+     * <code>Engine</code> object.
+     *
+     * @param engine The Engine to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Engine engine)
+        throws Exception {
+        String domain = engine.getName();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, engine);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Group</code> object.
+     *
+     * @param group The Group to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Group group)
+        throws Exception {
+
+        String mname = createManagedName(group);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, group);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Host</code> object.
+     *
+     * @param host The Host to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Host host)
+        throws Exception {
+
+        String domain = host.getParent().getName();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, host);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Loader</code> object.
+     *
+     * @param loader The Loader to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Loader loader)
+        throws Exception {
+
+        String mname = createManagedName(loader);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, loader);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Manager</code> object.
+     *
+     * @param manager The Manager to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Manager manager)
+        throws Exception {
+
+        String mname = createManagedName(manager);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, manager);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+    
+    
+   /**
+     * Deregister the MBean for this
+     * <code>NamingResources</code> object.
+     *
+     * @param resources The NamingResources to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(NamingResources resources)
+        throws Exception {
+
+        String mname = createManagedName(resources);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, resources);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+    
+    
+    /**
+     * Deregister the MBean for this
+     * <code>Realm</code> object.
+     *
+     * @param realm The Realm to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Realm realm)
+        throws Exception {
+
+        String mname = createManagedName(realm);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, realm);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Role</code> object.
+     *
+     * @param role The Role to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Role role)
+        throws Exception {
+
+        String mname = createManagedName(role);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, role);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Server</code> object.
+     *
+     * @param server The Server to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Server server)
+        throws Exception {
+
+        String mname = createManagedName(server);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, server);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+        
+        // Global String cache - fixed name
+        oname = new ObjectName("Catalina:type=StringCache");
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+        // MBean Factory - fixed name
+        oname = new ObjectName("Catalina:type=MBeanFactory");
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Service</code> object.
+     *
+     * @param service The Service to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Service service)
+        throws Exception {
+
+        String mname = createManagedName(service);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, service);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>User</code> object.
+     *
+     * @param user The User to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(User user)
+        throws Exception {
+
+        String mname = createManagedName(user);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, user);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>UserDatabase</code> object.
+     *
+     * @param userDatabase The UserDatabase to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(UserDatabase userDatabase)
+        throws Exception {
+
+        String mname = createManagedName(userDatabase);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, userDatabase);
+        if( mserver.isRegistered(oname) )
+            mserver.unregisterMBean(oname);
+
+    }
+
+
+
+    /**
+     * Deregister the MBean for this
+     * <code>Valve</code> object.
+     *
+     * @param valve The Valve to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBean(Valve valve, Container container)
+        throws Exception {
+
+        ((Contained)valve).setContainer(container);
+        String mname = createManagedName(valve);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            return;
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        ObjectName oname = createObjectName(domain, valve);
+        try {
+            ((Contained)valve).setContainer(null);
+        } catch (Throwable t) {
+        ;
+        }
+        if( mserver.isRegistered(oname) ) {
+            mserver.unregisterMBean(oname);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Deregister the MBean for the
+     * <code>UserDatabase</code> object with this name.
+     *
+     * @param userDatabase The UserDatabase to be managed
+     *
+     * @exception Exception if an MBean cannot be deregistered
+     */
+    static void destroyMBeanUserDatabase(String userDatabase)
+        throws Exception {
+
+        ObjectName query = null;
+        Set<ObjectName> results = null;
+        
+        // Groups
+        query = new ObjectName(
+                "Users:type=Group,database=" + userDatabase + ",*");
+        results = mserver.queryNames(query, null);
+        for(ObjectName result : results) {
+            mserver.unregisterMBean(result);
+        }
+        
+        // Roles
+        query = new ObjectName(
+                "Users:type=Role,database=" + userDatabase + ",*");
+        results = mserver.queryNames(query, null);
+        for(ObjectName result : results) {
+            mserver.unregisterMBean(result);
+        }
+        
+        // Users
+        query = new ObjectName(
+                "Users:type=User,database=" + userDatabase + ",*");
+        results = mserver.queryNames(query, null);
+        for(ObjectName result : results) {
+            mserver.unregisterMBean(result);
+        }
+
+        // The database itself
+        ObjectName db = new ObjectName(
+                "Users:type=UserDatabase,database=" + userDatabase);
+        mserver.unregisterMBean(db);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>Container</code> with which this instance is associated.
+     *
+     * @param container The Container instance with which this instance is to
+     *  be associated, or <code>null</code> to disassociate this instance
+     *  from any Container
+     */
+    public void setContainer(Container container);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>Service</code> with which we are associated (if any).
+     *
+     * @param service The service that owns this Engine
+     */
+    public void setService(Service service) {
+
+        this.service = service;
+        // FIXME: setProperty("service", service);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * The (optional) <code>ObjectName</code> domain in which this MBean
+     * should be registered in the MBeanServer.
+     */
+    public String getDomain() {
+        return (this.domain);
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Static Methods
+
+    /**
+     * Create and return the name of the <code>ManagedBean</code> that
+     * corresponds to this Catalina component.
+     *
+     * @param component The component for which to create a name
+     */
+    static String createManagedName(Object component) {
+
+        // Deal with exceptions to the standard rule
+        String className = component.getClass().getName();
+        for (int i = 0; i < exceptions.length; i++) {
+            if (className.equals(exceptions[i][0])) {
+                return (exceptions[i][1]);
+            }
+        }
+
+        // Perform the standard transformation
+        int period = className.lastIndexOf('.');
+        if (period >= 0)
+            className = className.substring(period + 1);
+        return (className);
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return a String representation of this object.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("ContextResource[");
+        sb.append("name=");
+        sb.append(getName());
+        if (getDescription() != null) {
+            sb.append(", description=");
+            sb.append(getDescription());
+        }
+        if (getType() != null) {
+            sb.append(", type=");
+            sb.append(getType());
+        }
+        if (auth != null) {
+            sb.append(", auth=");
+            sb.append(auth);
+        }
+        if (scope != null) {
+            sb.append(", scope=");
+            sb.append(scope);
+        }
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Return the MBean Names of the set of defined environment entries for  
+     * this web application
+     */
+    public String[] getEnvironments() {
+        ContextEnvironment[] envs = getNamingResources().findEnvironments();
+        ArrayList results = new ArrayList();
+        for (int i = 0; i < envs.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), envs[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for environment " + envs[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Return the MBean Names of all the defined resource references for this
+     * application.
+     */
+    public String[] getResources() {
+        
+        ContextResource[] resources = getNamingResources().findResources();
+        ArrayList results = new ArrayList();
+        for (int i = 0; i < resources.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), resources[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for resource " + resources[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----
+
+
+      
+    /**
+     * Return the MBean Names of all the defined resource links for this 
+     * application
+     */
+    public String[] getResourceLinks() {
+        
+        ContextResourceLink[] links = getNamingResources().findResourceLinks();
+        ArrayList results = new ArrayList();
+        for (int i = 0; i < links.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), links[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for resource " + links[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+    /**
+     * Return the MBean Names of all authorized roles for this group.
+     */
+    public String[] getRoles() {
+
+        Group group = (Group) this.resource;
+        ArrayList results = new ArrayList();
+        Iterator roles = group.getRoles();
+        while (roles.hasNext()) {
+            Role role = null;
+            try {
+                role = (Role) roles.next();
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), role);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for role " + role);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Attributes
+    
+
+    /**
+     * Return the MBean Names of the set of defined environment entries for  
+     * this web application
+     */
+    public String[] getEnvironments() {
+        ContextEnvironment[] envs = 
+                            ((NamingResources)this.resource).findEnvironments();
+        ArrayList results = new ArrayList();
+        for (int i = 0; i < envs.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), envs[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for environment " + envs[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Return the MBean Names of all the defined resource references for this
+     * application.
+     */
+    public String[] getResources() {
+        
+        ContextResource[] resources = 
+                            ((NamingResources)this.resource).findResources();
+        ArrayList results = new ArrayList();
+        for (int i = 0; i < resources.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), resources[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for resource " + resources[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Return the MBean Names of all the defined resource link references for 
+     * this application.
+     */
+    public String[] getResourceLinks() {
+        
+        ContextResourceLink[] resourceLinks = 
+                            ((NamingResources)this.resource).findResourceLinks();
+        ArrayList results = new ArrayList();
+        for (int i = 0; i < resourceLinks.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), resourceLinks[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for resource " + resourceLinks[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Return the MBean Names of the set of defined environment entries for  
+     * this web application
+     */
+    public String[] getEnvironments() {
+        ContextEnvironment[] envs = getNamingResources().findEnvironments();
+        ArrayList results = new ArrayList();
+        for (int i = 0; i < envs.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), envs[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for environment " + envs[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Return the MBean Names of all the defined resource references for this
+     * application.
+     */
+    public String[] getResources() {
+        
+        ContextResource[] resources = getNamingResources().findResources();
+        ArrayList results = new ArrayList();
+        for (int i = 0; i < resources.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), resources[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for resource " + resources[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----
+
+
+      
+    /**
+     * Return the MBean Names of all the defined resource links for this 
+     * application
+     */
+    public String[] getResourceLinks() {
+        
+        ContextResourceLink[] links = getNamingResources().findResourceLinks();
+        ArrayList results = new ArrayList();
+        for (int i = 0; i < links.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), links[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for resource " + links[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----
+
+
+
+   /**
+     * Return the MBean Names of the Valves assoicated with this Host
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String [] getValves()
+        throws Exception {
+
+        Registry registry = MBeanUtils.createRegistry();
+        StandardHost host = (StandardHost) this.resource;
+        String mname = MBeanUtils.createManagedName(host);
+        ManagedBean managed = registry.findManagedBean(mname);
+        String domain = null;
+        if (managed != null) {
+            domain = managed.getDomain();
+        }
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        Valve [] valves = host.getValves();
+        String [] mbeanNames = new String[valves.length];
+        for (int i = 0; i < valves.length; i++) {
+            mbeanNames[i] =
+                MBeanUtils.createObjectName(domain, valves[i]).toString();
+        }
+
+        return mbeanNames;
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+    /**
+     * Return the MBean Names of all groups this user is a member of.
+     */
+    public String[] getGroups() {
+
+        User user = (User) this.resource;
+        ArrayList results = new ArrayList();
+        Iterator groups = user.getGroups();
+        while (groups.hasNext()) {
+            Group group = null;
+            try {
+                group = (Group) groups.next();
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), group);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for group " + group);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the MBean Names of all roles assigned to this user.
+     */
+    public String[] getRoles() {
+
+        User user = (User) this.resource;
+        ArrayList results = new ArrayList();
+        Iterator roles = user.getRoles();
+        while (roles.hasNext()) {
+            Role role = null;
+            try {
+                role = (Role) roles.next();
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), role);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for role " + role);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }
+-----CSCI578-----

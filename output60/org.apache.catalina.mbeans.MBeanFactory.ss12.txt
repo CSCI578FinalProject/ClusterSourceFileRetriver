@@ -1,0 +1,67 @@
+3
+-----CSCI578-----
+
+
+    public void destroy() throws Exception {
+        if( oname!=null && controller==oname ) {
+            if(log.isDebugEnabled())
+                 log.debug("Unregister itself " + oname );
+            Registry.getRegistry(null, null).unregisterComponent(oname);
+        }
+        if( getService() == null)
+            return;
+        getService().removeConnector(this);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Remove the specified Connector from the set associated from this
+     * Service.  The removed Connector will also be disassociated from our
+     * Container.
+     *
+     * @param connector The Connector to be removed
+     */
+    public void removeConnector(Connector connector);
+-----CSCI578-----
+
+
+
+    /**
+     * Remove an existing Connector.
+     *
+     * @param name MBean Name of the component to remove
+     *
+     * @exception Exception if a component cannot be removed
+     */
+    public void removeConnector(String name) throws Exception {
+
+        // Acquire a reference to the component to be removed
+        ObjectName oname = new ObjectName(name);
+        Server server = ServerFactory.getServer();
+        Service service = getService(oname);
+        String port = oname.getKeyProperty("port");
+        //String address = oname.getKeyProperty("address");
+
+        Connector conns[] = (Connector[]) service.findConnectors();
+
+        for (int i = 0; i < conns.length; i++) {
+            String connAddress = String.valueOf(conns[i].getProperty("address"));
+            String connPort = ""+conns[i].getPort();
+
+            // if (((address.equals("null")) &&
+            if ((connAddress==null) && port.equals(connPort)) {
+                service.removeConnector(conns[i]);
+                conns[i].destroy();
+                break;
+            }
+            // } else if (address.equals(connAddress))
+            if (port.equals(connPort)) {
+                // Remove this component from its parent component
+                service.removeConnector(conns[i]);
+                conns[i].destroy();
+                break;
+            }
+        }
+
+    }

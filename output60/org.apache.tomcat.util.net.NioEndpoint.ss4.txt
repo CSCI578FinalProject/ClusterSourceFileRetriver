@@ -1,0 +1,159 @@
+13
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    public void reset(SSLEngine engine) throws IOException {
+        this.sslEngine = engine;
+        reset();
+    }
+
+    public void reset() throws IOException {
+        super.reset();
+        netOutBuffer.position(0);
+        netOutBuffer.limit(0);
+        netInBuffer.position(0);
+        netInBuffer.limit(0);
+        initHandshakeComplete = false;
+        closed = false;
+        closing = false;
+        //initiate handshake
+        sslEngine.beginHandshake();
+        initHandshakeStatus = sslEngine.getHandshakeStatus();
+    }
+-----CSCI578-----
+
+
+    public void setIOChannel(SocketChannel IOChannel) {
+        this.sc = IOChannel;
+    }
+-----CSCI578-----
+
+
+    public int getAppWriteBufSize() {
+        return appWriteBufSize;
+    }
+-----CSCI578-----
+
+
+    public void reset() throws IOException {
+        bufHandler.getReadBuffer().clear();
+        bufHandler.getWriteBuffer().clear();
+    }
+-----CSCI578-----
+
+
+    public int getAppReadBufSize() {
+        return appReadBufSize;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process the specified connection.
+     */
+    protected boolean setSocketOptions(SocketChannel socket) {
+        // Process the connection
+        try {
+            //disable blocking, APR style, we are gonna be polling it
+            socket.configureBlocking(false);
+            Socket sock = socket.socket();
+            socketProperties.setProperties(sock);
+
+            NioChannel channel = nioChannels.poll();
+            if ( channel == null ) {
+                // SSL setup
+                if (sslContext != null) {
+                    SSLEngine engine = createSSLEngine();
+                    int appbufsize = engine.getSession().getApplicationBufferSize();
+                    NioBufferHandler bufhandler = new NioBufferHandler(Math.max(appbufsize,socketProperties.getAppReadBufSize()),
+                                                                       Math.max(appbufsize,socketProperties.getAppWriteBufSize()),
+                                                                       socketProperties.getDirectBuffer());
+                    channel = new SecureNioChannel(socket, engine, bufhandler, selectorPool);
+                } else {
+                    // normal tcp setup
+                    NioBufferHandler bufhandler = new NioBufferHandler(socketProperties.getAppReadBufSize(),
+                                                                       socketProperties.getAppWriteBufSize(),
+                                                                       socketProperties.getDirectBuffer());
+
+                    channel = new NioChannel(socket, bufhandler);
+                }
+            } else {
+                channel.setIOChannel(socket);
+                if ( channel instanceof SecureNioChannel ) {
+                    SSLEngine engine = createSSLEngine();
+                    ((SecureNioChannel)channel).reset(engine);
+                } else {
+                    channel.reset();
+                }
+            }
+            getPoller0().register(channel);
+        } catch (Throwable t) {
+            try {
+                log.error("",t);
+            }catch ( Throwable tt){}
+            // Tell to close the socket
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+    public void setProperties(Socket socket) throws SocketException{
+        socket.setReceiveBufferSize(rxBufSize);
+        socket.setSendBufferSize(txBufSize);
+        socket.setOOBInline(ooBInline);
+        socket.setKeepAlive(soKeepAlive);
+        socket.setPerformancePreferences(performanceConnectionTime,performanceLatency,performanceBandwidth);
+        socket.setReuseAddress(soReuseAddress);
+        socket.setSoLinger(soLingerOn,soLingerTime);
+        socket.setSoTimeout(soTimeout);
+        socket.setTcpNoDelay(tcpNoDelay);
+        socket.setTrafficClass(soTrafficClass);
+    }
+-----CSCI578-----
+
+
+    protected SSLEngine createSSLEngine() {
+        SSLEngine engine = sslContext.createSSLEngine();
+        if ("false".equals(getClientAuth())) {
+            engine.setNeedClientAuth(false);
+            engine.setWantClientAuth(false);
+        } else if ("true".equals(getClientAuth()) || "yes".equals(getClientAuth())){
+            engine.setNeedClientAuth(true);
+        } else if ("want".equals(getClientAuth())) {
+            engine.setWantClientAuth(true);
+        }
+        engine.setUseClientMode(false);
+        if ( ciphersarr.length > 0 ) engine.setEnabledCipherSuites(ciphersarr);
+        if (sslEnabledProtocolsarr.length > 0) {
+            engine.setEnabledProtocols(sslEnabledProtocolsarr);
+        } else {
+            // Filter out the insecure protocols from the defaults
+            engine.setEnabledProtocols(JSSESocketFactory.filterInsecureProtocols(
+                    engine.getEnabledProtocols()));
+        }
+
+        return engine;
+    }
+-----CSCI578-----
+
+    /**
+     * Return an available poller in true round robin fashion
+     */
+    public Poller getPoller0() {
+        int idx = Math.abs(pollerRotater.incrementAndGet()) % pollers.length;
+        return pollers[idx];
+    }
+-----CSCI578-----
+
+
+    public boolean getDirectBuffer() {
+        return directBuffer;
+    }
+-----CSCI578-----
+
+    public String getClientAuth() { return clientAuth;}

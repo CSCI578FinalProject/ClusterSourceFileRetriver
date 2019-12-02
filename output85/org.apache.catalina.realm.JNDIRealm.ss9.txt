@@ -1,0 +1,95 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Check credentials by binding to the directory as the user
+     *
+     * @param context The directory context
+     * @param user The User to be authenticated
+     * @param credentials Authentication credentials
+     * @return <code>true</code> if the credentials are validated
+     * @exception NamingException if a directory server error occurs
+     */
+     protected boolean bindAsUser(DirContext context,
+                                  User user,
+                                  String credentials)
+         throws NamingException {
+
+         if (credentials == null || user == null)
+             return false;
+
+         String dn = user.getDN();
+         if (dn == null)
+             return false;
+
+         // Validate the credentials specified by the user
+         if (containerLog.isTraceEnabled()) {
+             containerLog.trace("  validating credentials by binding as the user");
+        }
+
+        userCredentialsAdd(context, dn, credentials);
+
+        // Elicit an LDAP bind operation
+        boolean validated = false;
+        try {
+            if (containerLog.isTraceEnabled()) {
+                containerLog.trace("  binding as "  + dn);
+            }
+            context.getAttributes("", null);
+            validated = true;
+        }
+        catch (AuthenticationException e) {
+            if (containerLog.isTraceEnabled()) {
+                containerLog.trace("  bind attempt failed");
+            }
+        }
+
+        userCredentialsRemove(context);
+
+        return validated;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Check whether the given User can be authenticated with the
+     * given credentials. If the <code>userPassword</code>
+     * configuration attribute is specified, the credentials
+     * previously retrieved from the directory are compared explicitly
+     * with those presented by the user. Otherwise the presented
+     * credentials are checked by binding to the directory as the
+     * user.
+     *
+     * @param context The directory context
+     * @param user The User to be authenticated
+     * @param credentials The credentials presented by the user
+     * @return <code>true</code> if the credentials are validated
+     * @exception NamingException if a directory server error occurs
+     */
+    protected boolean checkCredentials(DirContext context,
+                                     User user,
+                                     String credentials)
+         throws NamingException {
+
+         boolean validated = false;
+
+         if (userPassword == null) {
+             validated = bindAsUser(context, user, credentials);
+         } else {
+             validated = compareCredentials(context, user, credentials);
+         }
+
+         if (containerLog.isTraceEnabled()) {
+             if (validated) {
+                 containerLog.trace(sm.getString("jndiRealm.authenticateSuccess",
+                                  user.getUserName()));
+             } else {
+                 containerLog.trace(sm.getString("jndiRealm.authenticateFailure",
+                                  user.getUserName()));
+             }
+         }
+         return validated;
+     }

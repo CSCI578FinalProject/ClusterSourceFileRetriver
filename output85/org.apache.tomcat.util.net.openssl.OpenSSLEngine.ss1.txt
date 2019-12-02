@@ -1,0 +1,41 @@
+2
+-----CSCI578-----
+
+
+    @Override
+    public String[] getEnabledProtocols() {
+        List<String> enabled = new ArrayList<>();
+        // Seems like there is no way to explict disable SSLv2Hello in openssl so it is always enabled
+        enabled.add(Constants.SSL_PROTO_SSLv2Hello);
+        int opts = SSL.getOptions(ssl);
+        if ((opts & SSL.SSL_OP_NO_TLSv1) == 0) {
+            enabled.add(Constants.SSL_PROTO_TLSv1);
+        }
+        if ((opts & SSL.SSL_OP_NO_TLSv1_1) == 0) {
+            enabled.add(Constants.SSL_PROTO_TLSv1_1);
+        }
+        if ((opts & SSL.SSL_OP_NO_TLSv1_2) == 0) {
+            enabled.add(Constants.SSL_PROTO_TLSv1_2);
+        }
+        if ((opts & SSL.SSL_OP_NO_SSLv2) == 0) {
+            enabled.add(Constants.SSL_PROTO_SSLv2);
+        }
+        if ((opts & SSL.SSL_OP_NO_SSLv3) == 0) {
+            enabled.add(Constants.SSL_PROTO_SSLv3);
+        }
+        int size = enabled.size();
+        if (size == 0) {
+            return new String[0];
+        } else {
+            return enabled.toArray(new String[size]);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get OpenSSL Option.
+     * @param ssl the SSL instance (SSL *)
+     * @return options  See SSL.SSL_OP_* for option flags.
+     */
+    public static native int getOptions(long ssl);

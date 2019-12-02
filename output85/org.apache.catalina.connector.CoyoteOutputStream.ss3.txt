@@ -1,0 +1,47 @@
+4
+-----CSCI578-----
+
+
+
+    public boolean isBlocking() {
+        return coyoteResponse.getWriteListener() == null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Checks for concurrent writes which are not permitted. This object has no
+     * state information so the call chain is
+     * CoyoyeOutputStream->OutputBuffer->CoyoteResponse.
+     *
+     * @return <code>true</code> if this OutputStream is currently in
+     *         non-blocking mode.
+     */
+    private boolean checkNonBlockingWrite() {
+        boolean nonBlocking = !ob.isBlocking();
+        if (nonBlocking && !ob.isReady()) {
+            throw new IllegalStateException(
+                    sm.getString("coyoteOutputStream.nbNotready"));
+        }
+        return nonBlocking;
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * All the non-blocking write state information is held in the Response so
+     * it is visible / accessible to all the code that needs it.
+     */
+
+    public boolean isReady() {
+        return coyoteResponse.isReady();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean isReady() {
+        return ob.isReady();
+    }

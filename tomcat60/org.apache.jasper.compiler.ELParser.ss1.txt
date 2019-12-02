@@ -1,0 +1,58 @@
+2
+
+
+    /**
+     * Escape '\\', '\'' and '\"', inverting the unescaping performed in
+     * {@link #skipUntilEL()}.
+     *
+     * @param input Non-EL input to be escaped
+     * @param isDeferredSyntaxAllowedAsLiteral
+     *
+     * @return The escaped version of the input
+     */
+    private static String escapeELText(String input) {
+        int len = input.length();
+        char quote = 0;
+        int lastAppend = 0;
+        int start = 0;
+        int end = len;
+        
+        // Look to see if the value is quoted
+        String trimmed = input.trim();
+        int trimmedLen = trimmed.length();
+        if (trimmedLen > 1) {
+            // Might be quoted
+            quote = trimmed.charAt(0);
+            if (quote == '\'' || quote == '\"') {
+                if (trimmed.charAt(trimmedLen - 1) != quote) {
+                    throw new IllegalArgumentException(Localizer.getMessage(
+                            "org.apache.jasper.compiler.ELParser.invalidQuotesForStringLiteral",
+                            input));
+                }
+                start = input.indexOf(quote) + 1;
+                end = start + trimmedLen - 2;
+            } else {
+                quote = 0;
+            }
+        }
+
+        StringBuilder output = null;
+        for (int i = start; i < end; i++) {
+            char ch = input.charAt(i);
+            if (ch == '\\' || ch == quote) {
+                if (output == null) {
+                    output = new StringBuilder(len + 20);
+                }
+                output.append(input.substring(lastAppend, i));
+                lastAppend = i + 1;
+                output.append('\\');
+                output.append(ch);
+            }
+        }
+        if (output == null) {
+            return input;
+        } else {
+            output.append(input.substring(lastAppend, len));
+            return output.toString();
+        }
+    }

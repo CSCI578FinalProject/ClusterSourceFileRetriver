@@ -1,0 +1,96 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Execute the requested operation.
+     *
+     * @exception BuildException if an error occurs
+     */
+    @Override
+    public void execute() throws BuildException {
+
+        super.execute();
+        if (path == null) {
+            throw new BuildException
+                ("Must specify 'path' attribute");
+        }
+        if ((war == null) && (localWar == null) && (config == null) && (tag == null)) {
+            throw new BuildException
+                ("Must specify either 'war', 'localWar', 'config', or 'tag' attribute");
+        }
+
+        // Building an input stream on the WAR to upload, if any
+        BufferedInputStream stream = null;
+        String contentType = null;
+        long contentLength = -1;
+        if (war != null) {
+            if (PROTOCOL_PATTERN.matcher(war).lookingAt()) {
+                try {
+                    URL url = new URL(war);
+                    URLConnection conn = url.openConnection();
+                    contentLength = conn.getContentLengthLong();
+                    stream = new BufferedInputStream
+                        (conn.getInputStream(), 1024);
+                } catch (IOException e) {
+                    throw new BuildException(e);
+                }
+            } else {
+                FileInputStream fsInput = null;
+                try {
+                    fsInput = new FileInputStream(war);
+                    contentLength = fsInput.getChannel().size();
+                    stream = new BufferedInputStream(fsInput, 1024);
+                } catch (IOException e) {
+                    if (fsInput != null) {
+                        try {
+                            fsInput.close();
+                        } catch (IOException ioe) {
+                            // Ignore
+                        }
+                    }
+                    throw new BuildException(e);
+                }
+            }
+            contentType = "application/octet-stream";
+        }
+
+        // Building URL
+        StringBuilder sb = createQueryString("/deploy");
+        try {
+            if ((war == null) && (config != null)) {
+                sb.append("&config=");
+                sb.append(URLEncoder.encode(config, getCharset()));
+            }
+            if ((war == null) && (localWar != null)) {
+                sb.append("&war=");
+                sb.append(URLEncoder.encode(localWar, getCharset()));
+            }
+            if (update) {
+                sb.append("&update=true");
+            }
+            if (tag != null) {
+                sb.append("&tag=");
+                sb.append(URLEncoder.encode(tag, getCharset()));
+            }
+
+            execute(sb.toString(), stream, contentType, contentLength);
+        } catch (UnsupportedEncodingException e) {
+            throw new BuildException("Invalid 'charset' attribute: " + getCharset());
+        } finally {
+            if (stream != null) {
+                try {
+                    stream.close();
+                } catch (IOException ioe) {
+                    // Ignore
+                }
+            }
+        }
+
+    }
+-----CSCI578-----

@@ -1,0 +1,43 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * BIO_free
+     * @param bio BIO pointer
+     */
+    public static native void freeBIO(long bio);
+-----CSCI578-----
+
+
+    /**
+     * Destroys this engine.
+     */
+    public synchronized void shutdown() {
+        if (!destroyed) {
+            destroyed = true;
+            SSL.freeBIO(networkBIO);
+            SSL.freeSSL(ssl);
+            ssl = networkBIO = 0;
+
+            // internal errors can cause shutdown without marking the engine closed
+            isInboundDone = isOutboundDone = engineClosed = true;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * SSL_free
+     * @param ssl the SSL instance (SSL *)
+     */
+    public static native void freeSSL(long ssl);
+-----CSCI578-----
+
+
+    @Override
+    protected void finalize() throws Throwable {
+        super.finalize();
+        // Call shutdown as the user may have created the OpenSslEngine and not used it at all.
+        shutdown();
+    }

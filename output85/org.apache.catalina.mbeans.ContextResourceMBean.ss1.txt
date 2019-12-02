@@ -1,0 +1,72 @@
+4
+-----CSCI578-----
+
+
+    void addResource(ContextResource cr);
+-----CSCI578-----
+
+    void removeResource(String name);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the value of a specific attribute of this MBean.
+     *
+     * @param attribute The identification of the attribute to be set
+     *  and the new value
+     *
+     * @exception AttributeNotFoundException if this attribute is not
+     *  supported by this MBean
+     * @exception MBeanException if the initializer of an object
+     *  throws an exception
+     * @exception ReflectionException if a Java reflection exception
+     *  occurs when invoking the getter
+     */
+     @Override
+    public void setAttribute(Attribute attribute)
+        throws AttributeNotFoundException, MBeanException,
+        ReflectionException {
+
+        // Validate the input parameters
+        if (attribute == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Attribute is null"),
+                 "Attribute is null");
+        String name = attribute.getName();
+        Object value = attribute.getValue();
+        if (name == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Attribute name is null"),
+                 "Attribute name is null");
+
+        ContextResource cr = null;
+        try {
+            cr = (ContextResource) getManagedResource();
+        } catch (InstanceNotFoundException e) {
+            throw new MBeanException(e);
+        } catch (InvalidTargetObjectTypeException e) {
+             throw new MBeanException(e);
+        }
+
+        if ("auth".equals(name)) {
+            cr.setAuth((String)value);
+        } else if ("description".equals(name)) {
+            cr.setDescription((String)value);
+        } else if ("name".equals(name)) {
+            cr.setName((String)value);
+        } else if ("scope".equals(name)) {
+            cr.setScope((String)value);
+        } else if ("type".equals(name)) {
+            cr.setType((String)value);
+        } else {
+            cr.setProperty(name, ""+value);
+        }
+
+        // cannot use side-effects.  It's removed and added back each time
+        // there is a modification in a resource.
+        NamingResources nr = cr.getNamingResources();
+        nr.removeResource(cr.getName());
+        nr.addResource(cr);
+    }
+-----CSCI578-----

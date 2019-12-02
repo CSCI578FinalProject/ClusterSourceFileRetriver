@@ -1,0 +1,125 @@
+12
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Returns me to my pool.
+     */
+     @Override
+    public synchronized void close() throws SQLException {
+        if (isClosedInternal()) {
+            // already closed
+            return;
+        }
+
+        boolean isUnderlyingConectionClosed;
+        try {
+            isUnderlyingConectionClosed = getDelegateInternal().isClosed();
+        } catch (SQLException e) {
+            try {
+                _pool.invalidateObject(this);
+            } catch(IllegalStateException ise) {
+                // pool is closed, so close the connection
+                passivate();
+                getInnermostDelegate().close();
+            } catch (Exception ie) {
+                // DO NOTHING the original exception will be rethrown
+            }
+            throw new SQLException("Cannot close connection (isClosed check failed)", e);
+        }
+
+        /* Can't set close before this code block since the connection needs to
+         * be open when validation runs. Can't set close after this code block
+         * since by then the connection will have been returned to the pool and
+         * may have been borrowed by another thread. Therefore, the close flag
+         * is set in passivate().
+         */
+        if (isUnderlyingConectionClosed) {
+            // Abnormal close: underlying connection closed unexpectedly, so we
+            // must destroy this proxy
+            try {
+                _pool.invalidateObject(this);
+            } catch(IllegalStateException e) {
+                // pool is closed, so close the connection
+                passivate();
+                getInnermostDelegate().close();
+            } catch (Exception e) {
+                throw new SQLException("Cannot close connection (invalidating pooled object failed)", e);
+            }
+        } else {
+            // Normal close: underlying connection is still open, so we
+            // simply need to return this proxy to the pool
+            try {
+                _pool.returnObject(this);
+            } catch(IllegalStateException e) {
+                // pool is closed, so close the connection
+                passivate();
+                getInnermostDelegate().close();
+            } catch(SQLException e) {
+                throw e;
+            } catch(RuntimeException e) {
+                throw e;
+            } catch(Exception e) {
+                throw new SQLException("Cannot close connection (return to pool failed)", e);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void validateConnection(PoolableConnection conn) throws SQLException {
+        if(conn.isClosed()) {
+            throw new SQLException("validateConnection: connection closed");
+        }
+        conn.validate(_validationQuery, _validationQueryTimeout);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ***********************************************************************
+    // java.sql.ConnectionEventListener implementation
+    // ***********************************************************************
+
+    /**
+     * This will be called if the Connection returned by the getConnection
+     * method came from a PooledConnection, and the user calls the close()
+     * method of this connection object. What we need to do here is to
+     * release this PooledConnection from our pool...
+     */
+    @Override
+    public void connectionClosed(ConnectionEvent event) {
+        PooledConnection pc = (PooledConnection) event.getSource();
+        // if this event occurred because we were validating, ignore it
+        // otherwise return the connection to the pool.
+        if (!validatingSet.contains(pc)) {
+            PooledConnectionAndInfo pci = pcMap.get(pc);
+            if (pci == null) {
+                throw new IllegalStateException(NO_KEY_MESSAGE);
+            }
+
+            try {
+                _pool.returnObject(pci);
+            } catch (Exception e) {
+                System.err.println("CLOSING DOWN CONNECTION AS IT COULD "
+                        + "NOT BE RETURNED TO THE POOL");
+                pc.removeConnectionEventListener(this);
+                try {
+                    doDestroyObject(pci);
+                } catch (Exception e2) {
+                    System.err.println("EXCEPTION WHILE DESTROYING OBJECT "
+                            + pci);
+                    e2.printStackTrace();
+                }
+            }
+        }
+    }
+-----CSCI578-----

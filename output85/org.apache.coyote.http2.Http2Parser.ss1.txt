@@ -1,0 +1,264 @@
+20
+-----CSCI578-----
+
+
+
+    private void readContinuationFrame(int streamId, int flags, int payloadSize)
+            throws Http2Exception, IOException {
+        if (headersCurrentStream == -1) {
+            // No headers to continue
+            throw new ConnectionException(sm.getString(
+                    "http2Parser.processFrameContinuation.notExpected", connectionId,
+                    Integer.toString(streamId)), Http2Error.PROTOCOL_ERROR);
+        }
+
+        boolean endOfHeaders = Flags.isEndOfHeaders(flags);
+        readHeaderBlock(payloadSize, endOfHeaders);
+
+        if (endOfHeaders) {
+            output.headersEnd(streamId);
+            headersCurrentStream = -1;
+            if (headersEndStream) {
+                output.receiveEndOfStream(streamId);
+                headersEndStream = false;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    public static boolean hasPadding(int flags) {
+        return (flags & 0x08) > 0;
+    }
+-----CSCI578-----
+
+
+
+    private void readPushPromiseFrame(int streamId) throws Http2Exception {
+        throw new ConnectionException(sm.getString("http2Parser.processFramePushPromise",
+                connectionId, Integer.valueOf(streamId)), Http2Error.PROTOCOL_ERROR);
+    }
+-----CSCI578-----
+
+
+
+    private void swallow(int streamId, int len, boolean mustBeZero)
+            throws IOException, ConnectionException {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("http2Parser.swallow.debug", connectionId,
+                    Integer.toString(streamId), Integer.toString(len)));
+        }
+        if (len == 0) {
+            return;
+        }
+        int read = 0;
+        byte[] buffer = new byte[1024];
+        while (read < len) {
+            int thisTime = Math.min(buffer.length, len - read);
+            input.fill(true, buffer, 0, thisTime);
+            if (mustBeZero) {
+                // Validate the padding is zero since receiving non-zero padding
+                // is a strong indication of either a faulty client or a server
+                // side bug.
+                for (int i = 0; i < thisTime; i++) {
+                    if (buffer[i] != 0) {
+                        throw new ConnectionException(sm.getString("http2Parser.nonZeroPadding",
+                                connectionId, Integer.toString(streamId)), Http2Error.PROTOCOL_ERROR);
+                    }
+                }
+            }
+            read += thisTime;
+        }
+    }
+-----CSCI578-----
+
+
+
+    public static boolean isAck(int flags) {
+        return (flags & 0x01) > 0;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public static int getOneByte(byte[] input, int pos) {
+        return (input[pos] & 0xFF);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public static boolean isBit7Set(byte input) {
+        return (input & 0x80) > 0;
+    }
+-----CSCI578-----
+
+
+
+    public static FrameType valueOf(int i) {
+        switch(i) {
+        case 0:
+            return DATA;
+        case 1:
+            return HEADERS;
+        case 2:
+            return PRIORITY;
+        case 3:
+            return RST;
+        case 4:
+            return SETTINGS;
+        case 5:
+            return PUSH_PROMISE;
+        case 6:
+            return PING;
+        case 7:
+            return GOAWAY;
+        case 8:
+            return WINDOW_UPDATE;
+        case 9:
+            return CONTINUATION;
+        default:
+            return UNKNOWN;
+        }
+    }
+-----CSCI578-----
+
+
+
+    public static int getThreeBytes(byte[] input, int firstByte) {
+        return ((input[firstByte] & 0xFF) << 16) + ((input[firstByte + 1] & 0xFF) << 8) +
+                (input[firstByte + 2] & 0xFF);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read and process a single frame. Once the start of a frame is read, the
+     * remainder will be read using blocking IO.
+     *
+     * @param block Should this method block until a frame is available if no
+     *              frame is available immediately?
+     *
+     * @return <code>true</code> if a frame was read otherwise
+     *         <code>false</code>
+     *
+     * @throws IOException If an IO error occurs while trying to read a frame
+     */
+    boolean readFrame(boolean block) throws Http2Exception, IOException {
+        return readFrame(block, null);
+    }
+
+
+
+    private boolean readFrame(boolean block, FrameType expected)
+            throws IOException, Http2Exception {
+
+        if (!input.fill(block, frameHeaderBuffer)) {
+            return false;
+        }
+
+        int payloadSize = ByteUtil.getThreeBytes(frameHeaderBuffer, 0);
+        FrameType frameType = FrameType.valueOf(ByteUtil.getOneByte(frameHeaderBuffer, 3));
+        int flags = ByteUtil.getOneByte(frameHeaderBuffer, 4);
+        int streamId = ByteUtil.get31Bits(frameHeaderBuffer, 5);
+
+        try {
+            validateFrame(expected, frameType, streamId, flags, payloadSize);
+        } catch (StreamException se) {
+            swallow(streamId, payloadSize, false);
+            throw se;
+        }
+
+        switch (frameType) {
+        case DATA:
+            readDataFrame(streamId, flags, payloadSize);
+            break;
+        case HEADERS:
+            readHeadersFrame(streamId, flags, payloadSize);
+            break;
+        case PRIORITY:
+            readPriorityFrame(streamId);
+            break;
+        case RST:
+            readRstFrame(streamId);
+            break;
+        case SETTINGS:
+            readSettingsFrame(flags, payloadSize);
+            break;
+        case PUSH_PROMISE:
+            readPushPromiseFrame(streamId);
+            break;
+        case PING:
+            readPingFrame(flags);
+            break;
+        case GOAWAY:
+            readGoawayFrame(payloadSize);
+            break;
+        case WINDOW_UPDATE:
+            readWindowUpdateFrame(streamId);
+            break;
+        case CONTINUATION:
+            readContinuationFrame(streamId, flags, payloadSize);
+            break;
+        case UNKNOWN:
+            readUnknownFrame(streamId, frameType, flags, payloadSize);
+        }
+
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    public static boolean isEndOfStream(int flags) {
+        return (flags & 0x01) > 0;
+    }
+-----CSCI578-----
+
+
+
+    public static boolean isEndOfHeaders(int flags) {
+        return (flags & 0x04) > 0;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void readPriorityFrame(int streamId) throws Http2Exception, IOException {
+        byte[] payload = new byte[5];
+        input.fill(true, payload);
+
+        boolean exclusive = ByteUtil.isBit7Set(payload[0]);
+        int parentStreamId = ByteUtil.get31Bits(payload, 0);
+        int weight = ByteUtil.getOneByte(payload, 4) + 1;
+
+        if (streamId == parentStreamId) {
+            throw new StreamException(sm.getString("http2Parser.processFramePriority.invalidParent",
+                    connectionId, Integer.valueOf(streamId)), Http2Error.PROTOCOL_ERROR, streamId);
+        }
+
+        output.reprioritise(streamId, parentStreamId, exclusive, weight);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public static int get31Bits(byte[] input, int firstByte) {
+        return ((input[firstByte] & 0x7F) << 24) + ((input[firstByte + 1] & 0xFF) << 16) +
+                ((input[firstByte + 2] & 0xFF) << 8) + (input[firstByte + 3] & 0xFF);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    void throwException(String msg, Http2Error error) throws ConnectionException {
+        throw new ConnectionException(msg, error);
+    }

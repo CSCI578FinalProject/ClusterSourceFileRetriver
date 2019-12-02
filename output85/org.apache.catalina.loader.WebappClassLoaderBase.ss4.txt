@@ -1,0 +1,230 @@
+12
+-----CSCI578-----
+
+
+
+    /**
+     * Find specified class in local repositories.
+     *
+     * @param name The binary name of the class to be loaded
+     *
+     * @return the loaded class, or null if the class isn't found
+     */
+    protected Class<?> findClassInternal(String name) {
+
+        checkStateForResourceLoading(name);
+
+        String path = binaryNameToPath(name, true);
+
+        if (name == null || path == null) {
+            return null;
+        }
+
+        ResourceEntry entry = resourceEntries.get(path);
+        WebResource resource = null;
+
+        if (entry == null) {
+            resource = resources.getClassLoaderResource(path);
+
+            if (!resource.exists()) {
+                return null;
+            }
+
+            entry = new ResourceEntry();
+            entry.lastModified = resource.getLastModified();
+
+            // Add the entry in the local resource repository
+            synchronized (resourceEntries) {
+                // Ensures that all the threads which may be in a race to load
+                // a particular class all end up with the same ResourceEntry
+                // instance
+                ResourceEntry entry2 = resourceEntries.get(path);
+                if (entry2 == null) {
+                    resourceEntries.put(path, entry);
+                } else {
+                    entry = entry2;
+                }
+            }
+        }
+
+        Class<?> clazz = entry.loadedClass;
+        if (clazz != null)
+            return clazz;
+
+        synchronized (getClassLoadingLock(name)) {
+            clazz = entry.loadedClass;
+            if (clazz != null)
+                return clazz;
+
+            if (resource == null) {
+                resource = resources.getClassLoaderResource(path);
+            }
+
+            if (!resource.exists()) {
+                return null;
+            }
+
+            byte[] binaryContent = resource.getContent();
+            Manifest manifest = resource.getManifest();
+            URL codeBase = resource.getCodeBase();
+            Certificate[] certificates = resource.getCertificates();
+
+            if (transformers.size() > 0) {
+                // If the resource is a class just being loaded, decorate it
+                // with any attached transformers
+                String className = name.endsWith(CLASS_FILE_SUFFIX) ?
+                        name.substring(0, name.length() - CLASS_FILE_SUFFIX.length()) : name;
+                String internalName = className.replace(".", "/");
+
+                for (ClassFileTransformer transformer : this.transformers) {
+                    try {
+                        byte[] transformed = transformer.transform(
+                                this, internalName, null, null, binaryContent);
+                        if (transformed != null) {
+                            binaryContent = transformed;
+                        }
+                    } catch (IllegalClassFormatException e) {
+                        log.error(sm.getString("webappClassLoader.transformError", name), e);
+                        return null;
+                    }
+                }
+            }
+
+            // Looking up the package
+            String packageName = null;
+            int pos = name.lastIndexOf('.');
+            if (pos != -1)
+                packageName = name.substring(0, pos);
+
+            Package pkg = null;
+
+            if (packageName != null) {
+                pkg = getPackage(packageName);
+                // Define the package (if null)
+                if (pkg == null) {
+                    try {
+                        if (manifest == null) {
+                            definePackage(packageName, null, null, null, null, null, null, null);
+                        } else {
+                            definePackage(packageName, manifest, codeBase);
+                        }
+                    } catch (IllegalArgumentException e) {
+                        // Ignore: normal error due to dual definition of package
+                    }
+                    pkg = getPackage(packageName);
+                }
+            }
+
+            if (securityManager != null) {
+
+                // Checking sealing
+                if (pkg != null) {
+                    boolean sealCheck = true;
+                    if (pkg.isSealed()) {
+                        sealCheck = pkg.isSealed(codeBase);
+                    } else {
+                        sealCheck = (manifest == null) || !isPackageSealed(packageName, manifest);
+                    }
+                    if (!sealCheck)
+                        throw new SecurityException
+                            ("Sealing violation loading " + name + " : Package "
+                             + packageName + " is sealed.");
+                }
+
+            }
+
+            try {
+                clazz = defineClass(name, binaryContent, 0,
+                        binaryContent.length, new CodeSource(codeBase, certificates));
+            } catch (UnsupportedClassVersionError ucve) {
+                throw new UnsupportedClassVersionError(
+                        ucve.getLocalizedMessage() + " " +
+                        sm.getString("webappClassLoader.wrongVersion",
+                                name));
+            }
+            entry.loadedClass = clazz;
+        }
+
+        return clazz;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Returns true if the specified package name is sealed according to the
+     * given manifest.
+     *
+     * @param name Path name to check
+     * @param man Associated manifest
+     * @return <code>true</code> if the manifest associated says it is sealed
+     */
+    protected boolean isPackageSealed(String name, Manifest man) {
+
+        String path = name.replace('.', '/') + '/';
+        Attributes attr = man.getAttributes(path);
+        String sealed = null;
+        if (attr != null) {
+            sealed = attr.getValue(Name.SEALED);
+        }
+        if (sealed == null) {
+            if ((attr = man.getMainAttributes()) != null) {
+                sealed = attr.getValue(Name.SEALED);
+            }
+        }
+        return "true".equalsIgnoreCase(sealed);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * @return the manifest associated with this resource or @null if none.
+     *
+     * @see java.util.jar.JarFile#getManifest()
+     */
+    Manifest getManifest();
+-----CSCI578-----
+
+
+    /**
+     * @return the code base for this resource that will be used when looking up the
+     * assigned permissions for the code base in the security policy file when
+     * running under a security manager.
+     */
+    URL getCodeBase();
+-----CSCI578-----
+
+
+    /**
+     * @return the certificates that were used to sign this resource to verify
+     * it or @null if none.
+     *
+     * @see java.util.jar.JarEntry#getCertificates()
+     */
+    Certificate[] getCertificates();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public URL getCodeBase() {
+        return webResource.getCodeBase();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Certificate[] getCertificates() {
+        return webResource.getCertificates();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Manifest getManifest() {
+        return webResource.getManifest();
+    }

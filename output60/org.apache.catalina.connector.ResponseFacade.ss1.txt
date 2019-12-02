@@ -1,0 +1,120 @@
+6
+-----CSCI578-----
+
+
+
+    public void addIntHeader(String name, int value) {
+
+        if (isCommitted())
+            return;
+
+        response.addIntHeader(name, value);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add the specified integer header to the specified value.
+     *
+     * @param name Name of the header to set
+     * @param value Integer value to be set
+     */
+    public void addIntHeader(String name, int value) {
+
+        if (name == null || name.length() == 0) {
+            return;
+        }
+
+        if (isCommitted())
+            return;
+
+        // Ignore any call from an included servlet
+        if (included)
+            return;
+
+        addHeader(name, "" + value);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add the specified header to the specified value.
+     *
+     * @param name Name of the header to set
+     * @param value Value to be set
+     */
+    public void addHeader(String name, String value) {
+
+        if (name == null || name.length() == 0 || value == null) {
+            return;
+        }
+
+        if (isCommitted())
+            return;
+
+        // Ignore any call from an included servlet
+        if (included)
+            return;
+
+        coyoteResponse.addHeader(name, value);
+
+    }
+-----CSCI578-----
+
+
+
+    public void addHeader(String name, String value) {
+        char cc=name.charAt(0);
+        if( cc=='C' || cc=='c' ) {
+            if( checkSpecialHeader(name, value) )
+            return;
+        }
+        headers.addValue(name).setString( value );
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Has the output of this response already been committed?
+     */
+    public boolean isCommitted() {
+        return (coyoteResponse.isCommitted());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add the specified date header to the specified value.
+     *
+     * @param name Name of the header to set
+     * @param value Date value to be set
+     */
+    public void addDateHeader(String name, long value) {
+
+        if (name == null || name.length() == 0) {
+            return;
+        }
+
+        if (isCommitted())
+            return;
+
+        // Ignore any call from an included servlet
+        if (included) {
+            return;
+        }
+
+        if (format == null) {
+            format = new SimpleDateFormat(DateTool.HTTP_RESPONSE_DATE_HEADER,
+                                          Locale.US);
+            format.setTimeZone(TimeZone.getTimeZone("GMT"));
+        }
+
+        addHeader(name, FastHttpDateFormat.formatDate(value, format));
+
+    }

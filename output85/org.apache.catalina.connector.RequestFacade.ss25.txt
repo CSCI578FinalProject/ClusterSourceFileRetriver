@@ -1,0 +1,53 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public String[] getParameterValues(String name) {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        String[] ret = null;
+
+        /*
+         * Clone the returned array only if there is a security manager
+         * in place, so that performance won't suffer in the non-secure case
+         */
+        if (SecurityUtil.isPackageProtectionEnabled()){
+            ret = AccessController.doPrivileged(
+                new GetParameterValuePrivilegedAction(name));
+            if (ret != null) {
+                ret = ret.clone();
+            }
+        } else {
+            ret = request.getParameterValues(name);
+        }
+
+        return ret;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the defined values for the specified request parameter, if any;
+     * otherwise, return <code>null</code>.
+     *
+     * @param name Name of the desired request parameter
+     */
+    @Override
+    public String[] getParameterValues(String name) {
+
+        if (!parametersParsed) {
+            parseParameters();
+        }
+
+        return coyoteRequest.getParameters().getParameterValues(name);
+
+    }
+-----CSCI578-----

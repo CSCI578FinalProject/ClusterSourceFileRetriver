@@ -1,0 +1,94 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Try to get user from the session, if possible.
+     * @param in_session The session
+     * @return the user
+     */
+    public static Object guessUserFromSession(final Session in_session) {
+        if (null == in_session) {
+            return null;
+        }
+        if (in_session.getPrincipal() != null) {
+            return in_session.getPrincipal().getName();
+        }
+        HttpSession httpSession = in_session.getSession();
+        if (httpSession == null)
+            return null;
+
+        try {
+            Object user = null;
+            // First search "known locations"
+            for (int i = 0; i < USER_TEST_ATTRIBUTES.length; ++i) {
+                Object obj = httpSession.getAttribute(USER_TEST_ATTRIBUTES[i]);
+                if (null != obj) {
+                    user = obj;
+                    break;
+                }
+                obj = httpSession.getAttribute(USER_TEST_ATTRIBUTES[i].toLowerCase(Locale.ENGLISH));
+                if (null != obj) {
+                    user = obj;
+                    break;
+                }
+                obj = httpSession.getAttribute(USER_TEST_ATTRIBUTES[i].toUpperCase(Locale.ENGLISH));
+                if (null != obj) {
+                    user = obj;
+                    break;
+                }
+            }
+
+            if (null != user) {
+                return user;
+            }
+
+            // Last guess: iterate over all attributes, to find a java.security.Principal or javax.security.auth.Subject
+            // If there is only one, consider it to be /the/ user
+            final List<Object> principalArray = new ArrayList<>();
+            for (Enumeration<String> enumeration = httpSession.getAttributeNames(); enumeration.hasMoreElements();) {
+                String name = enumeration.nextElement();
+                Object obj = httpSession.getAttribute(name);
+                if (obj instanceof Principal || obj instanceof Subject) {
+                    principalArray.add(obj);
+                }
+            }
+            if (principalArray.size() == 1) {
+                user = principalArray.get(0);
+            }
+
+            if (null != user) {
+                return user;
+            }
+
+            return user;
+        } catch (IllegalStateException ise) {
+            //ignore: invalidated session
+            return null;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Try to get user name from the session, if possible.
+     * @param in_session The Servlet session
+     * @return the user name
+     */
+    public static String guessDisplayUserFromSession(Session in_session) {
+        Object user = SessionUtils.guessUserFromSession(in_session);
+        return escapeXml(user);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the authenticated Principal that is associated with this Session.
+     * This provides an <code>Authenticator</code> with a means to cache a
+     * previously authenticated Principal, and avoid potentially expensive
+     * <code>Realm.authenticate()</code> calls on every request.  If there
+     * is no current associated Principal, return <code>null</code>.
+     */
+    public Principal getPrincipal();

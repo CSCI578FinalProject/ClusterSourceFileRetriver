@@ -1,0 +1,600 @@
+32
+-----CSCI578-----
+
+
+    /**
+     * Gets the time (in milliseconds) it took to start this context.
+     *
+     * @return Time (in milliseconds) it took to start this context.
+     */
+    public long getStartupTime() {
+        return startupTime;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- protected Methods
+
+
+    /**
+     * Process the application classes annotations, if it exists.
+     */
+    protected void applicationAnnotationsConfig() {
+
+        long t1=System.currentTimeMillis();
+
+        WebAnnotationSet.loadApplicationAnnotations(context);
+
+        long t2=System.currentTimeMillis();
+        if (context instanceof StandardContext) {
+            ((StandardContext) context).setStartupTime(t2-t1+
+                    ((StandardContext) context).getStartupTime());
+        }
+    }
+-----CSCI578-----
+
+
+    public void setStartupTime(long startupTime) {
+        this.startupTime = startupTime;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the set of security role reference names associated with
+     * this servlet, if any; otherwise return a zero-length array.
+     */
+    public String[] findSecurityReferences();
+-----CSCI578-----
+
+
+    /**
+     * Validate the usage of security role names in the web application
+     * deployment descriptor.  If any problems are found, issue warning
+     * messages (for backwards compatibility) and add the missing roles.
+     * (To make these problems fatal instead, simply set the <code>ok</code>
+     * instance variable to <code>false</code> as well).
+     */
+    protected void validateSecurityRoles() {
+
+        // Check role names used in <security-constraint> elements
+        SecurityConstraint constraints[] = context.findConstraints();
+        for (int i = 0; i < constraints.length; i++) {
+            String roles[] = constraints[i].findAuthRoles();
+            for (int j = 0; j < roles.length; j++) {
+                if (!"*".equals(roles[j]) &&
+                    !context.findSecurityRole(roles[j])) {
+                    log.warn(sm.getString("contextConfig.role.auth", roles[j]));
+                    context.addSecurityRole(roles[j]);
+                }
+            }
+        }
+
+        // Check role names used in <servlet> elements
+        Container wrappers[] = context.findChildren();
+        for (int i = 0; i < wrappers.length; i++) {
+            Wrapper wrapper = (Wrapper) wrappers[i];
+            String runAs = wrapper.getRunAs();
+            if ((runAs != null) && !context.findSecurityRole(runAs)) {
+                log.warn(sm.getString("contextConfig.role.runas", runAs));
+                context.addSecurityRole(runAs);
+            }
+            String names[] = wrapper.findSecurityReferences();
+            for (int j = 0; j < names.length; j++) {
+                String link = wrapper.findSecurityReference(names[j]);
+                if ((link != null) && !context.findSecurityRole(link)) {
+                    log.warn(sm.getString("contextConfig.role.link", link));
+                    context.addSecurityRole(link);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if the specified security role is defined
+     * for this application; otherwise return <code>false</code>.
+     *
+     * @param role Security role to verify
+     */
+    public boolean findSecurityRole(String role);
+-----CSCI578-----
+
+
+
+    /**
+     * @return the run-as identity for this servlet.
+     */
+    public String getRunAs();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the set of security constraints for this web application.
+     * If there are none, a zero-length array is returned.
+     */
+    public SecurityConstraint[] findConstraints();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the security role link for the specified security role
+     * reference name, if any; otherwise return <code>null</code>.
+     *
+     * @param name Security role reference used within this servlet
+     */
+    public String findSecurityReference(String name);
+-----CSCI578-----
+
+
+    @Override
+    public String getRunAsRole() {
+        return wrapper.getRunAs();
+    }
+-----CSCI578-----
+
+
+    public String getLink() {
+        return (this.link);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Scan JARs that contain web-fragment.xml files that will be used to
+     * configure this application to see if they also contain static resources.
+     * If static resources are found, add them to the context. Resources are
+     * added in web-fragment.xml priority order.
+     * @param fragments The set of fragments that will be scanned for
+     *  static resources
+     */
+    protected void processResourceJARs(Set<WebXml> fragments) {
+        for (WebXml fragment : fragments) {
+            URL url = fragment.getURL();
+            try {
+                if ("jar".equals(url.getProtocol())) {
+                    try (Jar jar = JarFactory.newInstance(url)) {
+                        jar.nextEntry();
+                        String entryName = jar.getEntryName();
+                        while (entryName != null) {
+                            if (entryName.startsWith("META-INF/resources/")) {
+                                context.getResources().createWebResourceSet(
+                                        WebResourceRoot.ResourceSetType.RESOURCE_JAR,
+                                        "/", url, "/META-INF/resources");
+                                break;
+                            }
+                            jar.nextEntry();
+                            entryName = jar.getEntryName();
+                        }
+                    }
+                } else if ("file".equals(url.getProtocol())) {
+                    File file = new File(url.toURI());
+                    File resources = new File(file, "META-INF/resources/");
+                    if (resources.isDirectory()) {
+                        context.getResources().createWebResourceSet(
+                                WebResourceRoot.ResourceSetType.RESOURCE_JAR,
+                                "/", file.getAbsolutePath(), null, "/");
+                    }
+                }
+            } catch (IOException ioe) {
+                log.error(sm.getString("contextConfig.resourceJarFail", url,
+                        context.getName()));
+            } catch (URISyntaxException e) {
+                log.error(sm.getString("contextConfig.resourceJarFail", url,
+                    context.getName()));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public String getDisplayName() {
+        return (this.displayName);
+    }
+-----CSCI578-----
+
+
+    public String[] getDispatcherNames() {
+        ArrayList<String> result = new ArrayList<>();
+        if ((dispatcherMapping & FORWARD) > 0) {
+            result.add(DispatcherType.FORWARD.name());
+        }
+        if ((dispatcherMapping & INCLUDE) > 0) {
+            result.add(DispatcherType.INCLUDE.name());
+        }
+        if ((dispatcherMapping & REQUEST) > 0) {
+            result.add(DispatcherType.REQUEST.name());
+        }
+        if ((dispatcherMapping & ERROR) > 0) {
+            result.add(DispatcherType.ERROR.name());
+        }
+        if ((dispatcherMapping & ASYNC) > 0) {
+            result.add(DispatcherType.ASYNC.name());
+        }
+        return result.toArray(new String[result.size()]);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Will the parsing of web.xml, web-fragment.xml, *.tld, *.jspx, *.tagx and
+     * tagplugin.xml files for this Context block the use of external entities?
+     *
+     * @return true if access to external entities is blocked
+     */
+    public boolean getXmlBlockExternal();
+-----CSCI578-----
+
+
+    /**
+     * Add a ServletContainerInitializer instance to this web application.
+     *
+     * @param sci       The instance to add
+     * @param classes   The classes in which the initializer expressed an
+     *                  interest
+     */
+    public void addServletContainerInitializer(
+            ServletContainerInitializer sci, Set<Class<?>> classes);
+-----CSCI578-----
+
+
+    public String getDescription() {
+        return (this.description);
+    }
+-----CSCI578-----
+
+
+    public String getDisplayName() {
+        return (this.displayName);
+    }
+-----CSCI578-----
+
+
+    protected WebXml createWebXml() {
+        return new WebXml();
+    }
+-----CSCI578-----
+
+
+    public String getDescription() {
+        return (this.description);
+    }
+-----CSCI578-----
+
+
+    public String getName() {
+        return (this.name);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Identify the application web.xml to be used and obtain an input source
+     * for it.
+     * @return an input source to the context web.xml
+     */
+    protected InputSource getContextWebXmlSource() {
+        InputStream stream = null;
+        InputSource source = null;
+        URL url = null;
+
+        String altDDName = null;
+
+        // Open the application web.xml file, if it exists
+        ServletContext servletContext = context.getServletContext();
+        try {
+            if (servletContext != null) {
+                altDDName = (String)servletContext.getAttribute(Globals.ALT_DD_ATTR);
+                if (altDDName != null) {
+                    try {
+                        stream = new FileInputStream(altDDName);
+                        url = new File(altDDName).toURI().toURL();
+                    } catch (FileNotFoundException e) {
+                        log.error(sm.getString("contextConfig.altDDNotFound",
+                                               altDDName));
+                    } catch (MalformedURLException e) {
+                        log.error(sm.getString("contextConfig.applicationUrl"));
+                    }
+                }
+                else {
+                    stream = servletContext.getResourceAsStream
+                        (Constants.ApplicationWebXml);
+                    try {
+                        url = servletContext.getResource(
+                                Constants.ApplicationWebXml);
+                    } catch (MalformedURLException e) {
+                        log.error(sm.getString("contextConfig.applicationUrl"));
+                    }
+                }
+            }
+            if (stream == null || url == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("contextConfig.applicationMissing") + " " + context);
+                }
+            } else {
+                source = new InputSource(url.toExternalForm());
+                source.setByteStream(stream);
+            }
+        } finally {
+            if (source == null && stream != null) {
+                try {
+                    stream.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+        }
+
+        return source;
+    }
+-----CSCI578-----
+
+
+    public String getRunAs() {
+        return (this.runAs);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Scan the web.xml files that apply to the web application and merge them
+     * using the rules defined in the spec. For the global web.xml files,
+     * where there is duplicate configuration, the most specific level wins. ie
+     * an application's web.xml takes precedence over the host level or global
+     * web.xml file.
+     */
+    protected void webConfig() {
+        /*
+         * Anything and everything can override the global and host defaults.
+         * This is implemented in two parts
+         * - Handle as a web fragment that gets added after everything else so
+         *   everything else takes priority
+         * - Mark Servlets as overridable so SCI configuration can replace
+         *   configuration from the defaults
+         */
+
+        /*
+         * The rules for annotation scanning are not as clear-cut as one might
+         * think. Tomcat implements the following process:
+         * - As per SRV.1.6.2, Tomcat will scan for annotations regardless of
+         *   which Servlet spec version is declared in web.xml. The EG has
+         *   confirmed this is the expected behaviour.
+         * - As per http://java.net/jira/browse/SERVLET_SPEC-36, if the main
+         *   web.xml is marked as metadata-complete, JARs are still processed
+         *   for SCIs.
+         * - If metadata-complete=true and an absolute ordering is specified,
+         *   JARs excluded from the ordering are also excluded from the SCI
+         *   processing.
+         * - If an SCI has a @HandlesType annotation then all classes (except
+         *   those in JARs excluded from an absolute ordering) need to be
+         *   scanned to check if they match.
+         */
+        WebXmlParser webXmlParser = new WebXmlParser(context.getXmlNamespaceAware(),
+                context.getXmlValidation(), context.getXmlBlockExternal());
+
+        Set<WebXml> defaults = new HashSet<>();
+        defaults.add(getDefaultWebXmlFragment(webXmlParser));
+
+        WebXml webXml = createWebXml();
+
+        // Parse context level web.xml
+        InputSource contextWebXml = getContextWebXmlSource();
+        if (!webXmlParser.parseWebXml(contextWebXml, webXml, false)) {
+            ok = false;
+        }
+
+        ServletContext sContext = context.getServletContext();
+
+        // Ordering is important here
+
+        // Step 1. Identify all the JARs packaged with the application and those
+        // provided by the container. If any of the application JARs have a
+        // web-fragment.xml it will be parsed at this point. web-fragment.xml
+        // files are ignored for container provided JARs.
+        Map<String,WebXml> fragments = processJarsForWebFragments(webXml, webXmlParser);
+
+        // Step 2. Order the fragments.
+        Set<WebXml> orderedFragments = null;
+        orderedFragments =
+                WebXml.orderWebFragments(webXml, fragments, sContext);
+
+        // Step 3. Look for ServletContainerInitializer implementations
+        if (ok) {
+            processServletContainerInitializers();
+        }
+
+        if  (!webXml.isMetadataComplete() || typeInitializerMap.size() > 0) {
+            // Step 4. Process /WEB-INF/classes for annotations and
+            // @HandlesTypes matches
+            Map<String,JavaClassCacheEntry> javaClassCache = new HashMap<>();
+
+            if (ok) {
+                WebResource[] webResources =
+                        context.getResources().listResources("/WEB-INF/classes");
+
+                for (WebResource webResource : webResources) {
+                    processAnnotationsWebResource(webResource, webXml,
+                            webXml.isMetadataComplete(), javaClassCache);
+                }
+            }
+
+            // Step 5. Process JARs for annotations for annotations and
+            // @HandlesTypes matches - only need to process those fragments we
+            // are going to use (remember orderedFragments includes any
+            // container fragments)
+            if (ok) {
+                processAnnotations(
+                        orderedFragments, webXml.isMetadataComplete(), javaClassCache);
+            }
+
+            // Cache, if used, is no longer required so clear it
+            javaClassCache.clear();
+        }
+
+        if (!webXml.isMetadataComplete()) {
+            // Step 6. Merge web-fragment.xml files into the main web.xml
+            // file.
+            if (ok) {
+                ok = webXml.merge(orderedFragments);
+            }
+
+            // Step 7. Apply global defaults
+            // Have to merge defaults before JSP conversion since defaults
+            // provide JSP servlet definition.
+            webXml.merge(defaults);
+
+            // Step 8. Convert explicitly mentioned jsps to servlets
+            if (ok) {
+                convertJsps(webXml);
+            }
+
+            // Step 9. Apply merged web.xml to Context
+            if (ok) {
+                configureContext(webXml);
+            }
+        } else {
+            webXml.merge(defaults);
+            convertJsps(webXml);
+            configureContext(webXml);
+        }
+
+        if (context.getLogEffectiveWebXml()) {
+            log.info("web.xml:\n" + webXml.toXml());
+        }
+
+        // Always need to look for static resources
+        // Step 10. Look for static resources packaged in JARs
+        if (ok) {
+            // Spec does not define an order.
+            // Use ordered JARs followed by remaining JARs
+            Set<WebXml> resourceJars = new LinkedHashSet<>();
+            for (WebXml fragment : orderedFragments) {
+                resourceJars.add(fragment);
+            }
+            for (WebXml fragment : fragments.values()) {
+                if (!resourceJars.contains(fragment)) {
+                    resourceJars.add(fragment);
+                }
+            }
+            processResourceJARs(resourceJars);
+            // See also StandardContext.resourcesStart() for
+            // WEB-INF/classes/META-INF/resources configuration
+        }
+
+        // Step 11. Apply the ServletContainerInitializer config to the
+        // context
+        if (ok) {
+            for (Map.Entry<ServletContainerInitializer,
+                    Set<Class<?>>> entry :
+                        initializerClassMap.entrySet()) {
+                if (entry.getValue().isEmpty()) {
+                    context.addServletContainerInitializer(
+                            entry.getKey(), null);
+                } else {
+                    context.addServletContainerInitializer(
+                            entry.getKey(), entry.getValue());
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    protected void processAnnotationsWebResource(WebResource webResource,
+            WebXml fragment, boolean handlesTypesOnly,
+            Map<String,JavaClassCacheEntry> javaClassCache) {
+
+        if (webResource.isDirectory()) {
+            WebResource[] webResources =
+                    webResource.getWebResourceRoot().listResources(
+                            webResource.getWebappPath());
+            if (webResources.length > 0) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString(
+                            "contextConfig.processAnnotationsWebDir.debug",
+                            webResource.getURL()));
+                }
+                for (WebResource r : webResources) {
+                    processAnnotationsWebResource(r, fragment, handlesTypesOnly, javaClassCache);
+                }
+            }
+        } else if (webResource.isFile() &&
+                webResource.getName().endsWith(".class")) {
+            try (InputStream is = webResource.getInputStream()) {
+                processAnnotationsStream(is, fragment, handlesTypesOnly, javaClassCache);
+            } catch (IOException e) {
+                log.error(sm.getString("contextConfig.inputStreamWebResource",
+                        webResource.getWebappPath()),e);
+            } catch (ClassFormatException e) {
+                log.error(sm.getString("contextConfig.inputStreamWebResource",
+                        webResource.getWebappPath()),e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Should the effective web.xml for this context be logged on context start?
+     *
+     * @return true if the reconstructed web.xml that will be used for the
+     *   webapp should be logged
+     */
+    public boolean getLogEffectiveWebXml();
+-----CSCI578-----
+
+
+    public String getServletName() {
+        return (this.servletName);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the Servlet context for which this Context is a facade.
+     */
+    public ServletContext getServletContext();
+-----CSCI578-----
+
+
+    /**
+     * @return the Resources with which this Context is associated.
+     */
+    public WebResourceRoot getResources();
+-----CSCI578-----
+
+
+    /**
+     * Obtain the list of all of the WebResources in the specified directory.
+     *
+     * @param path  The path for the resource of interest relative to the root
+     *              of the web application. It must start with '/'.
+     *
+     * @return  The list of resources. If path does not refer to a directory
+     *          then a zero length array will be returned.
+     */
+    WebResource[] listResources(String path);
+-----CSCI578-----
+
+
+    /**
+     * @return a reference to the WebResourceRoot of which this WebResource is a
+     * part.
+     */
+    WebResourceRoot getWebResourceRoot();
+-----CSCI578-----
+
+
+    @Override
+    public WebResourceRoot getWebResourceRoot() {
+        return webResource.getWebResourceRoot();
+    }

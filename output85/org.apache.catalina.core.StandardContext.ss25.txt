@@ -1,0 +1,76 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Set the location.
+     *
+     * @param location The new location
+     */
+    public void setLocation(String location) {
+
+        //        if ((location == null) || !location.startsWith("/"))
+        //            throw new IllegalArgumentException
+        //                ("Error Page Location must start with a '/'");
+        this.location = UDecoder.URLDecode(location);
+
+    }
+-----CSCI578-----
+
+
+
+
+    /**
+     * Add an error page for the specified error or Java exception.
+     *
+     * @param errorPage The error page definition to be added
+     */
+    @Override
+    public void addErrorPage(ErrorPage errorPage) {
+        // Validate the input parameters
+        if (errorPage == null)
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.errorPage.required"));
+        String location = errorPage.getLocation();
+        if ((location != null) && !location.startsWith("/")) {
+            if (isServlet22()) {
+                if(log.isDebugEnabled())
+                    log.debug(sm.getString("standardContext.errorPage.warning",
+                                 location));
+                errorPage.setLocation("/" + location);
+            } else {
+                throw new IllegalArgumentException
+                    (sm.getString("standardContext.errorPage.error",
+                                  location));
+            }
+        }
+
+        // Add the specified error page to our internal collections
+        String exceptionType = errorPage.getExceptionType();
+        if (exceptionType != null) {
+            synchronized (exceptionPages) {
+                exceptionPages.put(exceptionType, errorPage);
+            }
+        } else {
+            synchronized (statusPages) {
+                statusPages.put(Integer.valueOf(errorPage.getErrorCode()),
+                                errorPage);
+            }
+        }
+        fireContainerEvent("addErrorPage", errorPage);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Are we processing a version 2.2 deployment descriptor?
+     *
+     * @return <code>true</code> if running a legacy Servlet 2.2 application
+     */
+    @Override
+    public boolean isServlet22() {
+        return XmlIdentifiers.WEB_22_PUBLIC.equals(publicId);
+    }

@@ -1,0 +1,106 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Load all sessions found in the persistence mechanism, assuming
+     * they are marked as valid and have not passed their expiration
+     * limit. If persistence is not supported, this method returns
+     * without doing anything.
+     * <p>
+     * Note that by default, this method is not called by the MiddleManager
+     * class. In order to use it, a subclass must specifically call it,
+     * for example in the start() and/or processPersistenceChecks() methods.
+     */
+    @Override
+    public void load() {
+
+        // Initialize our internal data structures
+        sessions.clear();
+
+        if (store == null)
+            return;
+
+        String[] ids = null;
+        try {
+            if (SecurityUtil.isPackageProtectionEnabled()){
+                try{
+                    ids = AccessController.doPrivileged(
+                            new PrivilegedStoreKeys());
+                }catch(PrivilegedActionException ex){
+                    Exception exception = ex.getException();
+                    log.error("Exception in the Store during load: "
+                              + exception, exception);
+                    return;
+                }
+            } else {
+                ids = store.keys();
+            }
+        } catch (IOException e) {
+            log.error("Can't load sessions from store, " + e.getMessage(), e);
+            return;
+        }
+
+        int n = ids.length;
+        if (n == 0)
+            return;
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("persistentManager.loading", String.valueOf(n)));
+
+        for (int i = 0; i < n; i++)
+            try {
+                swapIn(ids[i]);
+            } catch (IOException e) {
+                log.error("Failed load session from store, " + e.getMessage(), e);
+            }
+
+    }
+
+
+    /**
+     * Save all currently active sessions in the appropriate persistence
+     * mechanism, if any.  If persistence is not supported, this method
+     * returns without doing anything.
+     * <p>
+     * Note that by default, this method is not called by the MiddleManager
+     * class. In order to use it, a subclass must specifically call it,
+     * for example in the stop() and/or processPersistenceChecks() methods.
+     */
+    @Override
+    public void unload() {
+
+        if (store == null)
+            return;
+
+        Session sessions[] = findSessions();
+        int n = sessions.length;
+        if (n == 0)
+            return;
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("persistentManager.unloading",
+                             String.valueOf(n)));
+
+        for (int i = 0; i < n; i++)
+            try {
+                swapOut(sessions[i]);
+            } catch (IOException e) {
+                // This is logged in writeSession()
+            }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return an array containing the session identifiers of all Sessions
+     * currently saved in this Store.  If there are no such Sessions, a
+     * zero-length array is returned.
+     *
+     * @exception IOException if an input/output error occurred
+     */
+    public String[] keys() throws IOException;
+-----CSCI578-----

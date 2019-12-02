@@ -1,0 +1,57 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public static Serializable deserialize(byte[] data)
+        throws IOException, ClassNotFoundException, ClassCastException {
+        return deserialize(data,0,data.length);
+    }
+
+
+    public static Serializable deserialize(byte[] data, int offset, int length)
+        throws IOException, ClassNotFoundException, ClassCastException {
+        return deserialize(data,offset,length,null);
+    }
+
+
+    public static Serializable deserialize(byte[] data, int offset, int length, ClassLoader[] cls)
+        throws IOException, ClassNotFoundException, ClassCastException {
+        invokecount.addAndGet(1);
+        Object message = null;
+        if ( cls == null ) cls = new ClassLoader[0];
+        if (data != null && length > 0) {
+            InputStream  instream = new ByteArrayInputStream(data,offset,length);
+            ObjectInputStream stream = null;
+            stream = (cls.length>0)? new ReplicationStream(instream,cls):new ObjectInputStream(instream);
+            message = stream.readObject();
+            instream.close();
+            stream.close();
+        }
+        if ( message == null ) {
+            return null;
+        } else if (message instanceof Serializable)
+            return (Serializable) message;
+        else {
+            throw new ClassCastException(sm.getString("xByteBuffer.wrong.class", message.getClass().getName()));
+        }
+    }
+
+
+    /**
+     * Serializes a message into cluster data
+     * @param msg ClusterMessage
+     * @return serialized content as byte[] array
+     * @throws IOException Serialization error
+     */
+    public static byte[] serialize(Serializable msg) throws IOException {
+        ByteArrayOutputStream outs = new ByteArrayOutputStream();
+        ObjectOutputStream out = new ObjectOutputStream(outs);
+        out.writeObject(msg);
+        out.flush();
+        byte[] data = outs.toByteArray();
+        return data;
+    }
+-----CSCI578-----

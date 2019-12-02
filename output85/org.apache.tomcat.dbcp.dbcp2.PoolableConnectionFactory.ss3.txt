@@ -1,0 +1,197 @@
+25
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void destroyObject(PooledObject<PoolableConnection> p)
+            throws Exception {
+        p.getObject().reallyClose();
+    }
+-----CSCI578-----
+
+
+    protected final void closeInternal() throws SQLException {
+        try {
+            passivate();
+        } finally {
+            if (_conn != null) {
+                try {
+                    _conn.close();
+                } finally {
+                    _closed = true;
+                }
+            } else {
+                _closed = true;
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void passivateObject(PooledObject<PoolableConnection> p)
+            throws Exception {
+
+        validateLifetime(p);
+
+        PoolableConnection conn = p.getObject();
+        Boolean connAutoCommit = null;
+        if (rollbackOnReturn) {
+            connAutoCommit = Boolean.valueOf(conn.getAutoCommit());
+            if(!connAutoCommit.booleanValue() && !conn.isReadOnly()) {
+                conn.rollback();
+            }
+        }
+
+        conn.clearWarnings();
+
+        // DBCP-97 / DBCP-399 / DBCP-351 Idle connections in the pool should
+        // have autoCommit enabled
+        if (enableAutoCommitOnReturn) {
+            if (connAutoCommit == null) {
+                connAutoCommit = Boolean.valueOf(conn.getAutoCommit());
+            }
+            if(!connAutoCommit.booleanValue()) {
+                conn.setAutoCommit(true);
+            }
+        }
+
+        conn.passivate();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void activateObject(PooledObject<PoolableConnection> p)
+            throws Exception {
+
+        validateLifetime(p);
+
+        PoolableConnection conn = p.getObject();
+        conn.activate();
+
+        if (_defaultAutoCommit != null &&
+                conn.getAutoCommit() != _defaultAutoCommit.booleanValue()) {
+            conn.setAutoCommit(_defaultAutoCommit.booleanValue());
+        }
+        if (_defaultTransactionIsolation != UNKNOWN_TRANSACTIONISOLATION &&
+                conn.getTransactionIsolation() != _defaultTransactionIsolation) {
+            conn.setTransactionIsolation(_defaultTransactionIsolation);
+        }
+        if (_defaultReadOnly != null &&
+                conn.isReadOnly() != _defaultReadOnly.booleanValue()) {
+            conn.setReadOnly(_defaultReadOnly.booleanValue());
+        }
+        if (_defaultCatalog != null &&
+                !_defaultCatalog.equals(conn.getCatalog())) {
+            conn.setCatalog(_defaultCatalog);
+        }
+        conn.setDefaultQueryTimeout(defaultQueryTimeout);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected void initializeConnection(Connection conn) throws SQLException {
+        Collection<String> sqls = _connectionInitSqls;
+        if(conn.isClosed()) {
+            throw new SQLException("initializeConnection: connection closed");
+        }
+        if(null != sqls) {
+            try (Statement stmt = conn.createStatement();) {
+                for (String sql : sqls) {
+                    if (sql == null) {
+                        throw new NullPointerException(
+                                "null connectionInitSqls element");
+                    }
+                    stmt.execute(sql);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public void setStatementPool(
+            KeyedObjectPool<PStmtKey,DelegatingPreparedStatement> pool) {
+        _pstmtPool = pool;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public PooledObject<PoolableConnection> makeObject() throws Exception {
+        Connection conn = _connFactory.createConnection();
+        if (conn == null) {
+            throw new IllegalStateException("Connection factory returned null from createConnection");
+        }
+        try {
+            initializeConnection(conn);
+        } catch (SQLException sqle) {
+            // Make sure the connection is closed
+            try {
+                conn.close();
+            } catch (SQLException ignore) {
+                // ignore
+            }
+            // Rethrow original exception so it is visible to caller
+            throw sqle;
+        }
+
+        long connIndex = connectionIndex.getAndIncrement();
+
+        if(poolStatements) {
+            conn = new PoolingConnection(conn);
+            GenericKeyedObjectPoolConfig config = new GenericKeyedObjectPoolConfig();
+            config.setMaxTotalPerKey(-1);
+            config.setBlockWhenExhausted(false);
+            config.setMaxWaitMillis(0);
+            config.setMaxIdlePerKey(1);
+            config.setMaxTotal(maxOpenPreparedStatements);
+            if (dataSourceJmxName != null) {
+                StringBuilder base = new StringBuilder(dataSourceJmxName.toString());
+                base.append(Constants.JMX_CONNECTION_BASE_EXT);
+                base.append(Long.toString(connIndex));
+                config.setJmxNameBase(base.toString());
+                config.setJmxNamePrefix(Constants.JMX_STATEMENT_POOL_PREFIX);
+            } else {
+                config.setJmxEnabled(false);
+            }
+            KeyedObjectPool<PStmtKey,DelegatingPreparedStatement> stmtPool =
+                    new GenericKeyedObjectPool<>((PoolingConnection)conn, config);
+            ((PoolingConnection)conn).setStatementPool(stmtPool);
+            ((PoolingConnection) conn).setCacheState(_cacheState);
+        }
+
+        // Register this connection with JMX
+        ObjectName connJmxName;
+        if (dataSourceJmxName == null) {
+            connJmxName = null;
+        } else {
+            connJmxName = new ObjectName(dataSourceJmxName.toString() +
+                    Constants.JMX_CONNECTION_BASE_EXT + connIndex);
+        }
+
+        PoolableConnection pc = new PoolableConnection(conn,_pool, connJmxName,
+                                      _disconnectionSqlCodes, _fastFailValidation);
+
+        return new DefaultPooledObject<>(pc);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

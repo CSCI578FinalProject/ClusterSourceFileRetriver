@@ -1,0 +1,79 @@
+3
+-----CSCI578-----
+
+
+
+    public Future<Void> sendObjectByFuture(Object obj) {
+        FutureToSendHandler f2sh = new FutureToSendHandler(wsSession);
+        sendObjectByCompletion(obj, f2sh);
+        return f2sh;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Future<Void> sendObject(Object obj) {
+        return base.sendObjectByFuture(obj);
+    }
+
+
+
+    @Override
+    public void sendObject(Object obj, SendHandler completion) {
+        base.sendObjectByCompletion(obj, completion);
+    }
+-----CSCI578-----
+)
+    public void sendObjectByCompletion(Object obj, SendHandler completion) {
+
+        if (obj == null) {
+            throw new IllegalArgumentException(sm.getString("wsRemoteEndpoint.nullData"));
+        }
+        if (completion == null) {
+            throw new IllegalArgumentException(sm.getString("wsRemoteEndpoint.nullHandler"));
+        }
+
+        /*
+         * Note that the implementation will convert primitives and their object
+         * equivalents by default but that users are free to specify their own
+         * encoders and decoders for this if they wish.
+         */
+        Encoder encoder = findEncoder(obj);
+        if (encoder == null && Util.isPrimitive(obj.getClass())) {
+            String msg = obj.toString();
+            sendStringByCompletion(msg, completion);
+            return;
+        }
+        if (encoder == null && byte[].class.isAssignableFrom(obj.getClass())) {
+            ByteBuffer msg = ByteBuffer.wrap((byte[]) obj);
+            sendBytesByCompletion(msg, completion);
+            return;
+        }
+
+        try {
+            if (encoder instanceof Encoder.Text) {
+                String msg = ((Encoder.Text) encoder).encode(obj);
+                sendStringByCompletion(msg, completion);
+            } else if (encoder instanceof Encoder.TextStream) {
+                try (Writer w = getSendWriter()) {
+                    ((Encoder.TextStream) encoder).encode(obj, w);
+                }
+                completion.onResult(new SendResult());
+            } else if (encoder instanceof Encoder.Binary) {
+                ByteBuffer msg = ((Encoder.Binary) encoder).encode(obj);
+                sendBytesByCompletion(msg, completion);
+            } else if (encoder instanceof Encoder.BinaryStream) {
+                try (OutputStream os = getSendStream()) {
+                    ((Encoder.BinaryStream) encoder).encode(obj, os);
+                }
+                completion.onResult(new SendResult());
+            } else {
+                throw new EncodeException(obj, sm.getString(
+                        "wsRemoteEndpoint.noEncoder", obj.getClass()));
+            }
+        } catch (Exception e) {
+            SendResult sr = new SendResult(e);
+            completion.onResult(sr);
+        }
+    }

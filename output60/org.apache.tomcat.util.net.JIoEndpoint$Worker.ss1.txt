@@ -1,0 +1,45 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the options for the current socket.
+     */
+    protected boolean setSocketOptions(Socket socket) {
+        // Process the connection
+        int step = 1;
+        try {
+
+            // 1: Set socket options: timeout, linger, etc
+            if (soLinger >= 0) { 
+                socket.setSoLinger(true, soLinger);
+            }
+            if (tcpNoDelay) {
+                socket.setTcpNoDelay(tcpNoDelay);
+            }
+            if (soTimeout > 0) {
+                socket.setSoTimeout(soTimeout);
+            }
+
+            // 2: SSL handshake
+            step = 2;
+            serverSocketFactory.handshake(socket);
+
+        } catch (Throwable t) {
+            if (log.isDebugEnabled()) {
+                if (step == 2) {
+                    log.debug(sm.getString("endpoint.err.handshake"), t);
+                } else {
+                    log.debug(sm.getString("endpoint.err.unexpected"), t);
+                }
+            }
+            // Tell to close the socket
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----

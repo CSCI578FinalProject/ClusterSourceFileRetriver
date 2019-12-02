@@ -1,0 +1,132 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    private void initClassLoaders() {
+        try {
+            commonLoader = createClassLoader("common", null);
+            if( commonLoader == null ) {
+                // no config file, default to this loader - we might be in a 'single' env.
+                commonLoader=this.getClass().getClassLoader();
+            }
+            catalinaLoader = createClassLoader("server", commonLoader);
+            sharedLoader = createClassLoader("shared", commonLoader);
+        } catch (Throwable t) {
+            handleThrowable(t);
+            log.error("Class loader creation threw exception", t);
+            System.exit(1);
+        }
+    }
+
+    }
+
+        initClassLoaders();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * System property replacement in the given string.
+     *
+     * @param str The original string
+     * @return the modified string
+     */
+    protected String replace(String str) {
+        // Implementation is copied from ClassLoaderLogManager.replace(),
+        // but added special processing for catalina.home and catalina.base.
+        String result = str;
+        int pos_start = str.indexOf("${");
+        if (pos_start >= 0) {
+            StringBuilder builder = new StringBuilder();
+            int pos_end = -1;
+            while (pos_start >= 0) {
+                builder.append(str, pos_end + 1, pos_start);
+                pos_end = str.indexOf('}', pos_start + 2);
+                if (pos_end < 0) {
+                    pos_end = pos_start - 1;
+                    break;
+                }
+                String propName = str.substring(pos_start + 2, pos_end);
+                String replacement;
+                if (propName.length() == 0) {
+                    replacement = null;
+                } else if (Globals.CATALINA_HOME_PROP.equals(propName)) {
+                    replacement = getCatalinaHome();
+                } else if (Globals.CATALINA_BASE_PROP.equals(propName)) {
+                    replacement = getCatalinaBase();
+                } else {
+                    replacement = System.getProperty(propName);
+                }
+                if (replacement != null) {
+                    builder.append(replacement);
+                } else {
+                    builder.append(str, pos_start, pos_end + 1);
+                }
+                pos_start = str.indexOf("${", pos_end + 1);
+            }
+            builder.append(str, pos_end + 1, str.length());
+            result = builder.toString();
+        }
+-----CSCI578-----
+
+
+
+    private ClassLoader createClassLoader(String name, ClassLoader parent)
+        throws Exception {
+
+        String value = CatalinaProperties.getProperty(name + ".loader");
+        if ((value == null) || (value.equals("")))
+            return parent;
+
+        value = replace(value);
+
+        List<Repository> repositories = new ArrayList<>();
+
+        String[] repositoryPaths = getPaths(value);
+
+        for (String repository : repositoryPaths) {
+            // Check for a JAR URL repository
+            try {
+                @SuppressWarnings("unused")
+                URL url = new URL(repository);
+                repositories.add(
+                        new Repository(repository, RepositoryType.URL));
+                continue;
+            } catch (MalformedURLException e) {
+                // Ignore
+            }
+
+            // Local repository
+            if (repository.endsWith("*.jar")) {
+                repository = repository.substring
+                    (0, repository.length() - "*.jar".length());
+                repositories.add(
+                        new Repository(repository, RepositoryType.GLOB));
+            } else if (repository.endsWith(".jar")) {
+                repositories.add(
+                        new Repository(repository, RepositoryType.JAR));
+            } else {
+                repositories.add(
+                        new Repository(repository, RepositoryType.DIR));
+            }
+        }
+
+        return ClassLoaderFactory.createClassLoader(repositories, parent);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @param name The property name
+     * @return specified property value
+     */
+    public static String getProperty(String name) {
+        return properties.getProperty(name);
+    }

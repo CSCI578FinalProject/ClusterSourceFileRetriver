@@ -1,0 +1,81 @@
+13
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * add cluster war to the watcher state
+     * @param warfile
+     */
+    protected void addWarInfo(File warfile) {
+        WarInfo info = (WarInfo) currentStatus.get(warfile.getAbsolutePath());
+        if (info == null) {
+            info = new WarInfo(warfile);
+            info.setLastState(-1); //assume file is non existent
+            currentStatus.put(warfile.getAbsolutePath(), info);
+        }
+    }
+-----CSCI578-----
+
+    public void fileRemoved(File f);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /*--Logic---------------------------------------------------*/
+
+    /**
+     * check for modification and send notifcation to listener
+     */
+    public void check() {
+        if (log.isInfoEnabled())
+            log.info("check cluster wars at " + watchDir);
+        File[] list = watchDir.listFiles(new WarFilter());
+        if (list == null)
+            list = new File[0];
+        //first make sure all the files are listed in our current status
+        for (int i = 0; i < list.length; i++) {
+            addWarInfo(list[i]);
+        }
+
+        //check all the status codes and update the FarmDeployer
+        for (Iterator i = currentStatus.entrySet().iterator(); i.hasNext();) {
+            Map.Entry entry = (Map.Entry) i.next();
+            WarInfo info = (WarInfo) entry.getValue();
+            int check = info.check();
+            if (check == 1) {
+                listener.fileModified(info.getWar());
+            } else if (check == -1) {
+                listener.fileRemoved(info.getWar());
+                //no need to keep in memory
+                i.remove();
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    public void fileModified(File f);
+-----CSCI578-----
+
+
+    /*
+     * Call watcher to check for deploy changes
+     * 
+     * @see org.apache.catalina.ha.ClusterDeployer#backgroundProcess()
+     */
+    public void backgroundProcess() {
+        if (started) {
+            count = (count + 1) % processDeployFrequency;
+            if (count == 0 && watchEnabled) {
+                watcher.check();
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

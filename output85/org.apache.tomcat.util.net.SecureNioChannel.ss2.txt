@@ -1,0 +1,51 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Writes a sequence of bytes to this channel from the given buffer.
+     *
+     * @param src The buffer from which bytes are to be retrieved
+     * @return The number of bytes written, possibly zero
+     * @throws IOException If some other I/O error occurs
+     */
+    @Override
+    public int write(ByteBuffer src) throws IOException {
+        checkInterruptStatus();
+        if (src == this.netOutBuffer) {
+            //we can get here through a recursive call
+            //by using the NioBlockingSelector
+            int written = sc.write(src);
+            return written;
+        } else {
+            // Are we closing or closed?
+            if (closing || closed) {
+                throw new IOException(sm.getString("channel.nio.ssl.closing"));
+            }
+
+            if (!flush(netOutBuffer)) {
+                // We haven't emptied out the buffer yet
+                return 0;
+            }
+
+            // The data buffer is empty, we can reuse the entire buffer.
+            netOutBuffer.clear();
+
+            SSLEngineResult result = sslEngine.wrap(src, netOutBuffer);
+            // The number of bytes written
+            int written = result.bytesConsumed();
+            netOutBuffer.flip();
+
+            if (result.getStatus() == Status.OK) {
+                if (result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) tasks();
+            } else {
+                throw new IOException(sm.getString("channel.nio.ssl.wrapFail", result.getStatus()));
+            }
+
+            // Force a flush
+            flush(netOutBuffer);
+
+            return written;
+        }
+    }

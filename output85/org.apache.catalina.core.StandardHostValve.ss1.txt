@@ -1,0 +1,300 @@
+10
+-----CSCI578-----
+
+
+
+    /**
+     * Handle the specified Throwable encountered while processing
+     * the specified Request to produce the specified Response.  Any
+     * exceptions that occur during generation of the exception report are
+     * logged and swallowed.
+     *
+     * @param request The request being processed
+     * @param response The response being generated
+     * @param throwable The exception that occurred (which possibly wraps
+     *  a root cause exception
+     */
+    protected void throwable(Request request, Response response,
+                             Throwable throwable) {
+        Context context = request.getContext();
+        if (context == null) {
+            return;
+        }
+
+        Throwable realError = throwable;
+
+        if (realError instanceof ServletException) {
+            realError = ((ServletException) realError).getRootCause();
+            if (realError == null) {
+                realError = throwable;
+            }
+        }
+
+        // If this is an aborted request from a client just log it and return
+        if (realError instanceof ClientAbortException ) {
+            if (log.isDebugEnabled()) {
+                log.debug
+                    (sm.getString("standardHost.clientAbort",
+                        realError.getCause().getMessage()));
+            }
+            return;
+        }
+
+        ErrorPage errorPage = findErrorPage(context, throwable);
+        if ((errorPage == null) && (realError != throwable)) {
+            errorPage = findErrorPage(context, realError);
+        }
+
+        if (errorPage != null) {
+            if (response.setErrorReported()) {
+                response.setAppCommitted(false);
+                request.setAttribute(Globals.DISPATCHER_REQUEST_PATH_ATTR,
+                        errorPage.getLocation());
+                request.setAttribute(Globals.DISPATCHER_TYPE_ATTR,
+                        DispatcherType.ERROR);
+                request.setAttribute(RequestDispatcher.ERROR_STATUS_CODE,
+                        Integer.valueOf(HttpServletResponse.SC_INTERNAL_SERVER_ERROR));
+                request.setAttribute(RequestDispatcher.ERROR_MESSAGE,
+                                  throwable.getMessage());
+                request.setAttribute(RequestDispatcher.ERROR_EXCEPTION,
+                                  realError);
+                Wrapper wrapper = request.getWrapper();
+                if (wrapper != null) {
+                    request.setAttribute(RequestDispatcher.ERROR_SERVLET_NAME,
+                                      wrapper.getName());
+                }
+                request.setAttribute(RequestDispatcher.ERROR_REQUEST_URI,
+                                     request.getRequestURI());
+                request.setAttribute(RequestDispatcher.ERROR_EXCEPTION_TYPE,
+                                  realError.getClass());
+                if (custom(request, response, errorPage)) {
+                    try {
+                        response.finishResponse();
+                    } catch (IOException e) {
+                        container.getLogger().warn("Exception Processing " + errorPage, e);
+                    }
+                }
+            }
+        } else {
+            // A custom error-page has not been defined for the exception
+            // that was thrown during request processing. Check if an
+            // error-page for error code 500 was specified and if so,
+            // send that page back as the response.
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            // The response is an error
+            response.setError();
+
+            status(request, response);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the Wrapper within which this Request is being processed.
+     */
+    public Wrapper getWrapper() {
+        return mappingData.wrapper;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the application commit flag.
+     *
+     * @param appCommitted The new application committed flag value
+     */
+    public void setAppCommitted(boolean appCommitted) {
+        this.appCommitted = appCommitted;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+    /**
+     * Handle the HTTP status code (and corresponding message) generated
+     * while processing the specified Request to produce the specified
+     * Response.  Any exceptions that occur during generation of the error
+     * report are logged and swallowed.
+     *
+     * @param request The request being processed
+     * @param response The response being generated
+     */
+    private void status(Request request, Response response) {
+
+        int statusCode = response.getStatus();
+
+        // Handle a custom error page for this status code
+        Context context = request.getContext();
+        if (context == null) {
+            return;
+        }
+
+        /* Only look for error pages when isError() is set.
+         * isError() is set when response.sendError() is invoked. This
+         * allows custom error pages without relying on default from
+         * web.xml.
+         */
+        if (!response.isError()) {
+            return;
+        }
+
+        ErrorPage errorPage = context.findErrorPage(statusCode);
+        if (errorPage == null) {
+            // Look for a default error page
+            errorPage = context.findErrorPage(0);
+        }
+        if (errorPage != null && response.isErrorReportRequired()) {
+            response.setAppCommitted(false);
+            request.setAttribute(RequestDispatcher.ERROR_STATUS_CODE,
+                              Integer.valueOf(statusCode));
+
+            String message = response.getMessage();
+            if (message == null) {
+                message = "";
+            }
+            request.setAttribute(RequestDispatcher.ERROR_MESSAGE, message);
+            request.setAttribute(Globals.DISPATCHER_REQUEST_PATH_ATTR,
+                    errorPage.getLocation());
+            request.setAttribute(Globals.DISPATCHER_TYPE_ATTR,
+                    DispatcherType.ERROR);
+
+
+            Wrapper wrapper = request.getWrapper();
+            if (wrapper != null) {
+                request.setAttribute(RequestDispatcher.ERROR_SERVLET_NAME,
+                                  wrapper.getName());
+            }
+            request.setAttribute(RequestDispatcher.ERROR_REQUEST_URI,
+                                 request.getRequestURI());
+            if (custom(request, response, errorPage)) {
+                response.setErrorReported();
+                try {
+                    response.finishResponse();
+                } catch (ClientAbortException e) {
+                    // Ignore
+                } catch (IOException e) {
+                    container.getLogger().warn("Exception Processing " + errorPage, e);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the error page entry for the specified HTTP error code,
+     * if any; otherwise return <code>null</code>.
+     *
+     * @param errorCode Error code to look up
+     */
+    public ErrorPage findErrorPage(int errorCode);
+
+
+
+    /**
+     * @return the error page entry for the specified Java exception type,
+     * if any; otherwise return <code>null</code>.
+     *
+     * @param exceptionType Exception type to look up
+     */
+    public ErrorPage findErrorPage(String exceptionType);
+-----CSCI578-----
+
+
+
+    /**
+     * Handle an HTTP status code or Java exception by forwarding control
+     * to the location included in the specified errorPage object.  It is
+     * assumed that the caller has already recorded any request attributes
+     * that are to be forwarded to this page.  Return <code>true</code> if
+     * we successfully utilized the specified error page location, or
+     * <code>false</code> if the default error report should be rendered.
+     *
+     * @param request The request being processed
+     * @param response The response being generated
+     * @param errorPage The errorPage directive we are obeying
+     */
+    private boolean custom(Request request, Response response,
+                             ErrorPage errorPage) {
+
+        if (container.getLogger().isDebugEnabled()) {
+            container.getLogger().debug("Processing " + errorPage);
+        }
+
+        try {
+            // Forward control to the specified location
+            ServletContext servletContext =
+                request.getContext().getServletContext();
+            RequestDispatcher rd =
+                servletContext.getRequestDispatcher(errorPage.getLocation());
+
+            if (rd == null) {
+                container.getLogger().error(
+                    sm.getString("standardHostValue.customStatusFailed", errorPage.getLocation()));
+                return false;
+            }
+
+            if (response.isCommitted()) {
+                // Response is committed - including the error page is the
+                // best we can do
+                rd.include(request.getRequest(), response.getResponse());
+            } else {
+                // Reset the response (keeping the real error code and message)
+                response.resetBuffer(true);
+                response.setContentLength(-1);
+
+                rd.forward(request.getRequest(), response.getResponse());
+
+                // If we forward, the response is suspended again
+                response.setSuspended(false);
+            }
+
+            // Indicate that we have successfully processed this custom page
+            return true;
+
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            // Report our failure to process this custom page
+            container.getLogger().error("Exception Processing " + errorPage, t);
+            return false;
+
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the content length (in bytes) for this Response.
+     *
+     * @param length The new content length
+     */
+    @Override
+    public void setContentLength(int length) {
+
+        setContentLengthLong(length);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setContentLengthLong(long length) {
+        if (isCommitted()) {
+            return;
+        }
+
+        // Ignore any call from an included servlet
+        if (included) {
+            return;
+        }
+
+        getCoyoteResponse().setContentLength(length);
+    }
+-----CSCI578-----

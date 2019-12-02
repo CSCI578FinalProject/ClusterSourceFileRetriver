@@ -1,0 +1,230 @@
+9
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public SocketState service(SocketWrapperBase<?> socket) throws IOException {
+
+        RequestInfo rp = request.getRequestProcessor();
+        rp.setStage(org.apache.coyote.Constants.STAGE_PARSE);
+
+        // Setting up the socket
+        this.socketWrapper = socket;
+
+        int soTimeout = endpoint.getSoTimeout();
+        boolean cping = false;
+
+        boolean keptAlive = false;
+
+        while (!getErrorState().isError() && !endpoint.isPaused()) {
+            // Parsing the request header
+            try {
+                // Get first message of the request
+                if (!readMessage(requestHeaderMessage, !keptAlive)) {
+                    break;
+                }
+                // Set back timeout if keep alive timeout is enabled
+                if (keepAliveTimeout > 0) {
+                    socketWrapper.setReadTimeout(soTimeout);
+                }
+                // Check message type, process right away and break if
+                // not regular request processing
+                int type = requestHeaderMessage.getByte();
+                if (type == Constants.JK_AJP13_CPING_REQUEST) {
+                    if (endpoint.isPaused()) {
+                        recycle();
+                        break;
+                    }
+                    cping = true;
+                    try {
+                        socketWrapper.write(true, pongMessageArray, 0, pongMessageArray.length);
+                        socketWrapper.flush(true);
+                    } catch (IOException e) {
+                        setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
+                    }
+                    recycle();
+                    continue;
+                } else if(type != Constants.JK_AJP13_FORWARD_REQUEST) {
+                    // Unexpected packet type. Unread body packets should have
+                    // been swallowed in finish().
+                    if (getLog().isDebugEnabled()) {
+                        getLog().debug("Unexpected message: " + type);
+                    }
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, null);
+                    break;
+                }
+                keptAlive = true;
+                request.setStartTime(System.currentTimeMillis());
+            } catch (IOException e) {
+                setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
+                break;
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                getLog().debug(sm.getString("ajpprocessor.header.error"), t);
+                // 400 - Bad Request
+                response.setStatus(400);
+                setErrorState(ErrorState.CLOSE_CLEAN, t);
+                getAdapter().log(request, response, 0);
+            }
+
+            if (!getErrorState().isError()) {
+                // Setting up filters, and parse some request headers
+                rp.setStage(org.apache.coyote.Constants.STAGE_PREPARE);
+                try {
+                    prepareRequest();
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    getLog().debug(sm.getString("ajpprocessor.request.prepare"), t);
+                    // 500 - Internal Server Error
+                    response.setStatus(500);
+                    setErrorState(ErrorState.CLOSE_CLEAN, t);
+                    getAdapter().log(request, response, 0);
+                }
+            }
+
+            if (!getErrorState().isError() && !cping && endpoint.isPaused()) {
+                // 503 - Service unavailable
+                response.setStatus(503);
+                setErrorState(ErrorState.CLOSE_CLEAN, null);
+                getAdapter().log(request, response, 0);
+            }
+            cping = false;
+
+            // Process the request in the adapter
+            if (!getErrorState().isError()) {
+                try {
+                    rp.setStage(org.apache.coyote.Constants.STAGE_SERVICE);
+                    getAdapter().service(request, response);
+                } catch (InterruptedIOException e) {
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    getLog().error(sm.getString("ajpprocessor.request.process"), t);
+                    // 500 - Internal Server Error
+                    response.setStatus(500);
+                    setErrorState(ErrorState.CLOSE_CLEAN, t);
+                    getAdapter().log(request, response, 0);
+                }
+            }
+
+            if (isAsync() && !getErrorState().isError()) {
+                break;
+            }
+
+            // Finish the response if not done yet
+            if (!finished && getErrorState().isIoAllowed()) {
+                try {
+                    action(ActionCode.COMMIT, null);
+                    finish();
+                } catch (IOException ioe){
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    setErrorState(ErrorState.CLOSE_NOW, t);
+                }
+            }
+
+            // If there was an error, make sure the request is counted as
+            // and error, and update the statistics counter
+            if (getErrorState().isError()) {
+                response.setStatus(500);
+            }
+            request.updateCounters();
+
+            rp.setStage(org.apache.coyote.Constants.STAGE_KEEPALIVE);
+            // Set keep alive timeout for next request if enabled
+            if (keepAliveTimeout > 0) {
+                socketWrapper.setReadTimeout(keepAliveTimeout);
+            }
+
+            recycle();
+        }
+
+        rp.setStage(org.apache.coyote.Constants.STAGE_ENDED);
+
+        if (getErrorState().isError() || endpoint.isPaused()) {
+            return SocketState.CLOSED;
+        } else {
+            if (isAsync()) {
+                return SocketState.LONG;
+            } else {
+                return SocketState.OPEN;
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private static final Log log = LogFactory.getLog(AjpProcessor.class);
+
+
+
+    @Override
+    protected Log getLog() {
+        return log;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void recycle() {
+        getAdapter().checkRecycled(request, response);
+        super.recycle();
+        request.recycle();
+        response.recycle();
+        first = true;
+        endOfStream = false;
+        waitingForBodyMessage = false;
+        empty = true;
+        replay = false;
+        finished = false;
+        certificates.recycle();
+        swallowResponse = false;
+        bytesWritten = 0;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Finish AJP response.
+     */
+    private void finish() throws IOException {
+        if (finished)
+            return;
+
+        finished = true;
+
+        // Swallow the unread body packet if present
+        if (waitingForBodyMessage || first && request.getContentLengthLong() > 0) {
+            refillReadBuffer(true);
+        }
+
+        // Add the end message
+        if (getErrorState().isError()) {
+            socketWrapper.write(true, endAndCloseMessageArray, 0, endAndCloseMessageArray.length);
+        } else {
+            socketWrapper.write(true, endMessageArray, 0, endMessageArray.length);
+        }
+        socketWrapper.flush(true);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public byte getByte() {
+        byte res = buf[pos++];
+        validatePos(pos);
+        return res;
+    }
+-----CSCI578-----
+
+
+    public boolean isError() {
+        return error;
+    }

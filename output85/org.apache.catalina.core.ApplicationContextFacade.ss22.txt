@@ -1,0 +1,70 @@
+2
+-----CSCI578-----
+
+
+
+    @Override
+    public URL getResource(String path) throws MalformedURLException {
+
+        String validatedPath = validateResourcePath(path, false);
+
+        if (validatedPath == null) {
+            throw new MalformedURLException(
+                    sm.getString("applicationContext.requestDispatcher.iae", path));
+        }
+
+        WebResourceRoot resources = context.getResources();
+        if (resources != null) {
+            return resources.getResource(validatedPath).getURL();
+        }
+
+        return null;
+    }
+
+
+
+    /*
+     * Returns null if the input path is not valid or a path that will be
+     * acceptable to resoucres.getResource().
+     */
+    private String validateResourcePath(String path, boolean allowEmptyPath) {
+        if (path == null) {
+            return null;
+        }
+
+        if (path.length() == 0 && allowEmptyPath) {
+            return path;
+        }
+
+        if (!path.startsWith("/")) {
+            if (GET_RESOURCE_REQUIRE_SLASH) {
+                return null;
+            } else {
+                return "/" + path;
+            }
+        }
+
+        return path;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public URL getResource(String path)
+        throws MalformedURLException {
+        if (Globals.IS_SECURITY_ENABLED) {
+            try {
+                return (URL) invokeMethod(context, "getResource",
+                                          new Object[]{path});
+            } catch(Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                if (t instanceof MalformedURLException){
+                    throw (MalformedURLException)t;
+                }
+                return null;
+            }
+        } else {
+            return context.getResource(path);
+        }
+    }

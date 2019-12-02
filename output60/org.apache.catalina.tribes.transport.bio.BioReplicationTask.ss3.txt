@@ -1,0 +1,62 @@
+5
+-----CSCI578-----
+
+    
+    protected void execute(ObjectReader reader) throws Exception{
+        int pkgcnt = reader.count();
+
+        if ( pkgcnt > 0 ) {
+            ChannelMessage[] msgs = reader.execute();
+            for ( int i=0; i<msgs.length; i++ ) {
+                /**
+                 * Use send ack here if you want to ack the request to the remote 
+                 * server before completing the request
+                 * This is considered an asynchronized request
+                 */
+                if (ChannelData.sendAckAsync(msgs[i].getOptions())) sendAck(Constants.ACK_COMMAND);
+                try {
+                    //process the message
+                    getCallback().messageDataReceived(msgs[i]);
+                    /**
+                     * Use send ack here if you want the request to complete on this
+                     * server before sending the ack to the remote server
+                     * This is considered a synchronized request
+                     */
+                    if (ChannelData.sendAckSync(msgs[i].getOptions())) sendAck(Constants.ACK_COMMAND);
+                }catch  ( Exception x ) {
+                    if (ChannelData.sendAckSync(msgs[i].getOptions())) sendAck(Constants.FAIL_ACK_COMMAND);
+                    log.error("Error thrown from messageDataReceived.",x);
+                }
+                if ( getUseBufferPool() ) {
+                    BufferPool.getBufferPool().returnBuffer(msgs[i].getMessage());
+                    msgs[i].setMessage(null);
+                }
+            }                       
+        }
+
+       
+    }
+-----CSCI578-----
+
+
+
+
+
+    /**
+     * send a reply-acknowledgement (6,2,3)
+     */
+    protected void sendAck(byte[] command) {
+        try {
+            OutputStream out = socket.getOutputStream();
+            out.write(command);
+            out.flush();
+            if (log.isTraceEnabled()) {
+                log.trace("ACK sent to " + socket.getPort());
+            }
+        } catch ( java.io.IOException x ) {
+            log.warn("Unable to send ACK back through channel, channel disconnected?: "+x.getMessage());
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,45 @@
+2
+-----CSCI578-----
+
+
+    public void setPort(int port) {
+        this.port = port;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Same as bind() except it does it for the UDP port
+     * @param socket The socket to bind
+     * @param portstart     Starting port for bind attempts
+     * @param retries       Number of times to attempt to bind (port incremented
+     *                      between attempts)
+     * @return int The retry count
+     * @throws IOException Socket bind error
+     */
+    protected int bindUdp(DatagramSocket socket, int portstart, int retries) throws IOException {
+        InetSocketAddress addr = null;
+        while ( retries > 0 ) {
+            try {
+                addr = new InetSocketAddress(getBind(), portstart);
+                socket.bind(addr);
+                setUdpPort(portstart);
+                log.info(sm.getString("receiverBase.udp.bind", addr));
+                return 0;
+            }catch ( IOException x) {
+                retries--;
+                if ( retries <= 0 ) {
+                    log.info(sm.getString("receiverBase.unable.bind.udp", addr));
+                    throw x;
+                }
+                portstart++;
+                try {
+                    Thread.sleep(25);
+                } catch (InterruptedException ti) {
+                    Thread.currentThread().interrupt();
+                }
+                retries = bindUdp(socket,portstart,retries);
+            }
+        }
+        return retries;
+    }

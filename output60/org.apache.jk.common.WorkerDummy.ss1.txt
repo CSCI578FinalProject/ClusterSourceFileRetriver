@@ -1,0 +1,84 @@
+6
+-----CSCI578-----
+
+
+    /**
+     * Prepare this packet for accumulating a message from the container to
+     * the web server.  Set the write position to just after the header
+     * (but leave the length unwritten, because it is as yet unknown).
+     */
+    public void reset() {
+        len = 4;
+        pos = 4;
+    }
+-----CSCI578-----
+
+    
+    // ============ Data Writing Methods ===================
+
+    /**
+     * Add an int.
+     *
+     * @param val The integer to write.
+     */
+    public void appendInt( int val ) {
+        buf[pos++]   = (byte) ((val >>>  8) & 0xFF);
+        buf[pos++] = (byte) (val & 0xFF);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Invoke the request chain.
+     */
+    public int invoke(Msg msg, MsgContext ep) throws IOException;
+-----CSCI578-----
+
+    
+    public int invoke( Msg in, MsgContext ep ) 
+        throws IOException
+    {
+        MsgAjp msg=(MsgAjp)ep.getNote( headersMsgNote );
+        if( msg==null ) {
+            msg=new MsgAjp();
+            ep.setNote( headersMsgNote, msg );
+        }
+
+        msg.reset();
+        msg.appendByte(AjpConstants.JK_AJP13_SEND_HEADERS);
+        msg.appendInt(200);
+        msg.appendBytes(null);
+
+        msg.appendInt(0);
+
+        ep.setType( JkHandler.HANDLE_SEND_PACKET );
+        ep.getSource().invoke( msg, ep );
+        //         msg.dump("out:" );
+
+        msg.reset();
+        msg.appendByte( AjpConstants.JK_AJP13_SEND_BODY_CHUNK);
+        msg.appendInt( body.getLength() );
+        msg.appendBytes( body );
+
+        
+        ep.getSource().invoke(msg, ep);
+
+        msg.reset();
+        msg.appendByte( AjpConstants.JK_AJP13_END_RESPONSE );
+        msg.appendInt( 1 );
+        
+        ep.getSource().invoke(msg, ep );
+        return OK;
+    }
+-----CSCI578-----
+
+
+    public void appendByte( int val ) {
+        buf[pos++] = (byte)val;
+    }
+-----CSCI578-----
+
+
+    public final void setType(int i) {
+        type=i;
+    }

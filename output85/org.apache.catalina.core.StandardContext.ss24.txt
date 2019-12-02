@@ -1,0 +1,107 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /** Destroy needs to clean up the context completely.
+     *
+     * The problem is that undoing all the config in start() and restoring
+     * a 'fresh' state is impossible. After stop()/destroy()/init()/start()
+     * we should have the same state as if a fresh start was done - i.e
+     * read modified web.xml, etc. This can only be done by completely
+     * removing the context object and remapping a new one, or by cleaning
+     * up everything.
+     *
+     * XXX Should this be done in stop() ?
+     *
+     */
+    @Override
+    protected void destroyInternal() throws LifecycleException {
+
+        // If in state NEW when destroy is called, the object name will never
+        // have been set so the notification can't be created
+        if (getObjectName() != null) {
+            // Send j2ee.object.deleted notification
+            Notification notification =
+                new Notification("j2ee.object.deleted", this.getObjectName(),
+                                 sequenceNumber.getAndIncrement());
+            broadcaster.sendNotification(notification);
+        }
+
+        if (namingResources != null) {
+            namingResources.destroy();
+        }
+
+        Loader loader = getLoader();
+        if (loader instanceof Lifecycle) {
+            ((Lifecycle) loader).destroy();
+        }
+
+        Manager manager = getManager();
+        if (manager instanceof Lifecycle) {
+            ((Lifecycle) manager).destroy();
+        }
+
+        if (resources != null) {
+            resources.destroy();
+        }
+
+        super.destroyInternal();
+    }
+-----CSCI578-----
+
+
+    @Override
+    protected void destroyInternal() throws LifecycleException {
+
+        Realm realm = getRealmInternal();
+        if (realm instanceof Lifecycle) {
+            ((Lifecycle) realm).destroy();
+        }
+        Cluster cluster = getClusterInternal();
+        if (cluster instanceof Lifecycle) {
+            ((Lifecycle) cluster).destroy();
+        }
+
+        // Stop the Valves in our pipeline (including the basic), if any
+        if (pipeline instanceof Lifecycle) {
+            ((Lifecycle) pipeline).destroy();
+        }
+
+        // Remove children now this container is being destroyed
+        for (Container child : findChildren()) {
+            removeChild(child);
+        }
+
+        // Required if the child is destroyed directly.
+        if (parent != null) {
+            parent.removeChild(this);
+        }
+
+        // If init fails, this may be null
+        if (startStopExecutor != null) {
+            startStopExecutor.shutdownNow();
+        }
+
+        super.destroyInternal();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * The ContainerEvent event type sent when a child container is removed
+     * by <code>removeChild()</code>.
+     */
+    public static final String REMOVE_CHILD_EVENT = "removeChild";
+
+
+
+    /**
+     * Remove an existing child Container from association with this parent
+     * Container.
+     *
+     * @param child Existing child Container to be removed
+     */
+    public void removeChild(Container child);

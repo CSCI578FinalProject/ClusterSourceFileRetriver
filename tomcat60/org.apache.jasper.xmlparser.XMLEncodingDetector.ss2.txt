@@ -1,0 +1,869 @@
+25
+    
+    // Adapted from:
+    // org.apache.xerces.impl.XMLEntityManager.startEntity()
+    private void createInitialReader() throws IOException, JasperException {
+
+	// wrap this stream in RewindableInputStream
+	stream = new RewindableInputStream(stream);
+
+	// perform auto-detect of encoding if necessary
+	if (encoding == null) {
+	    // read first four bytes and determine encoding
+	    final byte[] b4 = new byte[4];
+	    int count = 0;
+	    for (; count<4; count++ ) {
+		b4[count] = (byte)stream.read();
+	    }
+	    if (count == 4) {
+		Object [] encodingDesc = getEncodingName(b4, count);
+		encoding = (String)(encodingDesc[0]);
+		isBigEndian = (Boolean)(encodingDesc[1]);
+        
+        if (encodingDesc.length > 3) {
+            isBomPresent = (Boolean)(encodingDesc[2]);
+            skip = (Integer)(encodingDesc[3]);
+        } else {
+            isBomPresent = true;
+            skip = (Integer)(encodingDesc[2]);
+        }
+
+		stream.reset();
+		// Special case UTF-8 files with BOM created by Microsoft
+		// tools. It's more efficient to consume the BOM than make
+		// the reader perform extra checks. -Ac
+		if (count > 2 && encoding.equals("UTF-8")) {
+		    int b0 = b4[0] & 0xFF;
+		    int b1 = b4[1] & 0xFF;
+		    int b2 = b4[2] & 0xFF;
+		    if (b0 == 0xEF && b1 == 0xBB && b2 == 0xBF) {
+			// ignore first three bytes...
+			stream.skip(3);
+		    }
+		}
+		reader = createReader(stream, encoding, isBigEndian);
+	    } else {
+		reader = createReader(stream, encoding, isBigEndian);
+	    }
+	}
+    }
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLEntityManager.createReader
+    /**
+     * Creates a reader capable of reading the given input stream in
+     * the specified encoding.
+     *
+     * @param inputStream  The input stream.
+     * @param encoding     The encoding name that the input stream is
+     *                     encoded using. If the user has specified that
+     *                     Java encoding names are allowed, then the
+     *                     encoding name may be a Java encoding name;
+     *                     otherwise, it is an ianaEncoding name.
+     * @param isBigEndian   For encodings (like uCS-4), whose names cannot
+     *                      specify a byte order, this tells whether the order
+     *                      is bigEndian. null means unknown or not relevant.
+     *
+     * @return Returns a reader.
+     */
+    private Reader createReader(InputStream inputStream, String encoding,
+				Boolean isBigEndian)
+                throws IOException, JasperException {
+
+        // normalize encoding name
+        if (encoding == null) {
+            encoding = "UTF-8";
+        }
+
+        // try to use an optimized reader
+        String ENCODING = encoding.toUpperCase(Locale.ENGLISH);
+        if (ENCODING.equals("UTF-8")) {
+            return new UTF8Reader(inputStream, fBufferSize);
+        }
+        if (ENCODING.equals("US-ASCII")) {
+            return new ASCIIReader(inputStream, fBufferSize);
+        }
+        if (ENCODING.equals("ISO-10646-UCS-4")) {
+            if (isBigEndian != null) {
+                boolean isBE = isBigEndian.booleanValue();
+                if (isBE) {
+                    return new UCSReader(inputStream, UCSReader.UCS4BE);
+                } else {
+                    return new UCSReader(inputStream, UCSReader.UCS4LE);
+                }
+            } else {
+                err.jspError("jsp.error.xml.encodingByteOrderUnsupported",
+			     encoding);
+            }
+        }
+        if (ENCODING.equals("ISO-10646-UCS-2")) {
+            if (isBigEndian != null) { // sould never happen with this encoding...
+                boolean isBE = isBigEndian.booleanValue();
+                if (isBE) {
+                    return new UCSReader(inputStream, UCSReader.UCS2BE);
+                } else {
+                    return new UCSReader(inputStream, UCSReader.UCS2LE);
+                }
+            } else {
+                err.jspError("jsp.error.xml.encodingByteOrderUnsupported",
+			     encoding);
+            }
+        }
+
+        // check for valid name
+        boolean validIANA = XMLChar.isValidIANAEncoding(encoding);
+        boolean validJava = XMLChar.isValidJavaEncoding(encoding);
+        if (!validIANA || (fAllowJavaEncodings && !validJava)) {
+            err.jspError("jsp.error.xml.encodingDeclInvalid", encoding);
+            // NOTE: AndyH suggested that, on failure, we use ISO Latin 1
+            //       because every byte is a valid ISO Latin 1 character.
+            //       It may not translate correctly but if we failed on
+            //       the encoding anyway, then we're expecting the content
+            //       of the document to be bad. This will just prevent an
+            //       invalid UTF-8 sequence to be detected. This is only
+            //       important when continue-after-fatal-error is turned
+            //       on. -Ac
+            encoding = "ISO-8859-1";
+        }
+
+        // try to use a Java reader
+        String javaEncoding = EncodingMap.getIANA2JavaMapping(ENCODING);
+        if (javaEncoding == null) {
+            if (fAllowJavaEncodings) {
+		javaEncoding = encoding;
+            } else {
+                err.jspError("jsp.error.xml.encodingDeclInvalid", encoding);
+                // see comment above.
+                javaEncoding = "ISO8859_1";
+            }
+        }
+        return new InputStreamReader(inputStream, javaEncoding);
+
+    } // createReader(InputStream,String, Boolean): Reader
+
+
+
+
+
+    // encodings
+
+    /**
+     * Returns true if the encoding name is a valid IANA encoding.
+     * This method does not verify that there is a decoder available
+     * for this encoding, only that the characters are valid for an
+     * IANA encoding name.
+     *
+     * @param ianaEncoding The IANA encoding name.
+     */
+    public static boolean isValidIANAEncoding(String ianaEncoding) {
+        if (ianaEncoding != null) {
+            int length = ianaEncoding.length();
+            if (length > 0) {
+                char c = ianaEncoding.charAt(0);
+                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+                    for (int i = 1; i < length; i++) {
+                        c = ianaEncoding.charAt(i);
+                        if ((c < 'A' || c > 'Z') && (c < 'a' || c > 'z') &&
+                            (c < '0' || c > '9') && c != '.' && c != '_' &&
+                            c != '-') {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
+    } // isValidIANAEncoding(String):boolean
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLEntityManager.getEncodingName
+    /**
+     * Returns the IANA encoding name that is auto-detected from
+     * the bytes specified, with the endian-ness of that encoding where
+     * appropriate.
+     *
+     * @param b4    The first four bytes of the input.
+     * @param count The number of bytes actually read.
+     * @return a 2-element array:  the first element, an IANA-encoding string,
+     *  the second element a Boolean which is true iff the document is big
+     *  endian, false if it's little-endian, and null if the distinction isn't
+     *  relevant.
+     */
+    private Object[] getEncodingName(byte[] b4, int count) {
+
+        if (count < 2) {
+            return new Object[]{"UTF-8", null, Boolean.FALSE, Integer.valueOf(0)};
+        }
+
+        // UTF-16, with BOM
+        int b0 = b4[0] & 0xFF;
+        int b1 = b4[1] & 0xFF;
+        if (b0 == 0xFE && b1 == 0xFF) {
+            // UTF-16, big-endian
+            return new Object [] {"UTF-16BE", Boolean.TRUE, Integer.valueOf(2)};
+        }
+        if (b0 == 0xFF && b1 == 0xFE) {
+            // UTF-16, little-endian
+            return new Object [] {"UTF-16LE", Boolean.FALSE, Integer.valueOf(2)};
+        }
+
+        // default to UTF-8 if we don't have enough bytes to make a
+        // good determination of the encoding
+        if (count < 3) {
+            return new Object [] {"UTF-8", null, Boolean.FALSE, Integer.valueOf(0)};
+        }
+
+        // UTF-8 with a BOM
+        int b2 = b4[2] & 0xFF;
+        if (b0 == 0xEF && b1 == 0xBB && b2 == 0xBF) {
+            return new Object [] {"UTF-8", null, Integer.valueOf(3)};
+        }
+
+        // default to UTF-8 if we don't have enough bytes to make a
+        // good determination of the encoding
+        if (count < 4) {
+            return new Object [] {"UTF-8", null, Integer.valueOf(0)};
+        }
+
+        // other encodings
+        int b3 = b4[3] & 0xFF;
+        if (b0 == 0x00 && b1 == 0x00 && b2 == 0x00 && b3 == 0x3C) {
+            // UCS-4, big endian (1234)
+            return new Object [] {"ISO-10646-UCS-4", new Boolean(true), Integer.valueOf(4)};
+        }
+        if (b0 == 0x3C && b1 == 0x00 && b2 == 0x00 && b3 == 0x00) {
+            // UCS-4, little endian (4321)
+            return new Object [] {"ISO-10646-UCS-4", new Boolean(false), Integer.valueOf(4)};
+        }
+        if (b0 == 0x00 && b1 == 0x00 && b2 == 0x3C && b3 == 0x00) {
+            // UCS-4, unusual octet order (2143)
+            // REVISIT: What should this be?
+            return new Object [] {"ISO-10646-UCS-4", null, Integer.valueOf(4)};
+        }
+        if (b0 == 0x00 && b1 == 0x3C && b2 == 0x00 && b3 == 0x00) {
+            // UCS-4, unusual octect order (3412)
+            // REVISIT: What should this be?
+            return new Object [] {"ISO-10646-UCS-4", null, Integer.valueOf(4)};
+        }
+        if (b0 == 0x00 && b1 == 0x3C && b2 == 0x00 && b3 == 0x3F) {
+            // UTF-16, big-endian, no BOM
+            // (or could turn out to be UCS-2...
+            // REVISIT: What should this be?
+            return new Object [] {"UTF-16BE", new Boolean(true), Integer.valueOf(4)};
+        }
+        if (b0 == 0x3C && b1 == 0x00 && b2 == 0x3F && b3 == 0x00) {
+            // UTF-16, little-endian, no BOM
+            // (or could turn out to be UCS-2...
+            return new Object [] {"UTF-16LE", new Boolean(false), Integer.valueOf(4)};
+        }
+        if (b0 == 0x4C && b1 == 0x6F && b2 == 0xA7 && b3 == 0x94) {
+            // EBCDIC
+            // a la xerces1, return CP037 instead of EBCDIC here
+            return new Object [] {"CP037", null, Integer.valueOf(4)};
+        }
+
+        // default encoding
+        return new Object [] {"UTF-8", null, Boolean.FALSE, Integer.valueOf(0)};
+
+    }
+
+    /**
+     * Returns true if the encoding name is a valid Java encoding.
+     * This method does not verify that there is a decoder available
+     * for this encoding, only that the characters are valid for an
+     * Java encoding name.
+     *
+     * @param javaEncoding The Java encoding name.
+     */
+    public static boolean isValidJavaEncoding(String javaEncoding) {
+        if (javaEncoding != null) {
+            int length = javaEncoding.length();
+            if (length > 0) {
+                for (int i = 1; i < length; i++) {
+                    char c = javaEncoding.charAt(i);
+                    if ((c < 'A' || c > 'Z') && (c < 'a' || c > 'z') &&
+                        (c < '0' || c > '9') && c != '.' && c != '_' &&
+                        c != '-') {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+        return false;
+    } // isValidIANAEncoding(String):boolean
+
+    /**
+     * Returns the Java encoding name for the specified IANA encoding name.
+     * 
+     * @param ianaEncoding The IANA encoding name.
+     */
+    public static String getIANA2JavaMapping(String ianaEncoding) {
+        return (String)fIANA2JavaMap.get(ianaEncoding);
+    } // getIANA2JavaMapping(String):String
+
+    /**
+     * Skips the specified string appearing immediately on the input.
+     * <p>
+     * <strong>Note:</strong> The characters are consumed only if they are
+     * space characters.
+     *
+     * @param s The string to skip.
+     *
+     * @return Returns true if the string was skipped.
+     *
+     * @throws IOException  Thrown if i/o error occurs.
+     * @throws EOFException Thrown on end of file.
+     */
+    public boolean skipString(String s) throws IOException {
+
+	// load more characters, if needed
+	if (fCurrentEntity.position == fCurrentEntity.count) {
+	    load(0, true);
+	}
+
+	// skip string
+	final int length = s.length();
+	for (int i = 0; i < length; i++) {
+	    char c = fCurrentEntity.ch[fCurrentEntity.position++];
+	    if (c != s.charAt(i)) {
+		fCurrentEntity.position -= i + 1;
+		return false;
+	    }
+	    if (i < length - 1 && fCurrentEntity.position == fCurrentEntity.count) {
+		System.arraycopy(fCurrentEntity.ch, fCurrentEntity.count - i - 1, fCurrentEntity.ch, 0, i + 1);
+		// REVISIT: Can a string to be skipped cross an
+		//          entity boundary? -Ac
+		if (load(i + 1, false)) {
+		    fCurrentEntity.position -= i + 1;
+		    return false;
+		}
+	    }
+	}
+	fCurrentEntity.columnNumber += length;
+	return true;
+
+    }
+
+    /**
+     * Returns whether the given character is a high surrogate
+     *
+     * @param c The character to check.
+     */
+    public static boolean isHighSurrogate(int c) {
+        return (0xD800 <= c && c <= 0xDBFF);
+    }
+    
+    // Adapted from:
+    // org.apache.xerces.impl.XMLEntityManager.EntityScanner.scanChar
+    /**
+     * Returns the next character on the input.
+     * <p>
+     * <strong>Note:</strong> The character is consumed.
+     *
+     * @throws IOException  Thrown if i/o error occurs.
+     * @throws EOFException Thrown on end of file.
+     */
+    public int scanChar() throws IOException {
+
+	// load more characters, if needed
+	if (fCurrentEntity.position == fCurrentEntity.count) {
+	    load(0, true);
+	}
+
+	// scan character
+	int c = fCurrentEntity.ch[fCurrentEntity.position++];
+	boolean external = false;
+	if (c == '\n' ||
+	    (c == '\r' && (external = fCurrentEntity.isExternal()))) {
+	    fCurrentEntity.lineNumber++;
+	    fCurrentEntity.columnNumber = 1;
+	    if (fCurrentEntity.position == fCurrentEntity.count) {
+		fCurrentEntity.ch[0] = (char)c;
+		load(1, false);
+	    }
+	    if (c == '\r' && external) {
+		if (fCurrentEntity.ch[fCurrentEntity.position++] != '\n') {
+		    fCurrentEntity.position--;
+		}
+		c = '\n';
+	    }
+	}
+
+	// return character that was scanned
+	fCurrentEntity.columnNumber++;
+	return c;
+	
+    }
+
+
+    /**
+     * Returns true if the specified character is valid. This method
+     * also checks the surrogate character range from 0x10000 to 0x10FFFF.
+     * <p>
+     * If the program chooses to apply the mask directly to the
+     * <code>CHARS</code> array, then they are responsible for checking
+     * the surrogate character range.
+     *
+     * @param c The character to check.
+     */
+    public static boolean isValid(int c) {
+        return (c < 0x10000 && (CHARS[c] & MASK_VALID) != 0) ||
+               (0x10000 <= c && c <= 0x10FFFF);
+    } // isValid(int):boolean
+
+    /*
+     * [5] Name ::= (Letter | '_' | ':') (NameChar)*
+     */
+    /**
+     * Check to see if a string is a valid Name according to [5]
+     * in the XML 1.0 Recommendation
+     *
+     * @param name string to check
+     * @return true if name is a valid Name
+     */
+    public static boolean isValidName(String name) {
+        if (name.length() == 0)
+            return false;
+        char ch = name.charAt(0);
+        if( isNameStart(ch) == false)
+           return false;
+        for (int i = 1; i < name.length(); i++ ) {
+           ch = name.charAt(i);
+           if( isName( ch ) == false ){
+              return false;
+           }
+        }
+        return true;
+    } // isValidName(String):boolean
+    
+
+    /*
+     * from the namespace rec
+     * [4] NCName ::= (Letter | '_') (NCNameChar)*
+     */
+    /**
+     * Check to see if a string is a valid NCName according to [4]
+     * from the XML Namespaces 1.0 Recommendation
+     *
+     * @param ncName string to check
+     * @return true if name is a valid NCName
+     */
+    public static boolean isValidNCName(String ncName) {
+        if (ncName.length() == 0)
+            return false;
+        char ch = ncName.charAt(0);
+        if( isNCNameStart(ch) == false)
+           return false;
+        for (int i = 1; i < ncName.length(); i++ ) {
+           ch = ncName.charAt(i);
+           if( isNCName( ch ) == false ){
+              return false;
+           }
+        }
+        return true;
+    } // isValidNCName(String):boolean
+
+    /*
+     * [7] Nmtoken ::= (NameChar)+
+     */
+    /**
+     * Check to see if a string is a valid Nmtoken according to [7]
+     * in the XML 1.0 Recommendation
+     *
+     * @param nmtoken string to check
+     * @return true if nmtoken is a valid Nmtoken 
+     */
+    public static boolean isValidNmtoken(String nmtoken) {
+        if (nmtoken.length() == 0)
+            return false;
+        for (int i = 0; i < nmtoken.length(); i++ ) {
+           char ch = nmtoken.charAt(i);
+           if(  ! isName( ch ) ){
+              return false;
+           }
+        }
+        return true;
+    } // isValidName(String):boolean
+
+
+
+
+
+    // encodings
+
+    /**
+     * Returns true if the encoding name is a valid IANA encoding.
+     * This method does not verify that there is a decoder available
+     * for this encoding, only that the characters are valid for an
+     * IANA encoding name.
+     *
+     * @param ianaEncoding The IANA encoding name.
+     */
+    public static boolean isValidIANAEncoding(String ianaEncoding) {
+        if (ianaEncoding != null) {
+            int length = ianaEncoding.length();
+            if (length > 0) {
+                char c = ianaEncoding.charAt(0);
+                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+                    for (int i = 1; i < length; i++) {
+                        c = ianaEncoding.charAt(i);
+                        if ((c < 'A' || c > 'Z') && (c < 'a' || c > 'z') &&
+                            (c < '0' || c > '9') && c != '.' && c != '_' &&
+                            c != '-') {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
+    } // isValidIANAEncoding(String):boolean
+
+    /**
+     * Returns true if the encoding name is a valid Java encoding.
+     * This method does not verify that there is a decoder available
+     * for this encoding, only that the characters are valid for an
+     * Java encoding name.
+     *
+     * @param javaEncoding The Java encoding name.
+     */
+    public static boolean isValidJavaEncoding(String javaEncoding) {
+        if (javaEncoding != null) {
+            int length = javaEncoding.length();
+            if (length > 0) {
+                for (int i = 1; i < length; i++) {
+                    char c = javaEncoding.charAt(i);
+                    if ((c < 'A' || c > 'Z') && (c < 'a' || c > 'z') &&
+                        (c < '0' || c > '9') && c != '.' && c != '_' &&
+                        c != '-') {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+        return false;
+    } // isValidIANAEncoding(String):boolean
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLDocumentScannerImpl.dispatch
+    private void scanXMLDecl() throws IOException, JasperException {
+
+	if (skipString("<?xml")) {
+	    fMarkupDepth++;
+	    // NOTE: special case where document starts with a PI
+	    //       whose name starts with "xml" (e.g. "xmlfoo")
+	    if (XMLChar.isName(peekChar())) {
+		fStringBuffer.clear();
+		fStringBuffer.append("xml");
+		while (XMLChar.isName(peekChar())) {
+		    fStringBuffer.append((char)scanChar());
+		}
+		String target = fSymbolTable.addSymbol(fStringBuffer.ch,
+						       fStringBuffer.offset,
+						       fStringBuffer.length);
+		scanPIData(target, fString);
+	    }
+
+	    // standard XML declaration
+	    else {
+		scanXMLDeclOrTextDecl(false);
+	    }
+	}
+    }
+    
+    // Adapted from:
+    // org.apache.xerces.impl.XMLDocumentFragmentScannerImpl.scanXMLDeclOrTextDecl
+    /**
+     * Scans an XML or text declaration.
+     * <p>
+     * <pre>
+     * [23] XMLDecl ::= '&lt;?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'
+     * [24] VersionInfo ::= S 'version' Eq (' VersionNum ' | " VersionNum ")
+     * [80] EncodingDecl ::= S 'encoding' Eq ('"' EncName '"' |  "'" EncName "'" )
+     * [81] EncName ::= [A-Za-z] ([A-Za-z0-9._] | '-')*
+     * [32] SDDecl ::= S 'standalone' Eq (("'" ('yes' | 'no') "'")
+     *                 | ('"' ('yes' | 'no') '"'))
+     *
+     * [77] TextDecl ::= '&lt;?xml' VersionInfo? EncodingDecl S? '?>'
+     * </pre>
+     *
+     * @param scanningTextDecl True if a text declaration is to
+     *                         be scanned instead of an XML
+     *                         declaration.
+     */
+    private void scanXMLDeclOrTextDecl(boolean scanningTextDecl) 
+        throws IOException, JasperException {
+
+        // scan decl
+        scanXMLDeclOrTextDecl(scanningTextDecl, fStrings);
+        fMarkupDepth--;
+
+        // pseudo-attribute values
+        String encodingPseudoAttr = fStrings[1];
+
+        // set encoding on reader
+        if (encodingPseudoAttr != null) {
+            isEncodingSetInProlog = true;
+	    encoding = encodingPseudoAttr;
+        }
+    }
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLScanner.scanXMLDeclOrTextDecl
+    /**
+     * Scans an XML or text declaration.
+     * <p>
+     * <pre>
+     * [23] XMLDecl ::= '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'
+     * [24] VersionInfo ::= S 'version' Eq (' VersionNum ' | " VersionNum ")
+     * [80] EncodingDecl ::= S 'encoding' Eq ('"' EncName '"' |  "'" EncName "'" )
+     * [81] EncName ::= [A-Za-z] ([A-Za-z0-9._] | '-')*
+     * [32] SDDecl ::= S 'standalone' Eq (("'" ('yes' | 'no') "'")
+     *                 | ('"' ('yes' | 'no') '"'))
+     *
+     * [77] TextDecl ::= '<?xml' VersionInfo? EncodingDecl S? '?>'
+     * </pre>
+     *
+     * @param scanningTextDecl True if a text declaration is to
+     *                         be scanned instead of an XML
+     *                         declaration.
+     * @param pseudoAttributeValues An array of size 3 to return the version,
+     *                         encoding and standalone pseudo attribute values
+     *                         (in that order).
+     *
+     * <strong>Note:</strong> This method uses fString, anything in it
+     * at the time of calling is lost.
+     */
+    private void scanXMLDeclOrTextDecl(boolean scanningTextDecl,
+				       String[] pseudoAttributeValues) 
+                throws IOException, JasperException {
+
+        // pseudo-attribute values
+        String version = null;
+        String encoding = null;
+        String standalone = null;
+
+        // scan pseudo-attributes
+        final int STATE_VERSION = 0;
+        final int STATE_ENCODING = 1;
+        final int STATE_STANDALONE = 2;
+        final int STATE_DONE = 3;
+        int state = STATE_VERSION;
+
+        boolean dataFoundForTarget = false;
+        boolean sawSpace = skipSpaces();
+        while (peekChar() != '?') {
+            dataFoundForTarget = true;
+            String name = scanPseudoAttribute(scanningTextDecl, fString);
+            switch (state) {
+                case STATE_VERSION: {
+                    if (name == fVersionSymbol) {
+                        if (!sawSpace) {
+                            reportFatalError(scanningTextDecl
+                                       ? "jsp.error.xml.spaceRequiredBeforeVersionInTextDecl"
+                                       : "jsp.error.xml.spaceRequiredBeforeVersionInXMLDecl",
+                                             null);
+                        }
+                        version = fString.toString();
+                        state = STATE_ENCODING;
+                        if (!version.equals("1.0")) {
+                            // REVISIT: XML REC says we should throw an error
+			    // in such cases.
+                            // some may object the throwing of fatalError.
+                            err.jspError("jsp.error.xml.versionNotSupported",
+					 version);
+                        }
+                    } else if (name == fEncodingSymbol) {
+                        if (!scanningTextDecl) {
+                            err.jspError("jsp.error.xml.versionInfoRequired");
+                        }
+                        if (!sawSpace) {
+                            reportFatalError(scanningTextDecl
+                                      ? "jsp.error.xml.spaceRequiredBeforeEncodingInTextDecl"
+                                      : "jsp.error.xml.spaceRequiredBeforeEncodingInXMLDecl",
+                                             null);
+                        }
+                        encoding = fString.toString();
+                        state = scanningTextDecl ? STATE_DONE : STATE_STANDALONE;
+                    } else {
+                        if (scanningTextDecl) {
+                            err.jspError("jsp.error.xml.encodingDeclRequired");
+                        }
+                        else {
+                            err.jspError("jsp.error.xml.versionInfoRequired");
+                        }
+                    }
+                    break;
+                }
+                case STATE_ENCODING: {
+                    if (name == fEncodingSymbol) {
+                        if (!sawSpace) {
+                            reportFatalError(scanningTextDecl
+                                      ? "jsp.error.xml.spaceRequiredBeforeEncodingInTextDecl"
+                                      : "jsp.error.xml.spaceRequiredBeforeEncodingInXMLDecl",
+                                             null);
+                        }
+                        encoding = fString.toString();
+                        state = scanningTextDecl ? STATE_DONE : STATE_STANDALONE;
+                        // TODO: check encoding name; set encoding on
+                        //       entity scanner
+                    } else if (!scanningTextDecl && name == fStandaloneSymbol) {
+                        if (!sawSpace) {
+                            err.jspError("jsp.error.xml.spaceRequiredBeforeStandalone");
+                        }
+                        standalone = fString.toString();
+                        state = STATE_DONE;
+                        if (!standalone.equals("yes") && !standalone.equals("no")) {
+                            err.jspError("jsp.error.xml.sdDeclInvalid");
+                        }
+                    } else {
+                        err.jspError("jsp.error.xml.encodingDeclRequired");
+                    }
+                    break;
+                }
+                case STATE_STANDALONE: {
+                    if (name == fStandaloneSymbol) {
+                        if (!sawSpace) {
+                            err.jspError("jsp.error.xml.spaceRequiredBeforeStandalone");
+                        }
+                        standalone = fString.toString();
+                        state = STATE_DONE;
+                        if (!standalone.equals("yes") && !standalone.equals("no")) {
+                            err.jspError("jsp.error.xml.sdDeclInvalid");
+                        }
+                    } else {
+			err.jspError("jsp.error.xml.encodingDeclRequired");
+                    }
+                    break;
+                }
+                default: {
+                    err.jspError("jsp.error.xml.noMorePseudoAttributes");
+                }
+            }
+            sawSpace = skipSpaces();
+        }
+        // REVISIT: should we remove this error reporting?
+        if (scanningTextDecl && state != STATE_DONE) {
+            err.jspError("jsp.error.xml.morePseudoAttributes");
+        }
+        
+        // If there is no data in the xml or text decl then we fail to report
+	// error for version or encoding info above.
+        if (scanningTextDecl) {
+            if (!dataFoundForTarget && encoding == null) {
+                err.jspError("jsp.error.xml.encodingDeclRequired");
+            }
+        } else {
+            if (!dataFoundForTarget && version == null) {
+                err.jspError("jsp.error.xml.versionInfoRequired");
+            }
+        }
+
+        // end
+        if (!skipChar('?')) {
+            err.jspError("jsp.error.xml.xmlDeclUnterminated");
+        }
+        if (!skipChar('>')) {
+            err.jspError("jsp.error.xml.xmlDeclUnterminated");
+
+        }
+        
+        // fill in return array
+        pseudoAttributeValues[0] = version;
+        pseudoAttributeValues[1] = encoding;
+        pseudoAttributeValues[2] = standalone;
+    }
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLEntityManager.EntityScanner.isExternal
+    /** Returns true if the current entity being scanned is external. */
+    public boolean isExternal() {
+	return true;
+    }
+
+    /**
+     * Returns true if the specified character is invalid.
+     *
+     * @param c The character to check.
+     */
+    public static boolean isInvalid(int c) {
+        return !isValid(c);
+    } // isInvalid(int):boolean
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLEntityManager.EntityScanner.peekChar
+    /**
+     * Returns the next character on the input.
+     * <p>
+     * <strong>Note:</strong> The character is <em>not</em> consumed.
+     *
+     * @throws IOException  Thrown if i/o error occurs.
+     * @throws EOFException Thrown on end of file.
+     */
+    public int peekChar() throws IOException {
+	
+	// load more characters, if needed
+	if (fCurrentEntity.position == fCurrentEntity.count) {
+	    load(0, true);
+	}
+	
+	// peek at character
+	int c = fCurrentEntity.ch[fCurrentEntity.position];
+
+	// return peeked character
+	if (fCurrentEntity.isExternal()) {
+	    return c != '\r' ? c : '\n';
+	}
+	else {
+	    return c;
+	}
+	
+    } // peekChar():int
+
+    /**
+     * Returns true if the specified character is a valid name start
+     * character as defined by production [5] in the XML 1.0
+     * specification.
+     *
+     * @param c The character to check.
+     */
+    public static boolean isNameStart(int c) {
+        return c < 0x10000 && (CHARS[c] & MASK_NAME_START) != 0;
+    } // isNameStart(int):boolean
+
+    /**
+     * Returns true if the specified character is a valid name
+     * character as defined by production [4] in the XML 1.0
+     * specification.
+     *
+     * @param c The character to check.
+     */
+    public static boolean isName(int c) {
+        return c < 0x10000 && (CHARS[c] & MASK_NAME) != 0;
+    } // isName(int):boolean
+
+    /*
+     * [7] Nmtoken ::= (NameChar)+
+     */
+    /**
+     * Check to see if a string is a valid Nmtoken according to [7]
+     * in the XML 1.0 Recommendation
+     *
+     * @param nmtoken string to check
+     * @return true if nmtoken is a valid Nmtoken 
+     */
+    public static boolean isValidNmtoken(String nmtoken) {
+        if (nmtoken.length() == 0)
+            return false;
+        for (int i = 0; i < nmtoken.length(); i++ ) {
+           char ch = nmtoken.charAt(i);
+           if(  ! isName( ch ) ){
+              return false;
+           }
+        }
+        return true;
+    } // isValidName(String):boolean

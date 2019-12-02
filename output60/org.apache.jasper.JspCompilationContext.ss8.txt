@@ -1,0 +1,73 @@
+3
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------ Constructor
+
+    public void init(JspCompilationContext ctxt, JspServletWrapper jsw) {
+        this.jsw = jsw;
+        this.ctxt = ctxt;
+        this.options = ctxt.getOptions();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create a "Compiler" object based on some init param data. This
+     * is not done yet. Right now we're just hardcoding the actual
+     * compilers that are created. 
+     */
+    public Compiler createCompiler() throws JasperException {
+        if (jspCompiler != null ) {
+            return jspCompiler;
+        }
+        jspCompiler = null;
+        if (options.getCompilerClassName() != null) {
+            jspCompiler = createCompiler(options.getCompilerClassName());
+        } else {
+            if (options.getCompiler() == null) {
+                jspCompiler = createCompiler("org.apache.jasper.compiler.JDTCompiler");
+                if (jspCompiler == null) {
+                    jspCompiler = createCompiler("org.apache.jasper.compiler.AntCompiler");
+                }
+            } else {
+                jspCompiler = createCompiler("org.apache.jasper.compiler.AntCompiler");
+                if (jspCompiler == null) {
+                    jspCompiler = createCompiler("org.apache.jasper.compiler.JDTCompiler");
+                }
+            }
+        }
+        if (jspCompiler == null) {
+            throw new IllegalStateException(Localizer.getMessage("jsp.error.compiler"));
+        }
+        jspCompiler.init(this, jsw);
+        return jspCompiler;
+    }
+
+
+    protected Compiler createCompiler(String className) {
+        Compiler compiler = null; 
+        try {
+            compiler = (Compiler) Class.forName(className).newInstance();
+        } catch (InstantiationException e) {
+            log.warn(Localizer.getMessage("jsp.error.compiler"), e);
+        } catch (IllegalAccessException e) {
+            log.warn(Localizer.getMessage("jsp.error.compiler"), e);
+        } catch (NoClassDefFoundError e) {
+            if (log.isDebugEnabled()) {
+                log.debug(Localizer.getMessage("jsp.error.compiler"), e);
+            }
+        } catch (ClassNotFoundException e) {
+            if (log.isDebugEnabled()) {
+                log.debug(Localizer.getMessage("jsp.error.compiler"), e);
+            }
+        }
+        return compiler;
+    }
+-----CSCI578-----
+   
+
+    /**
+     * Jasper Java compiler class to use.
+     */
+    public String getCompilerClassName();

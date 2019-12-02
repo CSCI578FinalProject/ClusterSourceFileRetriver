@@ -1,0 +1,86 @@
+8
+
+
+
+    /**
+     * Create a new  UserDatabaseRealm.
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param resourceName Global JNDI resource name of the associated
+     *  UserDatabase
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createUserDatabaseRealm(String parent, String resourceName)
+        throws Exception {
+
+         // Create a new UserDatabaseRealm instance
+        UserDatabaseRealm realm = new UserDatabaseRealm();
+        realm.setResourceName(resourceName);
+        
+        // Add the new instance to its parent component
+        ObjectName pname = new ObjectName(parent);
+        ContainerBase containerBase = getParentContainerFromParent(pname);
+        // Add the new instance to its parent component
+        containerBase.setRealm(realm);
+        // Return the corresponding MBean name
+        ObjectName oname = realm.getObjectName();
+        // FIXME getObjectName() returns null
+        //ObjectName oname = 
+        //    MBeanUtils.createObjectName(pname.getDomain(), realm);
+        if (oname != null) {
+            return (oname.toString());
+        } else {
+            return null;
+        }   
+
+    }
+    
+   /**
+     * Get Parent ContainerBase to add its child component 
+     * from parent's ObjectName
+     */
+    private ContainerBase getParentContainerFromParent(ObjectName pname) 
+        throws Exception {
+        
+        String type = pname.getKeyProperty("type");
+        String j2eeType = pname.getKeyProperty("j2eeType");
+        Service service = getService(pname);
+        StandardEngine engine = (StandardEngine) service.getContainer();
+        if ((j2eeType!=null) && (j2eeType.equals("WebModule"))) {
+            String name = pname.getKeyProperty("name");
+            name = name.substring(2);
+            int i = name.indexOf("/");
+            String hostName = name.substring(0,i);
+            String path = name.substring(i);
+            Host host = (Host) engine.findChild(hostName);
+            String pathStr = getPathStr(path);
+            StandardContext context = (StandardContext)host.findChild(pathStr);
+            return context;
+        } else if (type != null) {
+            if (type.equals("Engine")) {
+                return engine;
+            } else if (type.equals("Host")) {
+                String hostName = pname.getKeyProperty("host");
+                StandardHost host = (StandardHost) engine.findChild(hostName);
+                return host;
+            }
+        }
+        return null;
+        
+    }
+
+
+    /**
+     * Little convenience method to remove redundant code
+     * when retrieving the path string
+     *
+     * @param t path string
+     * @return empty string if t==null || t.equals("/")
+     */
+    private final String getPathStr(String t) {
+        if (t == null || t.equals("/")) {
+            return "";
+        }
+        return t;
+    }

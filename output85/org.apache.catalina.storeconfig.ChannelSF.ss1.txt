@@ -1,0 +1,84 @@
+6
+-----CSCI578-----
+
+
+    /**
+     * Returns the membership service
+     * @return MembershipService
+     * @see MembershipService
+     */
+    public MembershipService getMembershipService();
+-----CSCI578-----
+
+
+    /**
+     * returns the channel receiver
+     * @return ChannelReceiver
+     * @see ChannelReceiver
+     */
+    public ChannelReceiver getChannelReceiver();
+-----CSCI578-----
+
+
+    /**
+     * Returns the interceptor stack
+     * @return Iterator
+     * @see Channel#addInterceptor(ChannelInterceptor)
+     */
+    public Iterator<ChannelInterceptor> getInterceptors();
+-----CSCI578-----
+
+
+    /**
+     * Store the specified Channel children.
+     *
+     * @param aWriter
+     *            PrintWriter to which we are storing
+     * @param indent
+     *            Number of spaces to indent this element
+     * @param aChannel
+     *            Channel whose properties are being stored
+     *
+     * @exception Exception
+     *                if an exception occurs while storing
+     */
+    @Override
+    public void storeChildren(PrintWriter aWriter, int indent, Object aChannel,
+            StoreDescription parentDesc) throws Exception {
+        if (aChannel instanceof Channel) {
+            Channel channel = (Channel) aChannel;
+            if (channel instanceof ManagedChannel) {
+                ManagedChannel managedChannel = (ManagedChannel) channel;
+                // Store nested <Membership> element
+                MembershipService service = managedChannel.getMembershipService();
+                if (service != null) {
+                    storeElement(aWriter, indent, service);
+                }
+                // Store nested <Sender> element
+                ChannelSender sender = managedChannel.getChannelSender();
+                if (sender != null) {
+                    storeElement(aWriter, indent, sender);
+                }
+                // Store nested <Receiver> element
+                ChannelReceiver receiver = managedChannel.getChannelReceiver();
+                if (receiver != null) {
+                    storeElement(aWriter, indent, receiver);
+                }
+                Iterator<ChannelInterceptor> interceptors = managedChannel.getInterceptors();
+                while (interceptors.hasNext()) {
+                    ChannelInterceptor interceptor = interceptors.next();
+                    storeElement(aWriter, indent, interceptor);
+                }
+            }
+       }
+    }
+-----CSCI578-----
+
+
+    /**
+     * returns the channel sender
+     * @return ChannelSender
+     * @see ChannelSender
+     */
+    public ChannelSender getChannelSender();
+-----CSCI578-----

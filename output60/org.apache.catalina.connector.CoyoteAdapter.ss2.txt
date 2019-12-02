@@ -1,0 +1,149 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Returns the first instance of any of the given bytes in the byte array
+     * between the specified start and end.
+     * 
+     * @param bytes The byte array to search
+     * @param start The point to start searching from in the byte array
+     * @param end   The point to stop searching in the byte array
+     * @param b     The array of bytes to search for 
+     * @return      The position of the first instance of the byte or -1 if the
+     *                  byte is not found.
+     */
+    public static int findBytes(byte bytes[], int start, int end, byte b[]) {
+        int blen = b.length;
+        int offset = start;
+        while (offset < end) {
+            for (int i = 0;  i < blen; i++) 
+                if (bytes[offset] == b[i]) {
+                    return offset;
+                }
+            offset++;
+        }
+        return -1;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Extract the path parameters from the request. This assumes parameters are
+     * of the form /path;name=value;name2=value2/ etc. Currently only really
+     * interested in the session ID that will be in this form. Other parameters
+     * can safely be ignored.
+     *
+     * @param req
+     * @param request
+     */
+    protected void parsePathParameters(org.apache.coyote.Request req,
+            Request request) {
+
+        // Process in bytes (this is default format so this is normally a NO-OP
+        req.decodedURI().toBytes();
+
+        ByteChunk uriBC = req.decodedURI().getByteChunk();
+        int semicolon = uriBC.indexOf(';', 0);
+
+        // What encoding to use? Some platforms, eg z/os, use a default
+        // encoding that doesn't give the expected result so be explicit
+        String enc = connector.getURIEncoding();
+        if (enc == null) {
+            enc = "ISO-8859-1";
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("coyoteAdapter.debug", "uriBC",
+                    uriBC.toString()));
+            log.debug(sm.getString("coyoteAdapter.debug", "semicolon",
+                    String.valueOf(semicolon)));
+            log.debug(sm.getString("coyoteAdapter.debug", "enc", enc));
+        }
+
+        boolean warnedEncoding = false;
+
+        while (semicolon > -1) {
+            // Parse path param, and extract it from the decoded request URI
+            int start = uriBC.getStart();
+            int end = uriBC.getEnd();
+
+            int pathParamStart = semicolon + 1;
+            int pathParamEnd = ByteChunk.findBytes(uriBC.getBuffer(),
+                    start + pathParamStart, end,
+                    new byte[] {';', '/'});
+
+            String pv = null;
+
+            if (pathParamEnd >= 0) {
+                try {
+                    pv = (new String(uriBC.getBuffer(), start + pathParamStart,
+                                pathParamEnd - pathParamStart, enc));
+                } catch (UnsupportedEncodingException e) {
+                    if (!warnedEncoding) {
+                        log.warn(sm.getString("coyoteAdapter.parsePathParam",
+                                enc));
+                        warnedEncoding = true;
+                    }
+                }
+                // Extract path param from decoded request URI
+                byte[] buf = uriBC.getBuffer();
+                for (int i = 0; i < end - start - pathParamEnd; i++) {
+                    buf[start + semicolon + i]
+                        = buf[start + i + pathParamEnd];
+                }
+                uriBC.setBytes(buf, start,
+                        end - start - pathParamEnd + semicolon);
+            } else {
+                try {
+                    pv = (new String(uriBC.getBuffer(), start + pathParamStart,
+                                (end - start) - pathParamStart, enc));
+                } catch (UnsupportedEncodingException e) {
+                    if (!warnedEncoding) {
+                        log.warn(sm.getString("coyoteAdapter.parsePathParam",
+                                enc));
+                        warnedEncoding = true;
+                    }
+                }
+                uriBC.setEnd(start + semicolon);
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("coyoteAdapter.debug", "pathParamStart",
+                        String.valueOf(pathParamStart)));
+                log.debug(sm.getString("coyoteAdapter.debug", "pathParamEnd",
+                        String.valueOf(pathParamEnd)));
+                log.debug(sm.getString("coyoteAdapter.debug", "pv", pv));
+            }
+
+            if (pv != null) {
+                int equals = pv.indexOf('=');
+                if (equals > -1) {
+                    String name = pv.substring(0, equals);
+                    String value = pv.substring(equals + 1);
+                    request.addPathParameter(name, value);
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("coyoteAdapter.debug", "equals",
+                                String.valueOf(equals)));
+                        log.debug(sm.getString("coyoteAdapter.debug", "name",
+                                name));
+                        log.debug(sm.getString("coyoteAdapter.debug", "value",
+                                value));
+                    }
+                }
+            }
+
+            semicolon = uriBC.indexOf(';', semicolon);
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    protected void addPathParameter(String name, String value) {
+        pathParameters.put(name, value);
+    }

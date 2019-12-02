@@ -1,0 +1,99 @@
+7
+-----CSCI578-----
+
+
+
+    private void validateInitialWindowSize(long initialWindowSize) throws T {
+        if (initialWindowSize > MAX_WINDOW_SIZE) {
+            String msg = sm.getString("connectionSettings.windowSizeTooBig",
+                    connectionId, Long.toString(initialWindowSize), Long.toString(MAX_WINDOW_SIZE));
+            throwException(msg, Http2Error.FLOW_CONTROL_ERROR);
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void validateHeaderTableSize(long headerTableSize) throws T {
+        // Need to put a sensible limit on this. Start with 16k (default is 4k)
+        if (headerTableSize > (16 * 1024)) {
+            String msg = sm.getString("connectionSettings.headerTableSizeLimit",
+                    connectionId, Long.toString(headerTableSize));
+            throwException(msg, Http2Error.PROTOCOL_ERROR);
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void validateMaxFrameSize(long maxFrameSize) throws T {
+        if (maxFrameSize < MIN_MAX_FRAME_SIZE || maxFrameSize > MAX_MAX_FRAME_SIZE) {
+            String msg = sm.getString("connectionSettings.maxFrameSizeInvalid",
+                    connectionId, Long.toString(maxFrameSize), Integer.toString(MIN_MAX_FRAME_SIZE),
+                    Integer.toString(MAX_MAX_FRAME_SIZE));
+            throwException(msg, Http2Error.PROTOCOL_ERROR);
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void set(Setting setting, long value) throws T {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("connectionSettings.debug",
+                    connectionId, setting, Long.toString(value)));
+        }
+
+        switch(setting) {
+        case HEADER_TABLE_SIZE:
+            validateHeaderTableSize(value);
+            break;
+        case ENABLE_PUSH:
+            validateEnablePush(value);
+            break;
+        case MAX_CONCURRENT_STREAMS:
+            // No further validation required
+            break;
+        case INITIAL_WINDOW_SIZE:
+            validateInitialWindowSize(value);
+            break;
+        case MAX_FRAME_SIZE:
+            validateMaxFrameSize(value);
+            break;
+        case MAX_HEADER_LIST_SIZE:
+            // No further validation required
+            break;
+        case UNKNOWN:
+            // Unrecognised. Ignore it.
+            log.warn(sm.getString("connectionSettings.unknown",
+                    connectionId, setting, Long.toString(value)));
+            return;
+        }
+
+        set(setting, Long.valueOf(value));
+    }
+
+
+
+    synchronized void set(Setting setting, Long value) {
+        current.put(setting, value);
+    }
+-----CSCI578-----
+
+
+
+    abstract void throwException(String msg, Http2Error error) throws T;
+-----CSCI578-----
+
+
+
+    private void validateEnablePush(long enablePush) throws T {
+        // Can't be less than zero since the result of the byte->long conversion
+        // will never be negative
+        if (enablePush > 1) {
+            String msg = sm.getString("connectionSettings.enablePushInvalid",
+                    connectionId, Long.toString(enablePush));
+            throwException(msg, Http2Error.PROTOCOL_ERROR);
+        }
+    }
+-----CSCI578-----

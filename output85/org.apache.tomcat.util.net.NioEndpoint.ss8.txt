@@ -1,0 +1,56 @@
+8
+-----CSCI578-----
+
+
+
+    /**
+     * Deallocate NIO memory pools, and close server socket.
+     */
+    @Override
+    public void unbind() throws Exception {
+        if (log.isDebugEnabled()) {
+            log.debug("Destroy initiated for "+new InetSocketAddress(getAddress(),getPort()));
+        }
+        if (running) {
+            stop();
+        }
+        // Close server socket
+        serverSock.socket().close();
+        serverSock.close();
+        serverSock = null;
+        destroySsl();
+        super.unbind();
+        releaseCaches();
+        selectorPool.close();
+        if (log.isDebugEnabled()) {
+            log.debug("Destroy completed for "+new InetSocketAddress(getAddress(),getPort()));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    protected void releaseCaches() {
+        this.nioChannels.clear();
+        this.processorCache.clear();
+        if (getHandler() != null ) {
+            getHandler().recycle();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void unbind() throws Exception {
+        for (SSLHostConfig sslHostConfig : sslHostConfigs.values()) {
+            for (SSLHostConfigCertificate certificate : sslHostConfig.getCertificates(true)) {
+                certificate.setSslContext(null);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

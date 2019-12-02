@@ -1,0 +1,40 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Stop the endpoint. This will cause all processing threads to stop.
+     */
+    public void stop() {
+        if (running) {
+            running = false;
+            unlockAccept();
+            for (int i=0; pollers!=null && i<pollers.length; i++) {
+                if (pollers[i]==null) continue;
+                pollers[i].destroy();
+                pollers[i] = null;
+            }
+            try {
+                stopLatch.await(selectorTimeout+100,TimeUnit.MILLISECONDS);
+            } catch (InterruptedException ignore) {
+            }
+        }
+        eventCache.clear();
+        keyCache.clear();
+        nioChannels.clear();
+        processorCache.clear();
+        if ( executor!=null ) {
+            if ( executor instanceof ThreadPoolExecutor ) {
+                //this is our internal one, so we need to shut it down
+                ThreadPoolExecutor tpe = (ThreadPoolExecutor) executor;
+                tpe.shutdownNow();
+                TaskQueue queue = (TaskQueue) tpe.getQueue();
+                queue.setParent(null,null);
+            }
+            executor = null;
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----

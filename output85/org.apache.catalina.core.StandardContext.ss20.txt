@@ -1,0 +1,59 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Should the next call to <code>addWelcomeFile()</code> cause replacement
+     * of any existing welcome files?  This will be set before processing the
+     * web application's deployment descriptor, so that application specified
+     * choices <strong>replace</strong>, rather than append to, those defined
+     * in the global descriptor.
+     */
+    private boolean replaceWelcomeFiles = false;
+
+
+
+    /**
+     * Add a new welcome file to the set recognized by this Context.
+     *
+     * @param name New welcome file name
+     */
+    @Override
+    public void addWelcomeFile(String name) {
+
+        synchronized (welcomeFilesLock) {
+            // Welcome files from the application deployment descriptor
+            // completely replace those from the default conf/web.xml file
+            if (replaceWelcomeFiles) {
+                fireContainerEvent(CLEAR_WELCOME_FILES_EVENT, null);
+                welcomeFiles = new String[0];
+                setReplaceWelcomeFiles(false);
+            }
+            String results[] =new String[welcomeFiles.length + 1];
+            for (int i = 0; i < welcomeFiles.length; i++)
+                results[i] = welcomeFiles[i];
+            results[welcomeFiles.length] = name;
+            welcomeFiles = results;
+        }
+        if(this.getState().equals(LifecycleState.STARTED))
+            fireContainerEvent(ADD_WELCOME_FILE_EVENT, name);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the "replace welcome files" property.
+     *
+     * @param replaceWelcomeFiles The new property value
+     */
+    public void setReplaceWelcomeFiles(boolean replaceWelcomeFiles) {
+
+        boolean oldReplaceWelcomeFiles = this.replaceWelcomeFiles;
+        this.replaceWelcomeFiles = replaceWelcomeFiles;
+        support.firePropertyChange("replaceWelcomeFiles",
+                                   oldReplaceWelcomeFiles,
+                                   this.replaceWelcomeFiles);
+
+    }

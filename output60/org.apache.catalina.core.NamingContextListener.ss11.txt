@@ -1,0 +1,223 @@
+9
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of resource environment reference names for this
+     * web application.  If none have been specified, a zero-length
+     * array is returned.
+     */
+    public ContextResourceEnvRef[] findResourceEnvRefs() {
+
+        synchronized (resourceEnvRefs) {
+            ContextResourceEnvRef results[] = new ContextResourceEnvRef[resourceEnvRefs.size()];
+            return ((ContextResourceEnvRef[]) resourceEnvRefs.values().toArray(results));
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return a configured property.
+     */
+    public Object getProperty(String name) {
+        return properties.get(name);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+
+    /**
+     * Get the transaction object.
+     */
+    public ContextTransaction getTransaction() {
+        return transaction;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the defined EJB resource references for this application.
+     * If there are none, a zero-length array is returned.
+     */
+    public ContextEjb[] findEjbs() {
+
+        synchronized (ejbs) {
+            ContextEjb results[] = new ContextEjb[ejbs.size()];
+            return ((ContextEjb[]) ejbs.values().toArray(results));
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * List properties.
+     */
+    public Iterator listProperties() {
+        return properties.keySet().iterator();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Creates and binds a new context. Creates a new context with the given 
+     * name and binds it in the target context (that named by all but 
+     * terminal atomic component of the name). All intermediate contexts and 
+     * the target context must already exist.
+     * 
+     * @param name the name of the context to create; may not be empty
+     * @return the newly created context
+     * @exception NameAlreadyBoundException if name is already bound
+     * @exception InvalidAttributesException if creation of the subcontext 
+     * requires specification of mandatory attributes
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Context createSubcontext(Name name)
+        throws NamingException {
+        checkWritable();
+        
+        Context newContext = new NamingContext(env, this.name);
+        bind(name, newContext);
+        
+        return newContext;
+    }
+
+
+
+    /**
+     * Creates and binds a new context.
+     * 
+     * @param name the name of the context to create; may not be empty
+     * @return the newly created context
+     * @exception NameAlreadyBoundException if name is already bound
+     * @exception InvalidAttributesException if creation of the subcontext 
+     * requires specification of mandatory attributes
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Context createSubcontext(String name)
+        throws NamingException {
+        return createSubcontext(new CompositeName(name));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create and initialize the JNDI naming context.
+     */
+    private void createNamingContext()
+        throws NamingException {
+
+        // Creating the comp subcontext
+        if (container instanceof Server) {
+            compCtx = namingContext;
+            envCtx = namingContext;
+        } else {
+            compCtx = namingContext.createSubcontext("comp");
+            envCtx = compCtx.createSubcontext("env");
+        }
+
+        int i;
+
+        if (log.isDebugEnabled())
+            log.debug("Creating JNDI naming context");
+
+        if (namingResources == null) {
+            namingResources = new NamingResources();
+            namingResources.setContainer(container);
+        }
+
+        // Resource links
+        ContextResourceLink[] resourceLinks =
+            namingResources.findResourceLinks();
+        for (i = 0; i < resourceLinks.length; i++) {
+            addResourceLink(resourceLinks[i]);
+        }
+
+        // Resources
+        ContextResource[] resources = namingResources.findResources();
+        for (i = 0; i < resources.length; i++) {
+            addResource(resources[i]);
+        }
+
+        // Resources Env
+        ContextResourceEnvRef[] resourceEnvRefs = namingResources.findResourceEnvRefs();
+        for (i = 0; i < resourceEnvRefs.length; i++) {
+            addResourceEnvRef(resourceEnvRefs[i]);
+        }
+
+        // Environment entries
+        ContextEnvironment[] contextEnvironments =
+            namingResources.findEnvironments();
+        for (i = 0; i < contextEnvironments.length; i++) {
+            addEnvironment(contextEnvironments[i]);
+        }
+
+        // EJB references
+        ContextEjb[] ejbs = namingResources.findEjbs();
+        for (i = 0; i < ejbs.length; i++) {
+            addEjb(ejbs[i]);
+        }
+
+        // WebServices references
+        ContextService[] services = namingResources.findServices();
+        for (i = 0; i < services.length; i++) {
+            addService(services[i]);
+        }
+
+        // Binding a User Transaction reference
+        if (container instanceof Context) {
+            try {
+                Reference ref = new TransactionRef();
+                compCtx.bind("UserTransaction", ref);
+                ContextTransaction transaction = namingResources.getTransaction();
+                if (transaction != null) {
+                    Iterator params = transaction.listProperties();
+                    while (params.hasNext()) {
+                        String paramName = (String) params.next();
+                        String paramValue = (String) transaction.getProperty(paramName);
+                        StringRefAddr refAddr = new StringRefAddr(paramName, paramValue);
+                        ref.add(refAddr);
+                    }
+                }
+            } catch (NameAlreadyBoundException e) {
+                // Ignore because UserTransaction was obviously
+                // added via ResourceLink
+            } catch (NamingException e) {
+                logger.error(sm.getString("naming.bindFailed", e));
+            }
+        }
+
+        // Binding the resources directory context
+        if (container instanceof Context) {
+            try {
+                compCtx.bind("Resources",
+                             ((Container) container).getResources());
+            } catch (NamingException e) {
+                logger.error(sm.getString("naming.bindFailed", e));
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the defined web service references for this application.  If
+     * none have been defined, a zero-length array is returned.
+     */
+    public ContextService[] findServices() {
+        
+        synchronized (services) {
+            ContextService results[] = new ContextService[services.size()];
+            return ((ContextService[]) services.values().toArray(results));
+        }
+        
+    }

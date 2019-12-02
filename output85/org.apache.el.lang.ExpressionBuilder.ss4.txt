@@ -1,0 +1,69 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getLocalName() {
+        return localName;
+    }
+-----CSCI578-----
+
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see com.sun.el.parser.NodeVisitor#visit(com.sun.el.parser.Node)
+     */
+    @Override
+    public void visit(Node node) throws ELException {
+        if (node instanceof AstFunction) {
+
+            AstFunction funcNode = (AstFunction) node;
+
+            Method m = null;
+
+            if (this.fnMapper != null) {
+                m = fnMapper.resolveFunction(funcNode.getPrefix(), funcNode
+                        .getLocalName());
+            }
+
+            // References to variables that refer to lambda expressions will be
+            // parsed as functions. This is handled at runtime but at this point
+            // need to treat it as a variable rather than a function.
+            if (m == null && this.varMapper != null &&
+                    funcNode.getPrefix().length() == 0) {
+                this.varMapper.resolveVariable(funcNode.getLocalName());
+                return;
+            }
+
+            if (this.fnMapper == null) {
+                throw new ELException(MessageFactory.get("error.fnMapper.null"));
+            }
+
+            if (m == null) {
+                throw new ELException(MessageFactory.get(
+                        "error.fnMapper.method", funcNode.getOutputName()));
+            }
+
+            int methodParameterCount = m.getParameterTypes().length;
+            // AstFunction->MethodParameters->Parameters()
+            int inputParameterCount = node.jjtGetChild(0).jjtGetNumChildren();
+            if (m.isVarArgs() && inputParameterCount < methodParameterCount - 1 ||
+                    !m.isVarArgs() && inputParameterCount != methodParameterCount) {
+                throw new ELException(MessageFactory.get(
+                        "error.fnMapper.paramcount", funcNode.getOutputName(),
+                        "" + methodParameterCount, "" + node.jjtGetChild(0).jjtGetNumChildren()));
+            }
+        } else if (node instanceof AstIdentifier && this.varMapper != null) {
+            String variable = ((AstIdentifier) node).getImage();
+
+            // simply capture it
+            this.varMapper.resolveVariable(variable);
+        }
+    }
+-----CSCI578-----
+
+
+    public String getPrefix() {
+        return prefix;
+    }

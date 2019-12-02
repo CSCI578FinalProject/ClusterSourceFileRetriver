@@ -1,0 +1,46 @@
+2
+-----CSCI578-----
+
+
+    @Override
+    public String[] list(String path) {
+        return list(path, true);
+    }
+
+
+    private String[] list(String path, boolean validate) {
+        if (validate) {
+            path = validate(path);
+        }
+
+        // Set because we don't want duplicates
+        // LinkedHashSet to retain the order. It is the order of the
+        // WebResourceSet that matters but it is simpler to retain the order
+        // over all of the JARs.
+        HashSet<String> result = new LinkedHashSet<>();
+        for (List<WebResourceSet> list : allResources) {
+            for (WebResourceSet webResourceSet : list) {
+                if (!webResourceSet.getClassLoaderOnly()) {
+                    String[] entries = webResourceSet.list(path);
+                    for (String entry : entries) {
+                        result.add(entry);
+                    }
+                }
+            }
+        }
+        return result.toArray(new String[result.size()]);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Obtain the list of the names of all of the files and directories located
+     * in the specified directory.
+     *
+     * @param path  The path for the resource of interest relative to the root
+     *              of the web application. It must start with '/'.
+     *
+     * @return  The list of resources. If path does not refer to a directory
+     *          then a zero length array will be returned.
+     */
+    String[] list(String path);

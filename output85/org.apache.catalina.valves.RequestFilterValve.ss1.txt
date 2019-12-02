@@ -1,0 +1,176 @@
+6
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Extract the desired request property, and pass it (along with the
+     * specified request and response objects) to the protected
+     * <code>process()</code> method to perform the actual filtering.
+     * This method must be implemented by a concrete subclass.
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be created
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    @Override
+    public abstract void invoke(Request request, Response response)
+        throws IOException, ServletException;
+
+
+
+    /**
+     * Perform the filtering that has been configured for this Valve, matching
+     * against the specified request property.
+     *
+     * @param property The request property on which to filter
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be processed
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    protected void process(String property, Request request, Response response)
+            throws IOException, ServletException {
+
+        if (isAllowed(property)) {
+            getNext().invoke(request, response);
+            return;
+        }
+
+        // Deny this request
+        denyRequest(request, response);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Reject the request that was denied by this valve.
+     * <p>If <code>invalidAuthenticationWhenDeny</code> is true
+     * and the context has <code>preemptiveAuthentication</code>
+     * set, set an invalid authorization header to trigger basic auth.
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be processed
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    protected void denyRequest(Request request, Response response)
+            throws IOException, ServletException {
+        if (invalidAuthenticationWhenDeny) {
+            Context context = request.getContext();
+            if (context != null && context.getPreemptiveAuthentication()) {
+                if (request.getCoyoteRequest().getMimeHeaders().getValue("authorization") == null) {
+                    request.getCoyoteRequest().getMimeHeaders().addValue("authorization").setString("invalid");
+                }
+                getNext().invoke(request, response);
+                return;
+            }
+        }
+        response.sendError(denyStatus);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Perform the test implemented by this Valve, matching against the
+     * specified request property value. This method is public so that it can be
+     * called through JMX, e.g. to test whether certain IP address is allowed or
+     * denied by the valve configuration.
+     *
+     * @param property The request property value on which to filter
+     * @return <code>true</code> if the request is allowed
+     */
+    public boolean isAllowed(String property) {
+        // Use local copies for thread safety
+        Pattern deny = this.deny;
+        Pattern allow = this.allow;
+
+        // Check the deny patterns, if any
+        if (deny != null && deny.matcher(property).matches()) {
+            return false;
+        }
+
+        // Check the allow patterns, if any
+        if (allow != null && allow.matcher(property).matches()) {
+            return true;
+        }
+
+        // Allow if denies specified but not allows
+        if (deny != null && allow == null) {
+            return true;
+        }
+
+        // Deny this request
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * <p>Perform request processing as required by this Valve.</p>
+     *
+     * <p>An individual Valve <b>MAY</b> perform the following actions, in
+     * the specified order:</p>
+     * <ul>
+     * <li>Examine and/or modify the properties of the specified Request and
+     *     Response.
+     * <li>Examine the properties of the specified Request, completely generate
+     *     the corresponding Response, and return control to the caller.
+     * <li>Examine the properties of the specified Request and Response, wrap
+     *     either or both of these objects to supplement their functionality,
+     *     and pass them on.
+     * <li>If the corresponding Response was not generated (and control was not
+     *     returned, call the next Valve in the pipeline (if there is one) by
+     *     executing <code>getNext().invoke()</code>.
+     * <li>Examine, but not modify, the properties of the resulting Response
+     *     (which was created by a subsequently invoked Valve or Container).
+     * </ul>
+     *
+     * <p>A Valve <b>MUST NOT</b> do any of the following things:</p>
+     * <ul>
+     * <li>Change request properties that have already been used to direct
+     *     the flow of processing control for this request (for instance,
+     *     trying to change the virtual host to which a Request should be
+     *     sent from a pipeline attached to a Host or Context in the
+     *     standard implementation).
+     * <li>Create a completed Response <strong>AND</strong> pass this
+     *     Request and Response on to the next Valve in the pipeline.
+     * <li>Consume bytes from the input stream associated with the Request,
+     *     unless it is completely generating the response, or wrapping the
+     *     request before passing it on.
+     * <li>Modify the HTTP headers included with the Response after the
+     *     <code>getNext().invoke()</code> method has returned.
+     * <li>Perform any actions on the output stream associated with the
+     *     specified Response after the <code>getNext().invoke()</code> method has
+     *     returned.
+     * </ul>
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be created
+     *
+     * @exception IOException if an input/output error occurs, or is thrown
+     *  by a subsequently invoked Valve, Filter, or Servlet
+     * @exception ServletException if a servlet error occurs, or is thrown
+     *  by a subsequently invoked Valve, Filter, or Servlet
+     */
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException;
+-----CSCI578-----
+
+
+    /**
+     * @return if a user presents authentication credentials, will the
+     * context will process them when the request is for a non-protected
+     * resource.
+     */
+    public boolean getPreemptiveAuthentication();

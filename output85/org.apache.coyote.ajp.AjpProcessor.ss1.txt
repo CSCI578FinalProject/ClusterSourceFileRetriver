@@ -1,0 +1,44 @@
+4
+-----CSCI578-----
+
+
+
+    @Override
+    protected boolean flushBufferedWrite() throws IOException {
+        if (hasDataToWrite()) {
+            socketWrapper.flush(false);
+            if (hasDataToWrite()) {
+                // There is data to write but go via Response to
+                // maintain a consistent view of non-blocking state
+                response.checkRegisterForWrite();
+                return true;
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    private boolean hasDataToWrite() {
+        return responseMsgPos != -1 || socketWrapper.hasDataToWrite();
+    }
+-----CSCI578-----
+
+
+    public boolean checkRegisterForWrite() {
+        AtomicBoolean ready = new AtomicBoolean(false);
+        synchronized (nonBlockingStateLock) {
+            if (!registeredForWrite) {
+                action(ActionCode.NB_WRITE_INTEREST, ready);
+                registeredForWrite = !ready.get();
+            }
+        }
+        return ready.get();
+    }
+-----CSCI578-----
+
+
+    public boolean hasDataToWrite() {
+        return !socketBufferHandler.isWriteBufferEmpty() || bufferedWrites.size() > 0;
+    }

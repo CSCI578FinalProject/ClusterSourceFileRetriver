@@ -1,0 +1,89 @@
+4
+-----CSCI578-----
+
+
+    // -------------------- other utils --------------------
+    public static void clear() {
+        objectMethods.clear();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /*
+     * Get the set of current threads as an array.
+     */
+    private Thread[] getThreads() {
+        // Get the current thread group
+        ThreadGroup tg = Thread.currentThread( ).getThreadGroup( );
+        // Find the root thread group
+        while (tg.getParent() != null) {
+            tg = tg.getParent();
+        }
+
+        int threadCountGuess = tg.activeCount() + 50;
+        Thread[] threads = new Thread[threadCountGuess];
+        int threadCountActual = tg.enumerate(threads);
+        // Make sure we don't miss any threads
+        while (threadCountActual == threadCountGuess) {
+            threadCountGuess *=2;
+            threads = new Thread[threadCountGuess];
+            // Note tg.enumerate(Thread[]) silently ignores any threads that
+            // can't fit into the array
+            threadCountActual = tg.enumerate(threads);
+        }
+
+        return threads;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Clear references.
+     */
+    protected void clearReferences() {
+
+        // De-register any remaining JDBC drivers
+        clearReferencesJdbc();
+
+        // Stop any threads the web application started
+        clearReferencesThreads();
+
+        // Clear any ThreadLocals loaded by this class loader
+        clearReferencesThreadLocals();
+
+        // Clear RMI Targets loaded by this class loader
+        if (clearReferencesRmiTargets) {
+            clearReferencesRmiTargets();
+        }
+
+        // Null out any static or final fields from loaded classes,
+        // as a workaround for apparent garbage collection bugs
+        if (ENABLE_CLEAR_REFERENCES) {
+            clearReferencesStaticFinal();
+        }
+
+         // Clear the IntrospectionUtils cache.
+        IntrospectionUtils.clear();
+
+        // Clear the classloader reference in common-logging
+        if (clearReferencesLogFactoryRelease) {
+            org.apache.juli.logging.LogFactory.release(this);
+        }
+
+        // Clear the resource bundle cache
+        // This shouldn't be necessary, the cache uses weak references but
+        // it has caused leaks. Oddly, using the leak detection code in
+        // standard host allows the class loader to be GC'd. This has been seen
+        // on Sun but not IBM JREs. Maybe a bug in Sun's GC impl?
+        clearReferencesResourceBundles();
+
+        // Clear the classloader reference in the VM's bean introspector
+        java.beans.Introspector.flushCaches();
+
+    }

@@ -1,0 +1,162 @@
+18
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+
+
+    /**
+     * parse pattern string and create the array of AccessLogElement
+     */
+    protected AccessLogElement[] createLogElements() {
+        List<AccessLogElement> list = new ArrayList<AccessLogElement>();
+        boolean replace = false;
+        StringBuffer buf = new StringBuffer();
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (replace) {
+                /*
+                 * For code that processes {, the behavior will be ... if I do
+                 * not enounter a closing } - then I ignore the {
+                 */
+                if ('{' == ch) {
+                    StringBuffer name = new StringBuffer();
+                    int j = i + 1;
+                    for (; j < pattern.length() && '}' != pattern.charAt(j); j++) {
+                        name.append(pattern.charAt(j));
+                    }
+                    if (j + 1 < pattern.length()) {
+                        /* the +1 was to account for } which we increment now */
+                        j++;
+                        list.add(createAccessLogElement(name.toString(),
+                                pattern.charAt(j)));
+                        i = j; /* Since we walked more than one character */
+                    } else {
+                        // D'oh - end of string - pretend we never did this
+                        // and do processing the "old way"
+                        list.add(createAccessLogElement(ch));
+                    }
+                } else {
+                    list.add(createAccessLogElement(ch));
+                }
+                replace = false;
+            } else if (ch == '%') {
+                replace = true;
+                list.add(new StringElement(buf.toString()));
+                buf = new StringBuffer();
+            } else {
+                buf.append(ch);
+            }
+        }
+        if (buf.length() > 0) {
+            list.add(new StringElement(buf.toString()));
+        }
+        return list.toArray(new AccessLogElement[0]);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * create an AccessLogElement implementation which needs header string
+     */
+    protected AccessLogElement createAccessLogElement(String header, char pattern) {
+        switch (pattern) {
+        case 'i':
+            return new HeaderElement(header);
+        case 'c':
+            return new CookieElement(header);
+        case 'o':
+            return new ResponseHeaderElement(header);
+        case 'r':
+            return new RequestAttributeElement(header);
+        case 's':
+            return new SessionAttributeElement(header);            
+        default:
+            return new StringElement("???");
+        }
+    }
+
+
+    /**
+     * create an AccessLogElement implementation
+     */
+    protected AccessLogElement createAccessLogElement(char pattern) {
+        switch (pattern) {
+        case 'a':
+            return new RemoteAddrElement();
+        case 'A':
+            return new LocalAddrElement();
+        case 'b':
+            return new ByteSentElement(true);
+        case 'B':
+            return new ByteSentElement(false);
+        case 'D':
+            return new ElapsedTimeElement(true);
+        case 'h':
+            return new HostElement();
+        case 'H':
+            return new ProtocolElement();
+        case 'l':
+            return new LogicalUserNameElement();
+        case 'm':
+            return new MethodElement();
+        case 'p':
+            return new LocalPortElement();
+        case 'q':
+            return new QueryElement();
+        case 'r':
+            return new RequestElement();
+        case 's':
+            return new HttpStatusCodeElement();
+        case 'S':
+            return new SessionIdElement();
+        case 't':
+            return new DateAndTimeElement();
+        case 'T':
+            return new ElapsedTimeElement(false);
+        case 'u':
+            return new UserElement();
+        case 'U':
+            return new RequestURIElement();
+        case 'v':
+            return new LocalServerNameElement();
+        case 'I':
+            return new ThreadNameElement();
+        default:
+            return new StringElement("???" + pattern + "???");
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the format pattern, first translating any recognized alias.
+     *
+     * @param pattern The new pattern
+     */
+    public void setPattern(String pattern) {
+        if (pattern == null)
+            pattern = "";
+        if (pattern.equals(Constants.AccessLog.COMMON_ALIAS))
+            pattern = Constants.AccessLog.COMMON_PATTERN;
+        if (pattern.equals(Constants.AccessLog.COMBINED_ALIAS))
+            pattern = Constants.AccessLog.COMBINED_PATTERN;
+        this.pattern = pattern;
+        logElements = createLogElements();
+    }
+-----CSCI578-----

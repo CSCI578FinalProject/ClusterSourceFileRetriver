@@ -1,0 +1,100 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+    //-------------------------------------------------------- Lifecycle methods
+    @Override
+    protected void initInternal() throws LifecycleException {
+        super.initInternal();
+        // Is this an exploded web application?
+        if (getWebAppMount().equals("")) {
+            // Look for a manifest
+            File mf = file("META-INF/MANIFEST.MF", true);
+            if (mf != null && mf.isFile()) {
+                try (FileInputStream fis = new FileInputStream(mf)) {
+                    setManifest(new Manifest(fis));
+                } catch (IOException e) {
+                    log.warn(sm.getString("dirResourceSet.manifestFail", mf.getAbsolutePath()), e);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public String[] list(String path) {
+        checkPath(path);
+        String webAppMount = getWebAppMount();
+        if (path.startsWith(webAppMount)) {
+            File f = file(path.substring(webAppMount.length()), true);
+            if (f == null) {
+                return EMPTY_STRING_ARRAY;
+            }
+            String[] result = f.list();
+            if (result == null) {
+                return EMPTY_STRING_ARRAY;
+            } else {
+                return result;
+            }
+        } else {
+            if (!path.endsWith("/")) {
+                path = path + "/";
+            }
+            if (webAppMount.startsWith(path)) {
+                int i = webAppMount.indexOf('/', path.length());
+                if (i == -1) {
+                    return new String[] {webAppMount.substring(path.length())};
+                } else {
+                    return new String[] {
+                            webAppMount.substring(path.length(), i)};
+                }
+            }
+            return EMPTY_STRING_ARRAY;
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Set<String> listWebAppPaths(String path) {
+        checkPath(path);
+        String webAppMount = getWebAppMount();
+        ResourceSet<String> result = new ResourceSet<>();
+        if (path.startsWith(webAppMount)) {
+            File f = file(path.substring(webAppMount.length()), true);
+            if (f != null) {
+                File[] list = f.listFiles();
+                if (list != null) {
+                    for (File entry : list) {
+                        StringBuilder sb = new StringBuilder(path);
+                        if (path.charAt(path.length() - 1) != '/') {
+                            sb.append('/');
+                        }
+                        sb.append(entry.getName());
+                        if (entry.isDirectory()) {
+                            sb.append('/');
+                        }
+                        result.add(sb.toString());
+                    }
+                }
+            }
+        } else {
+            if (!path.endsWith("/")) {
+                path = path + "/";
+            }
+            if (webAppMount.startsWith(path)) {
+                int i = webAppMount.indexOf('/', path.length());
+                if (i == -1) {
+                    result.add(webAppMount + "/");
+                } else {
+                    result.add(webAppMount.substring(0, i + 1));
+                }
+            }
+        }
+        result.setLocked(true);
+        return result;
+    }

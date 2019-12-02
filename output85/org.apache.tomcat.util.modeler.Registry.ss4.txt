@@ -1,0 +1,205 @@
+11
+-----CSCI578-----
+
+
+
+    /**
+     * Find and return the managed bean definition for the specified
+     * bean name, if any; otherwise return <code>null</code>.
+     *
+     * @param name Name of the managed bean to be returned. Since 1.1, both
+     *   short names or the full name of the class can be used.
+     * @return the managed bean
+     * @since 1.0
+     */
+    public ManagedBean findManagedBean(String name) {
+        // XXX Group ?? Use Group + Type
+        ManagedBean mb = descriptors.get(name);
+        if( mb==null )
+            mb = descriptorsByClass.get(name);
+        return mb;
+    }
+
+
+    /**
+     * Find or load metadata.
+     * @param bean The bean
+     * @param beanClass The bean class
+     * @param type The registry type
+     * @return the managed bean
+     * @throws Exception An error occurred
+     */
+    public ManagedBean findManagedBean(Object bean, Class<?> beanClass,
+            String type) throws Exception {
+        if( bean!=null && beanClass==null ) {
+            beanClass=bean.getClass();
+        }
+
+        if( type==null ) {
+            type=beanClass.getName();
+        }
+
+        // first look for existing descriptor
+        ManagedBean managed = findManagedBean(type);
+
+        // Search for a descriptor in the same package
+        if( managed==null ) {
+            // check package and parent packages
+            if( log.isDebugEnabled() ) {
+                log.debug( "Looking for descriptor ");
+            }
+            findDescriptor( beanClass, type );
+
+            managed=findManagedBean(type);
+        }
+
+        // Still not found - use introspection
+        if( managed==null ) {
+            if( log.isDebugEnabled() ) {
+                log.debug( "Introspecting ");
+            }
+
+            // introspection
+            load("MbeansDescriptorsIntrospectionSource", beanClass, type);
+
+            managed=findManagedBean(type);
+            if( managed==null ) {
+                log.warn( "No metadata found for " + type );
+                return null;
+            }
+            managed.setName( type );
+            addManagedBean(managed);
+        }
+        return managed;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Lookup the component descriptor in the package and
+     * in the parent packages.
+     */
+    private void findDescriptor(Class<?> beanClass, String type) {
+        if( type==null ) {
+            type=beanClass.getName();
+        }
+        ClassLoader classLoader=null;
+        if( beanClass!=null ) {
+            classLoader=beanClass.getClassLoader();
+        }
+        if( classLoader==null ) {
+            classLoader=Thread.currentThread().getContextClassLoader();
+        }
+        if( classLoader==null ) {
+            classLoader=this.getClass().getClassLoader();
+        }
+
+        String className=type;
+        String pkg=className;
+        while( pkg.indexOf( ".") > 0 ) {
+            int lastComp=pkg.lastIndexOf( ".");
+            if( lastComp <= 0 ) return;
+            pkg=pkg.substring(0, lastComp);
+            if( searchedPaths.get( pkg ) != null ) {
+                return;
+            }
+            loadDescriptors(pkg, classLoader);
+        }
+        return;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Lookup the component descriptor in the package and
+     * in the parent packages.
+     *
+     * @param packageName The package name
+     * @param classLoader The class loader
+     */
+    public void loadDescriptors( String packageName, ClassLoader classLoader  ) {
+        String res=packageName.replace( '.', '/');
+
+        if( log.isTraceEnabled() ) {
+            log.trace("Finding descriptor " + res );
+        }
+
+        if( searchedPaths.get( packageName ) != null ) {
+            return;
+        }
+
+        String descriptors = res + "/mbeans-descriptors.xml";
+        URL dURL = classLoader.getResource( descriptors );
+
+        if (dURL == null) {
+            return;
+        }
+
+        log.debug( "Found " + dURL);
+        searchedPaths.put( packageName,  dURL );
+        try {
+            load("MbeansDescriptorsDigesterSource", dURL, null);
+        } catch(Exception ex ) {
+            log.error("Error loading " + dURL);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * The configuration information registry for our managed beans.
+     */
+    private static Registry registry = createRegistry();
+
+
+    /**
+     * Create and configure (if necessary) and return the registry of
+     * managed object descriptions.
+     * @return the singleton registry
+     */
+    public static synchronized Registry createRegistry() {
+
+        if (registry == null) {
+            registry = Registry.getRegistry(null, null);
+            ClassLoader cl = MBeanUtils.class.getClassLoader();
+
+            registry.loadDescriptors("org.apache.catalina.mbeans",  cl);
+            registry.loadDescriptors("org.apache.catalina.authenticator", cl);
+            registry.loadDescriptors("org.apache.catalina.core", cl);
+            registry.loadDescriptors("org.apache.catalina", cl);
+            registry.loadDescriptors("org.apache.catalina.deploy", cl);
+            registry.loadDescriptors("org.apache.catalina.loader", cl);
+            registry.loadDescriptors("org.apache.catalina.realm", cl);
+            registry.loadDescriptors("org.apache.catalina.session", cl);
+            registry.loadDescriptors("org.apache.catalina.startup", cl);
+            registry.loadDescriptors("org.apache.catalina.users", cl);
+            registry.loadDescriptors("org.apache.catalina.ha", cl);
+            registry.loadDescriptors("org.apache.catalina.connector", cl);
+            registry.loadDescriptors("org.apache.catalina.valves",  cl);
+            registry.loadDescriptors("org.apache.catalina.storeconfig",  cl);
+            registry.loadDescriptors("org.apache.tomcat.util.descriptor.web",  cl);
+        }
+        return (registry);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create a ManagedBean (StoreConfig).
+     *
+     * @param object The object to manage
+     * @return an MBean wrapping the object
+     * @throws Exception if an error occurred
+     */
+    protected DynamicMBean getManagedBean(Object object) throws Exception {
+        ManagedBean managedBean = registry.findManagedBean("StoreConfig");
+        return managedBean.createMBean(object);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

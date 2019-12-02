@@ -1,0 +1,36 @@
+2
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------- BackgroundProcess methods
+
+    @Override
+    public void backgroundProcess() {
+        // This method gets called once a second.
+        backgroundProcessCount ++;
+        if (backgroundProcessCount >= processPeriod) {
+            backgroundProcessCount = 0;
+
+            for (WsSession wsSession : sessions.keySet()) {
+                wsSession.checkExpiration();
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    protected void checkExpiration() {
+        long timeout = maxIdleTimeout;
+        if (timeout < 1) {
+            return;
+        }
+
+        if (System.currentTimeMillis() - lastActive > timeout) {
+            String msg = sm.getString("wsSession.timeout");
+            doClose(new CloseReason(CloseCodes.GOING_AWAY, msg),
+                    new CloseReason(CloseCodes.CLOSED_ABNORMALLY, msg));
+        }
+    }

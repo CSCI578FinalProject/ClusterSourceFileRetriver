@@ -1,0 +1,72 @@
+3
+-----CSCI578-----
+
+
+
+
+    /**
+     * The background thread that listens for incoming TCP/IP connections and
+     * hands them off to an appropriate processor.
+     */
+    public void run() {
+
+        // Process requests until we receive a shutdown signal
+        while (!stopped) {
+
+            // Wait for the next socket to be assigned
+            Socket socket = await();
+            if (socket == null)
+                continue;
+
+            // Process the request from this socket
+            endpoint.processSocket(socket, con, threadData);
+
+            // Finish up this request
+            endpoint.recycleWorkerThread(this);
+
+        }
+
+        // Tell threadStop() we have shut ourselves down successfully
+        synchronized (threadSync) {
+            threadSync.notifyAll();
+        }
+
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Await a newly assigned Socket from our Connector, or <code>null</code>
+     * if we are supposed to shut down.
+     */
+    private synchronized Socket await() {
+
+        // Wait for the Connector to provide a new Socket
+        while (!available) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
+            }
+        }
+
+        // Notify the Connector that we have received this Socket
+        Socket socket = this.socket;
+        available = false;
+        notifyAll();
+
+        return (socket);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Recycle the specified Processor so that it can be used again.
+     *
+     * @param processor The processor to be recycled
+     */
+    void recycleWorkerThread(MasterSlaveWorkerThread workerThread) {
+        workerThreads.push(workerThread);
+    }

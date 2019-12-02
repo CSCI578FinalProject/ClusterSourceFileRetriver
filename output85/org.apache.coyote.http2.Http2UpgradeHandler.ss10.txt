@@ -1,0 +1,75 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    void detachFromParent() {
+        if (parentStream != null) {
+            parentStream.getChildStreams().remove(this);
+            parentStream = null;
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void rePrioritise(AbstractStream parent, boolean exclusive, int weight) {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("stream.reprioritisation.debug",
+                    getConnectionId(), getIdentifier(), Boolean.toString(exclusive),
+                    parent.getIdentifier(), Integer.toString(weight)));
+        }
+
+        // Check if new parent is a descendant of this stream
+        if (isDescendant(parent)) {
+            parent.detachFromParent();
+            getParentStream().addChild(parent);
+        }
+
+        if (exclusive) {
+            // Need to move children of the new parent to be children of this
+            // stream. Slightly convoluted to avoid concurrent modification.
+            Iterator<AbstractStream> parentsChildren = parent.getChildStreams().iterator();
+            while (parentsChildren.hasNext()) {
+                AbstractStream parentsChild = parentsChildren.next();
+                parentsChildren.remove();
+                this.addChild(parentsChild);
+            }
+        }
+        parent.addChild(this);
+        this.weight = weight;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void reprioritise(int streamId, int parentStreamId,
+            boolean exclusive, int weight) throws Http2Exception {
+        Stream stream = getStream(streamId, false);
+        if (stream == null) {
+            stream = createRemoteStream(streamId);
+        }
+        stream.checkState(FrameType.PRIORITY);
+        AbstractStream parentStream = getStream(parentStreamId, false);
+        if (parentStream == null) {
+            parentStream = this;
+        }
+        stream.rePrioritise(parentStream, exclusive, weight);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    Set<AbstractStream> getChildStreams() {
+        return childStreams;
+    }
+-----CSCI578-----
+
+
+    public Integer getIdentifier() {
+        return identifier;
+    }
+-----CSCI578-----

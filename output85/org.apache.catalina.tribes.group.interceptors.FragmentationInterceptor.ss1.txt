@@ -1,0 +1,122 @@
+15
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Converts a byte array entry to boolean.
+     * @param b byte array
+     * @param offset within byte array
+     * @return true if byte array entry is non-zero, false otherwise
+     */
+    public static boolean toBoolean(byte[] b, int offset) {
+        return b[offset] != 0;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void defrag(ChannelMessage msg ) {
+        FragKey key = new FragKey(msg.getUniqueId());
+        FragCollection coll = getFragCollection(key,msg);
+        coll.addMessage((ChannelMessage)msg.deepclone());
+
+        if ( coll.complete() ) {
+            removeFragCollection(key);
+            ChannelMessage complete = coll.assemble();
+            super.messageReceived(complete);
+
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void messageReceived(ChannelMessage msg) {
+        boolean isFrag = XByteBuffer.toBoolean(msg.getMessage().getBytesDirect(),msg.getMessage().getLength()-1);
+        msg.getMessage().trim(1);
+        if ( isFrag ) {
+            defrag(msg);
+        } else {
+            super.messageReceived(msg);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * returns the byte buffer that contains the actual message payload
+     * @return XByteBuffer
+     */
+    public XByteBuffer getMessage();
+-----CSCI578-----
+
+
+    public byte[] getBytesDirect() {
+        return this.buf;
+    }
+-----CSCI578-----
+
+
+    public int getLength() {
+        return bufSize;
+    }
+-----CSCI578-----
+
+
+    public void trim(int length) {
+        if ( (bufSize - length) < 0 )
+            throw new ArrayIndexOutOfBoundsException(sm.getString("xByteBuffer.unableTrim",
+                    Integer.toString(bufSize), Integer.toString(length)));
+        bufSize -= length;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create a shallow clone, only the data gets recreated
+     * @return ClusterData
+     */
+    @Override
+    public Object clone() {
+//        byte[] d = this.getDataPackage();
+//        return ClusterData.getDataFromPackage(d);
+        ChannelData clone = new ChannelData(false);
+        clone.options = this.options;
+        clone.message = new XByteBuffer(this.message.getBytesDirect(),false);
+        clone.timestamp = this.timestamp;
+        clone.uniqueId = this.uniqueId;
+        clone.address = this.address;
+        return clone;
+    }
+
+
+    /**
+     * Complete clone
+     * @return ClusterData
+     */
+    @Override
+    public Object deepclone() {
+        byte[] d = this.getDataPackage();
+        return ChannelData.getDataFromPackage(d);
+    }
+-----CSCI578-----
+
+
+    public int size() {
+        return buffer.getLength();
+    }
+-----CSCI578-----
+
+
+    public byte[] getArrayDirect() {
+        return buffer.getBytesDirect();
+    }
+-----CSCI578-----
+
+
+    public int bufferSize() {
+        return buffer.getLength();
+    }

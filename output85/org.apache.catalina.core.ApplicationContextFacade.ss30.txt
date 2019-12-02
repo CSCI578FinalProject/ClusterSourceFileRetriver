@@ -1,0 +1,59 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Hook to track which registrations need annotation scanning
+     * @param servlet the Servlet to add
+     */
+    public void dynamicServletCreated(Servlet servlet) {
+        createdServlets.add(servlet);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public <T extends Servlet> T createServlet(Class<T> c)
+    throws ServletException {
+        try {
+            @SuppressWarnings("unchecked")
+            T servlet = (T) context.getInstanceManager().newInstance(c.getName());
+            context.dynamicServletCreated(servlet);
+            return servlet;
+        } catch (IllegalAccessException e) {
+            throw new ServletException(e);
+        } catch (InvocationTargetException e) {
+            ExceptionUtils.handleThrowable(e.getCause());
+            throw new ServletException(e);
+        } catch (NamingException e) {
+            throw new ServletException(e);
+        } catch (InstantiationException e) {
+            throw new ServletException(e);
+        } catch (ClassNotFoundException e) {
+            throw new ServletException(e);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public <T extends Servlet> T createServlet(Class<T> c)
+    throws ServletException {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                return (T) invokeMethod(context, "createServlet",
+                                              new Object[]{c});
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                if (t instanceof ServletException) {
+                    throw (ServletException) t;
+                }
+                return null;
+            }
+        } else {
+            return context.createServlet(c);
+        }
+    }

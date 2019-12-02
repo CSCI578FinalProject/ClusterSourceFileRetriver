@@ -1,0 +1,38 @@
+6
+
+    /*
+     * STATE VARIABLES *
+     */
+    protected ByteBuffer readbuf = null;
+    
+    
+
+    protected boolean read(SelectionKey key) throws IOException {
+        //if there is no message here, we are done
+        if ( current == null ) return true;
+        int read = socketChannel.read(readbuf);
+        //end of stream
+        if ( read == -1 ) throw new IOException("Unable to receive an ack message. EOF on socket channel has been reached.");
+        //no data read
+        else if ( read == 0 ) return false;
+        readbuf.flip();
+        ackbuf.append(readbuf,read);
+        readbuf.clear();
+        if (ackbuf.doesPackageExist() ) {
+            byte[] ackcmd = ackbuf.extractDataPackage(true).getBytes();
+            boolean ack = Arrays.equals(ackcmd,org.apache.catalina.tribes.transport.Constants.ACK_DATA);
+            boolean fack = Arrays.equals(ackcmd,org.apache.catalina.tribes.transport.Constants.FAIL_ACK_DATA);
+            if ( fack && getThrowOnFailedAck() ) throw new RemoteProcessException("Received a failed ack:org.apache.catalina.tribes.transport.Constants.FAIL_ACK_DATA");
+            return ack || fack;
+        } else {
+            return false;
+        }
+    }
+    
+    public byte[] getArrayDirect() {
+        return buffer.getBytesDirect();
+    }
+    
+    public byte[] getArray() {
+        return buffer.getBytes();
+    }

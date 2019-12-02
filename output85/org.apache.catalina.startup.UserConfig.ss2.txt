@@ -1,0 +1,153 @@
+9
+-----CSCI578-----
+
+
+
+    /**
+     * @return an enumeration of the usernames defined on this server.
+     */
+    public Enumeration<String> getUsers();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Test allow and deny rules for the provided user.
+     *
+     * @return <code>true</code> if this user is allowed to deploy,
+     *         <code>false</code> otherwise
+     */
+    private boolean isDeployAllowed(String user) {
+        if (deny != null && deny.matcher(user).matches()) {
+            return false;
+        }
+        if (allow != null) {
+            if (allow.matcher(user).matches()) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the UserConfig listener with which we are associated.
+     *
+     * @param userConfig The new UserConfig listener
+     */
+    public void setUserConfig(UserConfig userConfig);
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------- Public Methods
+
+
+    /**
+     * @return an absolute pathname to the home directory for the specified user.
+     *
+     * @param user User for which a home directory should be retrieved
+     */
+    public String getHome(String user);
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Deploy a web application for any user who has a web application present
+     * in a directory with a specified name within their home directory.
+     */
+    private void deploy() {
+
+        if (host.getLogger().isDebugEnabled())
+            host.getLogger().debug(sm.getString("userConfig.deploying"));
+
+        // Load the user database object for this host
+        UserDatabase database = null;
+        try {
+            Class<?> clazz = Class.forName(userClass);
+            database = (UserDatabase) clazz.newInstance();
+            database.setUserConfig(this);
+        } catch (Exception e) {
+            host.getLogger().error(sm.getString("userConfig.database"), e);
+            return;
+        }
+
+        ExecutorService executor = host.getStartStopExecutor();
+        List<Future<?>> results = new ArrayList<>();
+
+        // Deploy the web application (if any) for each defined user
+        Enumeration<String> users = database.getUsers();
+        while (users.hasMoreElements()) {
+            String user = users.nextElement();
+            if (!isDeployAllowed(user)) continue;
+            String home = database.getHome(user);
+            results.add(executor.submit(new DeployUserDirectory(this, user, home)));
+        }
+
+        for (Future<?> result : results) {
+            try {
+                result.get();
+            } catch (Exception e) {
+                host.getLogger().error(sm.getString("userConfig.deploy.threaded.error"), e);
+            }
+        }
+    }
+
+
+
+    /**
+     * Deploy a web application for the specified user if they have such an
+     * application in the defined directory within their home directory.
+     *
+     * @param user Username owning the application to be deployed
+     * @param home Home directory of this user
+     */
+    private void deploy(String user, String home) {
+
+        // Does this user have a web application to be deployed?
+        String contextPath = "/~" + user;
+        if (host.findChild(contextPath) != null)
+            return;
+        File app = new File(home, directoryName);
+        if (!app.exists() || !app.isDirectory())
+            return;
+
+        host.getLogger().info(sm.getString("userConfig.deploy", user));
+
+        // Deploy the web application for this user
+        try {
+            Class<?> clazz = Class.forName(contextClass);
+            Context context =
+              (Context) clazz.newInstance();
+            context.setPath(contextPath);
+            context.setDocBase(app.toString());
+            clazz = Class.forName(configClass);
+            LifecycleListener listener =
+                (LifecycleListener) clazz.newInstance();
+            context.addLifecycleListener(listener);
+            host.addChild(context);
+        } catch (Exception e) {
+            host.getLogger().error(sm.getString("userConfig.error", user), e);
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the executor that is used for starting and stopping contexts. This
+     * is primarily for use by components deploying contexts that want to do
+     * this in a multi-threaded manner.
+     */
+    public ExecutorService getStartStopExecutor();

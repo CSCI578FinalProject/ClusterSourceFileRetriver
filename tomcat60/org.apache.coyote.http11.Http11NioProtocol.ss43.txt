@@ -1,0 +1,83 @@
+15
+
+
+    /**
+     * Start the NIO endpoint, creating acceptor, poller threads.
+     */
+    public void start()
+        throws Exception {
+        // Initialize socket if not done before
+        if (!initialized) {
+            init();
+        }
+        if (!running) {
+            running = true;
+            paused = false;
+
+            // Create worker collection
+            if (getUseExecutor()) {
+                if ( executor == null ) {
+                    TaskQueue taskqueue = new TaskQueue();
+                    TaskThreadFactory tf = new TaskThreadFactory(getName() + "-exec-");
+                    executor = new ThreadPoolExecutor(getMinSpareThreads(), getMaxThreads(), 60, TimeUnit.SECONDS,taskqueue, tf);
+                    taskqueue.setParent( (ThreadPoolExecutor) executor, this);
+                }
+            } else if ( executor == null ) {//avoid two thread pools being created
+                workers = new WorkerStack(maxThreads);
+            }
+
+            // Start poller threads
+            pollers = new Poller[getPollerThreadCount()];
+            for (int i=0; i<pollers.length; i++) {
+                pollers[i] = new Poller();
+                Thread pollerThread = new Thread(pollers[i], getName() + "-ClientPoller-"+i);
+                pollerThread.setPriority(threadPriority);
+                pollerThread.setDaemon(true);
+                pollerThread.start();
+            }
+
+            // Start acceptor threads
+            for (int i = 0; i < acceptorThreadCount; i++) {
+                Thread acceptorThread = new Thread(new Acceptor(), getName() + "-Acceptor-" + i);
+                acceptorThread.setPriority(threadPriority);
+                acceptorThread.setDaemon(daemon);
+                acceptorThread.start();
+            }
+        }
+    }
+
+
+    /**
+     * Dummy minSpareThreads property.
+     */
+    public int getMinSpareThreads() { return Math.min(getMaxThreads(),5); }
+    public int getPollerThreadCount() { return pollerThreadCount; }
+    public int getMaxThreads() {
+        if (running && getUseExecutor() && executor!=null) {
+            if (executor instanceof ThreadPoolExecutor) {
+                return ((ThreadPoolExecutor)executor).getMaximumPoolSize();
+            } else {
+                return -1;
+            }
+        } else {
+            return maxThreads;
+        }
+    }
+
+    /**
+     * Dummy maxSpareThreads property.
+     */
+    public int getMaxSpareThreads() { return Math.min(getMaxThreads(),5); }
+
+
+    /**
+     * Dummy minSpareThreads property.
+     */
+    public int getMinSpareThreads() { return Math.min(getMaxThreads(),5); }
+    public String getName() { return name; }
+    public boolean getUseExecutor() { return useExecutor || (executor!=null);}
+
+    /**
+     * Dummy maxSpareThreads property.
+     */
+    public int getMaxSpareThreads() { return Math.min(getMaxThreads(),5); }

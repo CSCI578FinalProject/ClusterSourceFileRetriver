@@ -1,0 +1,92 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Initializes the classloader as/if needed for the given
+     * compilation context.
+     *
+     * @param clctxt The compilation context
+     * @throws IOException If an error occurs
+     */
+    protected void initClassLoader(JspCompilationContext clctxt)
+        throws IOException {
+
+        classPath = getClassPath();
+
+        ClassLoader jspcLoader = getClass().getClassLoader();
+        if (jspcLoader instanceof AntClassLoader) {
+            classPath += File.pathSeparator
+                + ((AntClassLoader) jspcLoader).getClasspath();
+        }
+
+        // Turn the classPath into URLs
+        ArrayList<URL> urls = new ArrayList<URL>();
+        StringTokenizer tokenizer = new StringTokenizer(classPath,
+                                                        File.pathSeparator);
+        while (tokenizer.hasMoreTokens()) {
+            String path = tokenizer.nextToken();
+            try {
+                File libFile = new File(path);
+                urls.add(libFile.toURL());
+            } catch (IOException ioe) {
+                // Failing a toCanonicalPath on a file that
+                // exists() should be a JVM regression test,
+                // therefore we have permission to freak uot
+                throw new RuntimeException(ioe.toString());
+            }
+        }
+
+        File webappBase = new File(uriRoot);
+        if (webappBase.exists()) {
+            File classes = new File(webappBase, "/WEB-INF/classes");
+            try {
+                if (classes.exists()) {
+                    classPath = classPath + File.pathSeparator
+                        + classes.getCanonicalPath();
+                    urls.add(classes.getCanonicalFile().toURL());
+                }
+            } catch (IOException ioe) {
+                // failing a toCanonicalPath on a file that
+                // exists() should be a JVM regression test,
+                // therefore we have permission to freak out
+                throw new RuntimeException(ioe.toString());
+            }
+            File lib = new File(webappBase, "/WEB-INF/lib");
+            if (lib.exists() && lib.isDirectory()) {
+                String[] libs = lib.list();
+                for (int i = 0; i < libs.length; i++) {
+                    if( libs[i].length() <5 ) continue;
+                    String ext=libs[i].substring( libs[i].length() - 4 );
+                    if (! ".jar".equalsIgnoreCase(ext)) {
+                        if (".tld".equalsIgnoreCase(ext)) {
+                            log.warn("TLD files should not be placed in "
+                                     + "/WEB-INF/lib");
+                        }
+                        continue;
+                    }
+                    try {
+                        File libFile = new File(lib, libs[i]);
+                        classPath = classPath + File.pathSeparator
+                            + libFile.getAbsolutePath();
+                        urls.add(libFile.getAbsoluteFile().toURL());
+                    } catch (IOException ioe) {
+                        // failing a toCanonicalPath on a file that
+                        // exists() should be a JVM regression test,
+                        // therefore we have permission to freak out
+                        throw new RuntimeException(ioe.toString());
+                    }
+                }
+            }
+        }
+
+        // What is this ??
+        urls.add(new File(clctxt.getRealPath("/")).getCanonicalFile().toURL());
+
+        URL urlsA[]=new URL[urls.size()];
+        urls.toArray(urlsA);
+        loader = new URLClassLoader(urlsA, this.getClass().getClassLoader());
+
+    }

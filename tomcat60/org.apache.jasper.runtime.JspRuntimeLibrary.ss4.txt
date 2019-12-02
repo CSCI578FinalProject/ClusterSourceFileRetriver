@@ -1,0 +1,270 @@
+6
+    // __end lookupReadMethodMethod
+
+    // handles <jsp:setProperty> with EL expression for 'value' attribute
+/** Use proprietaryEvaluate
+    public static void handleSetPropertyExpression(Object bean,
+        String prop, String expression, PageContext pageContext,
+        VariableResolver variableResolver, FunctionMapper functionMapper )
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] {
+                pageContext.getExpressionEvaluator().evaluate(
+                    expression,
+                    method.getParameterTypes()[0],
+                    variableResolver,
+                    functionMapper,
+                    null )
+            });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+**/
+    public static void handleSetPropertyExpression(Object bean,
+        String prop, String expression, PageContext pageContext,
+        ProtectedFunctionMapper functionMapper )
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] {
+                PageContextImpl.proprietaryEvaluate(
+                    expression,
+                    method.getParameterTypes()[0],
+                    pageContext,
+                    functionMapper,
+                    false )
+            });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+
+
+    /**
+     * Proprietary method to evaluate EL expressions. XXX - This method should
+     * go away once the EL interpreter moves out of JSTL and into its own
+     * project. For now, this is necessary because the standard machinery is too
+     * slow.
+     *
+     * @param expression
+     *            The expression to be evaluated
+     * @param expectedType
+     *            The expected resulting type
+     * @param pageContext
+     *            The page context
+     * @param functionMap
+     *            Maps prefix and name to Method
+     * @return The result of the evaluation
+     */
+    public static Object proprietaryEvaluate(final String expression,
+            final Class<?> expectedType, final PageContext pageContext,
+            final ProtectedFunctionMapper functionMap, final boolean escape)
+            throws ELException {
+        final ExpressionFactory exprFactory = jspf.getJspApplicationContext(pageContext.getServletContext()).getExpressionFactory();
+        ELContextImpl ctx = (ELContextImpl) pageContext.getELContext();
+        ctx.setFunctionMapper(new FunctionMapperImpl(functionMap));
+        ValueExpression ve = exprFactory.createValueExpression(ctx, expression, expectedType);
+        return ve.getValue(ctx);
+    }
+
+    public void setFunctionMapper(FunctionMapper functionMapper) {
+        this.functionMapper = functionMapper;
+    }
+
+    public static Method getWriteMethod(Class beanClass, String prop)
+    throws JasperException {
+        Method method = null;
+        Class type = null;
+        try {
+            java.beans.BeanInfo info
+                = java.beans.Introspector.getBeanInfo(beanClass);
+            if ( info != null ) {
+                java.beans.PropertyDescriptor pd[]
+                    = info.getPropertyDescriptors();
+                for (int i = 0 ; i < pd.length ; i++) {
+                    if ( pd[i].getName().equals(prop) ) {
+                        method = pd[i].getWriteMethod();
+                        type   = pd[i].getPropertyType();
+                        break;
+                    }
+                }
+            } else {
+                // just in case introspection silently fails.
+                throw new JasperException(
+                    Localizer.getMessage("jsp.error.beans.nobeaninfo",
+                                         beanClass.getName()));
+            }
+        } catch (Exception ex) {
+            throw new JasperException (ex);
+        }
+        if (method == null) {
+            if (type == null) {
+                throw new JasperException(
+                        Localizer.getMessage("jsp.error.beans.noproperty",
+                                             prop,
+                                             beanClass.getName()));
+            } else {
+                throw new JasperException(
+                    Localizer.getMessage("jsp.error.beans.nomethod.setproperty",
+                                         prop,
+                                         type.getName(),
+                                         beanClass.getName()));
+            }
+        }
+        return method;
+    }
+    // __end lookupReadMethodMethod
+
+    // handles <jsp:setProperty> with EL expression for 'value' attribute
+/** Use proprietaryEvaluate
+    public static void handleSetPropertyExpression(Object bean,
+        String prop, String expression, PageContext pageContext,
+        VariableResolver variableResolver, FunctionMapper functionMapper )
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] {
+                pageContext.getExpressionEvaluator().evaluate(
+                    expression,
+                    method.getParameterTypes()[0],
+                    variableResolver,
+                    functionMapper,
+                    null )
+            });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+**/
+    public static void handleSetPropertyExpression(Object bean,
+        String prop, String expression, PageContext pageContext,
+        ProtectedFunctionMapper functionMapper )
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] {
+                PageContextImpl.proprietaryEvaluate(
+                    expression,
+                    method.getParameterTypes()[0],
+                    pageContext,
+                    functionMapper,
+                    false )
+            });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+
+    public static void handleSetProperty(Object bean, String prop,
+                                         Object value)
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] { value });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+
+    public static void handleSetProperty(Object bean, String prop,
+                                         int value)
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] { new Integer(value) });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+
+    public static void handleSetProperty(Object bean, String prop,
+                                         short value)
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] { new Short(value) });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+
+    public static void handleSetProperty(Object bean, String prop,
+                                         long value)
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] { new Long(value) });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+
+    public static void handleSetProperty(Object bean, String prop,
+                                         double value)
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] { new Double(value) });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+
+    public static void handleSetProperty(Object bean, String prop,
+                                         float value)
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] { new Float(value) });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+
+    public static void handleSetProperty(Object bean, String prop,
+                                         char value)
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] { new Character(value) });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+
+    public static void handleSetProperty(Object bean, String prop,
+                                         byte value)
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] { new Byte(value) });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }
+
+    public static void handleSetProperty(Object bean, String prop,
+                                         boolean value)
+        throws JasperException
+    {
+        try {
+            Method method = getWriteMethod(bean.getClass(), prop);
+            method.invoke(bean, new Object[] { new Boolean(value) });
+        } catch (Exception ex) {
+            throw new JasperException(ex);
+        }
+    }

@@ -1,0 +1,70 @@
+6
+-----CSCI578-----
+
+    
+    /**
+     * Ends the Comet session. This signals to the container that 
+     * the container wants to end the comet session. This will send back to the
+     * client a notice that the server has no more data to send as part of this
+     * request. The servlet should perform any needed cleanup as if it had recieved
+     * an END or ERROR event. 
+     * 
+     * @throws IOException if an IO exception occurs
+     */
+    public void close() throws IOException;
+-----CSCI578-----
+
+    
+    /**
+     * Returns the HttpServletResponse.
+     * 
+     * @return HttpServletResponse
+     */
+    public HttpServletResponse getHttpServletResponse();
+-----CSCI578-----
+
+
+    public void doFilterEvent(CometEvent event, CometFilterChain chain)
+            throws IOException, ServletException {
+        if (event.getEventType() == CometEvent.EventType.BEGIN
+                && !isGoodRequest(event.getHttpServletRequest())) {
+            event.getHttpServletResponse().sendError(
+                    HttpServletResponse.SC_BAD_REQUEST);
+            event.close();
+            return;
+        }
+        chain.doFilterEvent(event);
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Causes the next filter in the chain to be invoked, or if the calling filter is the last filter
+     * in the chain, causes the resource at the end of the chain to be invoked.
+     *
+     * @param event the event to pass along the chain.
+     */
+    public void doFilterEvent(CometEvent event) throws IOException, ServletException;
+-----CSCI578-----
+
+    
+    
+    /**
+     * Returns the HttpServletRequest.
+     * 
+     * @return HttpServletRequest
+     */
+    public HttpServletRequest getHttpServletRequest();
+-----CSCI578-----
+
+
+    private boolean isGoodRequest(ServletRequest request) {
+        // Trigger parsing of parameters
+        request.getParameter("none");
+        // Detect failure
+        if (request.getAttribute(Globals.PARAMETER_PARSE_FAILED_ATTR) != null) {
+            return false;
+        }
+        return true;
+    }

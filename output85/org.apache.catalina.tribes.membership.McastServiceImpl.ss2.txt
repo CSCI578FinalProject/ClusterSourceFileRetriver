@@ -1,0 +1,45 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Increment the message count.
+     */
+    protected void inc() {
+        msgCount.incrementAndGet();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Send a ping.
+     * @param checkexpired <code>true</code> to check for expiration
+     * @throws IOException Send error
+     */
+    public void send(boolean checkexpired) throws IOException {
+        send(checkexpired,null);
+    }
+
+
+    public void send(boolean checkexpired, DatagramPacket packet) throws IOException {
+        checkexpired = (checkexpired && (packet==null));
+        //ignore if we haven't started the sender
+        //if ( (startLevel&Channel.MBR_TX_SEQ) != Channel.MBR_TX_SEQ ) return;
+        if (packet==null) {
+            member.inc();
+            if(log.isTraceEnabled()) {
+                log.trace("Mcast send ping from member " + member);
+            }
+            byte[] data = member.getData();
+            packet = new DatagramPacket(data,data.length);
+        } else if (log.isTraceEnabled()) {
+            log.trace("Sending message broadcast "+packet.getLength()+ " bytes from "+ member);
+        }
+        packet.setAddress(address);
+        packet.setPort(port);
+        //TODO this operation is not thread safe
+        synchronized (sendLock) {
+            socket.send(packet);
+        }
+        if ( checkexpired ) checkExpired();
+    }

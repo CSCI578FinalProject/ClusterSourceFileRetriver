@@ -1,0 +1,199 @@
+24
+-----CSCI578-----
+
+
+    public void setGetMethod(String getMethod) {
+        this.getMethod = getMethod;
+    }
+-----CSCI578-----
+
+
+    /**
+     * XXX Find if the 'className' is the name of the MBean or
+     *       the real class ( I suppose first )
+     * XXX Read (optional) descriptions from a .properties, generated
+     *       from source
+     * XXX Deal with constructors
+     *
+     * @param registry The Bean registry (not used)
+     * @param domain The bean domain (not used)
+     * @param realClass The class to analyze
+     * @param type The bean type
+     * @return ManagedBean The create MBean
+     */
+    public ManagedBean createManagedBean(Registry registry, String domain,
+                                         Class<?> realClass, String type)
+    {
+        ManagedBean mbean= new ManagedBean();
+
+        Method methods[]=null;
+
+        Hashtable<String,Method> attMap = new Hashtable<>();
+        // key: attribute val: getter method
+        Hashtable<String,Method> getAttMap = new Hashtable<>();
+        // key: attribute val: setter method
+        Hashtable<String,Method> setAttMap = new Hashtable<>();
+        // key: operation val: invoke method
+        Hashtable<String,Method> invokeAttMap = new Hashtable<>();
+
+        methods = realClass.getMethods();
+
+        initMethods(realClass, methods, attMap, getAttMap, setAttMap, invokeAttMap );
+
+        try {
+
+            Enumeration<String> en = attMap.keys();
+            while( en.hasMoreElements() ) {
+                String name = en.nextElement();
+                AttributeInfo ai=new AttributeInfo();
+                ai.setName( name );
+                Method gm = getAttMap.get(name);
+                if( gm!=null ) {
+                    //ai.setGetMethodObj( gm );
+                    ai.setGetMethod( gm.getName());
+                    Class<?> t=gm.getReturnType();
+                    if( t!=null )
+                        ai.setType( t.getName() );
+                }
+                Method sm = setAttMap.get(name);
+                if( sm!=null ) {
+                    //ai.setSetMethodObj(sm);
+                    Class<?> t = sm.getParameterTypes()[0];
+                    if( t!=null )
+                        ai.setType( t.getName());
+                    ai.setSetMethod( sm.getName());
+                }
+                ai.setDescription("Introspected attribute " + name);
+                if( log.isDebugEnabled()) log.debug("Introspected attribute " +
+                        name + " " + gm + " " + sm);
+                if( gm==null )
+                    ai.setReadable(false);
+                if( sm==null )
+                    ai.setWriteable(false);
+                if( sm!=null || gm!=null )
+                    mbean.addAttribute(ai);
+            }
+
+            for (Entry<String,Method> entry : invokeAttMap.entrySet()) {
+                String name = entry.getKey();
+                Method m = entry.getValue();
+                if(m != null) {
+                    OperationInfo op=new OperationInfo();
+                    op.setName(name);
+                    op.setReturnType(m.getReturnType().getName());
+                    op.setDescription("Introspected operation " + name);
+                    Class<?> parms[] = m.getParameterTypes();
+                    for(int i=0; i<parms.length; i++ ) {
+                        ParameterInfo pi=new ParameterInfo();
+                        pi.setType(parms[i].getName());
+                        pi.setName( "param" + i);
+                        pi.setDescription("Introspected parameter param" + i);
+                        op.addParameter(pi);
+                    }
+                    mbean.addOperation(op);
+                } else {
+                    log.error("Null arg method for [" + name + "]");
+                }
+            }
+
+            if( log.isDebugEnabled())
+                log.debug("Setting name: " + type );
+            mbean.setName( type );
+
+            return mbean;
+        } catch( Exception ex ) {
+            ex.printStackTrace();
+            return null;
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add a new attribute to the set of attributes for this MBean.
+     *
+     * @param attribute The new attribute descriptor
+     */
+    public void addAttribute(AttributeInfo attribute) {
+        attributes.put(attribute.getName(), attribute);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setSetMethod(String setMethod) {
+        this.setMethod = setMethod;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add a new parameter to the set of arguments for this operation.
+     *
+     * @param parameter The new parameter descriptor
+     */
+    public void addParameter(ParameterInfo parameter) {
+
+        Lock writeLock = parametersLock.writeLock();
+        writeLock.lock();
+        try {
+            ParameterInfo results[] = new ParameterInfo[parameters.length + 1];
+            System.arraycopy(parameters, 0, results, 0, parameters.length);
+            results[parameters.length] = parameter;
+            parameters = results;
+            this.info = null;
+        } finally {
+            writeLock.unlock();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setReadable(boolean readable) {
+        this.readable = readable;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new operation to the set of operations for this MBean.
+     *
+     * @param operation The new operation descriptor
+     */
+    public void addOperation(OperationInfo operation) {
+        operations.put(createOperationKey(operation), operation);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setReturnType(String returnType) {
+        this.type = returnType;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setWriteable(boolean writeable) {
+        this.writeable = writeable;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

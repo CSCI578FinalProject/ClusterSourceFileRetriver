@@ -1,0 +1,58 @@
+4
+-----CSCI578-----
+
+
+
+    private SSLHostConfigCertificate selectCertificate(
+            SSLHostConfig sslHostConfig, List<Cipher> clientCiphers) {
+
+        Set<SSLHostConfigCertificate> certificates = sslHostConfig.getCertificates(true);
+        if (certificates.size() == 1) {
+            return certificates.iterator().next();
+        }
+
+        LinkedHashSet<Cipher> serverCiphers = sslHostConfig.getCipherList();
+
+        List<Cipher> candidateCiphers = new ArrayList<>();
+        if (sslHostConfig.getHonorCipherOrder()) {
+            candidateCiphers.addAll(serverCiphers);
+            candidateCiphers.retainAll(clientCiphers);
+        } else {
+            candidateCiphers.addAll(clientCiphers);
+            candidateCiphers.retainAll(serverCiphers);
+        }
+
+        Iterator<Cipher> candidateIter = candidateCiphers.iterator();
+        while (candidateIter.hasNext()) {
+            Cipher candidate = candidateIter.next();
+            for (SSLHostConfigCertificate certificate : certificates) {
+                if (certificate.getType().isCompatibleWith(candidate.getAu())) {
+                    return certificate;
+                }
+            }
+        }
+
+        // No matches. Just return the first certificate. The handshake will
+        // then fail due to no matching ciphers.
+        return certificates.iterator().next();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public LinkedHashSet<Cipher> getCipherList() {
+        if (cipherList == null) {
+            cipherList = OpenSSLCipherConfigurationParser.parse(ciphers);
+        }
+        return cipherList;
+    }
+-----CSCI578-----
+
+
+
+    // Common
+
+    public Type getType() {
+        return type;
+    }

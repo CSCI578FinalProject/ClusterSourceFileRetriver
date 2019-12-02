@@ -1,0 +1,248 @@
+10
+-----CSCI578-----
+
+
+
+    protected boolean isOpen() {
+        return open;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected boolean isOpen() {
+        // Overridden to make it visible to other classes in this package
+        return super.isOpen();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Called when there is data in the ServletInputStream to process.
+     *
+     * @throws IOException if an I/O error occurs while processing the available
+     *                     data
+     */
+    public void onDataAvailable() throws IOException {
+        if (log.isDebugEnabled()) {
+            log.debug("wsFrameServer.onDataAvailable");
+        }
+        while (isOpen() && socketWrapper.isReadyForRead()) {
+            // Fill up the input buffer with as much data as we can
+            int read = socketWrapper.read(
+                    false, inputBuffer, writePos, inputBuffer.length - writePos);
+            if (read <= 0) {
+                return;
+            }
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("wsFrameServer.bytesRead", Integer.toString(read)));
+            }
+            writePos += read;
+            processInputBuffer();
+        }
+    }
+-----CSCI578-----
+
+
+
+    public abstract int read(boolean block, byte[] b, int off, int len) throws IOException;
+
+
+    /**
+     * Scatter read. The completion handler will be called once some
+     * data has been read or an error occurred. If a CompletionCheck
+     * object has been provided, the completion handler will only be
+     * called if the callHandler method returned true. If no
+     * CompletionCheck object has been provided, the default NIO2
+     * behavior is used: the completion handler will be called as soon
+     * as some data has been read, even if the read has completed inline.
+     *
+     * @param block true to block until any pending read is done, if the
+     *        timeout occurs and a read is still pending, a
+     *        ReadPendingException will be thrown; false to
+     *        not block but any pending read operation will cause
+     *        a ReadPendingException
+     * @param timeout timeout duration for the read
+     * @param unit units for the timeout duration
+     * @param attachment an object to attach to the I/O operation that will be
+     *        used when calling the completion handler
+     * @param check for the IO operation completion
+     * @param handler to call when the IO is complete
+     * @param dsts buffers
+     * @param <A> The attachment type
+     * @return the completion state (done, done inline, or still pending)
+     */
+    public final <A> CompletionState read(boolean block, long timeout, TimeUnit unit, A attachment,
+            CompletionCheck check, CompletionHandler<Long, ? super A> handler,
+            ByteBuffer... dsts) {
+        if (dsts == null) {
+            throw new IllegalArgumentException();
+        }
+        return read(dsts, 0, dsts.length, block, timeout, unit, attachment, check, handler);
+    }
+
+
+    /**
+     * Scatter read. The completion handler will be called once some
+     * data has been read or an error occurred. If a CompletionCheck
+     * object has been provided, the completion handler will only be
+     * called if the callHandler method returned true. If no
+     * CompletionCheck object has been provided, the default NIO2
+     * behavior is used: the completion handler will be called as soon
+     * as some data has been read, even if the read has completed inline.
+     *
+     * @param dsts buffers
+     * @param offset in the buffer array
+     * @param length in the buffer array
+     * @param block true to block until any pending read is done, if the
+     *        timeout occurs and a read is still pending, a
+     *        ReadPendingException will be thrown; false to
+     *        not block but any pending read operation will cause
+     *        a ReadPendingException
+     * @param timeout timeout duration for the read
+     * @param unit units for the timeout duration
+     * @param attachment an object to attach to the I/O operation that will be
+     *        used when calling the completion handler
+     * @param check for the IO operation completion
+     * @param handler to call when the IO is complete
+     * @param <A> The attachment type
+     * @return the completion state (done, done inline, or still pending)
+     */
+    public <A> CompletionState read(ByteBuffer[] dsts, int offset, int length,
+            boolean block, long timeout, TimeUnit unit, A attachment,
+            CompletionCheck check, CompletionHandler<Long, ? super A> handler) {
+        throw new UnsupportedOperationException();
+    }
+-----CSCI578-----
+
+    public abstract boolean isReadyForRead() throws IOException;
+-----CSCI578-----
+
+
+
+    @Override
+    public final int read() throws IOException {
+        preReadChecks();
+
+        return readInternal();
+    }
+
+
+
+    @Override
+    public final int read(byte[] b, int off, int len) throws IOException {
+        preReadChecks();
+
+        try {
+            int result = socketWrapper.read(listener == null, b, off, len);
+            if (result == -1) {
+                eof = true;
+            }
+            return result;
+        } catch (IOException ioe) {
+            close();
+            throw ioe;
+        }
+    }
+-----CSCI578-----
+
+
+
+    private int readInternal() throws IOException {
+        // Single byte reads for non-blocking need special handling so all
+        // single byte reads run through this method.
+        byte[] b = new byte[1];
+        int result;
+        try {
+            result = socketWrapper.read(listener == null, b, 0, 1);
+        } catch (IOException ioe) {
+            close();
+            throw ioe;
+        }
+        if (result == 0) {
+            return -1;
+        } else if (result == -1) {
+            eof = true;
+            return -1;
+        } else {
+            return b[0] & 0xFF;
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public final int readLine(byte[] b, int off, int len) throws IOException {
+        preReadChecks();
+
+        if (len <= 0) {
+            return 0;
+        }
+        int count = 0, c;
+
+        while ((c = readInternal()) != -1) {
+            b[off++] = (byte) c;
+            count++;
+            if (c == '\n' || count == len) {
+                break;
+            }
+        }
+        return count > 0 ? count : -1;
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------- Http2Parser.Input methods
+
+    @Override
+    public boolean fill(boolean block, byte[] data) throws IOException {
+        return fill(block, data, 0, data.length);
+    }
+
+
+    @Override
+    public boolean fill(boolean block, ByteBuffer data, int len) throws IOException {
+        boolean result = fill(block, data.array(), data.arrayOffset(), len);
+        if (result) {
+            data.position(data.position() + len);
+        }
+        return result;
+    }
+
+
+    @Override
+    public boolean fill(boolean block, byte[] data, int offset, int length) throws IOException {
+        int len = length;
+        int pos = offset;
+        boolean nextReadBlock = block;
+        int thisRead = 0;
+
+        while (len > 0) {
+            thisRead = socketWrapper.read(nextReadBlock, data, pos, len);
+            if (thisRead == 0) {
+                if (nextReadBlock) {
+                    // Should never happen
+                    throw new IllegalStateException();
+                } else {
+                    return false;
+                }
+            } else if (thisRead == -1) {
+                if (connectionState.get().isNewStreamAllowed()) {
+                    throw new EOFException();
+                } else {
+                    return false;
+                }
+            } else {
+                pos += thisRead;
+                len -= thisRead;
+                nextReadBlock = true;
+            }
+        }
+
+        return true;
+    }

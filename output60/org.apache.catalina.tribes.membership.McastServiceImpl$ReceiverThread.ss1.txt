@@ -1,0 +1,47 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Receive a datagram packet, locking wait
+     * @throws IOException
+     */
+    public void receive() throws IOException {
+        try {
+            socket.receive(receivePacket);
+            if(receivePacket.getLength() > MAX_PACKET_SIZE) {
+                log.error("Multicast packet received was too long, dropping package:"+receivePacket.getLength());
+            } else {
+                byte[] data = new byte[receivePacket.getLength()];
+                System.arraycopy(receivePacket.getData(), receivePacket.getOffset(), data, 0, data.length);
+                final MemberImpl m = MemberImpl.getMember(data);
+                if (log.isTraceEnabled()) log.trace("Mcast receive ping from member " + m);
+                Thread t = null;
+                if (Arrays.equals(m.getCommand(), Member.SHUTDOWN_PAYLOAD)) {
+                    if (log.isDebugEnabled()) log.debug("Member has shutdown:" + m);
+                    membership.removeMember(m);
+                    t = new Thread() {
+                        public void run() {
+                            service.memberDisappeared(m);
+                        }
+                    };
+                } else if (membership.memberAlive(m)) {
+                    if (log.isDebugEnabled()) log.debug("Mcast add member " + m);
+                    t = new Thread() {
+                        public void run() {
+                            service.memberAdded(m);
+                        }
+                    };
+                } //end if
+                if ( t != null ) t.start();
+            }
+        } catch (SocketTimeoutException x ) { 
+            //do nothing, this is normal, we don't want to block forever
+            //since the receive thread is the same thread
+            //that does membership expiration
+        }
+        checkExpired();
+    }

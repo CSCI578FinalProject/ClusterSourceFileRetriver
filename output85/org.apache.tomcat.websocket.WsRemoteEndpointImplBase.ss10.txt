@@ -1,0 +1,246 @@
+18
+-----CSCI578-----
+
+
+
+    void writeMessagePart(MessagePart mp) {
+        if (closed) {
+            throw new IllegalStateException(
+                    sm.getString("wsRemoteEndpoint.closed"));
+        }
+
+        if (Constants.INTERNAL_OPCODE_FLUSH == mp.getOpCode()) {
+            nextFragmented = fragmented;
+            nextText = text;
+            outputBuffer.flip();
+            SendHandler flushHandler = new OutputBufferFlushSendHandler(
+                    outputBuffer, mp.getEndHandler());
+            doWrite(flushHandler, mp.getBlockingWriteTimeoutExpiry(), outputBuffer);
+            return;
+        }
+
+        // Control messages may be sent in the middle of fragmented message
+        // so they have no effect on the fragmented or text flags
+        boolean first;
+        if (Util.isControl(mp.getOpCode())) {
+            nextFragmented = fragmented;
+            nextText = text;
+            if (mp.getOpCode() == Constants.OPCODE_CLOSE) {
+                closed = true;
+            }
+            first = true;
+        } else {
+            boolean isText = Util.isText(mp.getOpCode());
+
+            if (fragmented) {
+                // Currently fragmented
+                if (text != isText) {
+                    throw new IllegalStateException(
+                            sm.getString("wsRemoteEndpoint.changeType"));
+                }
+                nextText = text;
+                nextFragmented = !mp.isFin();
+                first = false;
+            } else {
+                // Wasn't fragmented. Might be now
+                if (mp.isFin()) {
+                    nextFragmented = false;
+                } else {
+                    nextFragmented = true;
+                    nextText = isText;
+                }
+                first = true;
+            }
+        }
+
+        byte[] mask;
+
+        if (isMasked()) {
+            mask = Util.generateMask();
+        } else {
+            mask = null;
+        }
+
+        headerBuffer.clear();
+        writeHeader(headerBuffer, mp.isFin(), mp.getRsv(), mp.getOpCode(),
+                isMasked(), mp.getPayload(), mask, first);
+        headerBuffer.flip();
+
+        if (getBatchingAllowed() || isMasked()) {
+            // Need to write via output buffer
+            OutputBufferSendHandler obsh = new OutputBufferSendHandler(
+                    mp.getEndHandler(), mp.getBlockingWriteTimeoutExpiry(),
+                    headerBuffer, mp.getPayload(), mask,
+                    outputBuffer, !getBatchingAllowed(), this);
+            obsh.write();
+        } else {
+            // Can write directly
+            doWrite(mp.getEndHandler(), mp.getBlockingWriteTimeoutExpiry(),
+                    headerBuffer, mp.getPayload());
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private static void writeHeader(ByteBuffer headerBuffer, boolean fin,
+            int rsv, byte opCode, boolean masked, ByteBuffer payload,
+            byte[] mask, boolean first) {
+
+        byte b = 0;
+
+        if (fin) {
+            // Set the fin bit
+            b -= 128;
+        }
+
+        b += (rsv << 4);
+
+        if (first) {
+            // This is the first fragment of this message
+            b += opCode;
+        }
+        // If not the first fragment, it is a continuation with opCode of zero
+
+        headerBuffer.put(b);
+
+        if (masked) {
+            b = (byte) 0x80;
+        } else {
+            b = 0;
+        }
+
+        // Next write the mask && length length
+        if (payload.limit() < 126) {
+            headerBuffer.put((byte) (payload.limit() | b));
+        } else if (payload.limit() < 65536) {
+            headerBuffer.put((byte) (126 | b));
+            headerBuffer.put((byte) (payload.limit() >>> 8));
+            headerBuffer.put((byte) (payload.limit() & 0xFF));
+        } else {
+            // Will never be more than 2^31-1
+            headerBuffer.put((byte) (127 | b));
+            headerBuffer.put((byte) 0);
+            headerBuffer.put((byte) 0);
+            headerBuffer.put((byte) 0);
+            headerBuffer.put((byte) 0);
+            headerBuffer.put((byte) (payload.limit() >>> 24));
+            headerBuffer.put((byte) (payload.limit() >>> 16));
+            headerBuffer.put((byte) (payload.limit() >>> 8));
+            headerBuffer.put((byte) (payload.limit() & 0xFF));
+        }
+        if (masked) {
+            headerBuffer.put(mask[0]);
+            headerBuffer.put(mask[1]);
+            headerBuffer.put(mask[2]);
+            headerBuffer.put(mask[3]);
+        }
+    }
+-----CSCI578-----
+
+    protected abstract boolean isMasked();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    static boolean isText(byte opCode) {
+        return opCode == Constants.OPCODE_TEXT;
+    }
+-----CSCI578-----
+
+
+
+    static byte[] generateMask() {
+        // SecureRandom is not thread-safe so need to make sure only one thread
+        // uses it at a time. In theory, the pool could grow to the same size
+        // as the number of request processing threads. In reality it will be
+        // a lot smaller.
+
+        // Get a SecureRandom from the pool
+        SecureRandom sr = randoms.poll();
+
+        // If one isn't available, generate a new one
+        if (sr == null) {
+            try {
+                sr = SecureRandom.getInstance("SHA1PRNG");
+            } catch (NoSuchAlgorithmException e) {
+                // Fall back to platform default
+                sr = new SecureRandom();
+            }
+        }
+
+        // Generate the mask
+        byte[] result = new byte[4];
+        sr.nextBytes(result);
+
+        // Put the SecureRandom back in the poll
+        randoms.add(sr);
+
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    public byte getOpCode() {
+        return opCode;
+    }
+-----CSCI578-----
+
+
+
+    public ByteBuffer getPayload() {
+        return payload;
+    }
+-----CSCI578-----
+
+
+
+    public boolean isFin() {
+        return fin;
+    }
+-----CSCI578-----
+
+
+    public long getBlockingWriteTimeoutExpiry() {
+        return blockingWriteTimeoutExpiry;
+    }
+-----CSCI578-----
+
+
+
+    public SendHandler getEndHandler() {
+        return endHandler;
+    }
+-----CSCI578-----
+
+
+
+    public int getRsv() {
+        return rsv;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean getBatchingAllowed() {
+        return batchingAllowed.get();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    protected abstract void doWrite(SendHandler handler, long blockingWrieTimeoutExpiry,
+            ByteBuffer... data);
+-----CSCI578-----
+
+
+
+    @Override
+    public final boolean getBatchingAllowed() {
+        return base.getBatchingAllowed();
+    }
+-----CSCI578-----

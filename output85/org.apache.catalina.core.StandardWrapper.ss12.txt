@@ -1,0 +1,261 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Load and initialize an instance of this servlet, if there is not already
+     * at least one initialized instance.  This can be used, for example, to
+     * load servlets that are marked in the deployment descriptor to be loaded
+     * at server startup time.
+     * <p>
+     * <b>IMPLEMENTATION NOTE</b>:  Servlets whose classnames begin with
+     * <code>org.apache.catalina.</code> (so-called "container" servlets)
+     * are loaded by the same classloader that loaded this class, rather than
+     * the classloader for the current web application.
+     * This gives such classes access to Catalina internals, which are
+     * prevented for classes loaded for web applications.
+     *
+     * @exception ServletException if the servlet init() method threw
+     *  an exception
+     * @exception ServletException if some other loading problem occurs
+     */
+    @Override
+    public synchronized void load() throws ServletException {
+        instance = loadServlet();
+
+        if (!instanceInitialized) {
+            initServlet(instance);
+        }
+
+        if (isJspServlet) {
+            StringBuilder oname = new StringBuilder(getDomain());
+
+            oname.append(":type=JspMonitor");
+
+            oname.append(getWebModuleKeyProperties());
+
+            oname.append(",name=");
+            oname.append(getName());
+
+            oname.append(getJ2EEKeyProperties());
+
+            try {
+                jspMonitorON = new ObjectName(oname.toString());
+                Registry.getRegistry(null, null)
+                    .registerComponent(instance, jspMonitorON, null);
+            } catch( Exception ex ) {
+                log.info("Error registering JSP monitoring with jmx " +
+                         instance);
+            }
+        }
+    }
+
+
+
+    /**
+     * Unload all initialized instances of this servlet, after calling the
+     * <code>destroy()</code> method for each instance.  This can be used,
+     * for example, prior to shutting down the entire servlet engine, or
+     * prior to reloading all of the classes from the Loader associated with
+     * our Loader's repository.
+     *
+     * @exception ServletException if an exception is thrown by the
+     *  destroy() method
+     */
+    @Override
+    public synchronized void unload() throws ServletException {
+
+        // Nothing to do if we have never loaded the instance
+        if (!singleThreadModel && (instance == null))
+            return;
+        unloading = true;
+
+        // Loaf a while if the current instance is allocated
+        // (possibly more than once if non-STM)
+        if (countAllocated.get() > 0) {
+            int nRetries = 0;
+            long delay = unloadDelay / 20;
+            while ((nRetries < 21) && (countAllocated.get() > 0)) {
+                if ((nRetries % 10) == 0) {
+                    log.info(sm.getString("standardWrapper.waiting",
+                                          countAllocated.toString(),
+                                          getName()));
+                }
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException e) {
+                    // Ignore
+                }
+                nRetries++;
+            }
+        }
+
+        if (instanceInitialized) {
+            PrintStream out = System.out;
+            if (swallowOutput) {
+                SystemLogHandler.startCapture();
+            }
+
+            // Call the servlet destroy() method
+            try {
+                if( Globals.IS_SECURITY_ENABLED) {
+                    try {
+                        SecurityUtil.doAsPrivilege("destroy", instance);
+                    } finally {
+                        SecurityUtil.remove(instance);
+                    }
+                } else {
+                    instance.destroy();
+                }
+
+                // Annotation processing
+                if (!((Context) getParent()).getIgnoreAnnotations()) {
+                   ((StandardContext)getParent()).getInstanceManager().destroyInstance(instance);
+                }
+            } catch (Throwable t) {
+                t = ExceptionUtils.unwrapInvocationTargetException(t);
+                ExceptionUtils.handleThrowable(t);
+                instance = null;
+                instancePool = null;
+                nInstances = 0;
+                fireContainerEvent("unload", this);
+                unloading = false;
+                throw new ServletException
+                    (sm.getString("standardWrapper.destroyException", getName()),
+                     t);
+            } finally {
+                // Write captured output
+                if (swallowOutput) {
+                    String log = SystemLogHandler.stopCapture();
+                    if (log != null && log.length() > 0) {
+                        if (getServletContext() != null) {
+                            getServletContext().log(log);
+                        } else {
+                            out.println(log);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Deregister the destroyed instance
+        instance = null;
+        instanceInitialized = false;
+
+        if (isJspServlet && jspMonitorON != null ) {
+            Registry.getRegistry(null, null).unregisterComponent(jspMonitorON);
+        }
+
+        if (singleThreadModel && (instancePool != null)) {
+            try {
+                while (!instancePool.isEmpty()) {
+                    Servlet s = instancePool.pop();
+                    if (Globals.IS_SECURITY_ENABLED) {
+                        try {
+                            SecurityUtil.doAsPrivilege("destroy", s);
+                        } finally {
+                            SecurityUtil.remove(s);
+                        }
+                    } else {
+                        s.destroy();
+                    }
+                    // Annotation processing
+                    if (!((Context) getParent()).getIgnoreAnnotations()) {
+                       ((StandardContext)getParent()).getInstanceManager().destroyInstance(s);
+                    }
+                }
+            } catch (Throwable t) {
+                t = ExceptionUtils.unwrapInvocationTargetException(t);
+                ExceptionUtils.handleThrowable(t);
+                instancePool = null;
+                nInstances = 0;
+                unloading = false;
+                fireContainerEvent("unload", this);
+                throw new ServletException
+                    (sm.getString("standardWrapper.destroyException",
+                                  getName()), t);
+            }
+            instancePool = null;
+            nInstances = 0;
+        }
+
+        singleThreadModel = false;
+
+        unloading = false;
+        fireContainerEvent("unload", this);
+
+    }
+-----CSCI578-----
+
+
+
+    private String getWebModuleKeyProperties() {
+
+        StringBuilder keyProperties = new StringBuilder(",WebModule=//");
+        String hostName = getParent().getParent().getName();
+        if (hostName == null) {
+            keyProperties.append("DEFAULT");
+        } else {
+            keyProperties.append(hostName);
+        }
+
+        String contextName = ((Context) getParent()).getName();
+        if (!contextName.startsWith("/")) {
+            keyProperties.append('/');
+        }
+        keyProperties.append(contextName);
+
+        return keyProperties.toString();
+    }
+-----CSCI578-----
+
+
+    private String getJ2EEKeyProperties() {
+
+        StringBuilder keyProperties = new StringBuilder(",J2EEApplication=");
+
+        StandardContext ctx = null;
+        if (parent instanceof StandardContext) {
+            ctx = (StandardContext) getParent();
+        }
+
+        if (ctx == null) {
+            keyProperties.append("none");
+        } else {
+            keyProperties.append(ctx.getJ2EEApplication());
+        }
+        keyProperties.append(",J2EEServer=");
+        if (ctx == null) {
+            keyProperties.append("none");
+        } else {
+            keyProperties.append(ctx.getJ2EEServer());
+        }
+
+        return keyProperties.toString();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected String getObjectNameKeyProperties() {
+
+        StringBuilder keyProperties =
+            new StringBuilder("j2eeType=Servlet");
+
+        keyProperties.append(getWebModuleKeyProperties());
+
+        keyProperties.append(",name=");
+
+        String name = getName();
+        if (Util.objectNameValueNeedsQuote(name)) {
+            name = ObjectName.quote(name);
+        }
+        keyProperties.append(name);
+
+        keyProperties.append(getJ2EEKeyProperties());
+
+        return keyProperties.toString();
+    }

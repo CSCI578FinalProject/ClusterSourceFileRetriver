@@ -1,0 +1,44 @@
+5
+
+
+    /**
+     * Get the HTTP format of the specified date.
+     */
+    public static final String formatDate
+        (long value, DateFormat threadLocalformat) {
+
+        Long longValue = new Long(value);
+        String cachedDate = formatCache.get(longValue);
+        if (cachedDate != null)
+            return cachedDate;
+
+        String newDate = null;
+        Date dateValue = new Date(value);
+        if (threadLocalformat != null) {
+            newDate = threadLocalformat.format(dateValue);
+            updateFormatCache(longValue, newDate);
+        } else {
+            synchronized (formatCache) {
+                synchronized (format) {
+                    newDate = format.format(dateValue);
+                }
+                updateFormatCache(longValue, newDate);
+            }
+        }
+        return newDate;
+
+    }
+
+
+    /**
+     * Update cache.
+     */
+    private static void updateFormatCache(Long key, String value) {
+        if (value == null) {
+            return;
+        }
+        if (formatCache.size() > CACHE_SIZE) {
+            formatCache.clear();
+        }
+        formatCache.put(key, value);
+    }

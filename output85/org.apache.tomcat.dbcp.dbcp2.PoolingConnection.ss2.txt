@@ -1,0 +1,69 @@
+9
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * flag set to true, once close() is called.
+     */
+    private boolean isClosed;
+
+    /* JDBC_4_ANT_KEY_END */
+
+    /**
+     * Closes the physical connection and marks this
+     * <code>PooledConnection</code> so that it may not be used
+     * to generate any more logical <code>Connection</code>s.
+     *
+     * @exception SQLException if an error occurs or the connection is already closed
+     */
+    @Override
+    public void close() throws SQLException {
+        assertOpen();
+        isClosed = true;
+        try {
+            if (pstmtPool != null) {
+                try {
+                    pstmtPool.close();
+                } finally {
+                    pstmtPool = null;
+                }
+            }
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new SQLException("Cannot close connection (return to pool failed)", e);
+        } finally {
+            try {
+                connection.close();
+            } finally {
+                connection = null;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Close pool being maintained by this datasource.
+     */
+    @Override
+    public void close() throws Exception {
+        if (pool != null) {
+            pool.close();
+        }
+        InstanceKeyDataSourceFactory.removeInstance(getInstanceKey());
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    static void removeInstance(String key) {
+        if (key != null) {
+            instanceMap.remove(key);
+        }
+    }

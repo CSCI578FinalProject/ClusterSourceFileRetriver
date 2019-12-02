@@ -1,0 +1,206 @@
+8
+-----CSCI578-----
+
+
+
+    /**
+     * Delete the specified directory, including all of its contents and
+     * subdirectories recursively. The code assumes that the directory exists.
+     *
+     * @param dir File object representing the directory to be deleted.
+     * @return <code>true</code> if the deletion was successful
+     */
+    protected boolean undeployDir(File dir) {
+
+        String files[] = dir.list();
+        if (files == null) {
+            files = new String[0];
+        }
+        for (int i = 0; i < files.length; i++) {
+            File file = new File(dir, files[i]);
+            if (file.isDirectory()) {
+                if (!undeployDir(file)) {
+                    return false;
+                }
+            } else {
+                if (!file.delete()) {
+                    return false;
+                }
+            }
+        }
+        return dir.delete();
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Support Methods
+
+
+    /**
+     * Invoke the isDeployed method on the deployer.
+     *
+     * @param name The webapp name
+     * @return <code>true</code> if a webapp with that name is deployed
+     * @throws Exception Propagate JMX invocation error
+     */
+    protected boolean isDeployed(String name)
+        throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        Boolean result =
+            (Boolean) mBeanServer.invoke(oname, "isDeployed", params, signature);
+        return result.booleanValue();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Undeploy the web application at the specified context path.
+     *
+     * @param writer Writer to render to
+     * @param cn Name of the application to be removed
+     * @param smClient i18n support for current client's locale
+     */
+    protected void undeploy(PrintWriter writer, ContextName cn,
+            StringManager smClient) {
+
+        if (debug >= 1)
+            log("undeploy: Undeploying web application at '" + cn + "'");
+
+        if (!validateContextName(cn, writer, smClient)) {
+            return;
+        }
+
+        String name = cn.getName();
+        String baseName = cn.getBaseName();
+        String displayPath = cn.getDisplayName();
+
+        try {
+
+            // Validate the Context of the specified application
+            Context context = (Context) host.findChild(name);
+            if (context == null) {
+                writer.println(smClient.getString("managerServlet.noContext",
+                        RequestUtil.filter(displayPath)));
+                return;
+            }
+
+            if (!isDeployed(name)) {
+                writer.println(smClient.getString("managerServlet.notDeployed",
+                        RequestUtil.filter(displayPath)));
+                return;
+            }
+
+            if (isServiced(name)) {
+                writer.println(smClient.getString("managerServlet.inService", displayPath));
+            } else {
+                addServiced(name);
+                try {
+                    // Try to stop the context first to be nicer
+                    context.stop();
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                }
+                try {
+                    File war = new File(host.getAppBaseFile(), baseName + ".war");
+                    File dir = new File(host.getAppBaseFile(), baseName);
+                    File xml = new File(configBase, baseName + ".xml");
+                    if (war.exists() && !war.delete()) {
+                        writer.println(smClient.getString(
+                                "managerServlet.deleteFail", war));
+                        return;
+                    } else if (dir.exists() && !undeployDir(dir)) {
+                        writer.println(smClient.getString(
+                                "managerServlet.deleteFail", dir));
+                        return;
+                    } else if (xml.exists() && !xml.delete()) {
+                        writer.println(smClient.getString(
+                                "managerServlet.deleteFail", xml));
+                        return;
+                    }
+                    // Perform new deployment
+                    check(name);
+                } finally {
+                    removeServiced(name);
+                }
+            }
+            writer.println(smClient.getString("managerServlet.undeployed",
+                    displayPath));
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            log("ManagerServlet.undeploy[" + displayPath + "]", t);
+            writer.println(smClient.getString("managerServlet.exception",
+                    t.toString()));
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Invoke the isServiced method on the deployer.
+     *
+     * @param name The webapp name
+     * @return <code>true</code> if a webapp with that name is being serviced
+     * @throws Exception Propagate JMX invocation error
+     */
+    protected boolean isServiced(String name)
+        throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        Boolean result =
+            (Boolean) mBeanServer.invoke(oname, "isServiced", params, signature);
+        return result.booleanValue();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Invoke the addServiced method on the deployer.
+     *
+     * @param name The webapp name
+     * @throws Exception Propagate JMX invocation error
+     */
+    protected void addServiced(String name)
+        throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "addServiced", params, signature);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Invoke the removeServiced method on the deployer.
+     *
+     * @param name The webapp name
+     * @throws Exception Propagate JMX invocation error
+     */
+    protected void removeServiced(String name)
+        throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "removeServiced", params, signature);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Invoke the check method on the deployer.
+     *
+     * @param name The webapp name
+     * @throws Exception Propagate JMX invocation error
+     */
+    protected void check(String name)
+        throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "check", params, signature);
+    }

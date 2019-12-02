@@ -1,0 +1,306 @@
+9
+-----CSCI578-----
+
+
+    /**
+     * Calls logout, if necessary, on any associated JAASLoginContext. May in
+     * the future be extended to cover other logout requirements.
+     *
+     * @throws Exception If something goes wrong with the logout. Uses Exception
+     *                   to allow for future expansion of this method to cover
+     *                   other logout mechanisms that might throw a different
+     *                   exception to LoginContext
+     *
+     */
+    void logout() throws Exception;
+-----CSCI578-----
+
+
+
+    /**
+     * Perform the internal processing required to invalidate this session,
+     * without triggering an exception if the session has already expired.
+     */
+    @Override
+    public void expire() {
+
+        expire(true);
+
+    }
+
+
+
+    /**
+     * Perform the internal processing required to invalidate this session,
+     * without triggering an exception if the session has already expired.
+     *
+     * @param notify Should we notify listeners about the demise of
+     *  this session?
+     */
+    public void expire(boolean notify) {
+
+        // Check to see if session has already been invalidated.
+        // Do not check expiring at this point as expire should not return until
+        // isValid is false
+        if (!isValid)
+            return;
+
+        synchronized (this) {
+            // Check again, now we are inside the sync so this code only runs once
+            // Double check locking - isValid needs to be volatile
+            // The check of expiring is to ensure that an infinite loop is not
+            // entered as per bug 56339
+            if (expiring || !isValid)
+                return;
+
+            if (manager == null)
+                return;
+
+            // Mark this session as "being expired"
+            expiring = true;
+
+            // Notify interested application event listeners
+            // FIXME - Assumes we call listeners in reverse order
+            Context context = manager.getContext();
+
+            // The call to expire() may not have been triggered by the webapp.
+            // Make sure the webapp's class loader is set when calling the
+            // listeners
+            if (notify) {
+                ClassLoader oldContextClassLoader = null;
+                try {
+                    oldContextClassLoader = context.bind(Globals.IS_SECURITY_ENABLED, null);
+                    Object listeners[] = context.getApplicationLifecycleListeners();
+                    if (listeners != null && listeners.length > 0) {
+                        HttpSessionEvent event =
+                            new HttpSessionEvent(getSession());
+                        for (int i = 0; i < listeners.length; i++) {
+                            int j = (listeners.length - 1) - i;
+                            if (!(listeners[j] instanceof HttpSessionListener))
+                                continue;
+                            HttpSessionListener listener =
+                                (HttpSessionListener) listeners[j];
+                            try {
+                                context.fireContainerEvent("beforeSessionDestroyed",
+                                        listener);
+                                listener.sessionDestroyed(event);
+                                context.fireContainerEvent("afterSessionDestroyed",
+                                        listener);
+                            } catch (Throwable t) {
+                                ExceptionUtils.handleThrowable(t);
+                                try {
+                                    context.fireContainerEvent(
+                                            "afterSessionDestroyed", listener);
+                                } catch (Exception e) {
+                                    // Ignore
+                                }
+                                manager.getContext().getLogger().error
+                                    (sm.getString("standardSession.sessionEvent"), t);
+                            }
+                        }
+                    }
+                } finally {
+                    context.unbind(Globals.IS_SECURITY_ENABLED, oldContextClassLoader);
+                }
+            }
+
+            if (ACTIVITY_CHECK) {
+                accessCount.set(0);
+            }
+
+            // Remove this session from our manager's active sessions
+            manager.remove(this, true);
+
+            // Notify interested session event listeners
+            if (notify) {
+                fireSessionEvent(Session.SESSION_DESTROYED_EVENT, null);
+            }
+
+            // Call the logout method
+            if (principal instanceof TomcatPrincipal) {
+                TomcatPrincipal gp = (TomcatPrincipal) principal;
+                try {
+                    gp.logout();
+                } catch (Exception e) {
+                    manager.getContext().getLogger().error(
+                            sm.getString("standardSession.logoutfail"),
+                            e);
+                }
+            }
+
+            // We have completed expire of this session
+            setValid(false);
+            expiring = false;
+
+            // Unbind any objects associated with this session
+            String keys[] = keys();
+            ClassLoader oldContextClassLoader = null;
+            try {
+                oldContextClassLoader = context.bind(Globals.IS_SECURITY_ENABLED, null);
+                for (int i = 0; i < keys.length; i++) {
+                    removeAttributeInternal(keys[i], notify);
+                }
+            } finally {
+                context.unbind(Globals.IS_SECURITY_ENABLED, oldContextClassLoader);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the object bound with the specified name from this session.  If
+     * the session does not have an object bound with this name, this method
+     * does nothing.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueUnbound()</code> on the object.
+     *
+     * @param name Name of the object to remove from this session.
+     * @param notify Should we notify interested listeners that this
+     *  attribute is being removed?
+     */
+    protected void removeAttributeInternal(String name, boolean notify) {
+
+        // Avoid NPE
+        if (name == null) return;
+
+        // Remove this attribute from our collection
+        Object value = attributes.remove(name);
+
+        // Do we need to do valueUnbound() and attributeRemoved() notification?
+        if (!notify || (value == null)) {
+            return;
+        }
+
+        // Call the valueUnbound() method if necessary
+        HttpSessionBindingEvent event = null;
+        if (value instanceof HttpSessionBindingListener) {
+            event = new HttpSessionBindingEvent(getSession(), name, value);
+            ((HttpSessionBindingListener) value).valueUnbound(event);
+        }
+
+        // Notify interested application event listeners
+        Context context = manager.getContext();
+        Object listeners[] = context.getApplicationEventListeners();
+        if (listeners == null)
+            return;
+        for (int i = 0; i < listeners.length; i++) {
+            if (!(listeners[i] instanceof HttpSessionAttributeListener))
+                continue;
+            HttpSessionAttributeListener listener =
+                (HttpSessionAttributeListener) listeners[i];
+            try {
+                context.fireContainerEvent("beforeSessionAttributeRemoved",
+                        listener);
+                if (event == null) {
+                    event = new HttpSessionBindingEvent
+                        (getSession(), name, value);
+                }
+                listener.attributeRemoved(event);
+                context.fireContainerEvent("afterSessionAttributeRemoved",
+                        listener);
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                try {
+                    context.fireContainerEvent("afterSessionAttributeRemoved",
+                            listener);
+                } catch (Exception e) {
+                    // Ignore
+                }
+                manager.getContext().getLogger().error
+                    (sm.getString("standardSession.attributeEvent"), t);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Properties
+
+    /**
+     * Get the Context with which this Manager is associated.
+     *
+     * @return The associated Context
+     */
+    public Context getContext();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>isValid</code> flag for this session.
+     *
+     * @param isValid The new value for the <code>isValid</code> flag
+     */
+    @Override
+    public void setValid(boolean isValid) {
+        this.isValid = isValid;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Inform the listeners about the change session ID.
+     *
+     * @param newId  new session ID
+     * @param oldId  old session ID
+     * @param notifySessionListeners  Should any associated sessionListeners be
+     *        notified that session ID has been changed?
+     * @param notifyContainerListeners  Should any associated ContainerListeners
+     *        be notified that session ID has been changed?
+     */
+    @Override
+    public void tellChangedSessionId(String newId, String oldId,
+            boolean notifySessionListeners, boolean notifyContainerListeners) {
+        Context context = manager.getContext();
+         // notify ContainerListeners
+        if (notifyContainerListeners) {
+            context.fireContainerEvent(Context.CHANGE_SESSION_ID_EVENT,
+                    new String[] {oldId, newId});
+        }
+
+        // notify HttpSessionIdListener
+        if (notifySessionListeners) {
+            Object listeners[] = context.getApplicationEventListeners();
+            if (listeners != null && listeners.length > 0) {
+                HttpSessionEvent event =
+                    new HttpSessionEvent(getSession());
+
+                for(Object listener : listeners) {
+                    if (!(listener instanceof HttpSessionIdListener))
+                        continue;
+
+                    HttpSessionIdListener idListener =
+                        (HttpSessionIdListener)listener;
+                    try {
+                        idListener.sessionIdChanged(event, oldId);
+                    } catch (Throwable t) {
+                        manager.getContext().getLogger().error
+                            (sm.getString("standardSession.sessionEvent"), t);
+                    }
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the ServletContext to which this session belongs.
+     */
+    @Override
+    public ServletContext getServletContext() {
+        if (manager == null) {
+            return null;
+        }
+        Context context = manager.getContext();
+        return context.getServletContext();
+    }

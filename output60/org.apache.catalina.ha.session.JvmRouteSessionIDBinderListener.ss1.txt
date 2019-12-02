@@ -1,0 +1,87 @@
+6
+-----CSCI578-----
+
+
+
+    /**
+     * Retrieve the cluster-wide unique identifier for this Engine.
+     * This value is only useful in a load-balancing scenario.
+     */
+    public String getJvmRoute() {
+        return jvmRouteId;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Callback from the cluster, when a message is received, The cluster will
+     * broadcast it invoking the messageReceived on the receiver.
+     * 
+     * @param msg
+     *            ClusterMessage - the message received from the cluster
+     */
+    public void messageReceived(ClusterMessage msg) {
+        if (msg instanceof SessionIDMessage && msg != null) {
+            SessionIDMessage sessionmsg = (SessionIDMessage) msg;
+            if (log.isDebugEnabled())
+                log.debug(sm.getString(
+                        "jvmRoute.receiveMessage.sessionIDChanged", sessionmsg
+                                .getOrignalSessionID(), sessionmsg
+                                .getBackupSessionID(), sessionmsg
+                                .getContextPath()));
+            Container container = getCluster().getContainer();
+            Container host = null ;
+            if(container instanceof Engine) {
+                host = container.findChild(sessionmsg.getHost());
+            } else {
+                host = container ;
+            }
+            if (host != null) {
+                Context context = (Context) host.findChild(sessionmsg
+                        .getContextPath());
+                if (context != null) {
+                    try {
+                        Session session = context.getManager().findSession(
+                                sessionmsg.getOrignalSessionID());
+                        if (session != null) {
+                            session.setId(sessionmsg.getBackupSessionID());
+                        } else if (log.isInfoEnabled())
+                            log.info(sm.getString("jvmRoute.lostSession",
+                                    sessionmsg.getOrignalSessionID(),
+                                    sessionmsg.getContextPath()));
+                    } catch (IOException e) {
+                        log.error(e);
+                    }
+
+                } else if (log.isErrorEnabled())
+                    log.error(sm.getString("jvmRoute.contextNotFound",
+                            sessionmsg.getContextPath(), ((StandardEngine) host
+                                    .getParent()).getJvmRoute()));
+            } else if (log.isErrorEnabled())
+                log.error(sm.getString("jvmRoute.hostNotFound", sessionmsg.getContextPath()));
+        }
+        return;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+	
+	/**
+	 * @return Returns the backupSessionID.
+	 */
+	public String getBackupSessionID() {
+		return backupSessionID;
+	}
+-----CSCI578-----
+
+
+
+    /**
+     * Return the child Container, associated with this Container, with
+     * the specified name (if any); otherwise, return <code>null</code>
+     *
+     * @param name Name of the child Container to be retrieved
+     */
+    public Container findChild(String name);

@@ -1,0 +1,333 @@
+13
+-----CSCI578-----
+
+
+    protected boolean isParseBodyMethod(String method) {
+
+        return parseBodyMethodsSet.contains(method);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read post body in an array.
+     */
+    protected int readPostBody(byte body[], int len)
+        throws IOException {
+
+        int offset = 0;
+        do {
+            int inputLen = getStream().read(body, offset, len - offset);
+            if (inputLen <= 0) {
+                return offset;
+            }
+            offset += inputLen;
+        } while ((len - offset) > 0);
+        return len;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read chunked post body.
+     */
+    protected byte[] readChunkedPostBody() throws IOException {
+        ByteChunk body = new ByteChunk();
+
+        byte[] buffer = new byte[CACHED_POST_LEN];
+
+        int len = 0;
+        while (len > -1) {
+            len = getStream().read(buffer, 0, CACHED_POST_LEN);
+            if (connector.getMaxPostSize() > 0 &&
+                    (body.getLength() + len) > connector.getMaxPostSize()) {
+                // Too much data
+                throw new IllegalStateException(
+                        sm.getString("coyoteRequest.chunkedPostTooLarge"));
+            }
+            if (len > 0) {
+                body.append(buffer, 0, len);
+            }
+        }
+        if (body.getLength() == 0) {
+            return null;
+        }
+        if (body.getLength() < body.getBuffer().length) {
+            int length = body.getLength();
+            byte[] result = new byte[length];
+            System.arraycopy(body.getBuffer(), 0, result, 0, length);
+            return result;
+        } else {
+            return body.getBuffer();
+        }
+    }
+-----CSCI578-----
+
+
+    public void setEncoding( String s ) {
+        encoding=s;
+        if(log.isDebugEnabled()) {
+            log.debug( "Set encoding to " + s );
+        }
+    }
+-----CSCI578-----
+
+
+    public void setLimit(int limit) {
+        this.limit = limit;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Parse request parameters.
+     */
+    protected void parseParameters() {
+
+        parametersParsed = true;
+
+        Parameters parameters = coyoteRequest.getParameters();
+        // Set this every time in case limit has been changed via JMX
+        parameters.setLimit(getConnector().getMaxParameterCount());
+
+        // getCharacterEncoding() may have been overridden to search for
+        // hidden form field containing request encoding
+        String enc = getCharacterEncoding();
+
+        boolean useBodyEncodingForURI = connector.getUseBodyEncodingForURI();
+        if (enc != null) {
+            parameters.setEncoding(enc);
+            if (useBodyEncodingForURI) {
+                parameters.setQueryStringEncoding(enc);
+            }
+        } else {
+            parameters.setEncoding
+                (org.apache.coyote.Constants.DEFAULT_CHARACTER_ENCODING);
+            if (useBodyEncodingForURI) {
+                parameters.setQueryStringEncoding
+                    (org.apache.coyote.Constants.DEFAULT_CHARACTER_ENCODING);
+            }
+        }
+
+        parameters.handleQueryParameters();
+
+        if (usingInputStream || usingReader)
+            return;
+
+        if( !getConnector().isParseBodyMethod(getMethod()) )
+            return;
+
+        String contentType = getContentType();
+        if (contentType == null)
+            contentType = "";
+        int semicolon = contentType.indexOf(';');
+        if (semicolon >= 0) {
+            contentType = contentType.substring(0, semicolon).trim();
+        } else {
+            contentType = contentType.trim();
+        }
+        if (!("application/x-www-form-urlencoded".equals(contentType)))
+            return;
+
+        boolean success = false;
+        int len = getContentLength();
+
+        try {
+            if (len > 0) {
+                int maxPostSize = connector.getMaxPostSize();
+                if ((maxPostSize > 0) && (len > maxPostSize)) {
+                    if (context.getLogger().isDebugEnabled()) {
+                        context.getLogger().debug(
+                                sm.getString("coyoteRequest.postTooLarge"));
+                    }
+                    parameters.setParseFailedReason(FailReason.POST_TOO_LARGE);
+                    return;
+                }
+                byte[] formData = null;
+                if (len < CACHED_POST_LEN) {
+                    if (postData == null)
+                        postData = new byte[CACHED_POST_LEN];
+                    formData = postData;
+                } else {
+                    formData = new byte[len];
+                }
+                try {
+                    if (readPostBody(formData, len) != len) {
+                        parameters.setParseFailedReason(FailReason.REQUEST_BODY_INCOMPLETE);
+                        return;
+                    }
+                } catch (IOException e) {
+                    // Client disconnect
+                    if (context.getLogger().isDebugEnabled()) {
+                        context.getLogger().debug(
+                                sm.getString("coyoteRequest.parseParameters"), e);
+                    }
+                    parameters.setParseFailedReason(FailReason.CLIENT_DISCONNECT);
+                    return;
+                }
+                parameters.processParameters(formData, 0, len);
+            } else if ("chunked".equalsIgnoreCase(
+                    coyoteRequest.getHeader("transfer-encoding"))) {
+                byte[] formData = null;
+                try {
+                    formData = readChunkedPostBody();
+                } catch (IllegalStateException ise) {
+                    // chunkedPostTooLarge error
+                    parameters.setParseFailedReason(FailReason.POST_TOO_LARGE);
+                    Context context = getContext();
+                    if (context != null && context.getLogger().isDebugEnabled()) {
+                        context.getLogger().debug(
+                                sm.getString("coyoteRequest.parseParameters"),
+                                ise);
+                    }
+                    return;
+                } catch (IOException e) {
+                    // Client disconnect
+                    parameters.setParseFailedReason(FailReason.CLIENT_DISCONNECT);
+                    if (context.getLogger().isDebugEnabled()) {
+                        context.getLogger().debug(
+                                sm.getString("coyoteRequest.parseParameters"), e);
+                    }
+                    return;
+                }
+                if (formData != null) {
+                    parameters.processParameters(formData, 0, formData.length);
+                }
+            }
+            success = true;
+        } finally {
+            if (!success) {
+                parameters.setParseFailedReason(FailReason.UNKNOWN);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the maximum size of a POST which will be automatically
+     * parsed by the container.
+     */
+    public int getMaxPostSize() {
+
+        return (maxPostSize);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the input stream associated with this Request.
+     */
+    public InputStream getStream() {
+        if (inputStream == null) {
+            inputStream = new CoyoteInputStream(inputBuffer);
+        }
+        return inputStream;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the maximum number of parameters (GET plus POST) that will be
+     * automatically parsed by the container. A value of less than 0 means no
+     * limit.
+     */
+    public int getMaxParameterCount() {
+        return maxParameterCount;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- Parameters --------------------
+
+
+    public Parameters getParameters() {
+        return parameters;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public String getHeader(String name) {
+        return headers.getHeader(name);
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------- Request Public Methods
+
+
+    /**
+     * Create and return a ServletInputStream to read the content
+     * associated with this Request.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public ServletInputStream createInputStream()
+        throws IOException {
+        if (inputStream == null) {
+            inputStream = new CoyoteInputStream(inputBuffer);
+        }
+        return inputStream;
+    }
+
+
+
+    /**
+     * Return the servlet input stream for this Request.  The default
+     * implementation returns a servlet input stream created by
+     * <code>createInputStream()</code>.
+     *
+     * @exception IllegalStateException if <code>getReader()</code> has
+     *  already been called for this request
+     * @exception IOException if an input/output error occurs
+     */
+    public ServletInputStream getInputStream() throws IOException {
+
+        if (usingReader)
+            throw new IllegalStateException
+                (sm.getString("coyoteRequest.getInputStream.ise"));
+
+        usingInputStream = true;
+        if (inputStream == null) {
+            inputStream = new CoyoteInputStream(inputBuffer);
+        }
+        return inputStream;
+
+    }
+
+
+
+    /**
+     * Read the Reader wrapping the input stream for this Request.  The
+     * default implementation wraps a <code>BufferedReader</code> around the
+     * servlet input stream returned by <code>createInputStream()</code>.
+     *
+     * @exception IllegalStateException if <code>getInputStream()</code>
+     *  has already been called for this request
+     * @exception IOException if an input/output error occurs
+     */
+    public BufferedReader getReader() throws IOException {
+
+        if (usingInputStream)
+            throw new IllegalStateException
+                (sm.getString("coyoteRequest.getReader.ise"));
+
+        usingReader = true;
+        inputBuffer.checkConverter();
+        if (reader == null) {
+            reader = new CoyoteReader(inputBuffer);
+        }
+        return reader;
+
+    }

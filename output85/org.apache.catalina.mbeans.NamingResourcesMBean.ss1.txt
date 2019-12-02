@@ -1,0 +1,75 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any resource reference with the specified name.
+     *
+     * @param resourceName Name of the resource reference to remove
+     */
+    public void removeResource(String resourceName) {
+
+        resourceName = ObjectName.unquote(resourceName);
+        NamingResourcesImpl nresources = (NamingResourcesImpl) this.resource;
+        if (nresources == null) {
+            return;
+        }
+        ContextResource resource = nresources.findResource(resourceName);
+        if (resource == null) {
+            throw new IllegalArgumentException
+                ("Invalid resource name '" + resourceName + "'");
+        }
+        nresources.removeResource(resourceName);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any resource reference with the specified name.
+     *
+     * @param name Name of the resource reference to remove
+     */
+    @Override
+    public void removeResource(String name) {
+
+        entries.remove(name);
+
+        ContextResource resource = null;
+        synchronized (resources) {
+            resource = resources.remove(name);
+        }
+        if (resource != null) {
+            support.firePropertyChange("resource", resource, null);
+            // De-register with JMX
+            if (resourceRequireExplicitRegistration) {
+                try {
+                    MBeanUtils.destroyMBean(resource);
+                } catch (Exception e) {
+                    log.warn(sm.getString("namingResources.mbeanDestroyFail",
+                            resource.getName()), e);
+                }
+            }
+            resource.setNamingResources(null);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the resource reference with the specified name, if any;
+     * otherwise return <code>null</code>.
+     *
+     * @param name Name of the desired resource reference
+     */
+    public ContextResource findResource(String name) {
+
+        synchronized (resources) {
+            return resources.get(name);
+        }
+
+    }
+-----CSCI578-----

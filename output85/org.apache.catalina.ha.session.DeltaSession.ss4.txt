@@ -1,0 +1,37 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Return the <code>isValid</code> flag for this session.
+     */
+    @Override
+    public boolean isValid() {
+        if (!this.isValid) {
+            return false;
+        }
+        if (this.expiring) {
+            return true;
+        }
+        if (ACTIVITY_CHECK && accessCount.get() > 0) {
+            return true;
+        }
+        if (maxInactiveInterval > 0) {
+            int timeIdle = (int) (getIdleTimeInternal() / 1000L);
+            if (isPrimarySession()) {
+                if (timeIdle >= maxInactiveInterval) {
+                    expire(true);
+                }
+            } else {
+                if (timeIdle >= (2 * maxInactiveInterval)) {
+                    //if the session has been idle twice as long as allowed,
+                    //the primary session has probably crashed, and no other
+                    //requests are coming in. that is why we do this. otherwise
+                    //we would have a memory leak
+                    expire(true, false);
+                }
+            }
+        }
+        return (this.isValid);
+    }
+-----CSCI578-----

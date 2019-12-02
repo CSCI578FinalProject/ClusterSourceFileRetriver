@@ -1,0 +1,53 @@
+2
+-----CSCI578-----
+
+
+    // Called from MessageBytes.getTime()
+    static long parseDate( MessageBytes value ) {
+     	return parseDate( value.toString());
+    }
+
+
+    
+    /** Called from HttpServletRequest.getDateHeader().
+	Not efficient - but not very used.
+     */
+    public static long parseDate( String dateString ) {
+	DateFormat [] format = {rfc1123Format,rfc1036Format,asctimeFormat};
+	return parseDate(dateString,format);
+    }
+
+    public static long parseDate( String dateString, DateFormat []format ) {
+	Date date=null;
+	for(int i=0; i < format.length; i++) {
+	    try {
+		date = format[i].parse(dateString);
+		return date.getTime();
+	    } catch (ParseException e) { }
+	    catch (StringIndexOutOfBoundsException e) { }
+	}
+	String msg = sm.getString("httpDate.pe", dateString);
+	throw new IllegalArgumentException(msg);
+    }
+-----CSCI578-----
+
+
+    /**
+     *  @deprecated The buffer are general purpose, caching for headers should
+     *  be done in headers
+     */
+    public  long getTime()
+    {
+     	if( hasDateValue ) {
+	    if( dateValue==null) return -1;
+	    return dateValue.getTime();
+     	}
+
+     	long l=DateTool.parseDate( this );
+     	if( dateValue==null)
+     	    dateValue=new Date(l);
+     	else
+     	    dateValue.setTime(l);
+     	hasDateValue=true;
+     	return l;
+    }

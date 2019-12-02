@@ -1,0 +1,40 @@
+8
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void invoke(Request request, Response response)
+            throws IOException, ServletException {
+
+        if (threshold <= 0) {
+            // short-circuit if not monitoring stuck threads
+            getNext().invoke(request, response);
+            return;
+        }
+
+        // Save the thread/runnable
+        // Keeping a reference to the thread object here does not prevent
+        // GC'ing, as the reference is removed from the Map in the finally clause
+
+        Long key = Long.valueOf(Thread.currentThread().getId());
+        StringBuffer requestUrl = request.getRequestURL();
+        if(request.getQueryString()!=null) {
+            requestUrl.append("?");
+            requestUrl.append(request.getQueryString());
+        }
+        MonitoredThread monitoredThread = new MonitoredThread(Thread.currentThread(),
+            requestUrl.toString());
+        activeThreads.put(key, monitoredThread);
+
+        try {
+            getNext().invoke(request, response);
+        } finally {
+            activeThreads.remove(key);
+            if (monitoredThread.markAsDone() == MonitoredThreadState.STUCK) {
+                completedStuckThreadsQueue.add(
+                        new CompletedStuckThread(monitoredThread.getThread(),
+                            monitoredThread.getActiveTimeInMillis()));
+            }
+        }
+    }

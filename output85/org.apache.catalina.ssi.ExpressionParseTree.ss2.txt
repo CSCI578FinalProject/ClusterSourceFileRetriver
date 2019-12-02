@@ -1,0 +1,142 @@
+17
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the current index for error reporting purposes.
+     */
+    public int getIndex() {
+        return index;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Resolves all pending opp nodes on the stack until the next group marker
+     * is reached.
+     */
+    private void resolveGroup() {
+        OppNode top = null;
+        while ((top = oppStack.remove(0)) != null) {
+            // Let it fill its branches
+            top.popValues(nodeStack);
+            // Stick it on the resolved node stack
+            nodeStack.add(0, top);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if there are more tokens.
+     */
+    public boolean hasMoreTokens() {
+        return index < length;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Parses the specified expression into a tree of parse nodes.
+     * @param expr The expression to parse
+     * @throws ParseException a parsing error occurred
+     */
+    private void parseExpression(String expr) throws ParseException {
+        StringNode currStringNode = null;
+        // We cheat a little and start an artificial
+        // group right away. It makes finishing easier.
+        pushOpp(null);
+        ExpressionTokenizer et = new ExpressionTokenizer(expr);
+        while (et.hasMoreTokens()) {
+            int token = et.nextToken();
+            if (token != ExpressionTokenizer.TOKEN_STRING)
+                currStringNode = null;
+            switch (token) {
+                case ExpressionTokenizer.TOKEN_STRING :
+                    if (currStringNode == null) {
+                        currStringNode = new StringNode(et.getTokenValue());
+                        nodeStack.add(0, currStringNode);
+                    } else {
+                        // Add to the existing
+                        currStringNode.value.append(" ");
+                        currStringNode.value.append(et.getTokenValue());
+                    }
+                    break;
+                case ExpressionTokenizer.TOKEN_AND :
+                    pushOpp(new AndNode());
+                    break;
+                case ExpressionTokenizer.TOKEN_OR :
+                    pushOpp(new OrNode());
+                    break;
+                case ExpressionTokenizer.TOKEN_NOT :
+                    pushOpp(new NotNode());
+                    break;
+                case ExpressionTokenizer.TOKEN_EQ :
+                    pushOpp(new EqualNode());
+                    break;
+                case ExpressionTokenizer.TOKEN_NOT_EQ :
+                    pushOpp(new NotNode());
+                    // Sneak the regular node in. The NOT will
+                    // be resolved when the next opp comes along.
+                    oppStack.add(0, new EqualNode());
+                    break;
+                case ExpressionTokenizer.TOKEN_RBRACE :
+                    // Closeout the current group
+                    resolveGroup();
+                    break;
+                case ExpressionTokenizer.TOKEN_LBRACE :
+                    // Push a group marker
+                    pushOpp(null);
+                    break;
+                case ExpressionTokenizer.TOKEN_GE :
+                    pushOpp(new NotNode());
+                    // Similar strategy to NOT_EQ above, except this
+                    // is NOT less than
+                    oppStack.add(0, new LessThanNode());
+                    break;
+                case ExpressionTokenizer.TOKEN_LE :
+                    pushOpp(new NotNode());
+                    // Similar strategy to NOT_EQ above, except this
+                    // is NOT greater than
+                    oppStack.add(0, new GreaterThanNode());
+                    break;
+                case ExpressionTokenizer.TOKEN_GT :
+                    pushOpp(new GreaterThanNode());
+                    break;
+                case ExpressionTokenizer.TOKEN_LT :
+                    pushOpp(new LessThanNode());
+                    break;
+                case ExpressionTokenizer.TOKEN_END :
+                    break;
+            }
+        }
+        // Finish off the rest of the opps
+        resolveGroup();
+        if (nodeStack.size() == 0) {
+            throw new ParseException("No nodes created.", et.getIndex());
+        }
+        if (nodeStack.size() > 1) {
+            throw new ParseException("Extra nodes created.", et.getIndex());
+        }
+        if (oppStack.size() != 0) {
+            throw new ParseException("Unused opp nodes exist.", et.getIndex());
+        }
+        root = nodeStack.get(0);
+    }

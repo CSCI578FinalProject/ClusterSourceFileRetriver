@@ -1,0 +1,59 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Reload the web application at the specified context path.
+     *
+     * @param writer Writer to render to
+     * @param path Context path of the application to be restarted
+     */
+    protected void reload(PrintWriter writer, String path) {
+
+        if (debug >= 1)
+            log("restart: Reloading web application at '" + path + "'");
+
+        if ((path == null) || (!path.startsWith("/") && path.equals(""))) {
+            writer.println(sm.getString("managerServlet.invalidPath",
+                                        RequestUtil.filter(path)));
+            return;
+        }
+        String displayPath = path;
+        if( path.equals("/") )
+            path = "";
+
+        try {
+            Context context = (Context) host.findChild(path);
+            if (context == null) {
+                writer.println(sm.getString
+                               ("managerServlet.noContext",
+                                   RequestUtil.filter(displayPath)));
+                return;
+            }
+            // It isn't possible for the manager to reload itself
+            if (context.getPath().equals(this.context.getPath())) {
+                writer.println(sm.getString("managerServlet.noSelf"));
+                return;
+            }
+            context.reload();
+            writer.println
+                (sm.getString("managerServlet.reloaded", displayPath));
+        } catch (Throwable t) {
+            log("ManagerServlet.reload[" + displayPath + "]", t);
+            writer.println(sm.getString("managerServlet.exception",
+                                        t.toString()));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Reload this web application, if reloading is supported.
+     *
+     * @exception IllegalStateException if the <code>reloadable</code>
+     *  property is set to <code>false</code>.
+     */
+    public void reload();

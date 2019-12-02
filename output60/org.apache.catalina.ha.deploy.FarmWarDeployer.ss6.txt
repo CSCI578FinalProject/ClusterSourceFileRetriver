@@ -1,0 +1,69 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getWatchDir() {
+        return watchDir;
+    }
+-----CSCI578-----
+
+
+    /*--Logic---------------------------------------------------*/
+    public void start() throws Exception {
+        if (started)
+            return;
+        Container hcontainer = getCluster().getContainer();
+        if(!(hcontainer instanceof Host)) {
+            log.error("FarmWarDeployer can only work as host cluster subelement!");
+            return ;
+        }
+        host = (Host) hcontainer;
+    
+        // Check to correct engine and host setup
+        Container econtainer = host.getParent();
+        if(!(econtainer instanceof Engine)) {
+            log.error("FarmWarDeployer can only work if parent of " + host.getName()+ " is an engine!"); 
+            return ;
+        }
+        Engine engine = (Engine) econtainer;
+        String hostname = null;
+        hostname = host.getName();
+        try {
+            oname = new ObjectName(engine.getName() + ":type=Deployer,host="
+                    + hostname);
+        } catch (Exception e) {
+            log.error("Can't construct MBean object name" + e);
+            return;
+        }
+        if (watchEnabled) {
+            watcher = new WarWatcher(this, new File(getWatchDir()));
+            if (log.isInfoEnabled()) {
+                log.info("Cluster deployment is watching " + getWatchDir()
+                          + " for changes.");
+            }
+        }
+         
+        configBase = new File(System.getProperty("catalina.base"), "conf");
+        if (engine != null) {
+            configBase = new File(configBase, engine.getName());
+        } 
+        if (host != null) {
+            configBase = new File(configBase, hostname);
+        }
+
+        // Retrieve the MBean server
+        mBeanServer = Registry.getRegistry(null, null).getMBeanServer();
+
+        started = true;
+        count = 0;
+
+        getCluster().addClusterListener(this);
+
+        if (log.isInfoEnabled())
+            log.info("Cluster FarmWarDeployer started.");
+    }
+-----CSCI578-----
+
+    
+    public void addClusterListener(ClusterListener listener);

@@ -1,0 +1,204 @@
+6
+-----CSCI578-----
+
+
+    /**
+     * Return a List of roles associated with the given User.  Any
+     * roles present in the user's directory entry are supplemented by
+     * a directory search. If no roles are associated with this user,
+     * a zero-length List is returned.
+     *
+     * @param context The directory context we are searching
+     * @param user The User to be checked
+     *
+     * @exception NamingException if a directory server error occurs
+     */
+    protected List<String> getRoles(DirContext context, User user)
+        throws NamingException {
+
+        if (user == null)
+            return (null);
+
+        String dn = user.getDN();
+        String username = user.getUserName();
+
+        if (dn == null || username == null)
+            return (null);
+
+        if (containerLog.isTraceEnabled())
+            containerLog.trace("  getRoles(" + dn + ")");
+
+        // Start with roles retrieved from the user entry
+        List<String> list = new ArrayList<String>(); 
+        List<String> userRoles = user.getRoles();
+        if (userRoles != null) {
+            list.addAll(userRoles); 
+        }
+        if (commonRole != null)
+            list.add(commonRole);
+
+        if (containerLog.isTraceEnabled()) {
+            containerLog.trace("  Found " + list.size() + " user internal roles");
+            for (int i=0; i<list.size(); i++)
+                containerLog.trace(  "  Found user internal role " + list.get(i));
+        }
+
+        // Are we configured to do role searches?
+        if ((roleFormat == null) || (roleName == null))
+            return (list);
+        
+        // Set up parameters for an appropriate search
+        String filter = roleFormat.format(new String[] { doRFC2254Encoding(dn), username });
+        SearchControls controls = new SearchControls();
+        if (roleSubtree)
+            controls.setSearchScope(SearchControls.SUBTREE_SCOPE);
+        else
+            controls.setSearchScope(SearchControls.ONELEVEL_SCOPE);
+        controls.setReturningAttributes(new String[] {roleName});
+
+        // Perform the configured search and process the results
+        NamingEnumeration<SearchResult> results =
+            context.search(roleBase, filter, controls);
+        if (results == null)
+            return (list);  // Should never happen, but just in case ...
+
+        HashMap<String, String> groupMap = new HashMap<String, String>();
+        try {
+            while (results.hasMore()) {
+                SearchResult result = results.next();
+                Attributes attrs = result.getAttributes();
+                if (attrs == null)
+                    continue;
+                String dname = getDistinguishedName(context, roleBase, result);
+                String name = getAttributeValue(roleName, attrs);
+                if (name != null && dname != null) {
+                    groupMap.put(dname, name);
+                }
+            }
+        } catch (PartialResultException ex) {
+            if (!adCompat)
+                throw ex;
+        } finally {
+            results.close();
+        }
+
+        Set<String> keys = groupMap.keySet();
+        if (containerLog.isTraceEnabled()) {
+            containerLog.trace("  Found " + keys.size() + " direct roles");
+            for (String key: keys) {
+                containerLog.trace(  "  Found direct role " + key + " -> " + groupMap.get(key));
+            }
+        }
+
+        // if nested group search is enabled, perform searches for nested groups until no new group is found
+        if (getRoleNested()) {
+
+            // The following efficient algorithm is known as memberOf Algorithm, as described in "Practices in 
+            // Directory Groups". It avoids group slurping and handles cyclic group memberships as well.
+            // See http://middleware.internet2.edu/dir/ for details
+
+            Map<String, String> newGroups = new HashMap<String,String>(groupMap);
+            while (!newGroups.isEmpty()) {
+                Map<String, String> newThisRound = new HashMap<String, String>(); // Stores the groups we find in this iteration
+
+                for (Entry<String, String> group : newGroups.entrySet()) {
+                    filter = roleFormat.format(new String[] { group.getKey(), group.getValue() });
+
+                    if (containerLog.isTraceEnabled()) {
+                        containerLog.trace("Perform a nested group search with base "+ roleBase + " and filter " + filter);
+                    }
+
+                    results = context.search(roleBase, filter, controls);
+
+                    try {
+                        while (results.hasMore()) {
+                            SearchResult result = results.next();
+                            Attributes attrs = result.getAttributes();
+                            if (attrs == null)
+                                continue;
+                            String dname = getDistinguishedName(context, roleBase, result);
+                            String name = getAttributeValue(roleName, attrs);
+                            if (name != null && dname != null && !groupMap.keySet().contains(dname)) {
+                                groupMap.put(dname, name);
+                                newThisRound.put(dname, name);
+
+                                if (containerLog.isTraceEnabled()) {
+                                    containerLog.trace("  Found nested role " + dname + " -> " + name);
+                                }
+
+                            }
+                         }
+                    } catch (PartialResultException ex) {
+                        if (!adCompat)
+                            throw ex;
+                    } finally {
+                        results.close();
+                    }
+                }
+
+                newGroups = newThisRound;
+            }
+        }
+
+        list.addAll(groupMap.values());
+        return list;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /**
+     * Return the "The nested group search flag" flag.
+     */
+    public boolean getRoleNested() {
+
+        return (this.roleNested);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Given an LDAP search string, returns the string with certain characters
+     * escaped according to RFC 2254 guidelines.
+     * The character mapping is as follows:
+     *     char ->  Replacement
+     *    ---------------------------
+     *     *  -> \2a
+     *     (  -> \28
+     *     )  -> \29
+     *     \  -> \5c
+     *     \0 -> \00
+     * @param inString string to escape according to RFC 2254 guidelines
+     * @return String the escaped/encoded result
+     */
+    protected String doRFC2254Encoding(String inString) {
+        StringBuffer buf = new StringBuffer(inString.length());
+        for (int i = 0; i < inString.length(); i++) {
+            char c = inString.charAt(i);
+            switch (c) {
+                case '\\':
+                    buf.append("\\5c");
+                    break;
+                case '*':
+                    buf.append("\\2a");
+                    break;
+                case '(':
+                    buf.append("\\28");
+                    break;
+                case ')':
+                    buf.append("\\29");
+                    break;
+                case '\0':
+                    buf.append("\\00");
+                    break;
+                default:
+                    buf.append(c);
+                    break;
+            }
+        }
+        return buf.toString();
+    }
+-----CSCI578-----
+-----CSCI578-----

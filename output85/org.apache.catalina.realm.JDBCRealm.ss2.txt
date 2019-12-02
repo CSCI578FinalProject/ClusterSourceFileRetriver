@@ -1,0 +1,202 @@
+6
+-----CSCI578-----
+
+
+
+    private boolean isRoleStoreDefined() {
+        return userRoleTable != null || roleNameCol != null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a PreparedStatement configured to perform the SELECT required
+     * to retrieve user roles for the specified username.
+     *
+     * @param dbConnection The database connection to be used
+     * @param username Username for which roles should be retrieved
+     * @return the prepared statement
+     * @exception SQLException if a database error occurs
+     */
+    protected synchronized PreparedStatement roles(Connection dbConnection,
+            String username)
+        throws SQLException {
+
+        if (preparedRoles == null) {
+            StringBuilder sb = new StringBuilder("SELECT ");
+            sb.append(roleNameCol);
+            sb.append(" FROM ");
+            sb.append(userRoleTable);
+            sb.append(" WHERE ");
+            sb.append(userNameCol);
+            sb.append(" = ?");
+            preparedRoles =
+                dbConnection.prepareStatement(sb.toString());
+        }
+
+        preparedRoles.setString(1, username);
+        return (preparedRoles);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the roles associated with the given user name.
+     * @param username The user name
+     * @return an array list of the role names
+     */
+    protected ArrayList<String> getRoles(String username) {
+
+        if (allRolesMode != AllRolesMode.STRICT_MODE && !isRoleStoreDefined()) {
+            // Using an authentication only configuration and no role store has
+            // been defined so don't spend cycles looking
+            return null;
+        }
+
+        // Number of tries is the number of attempts to connect to the database
+        // during this login attempt (if we need to open the database)
+        // This needs rewritten wuth better pooling support, the existing code
+        // needs signature changes since the Prepared statements needs cached
+        // with the connections.
+        // The code below will try twice if there is a SQLException so the
+        // connection may try to be opened again. On normal conditions (including
+        // invalid login - the above is only used once.
+        int numberOfTries = 2;
+        while (numberOfTries>0) {
+            try {
+                // Ensure that we have an open database connection
+                open();
+
+                PreparedStatement stmt = roles(dbConnection, username);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    // Accumulate the user's roles
+                    ArrayList<String> roleList = new ArrayList<>();
+
+                    while (rs.next()) {
+                        String role = rs.getString(1);
+                        if (null!=role) {
+                            roleList.add(role.trim());
+                        }
+                    }
+
+                    return roleList;
+                } finally {
+                    dbConnection.commit();
+                }
+            } catch (SQLException e) {
+                // Log the problem for posterity
+                containerLog.error(sm.getString("jdbcRealm.exception"), e);
+
+                // Close the connection so that it gets reopened next time
+                if (dbConnection != null)
+                    close(dbConnection);
+            }
+
+            numberOfTries--;
+        }
+
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Open (if necessary) and return a database connection for use by
+     * this Realm.
+     * @return the opened connection
+     * @exception SQLException if a database error occurs
+     */
+    protected Connection open() throws SQLException {
+
+        // Do nothing if there is a database connection already open
+        if (dbConnection != null)
+            return (dbConnection);
+
+        // Instantiate our database driver if necessary
+        if (driver == null) {
+            try {
+                Class<?> clazz = Class.forName(driverName);
+                driver = (Driver) clazz.newInstance();
+            } catch (Throwable e) {
+                ExceptionUtils.handleThrowable(e);
+                throw new SQLException(e.getMessage(), e);
+            }
+        }
+
+        // Open a new connection
+        Properties props = new Properties();
+        if (connectionName != null)
+            props.put("user", connectionName);
+        if (connectionPassword != null)
+            props.put("password", connectionPassword);
+        dbConnection = driver.connect(connectionURL, props);
+        if (dbConnection == null) {
+            throw new SQLException(sm.getString(
+                    "jdbcRealm.open.invalidurl",driverName, connectionURL));
+        }
+        dbConnection.setAutoCommit(false);
+        return (dbConnection);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Close the specified database connection.
+     *
+     * @param dbConnection The connection to be closed
+     */
+    protected void close(Connection dbConnection) {
+
+        // Do nothing if the database connection is already closed
+        if (dbConnection == null)
+            return;
+
+        // Close our prepared statements (if any)
+        try {
+            preparedCredentials.close();
+        } catch (Throwable f) {
+            ExceptionUtils.handleThrowable(f);
+        }
+        this.preparedCredentials = null;
+
+
+        try {
+            preparedRoles.close();
+        } catch (Throwable f) {
+            ExceptionUtils.handleThrowable(f);
+        }
+        this.preparedRoles = null;
+
+
+        // Close this database connection, and log any errors
+        try {
+            dbConnection.close();
+        } catch (SQLException e) {
+            containerLog.warn(sm.getString("jdbcRealm.close"), e); // Just log it here
+        } finally {
+           this.dbConnection = null;
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get the principal associated with the specified user.
+     * @param username The user name
+     * @return the Principal associated with the given user name.
+     */
+    @Override
+    protected synchronized Principal getPrincipal(String username) {
+
+        return (new GenericPrincipal(username,
+                                     getPassword(username),
+                                     getRoles(username)));
+
+    }

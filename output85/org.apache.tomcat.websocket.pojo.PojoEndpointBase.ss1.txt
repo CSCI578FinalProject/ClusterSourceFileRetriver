@@ -1,0 +1,49 @@
+3
+-----CSCI578-----
+
+
+
+    @Override
+    public final void onError(Session session, Throwable throwable) {
+
+        if (methodMapping.getOnError() == null) {
+            log.error(sm.getString("pojoEndpointBase.onError",
+                    pojo.getClass().getName()), throwable);
+        } else {
+            try {
+                methodMapping.getOnError().invoke(
+                        pojo,
+                        methodMapping.getOnErrorArgs(pathParameters, session,
+                                throwable));
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                log.error(sm.getString("pojoEndpointBase.onErrorFail",
+                        pojo.getClass().getName()), t);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void handleOnOpenOrCloseError(Session session, Throwable t) {
+        // If really fatal - re-throw
+        ExceptionUtils.handleThrowable(t);
+
+        // Trigger the error handler and close the session
+        onError(session, t);
+        try {
+            session.close();
+        } catch (IOException ioe) {
+            log.warn(sm.getString("pojoEndpointBase.closeSessionFail"), ioe);
+        }
+    }
+-----CSCI578-----
+
+
+
+    public Object[] getOnErrorArgs(Map<String,String> pathParameters,
+            Session session, Throwable throwable) throws DecodeException {
+        return buildArgs(onErrorParams, pathParameters, session, null,
+                throwable, null);
+    }

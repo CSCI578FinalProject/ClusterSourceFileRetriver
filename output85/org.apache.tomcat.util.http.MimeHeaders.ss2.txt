@@ -1,0 +1,92 @@
+10
+-----CSCI578-----
+
+
+    public Enumeration<String> values(String name) {
+        return new ValuesEnumerator(this, name);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // -------------------- Idx access to headers ----------
+
+    /**
+     * @return the current number of header fields.
+     */
+    public int size() {
+        return count;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public Collection<String> getHeaders(String name) {
+
+        Enumeration<String> enumeration =
+                getCoyoteResponse().getMimeHeaders().values(name);
+        Vector<String> result = new Vector<>();
+        while (enumeration.hasMoreElements()) {
+            result.addElement(enumeration.nextElement());
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Collection<String> getHeaders(String name) {
+        return response.getHeaders(name);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean accept(Request request) {
+        // Should only be one HTTP2-Settings header
+        Enumeration<String> settings = request.getMimeHeaders().values("HTTP2-Settings");
+        int count = 0;
+        while (settings.hasMoreElements()) {
+            count++;
+            settings.nextElement();
+        }
+        if (count != 1) {
+            return false;
+        }
+
+        Enumeration<String> connection = request.getMimeHeaders().values("Connection");
+        boolean found = false;
+        while (connection.hasMoreElements() && !found) {
+            found = connection.nextElement().contains("HTTP2-Settings");
+        }
+        return found;
+    }
+-----CSCI578-----
+
+
+    /**
+     * EXPENSIVE!!!  only for debugging.
+     */
+    @Override
+    public String toString() {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        pw.println("=== MimeHeaders ===");
+        Enumeration<String> e = names();
+        while (e.hasMoreElements()) {
+            String n = e.nextElement();
+            Enumeration<String> ev = values(n);
+            while (ev.hasMoreElements()) {
+                pw.print(n);
+                pw.print(" = ");
+                pw.println(ev.nextElement());
+            }
+        }
+        return sw.toString();
+    }
+-----CSCI578-----

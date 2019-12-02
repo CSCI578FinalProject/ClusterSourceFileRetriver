@@ -1,0 +1,66 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Determine if this resources allow the use of symbolic links.
+     *
+     * @return  <code>true</code> if symbolic links are allowed
+     */
+    boolean getAllowLinking();
+-----CSCI578-----
+
+
+    protected final File file(String name, boolean mustExist) {
+
+        if (name.equals("/")) {
+            name = "";
+        }
+        File file = new File(fileBase, name);
+        if (!mustExist || file.canRead()) {
+
+            if (getRoot().getAllowLinking()) {
+                return file;
+            }
+
+            // Check that this file is located under the WebResourceSet's base
+            String canPath = null;
+            try {
+                canPath = file.getCanonicalPath();
+            } catch (IOException e) {
+                // Ignore
+            }
+            if (canPath == null)
+                return null;
+
+            if (!canPath.startsWith(canonicalBase)) {
+                return null;
+            }
+
+            // Case sensitivity check
+            // Note: We know the resource is located somewhere under base at
+            //       point. The purpose of this code is to check in a case
+            //       sensitive manner, the path to the resource under base
+            //       agrees with what was requested
+            String fileAbsPath = file.getAbsolutePath();
+            if (fileAbsPath.endsWith("."))
+                fileAbsPath = fileAbsPath + '/';
+            String absPath = normalize(fileAbsPath);
+            if ((absoluteBase.length() < absPath.length())
+                && (canonicalBase.length() < canPath.length())) {
+                absPath = absPath.substring(absoluteBase.length() + 1);
+                if (absPath.equals(""))
+                    absPath = "/";
+                canPath = canPath.substring(canonicalBase.length() + 1);
+                if (canPath.equals(""))
+                    canPath = "/";
+                if (!canPath.equals(absPath))
+                    return null;
+            }
+
+        } else {
+            return null;
+        }
+        return file;
+    }
+-----CSCI578-----

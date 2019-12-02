@@ -1,0 +1,135 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Install a new web application, whose web application archive is at the
+     * specified URL, into this container and all the other members of the
+     * cluster with the specified context name.
+     * <p>
+     * If this application is successfully installed locally, a ContainerEvent
+     * of type <code>INSTALL_EVENT</code> will be sent to all registered
+     * listeners, with the newly created <code>Context</code> as an argument.
+     *
+     * @param contextName
+     *            The context name to which this application should be installed
+     *            (must be unique)
+     * @param webapp
+     *            A WAR file or unpacked directory structure containing the web
+     *            application to be installed
+     *
+     * @exception IllegalArgumentException
+     *                if the specified context name is malformed
+     * @exception IllegalStateException
+     *                if the specified context name is already deployed
+     * @exception IOException
+     *                if an input/output error was encountered during
+     *                installation
+     */
+    @Override
+    public void install(String contextName, File webapp) throws IOException {
+        Member[] members = getCluster().getMembers();
+        if (members.length == 0) return;
+
+        Member localMember = getCluster().getLocalMember();
+        FileMessageFactory factory =
+            FileMessageFactory.getInstance(webapp, false);
+        FileMessage msg = new FileMessage(localMember, webapp.getName(),
+                contextName);
+        if(log.isDebugEnabled())
+            log.debug(sm.getString("farmWarDeployer.sendStart", contextName,
+                    webapp));
+        msg = factory.readMessage(msg);
+        while (msg != null) {
+            for (int i = 0; i < members.length; i++) {
+                if (log.isDebugEnabled())
+                    log.debug(sm.getString("farmWarDeployer.sendFragment",
+                            contextName, webapp, members[i]));
+                getCluster().send(msg, members[i]);
+            }
+            msg = factory.readMessage(msg);
+        }
+        if(log.isDebugEnabled())
+            log.debug(sm.getString(
+                    "farmWarDeployer.sendEnd", contextName, webapp));
+    }
+-----CSCI578-----
+
+
+    /**
+     * Copy a file to the specified temp directory.
+     * @param from copy from temp
+     * @param to   to host appBase directory
+     * @return true, copy successful
+     */
+    protected boolean copy(File from, File to) {
+        try {
+            if (!to.exists()) {
+                if (!to.createNewFile()) {
+                    log.error(sm.getString("fileNewFail", to));
+                    return false;
+                }
+            }
+        } catch (IOException e) {
+            log.error(sm.getString("farmWarDeployer.fileCopyFail",
+                    from, to), e);
+            return false;
+        }
+
+        try (java.io.FileInputStream is = new java.io.FileInputStream(from);
+                java.io.FileOutputStream os = new java.io.FileOutputStream(to, false);) {
+            byte[] buf = new byte[4096];
+            while (true) {
+                int len = is.read(buf);
+                if (len < 0)
+                    break;
+                os.write(buf, 0, len);
+            }
+        } catch (IOException e) {
+            log.error(sm.getString("farmWarDeployer.fileCopyFail",
+                    from, to), e);
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Modification from watchDir war detected!
+     *
+     * @see org.apache.catalina.ha.deploy.FileChangeListener#fileModified(File)
+     */
+    @Override
+    public void fileModified(File newWar) {
+        try {
+            File deployWar = new File(getDeployDirFile(), newWar.getName());
+            ContextName cn = new ContextName(deployWar.getName(), true);
+            if (deployWar.exists() && deployWar.lastModified() > newWar.lastModified()) {
+                if (log.isInfoEnabled())
+                    log.info(sm.getString("farmWarDeployer.alreadyDeployed", cn.getName()));
+                return;
+            }
+            if (log.isInfoEnabled())
+                log.info(sm.getString("farmWarDeployer.modInstall",
+                        cn.getName(), deployWar.getAbsolutePath()));
+            // install local
+            if (!isServiced(cn.getName())) {
+                addServiced(cn.getName());
+                try {
+                    copy(newWar, deployWar);
+                    check(cn.getName());
+                } finally {
+                    removeServiced(cn.getName());
+                }
+            } else {
+                log.error(sm.getString("farmWarDeployer.servicingDeploy",
+                        cn.getName(), deployWar.getName()));
+            }
+            install(cn.getName(), deployWar);
+        } catch (Exception x) {
+            log.error(sm.getString("farmWarDeployer.modInstallFail"), x);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

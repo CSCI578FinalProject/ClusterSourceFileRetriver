@@ -1,0 +1,189 @@
+16
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public final void init() throws Exception {
+        if (bindOnInit) {
+            bind();
+            bindState = BindState.BOUND_ON_INIT;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    public void setName(String name) { this.name = name; }
+-----CSCI578-----
+
+    public void addNegotiatedProtocol(String negotiableProtocol) {
+        negotiableProtocols.add(negotiableProtocol);
+    }
+-----CSCI578-----
+
+    private void configureUpgradeProtocol(UpgradeProtocol upgradeProtocol) {
+        boolean secure = getEndpoint().isSSLEnabled();
+        // HTTP Upgrade
+        String httpUpgradeName = upgradeProtocol.getHttpUpgradeName(secure);
+        boolean httpUpgradeConfigured = false;
+        if (httpUpgradeName != null && httpUpgradeName.length() > 0) {
+            httpUpgradeProtocols.put(httpUpgradeName, upgradeProtocol);
+            httpUpgradeConfigured = true;
+            getLog().info(sm.getString("abstractHttp11Protocol.httpUpgradeConfigured",
+                    getName(), httpUpgradeName));
+        }
+
+        // ALPN
+        String alpnName = upgradeProtocol.getAlpnName();
+        if (alpnName != null && alpnName.length() > 0) {
+            // ALPN requires SSL
+            if (secure) {
+                negotiatedProtocols.put(alpnName, upgradeProtocol);
+                getEndpoint().addNegotiatedProtocol(alpnName);
+                getLog().info(sm.getString("abstractHttp11Protocol.alpnConfigured",
+                        getName(), alpnName));
+            } else {
+                if (!httpUpgradeConfigured) {
+                    // HTTP Upgrade is not available for this protocol so it
+                    // requires ALPN. It has been configured on a non-secure
+                    // connector where ALPN is not available.
+                    getLog().error(sm.getString("abstractHttp11Protocol.alpnWithNoTls",
+                            upgradeProtocol.getClass().getName(), alpnName, getName()));
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Provide the name of the domain to use to register MBeans for components
+     * associated with the connector.
+     *
+     * @return  The MBean domain name
+     */
+    public String getDomain();
+-----CSCI578-----
+
+
+
+    @Override
+    public void init() throws Exception {
+        for (UpgradeProtocol upgradeProtocol : upgradeProtocols) {
+            configureUpgradeProtocol(upgradeProtocol);
+        }
+
+        super.init();
+    }
+-----CSCI578-----
+
+
+
+    protected Handler<S> getHandler() {
+        return handler;
+    }
+-----CSCI578-----
+
+
+    private ObjectName createObjectName() throws MalformedObjectNameException {
+        // Use the same domain as the connector
+        domain = getAdapter().getDomain();
+
+        if (domain == null) {
+            return null;
+        }
+
+        StringBuilder name = new StringBuilder(getDomain());
+        name.append(":type=ProtocolHandler,port=");
+        int port = getPort();
+        if (port > 0) {
+            name.append(getPort());
+        } else {
+            name.append("auto-");
+            name.append(getNameIndex());
+        }
+        InetAddress address = getAddress();
+        if (address != null) {
+            name.append(",address=");
+            name.append(ObjectName.quote(address.getHostAddress()));
+        }
+        return new ObjectName(name.toString());
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------- Lifecycle methods
+
+    /*
+     * NOTE: There is no maintenance of state or checking for valid transitions
+     * within this class. It is expected that the connector will maintain state
+     * and prevent invalid state transitions.
+     */
+
+    @Override
+    public void init() throws Exception {
+        if (getLog().isInfoEnabled())
+            getLog().info(sm.getString("abstractProtocolHandler.init",
+                    getName()));
+
+        if (oname == null) {
+            // Component not pre-registered so register it
+            oname = createObjectName();
+            if (oname != null) {
+                Registry.getRegistry(null, null).registerComponent(this, oname,
+                    null);
+            }
+        }
+
+        if (this.domain != null) {
+            try {
+                tpOname = new ObjectName(domain + ":" +
+                        "type=ThreadPool,name=" + getName());
+                Registry.getRegistry(null, null).registerComponent(endpoint,
+                        tpOname, null);
+            } catch (Exception e) {
+                getLog().error(sm.getString(
+                        "abstractProtocolHandler.mbeanRegistrationFailed",
+                        tpOname, getName()), e);
+            }
+            rgOname=new ObjectName(domain +
+                    ":type=GlobalRequestProcessor,name=" + getName());
+            Registry.getRegistry(null, null).registerComponent(
+                    getHandler().getGlobal(), rgOname, null );
+        }
+
+        String endpointName = getName();
+        endpoint.setName(endpointName.substring(1, endpointName.length()-1));
+
+        try {
+            endpoint.init();
+        } catch (Exception ex) {
+            getLog().error(sm.getString("abstractProtocolHandler.initError",
+                    getName()), ex);
+            throw ex;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param isSecure Is this for a connector that is configured to support
+     *                 TLS. Some protocols (e.g. HTTP/2) only support HTTP
+     *                 upgrade over non-secure connections.
+     * @return The name that clients will use to request an upgrade to this
+     *         protocol via an HTTP/1.1 upgrade request or <code>null</code> if
+     *         upgrade via an HTTP/1.1 upgrade request is not supported.
+     */
+    public String getHttpUpgradeName(boolean isSecure);
+-----CSCI578-----
+-----CSCI578-----
+
+    @Override
+    public Adapter getAdapter() { return adapter; }
+-----CSCI578-----
+
+
+    public String getDomain() {
+        return domain;
+    }

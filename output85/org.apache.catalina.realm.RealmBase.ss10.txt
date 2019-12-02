@@ -1,0 +1,176 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Enforce any user data constraint required by the security constraint
+     * guarding this request URI.  Return <code>true</code> if this constraint
+     * was not violated and processing should continue, or <code>false</code>
+     * if we have created a response already.
+     *
+     * @param request Request we are processing
+     * @param response Response we are creating
+     * @param constraints Security constraint being checked
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public boolean hasUserDataPermission(Request request,
+                                         Response response,
+                                         SecurityConstraint []constraints)
+        throws IOException {
+
+        // Is there a relevant user data constraint?
+        if (constraints == null || constraints.length == 0) {
+            if (log.isDebugEnabled())
+                log.debug("  No applicable security constraint defined");
+            return true;
+        }
+        for(int i=0; i < constraints.length; i++) {
+            SecurityConstraint constraint = constraints[i];
+            String userConstraint = constraint.getUserConstraint();
+            if (userConstraint == null) {
+                if (log.isDebugEnabled())
+                    log.debug("  No applicable user data constraint defined");
+                return true;
+            }
+            if (userConstraint.equals(Constants.NONE_TRANSPORT)) {
+                if (log.isDebugEnabled())
+                    log.debug("  User data constraint has no restrictions");
+                return true;
+            }
+
+        }
+        // Validate the request against the user data constraint
+        if (request.getRequest().isSecure()) {
+            if (log.isDebugEnabled())
+                log.debug("  User data constraint already satisfied");
+            return true;
+        }
+        // Initialize variables we need to determine the appropriate action
+        int redirectPort = request.getConnector().getRedirectPort();
+
+        // Is redirecting disabled?
+        if (redirectPort <= 0) {
+            if (log.isDebugEnabled())
+                log.debug("  SSL redirect is disabled");
+            response.sendError
+                (HttpServletResponse.SC_FORBIDDEN,
+                 request.getRequestURI());
+            return false;
+        }
+
+        // Redirect to the corresponding SSL port
+        StringBuilder file = new StringBuilder();
+        String protocol = "https";
+        String host = request.getServerName();
+        // Protocol
+        file.append(protocol).append("://").append(host);
+        // Host with port
+        if(redirectPort != 443) {
+            file.append(":").append(redirectPort);
+        }
+        // URI
+        file.append(request.getRequestURI());
+        String requestedSessionId = request.getRequestedSessionId();
+        if ((requestedSessionId != null) &&
+            request.isRequestedSessionIdFromURL()) {
+            file.append(";");
+            file.append(SessionConfig.getSessionUriParamName(
+                    request.getContext()));
+            file.append("=");
+            file.append(requestedSessionId);
+        }
+        String queryString = request.getQueryString();
+        if (queryString != null) {
+            file.append('?');
+            file.append(queryString);
+        }
+        if (log.isDebugEnabled())
+            log.debug("  Redirecting to " + file.toString());
+        response.sendRedirect(file.toString());
+        return false;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the port number to which a request should be redirected if
+     * it comes in on a non-SSL port and is subject to a security constraint
+     * with a transport guarantee that requires SSL.
+     */
+    public int getRedirectPort() {
+
+        return (this.redirectPort);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Determine the name to use for the session cookie for the provided
+     * context.
+     * @param context The context
+     * @return the parameter name for the session
+     */
+    public static String getSessionUriParamName(Context context) {
+
+        String result = getConfiguredSessionCookieName(context);
+
+        if (result == null) {
+            result = DEFAULT_SESSION_PARAMETER_NAME;
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if the session identifier included in this
+     * request came from the request URI.
+     */
+    @Override
+    public boolean isRequestedSessionIdFromURL() {
+
+        if (requestedSessionId == null) {
+            return false;
+        }
+
+        return requestedSessionURL;
+    }
+
+
+
+    /**
+     * @return <code>true</code> if the session identifier included in this
+     * request came from the request URI.
+     *
+     * @deprecated As of Version 2.1 of the Java Servlet API, use
+     *  <code>isRequestedSessionIdFromURL()</code> instead.
+     */
+    @Override
+    @Deprecated
+    public boolean isRequestedSessionIdFromUrl() {
+        return (isRequestedSessionIdFromURL());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if the session identifier included in this
+     * request came from the request URI.
+     *
+     * @deprecated As of Version 2.1 of the Java Servlet API, use
+     *  <code>isRequestedSessionIdFromURL()</code> instead.
+     */
+    @Override
+    @Deprecated
+    public boolean isRequestedSessionIdFromUrl() {
+        return (isRequestedSessionIdFromURL());
+    }

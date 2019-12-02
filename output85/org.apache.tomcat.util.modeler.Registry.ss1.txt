@@ -1,0 +1,162 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // -------------------- Static methods  --------------------
+    // Factories
+
+    /**
+     * Factory method to create (if necessary) and return our
+     * <code>Registry</code> instance.
+     *
+     * The current version uses a static - future versions could use
+     * the thread class loader.
+     *
+     * @param key Support for application isolation. If null, the context class
+     * loader will be used ( if setUseContextClassLoader is called ) or the
+     * default registry is returned.
+     * @param guard Prevent access to the registry by untrusted components
+     * @return the registry
+     * @since 1.1
+     */
+    public static synchronized Registry getRegistry(Object key, Object guard) {
+        Registry localRegistry;
+        if( perLoaderRegistries!=null ) {
+            if( key==null )
+                key=Thread.currentThread().getContextClassLoader();
+            if( key != null ) {
+                localRegistry = perLoaderRegistries.get(key);
+                if( localRegistry == null ) {
+                    localRegistry=new Registry();
+//                    localRegistry.key=key;
+                    localRegistry.guard=guard;
+                    perLoaderRegistries.put( key, localRegistry );
+                    return localRegistry;
+                }
+                if( localRegistry.guard != null &&
+                        localRegistry.guard != guard ) {
+                    return null; // XXX Should I throw a permission ex ?
+                }
+                return localRegistry;
+            }
+        }
+
+        // static
+        if (registry == null) {
+            registry = new Registry();
+        }
+        if( registry.guard != null &&
+                registry.guard != guard ) {
+            return null;
+        }
+        return (registry);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * The <code>MBeanServer</code> for this application.
+     */
+    private static MBeanServer mserver = createServer();
+
+
+
+    /**
+     * Create and configure (if necessary) and return the
+     * <code>MBeanServer</code> with which we will be
+     * registering our <code>DynamicMBean</code> implementations.
+     * @return the singleton MBean server
+     */
+    public static synchronized MBeanServer createServer() {
+
+        if (mserver == null) {
+            mserver = Registry.getRegistry(null, null).getMBeanServer();
+        }
+        return (mserver);
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+    /**
+     * Initialize this servlet.
+     */
+    @Override
+    public void init() throws ServletException {
+        // Retrieve the MBean server
+        registry = Registry.getRegistry(null, null);
+        mBeanServer = Registry.getRegistry(null, null).getMBeanServer();
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Initialize this servlet.
+     */
+    @Override
+    public void init() throws ServletException {
+
+        // Retrieve the MBean server
+        mBeanServer = Registry.getRegistry(null, null).getMBeanServer();
+
+        try {
+
+            // Query protocol handlers
+            String onStr = "*:type=ProtocolHandler,*";
+            ObjectName objectName = new ObjectName(onStr);
+            Set<ObjectInstance> set = mBeanServer.queryMBeans(objectName, null);
+            Iterator<ObjectInstance> iterator = set.iterator();
+            while (iterator.hasNext()) {
+                ObjectInstance oi = iterator.next();
+                protocolHandlers.addElement(oi.getObjectName());
+            }
+
+            // Query Thread Pools
+            onStr = "*:type=ThreadPool,*";
+            objectName = new ObjectName(onStr);
+            set = mBeanServer.queryMBeans(objectName, null);
+            iterator = set.iterator();
+            while (iterator.hasNext()) {
+                ObjectInstance oi = iterator.next();
+                threadPools.addElement(oi.getObjectName());
+            }
+
+            // Query Global Request Processors
+            onStr = "*:type=GlobalRequestProcessor,*";
+            objectName = new ObjectName(onStr);
+            set = mBeanServer.queryMBeans(objectName, null);
+            iterator = set.iterator();
+            while (iterator.hasNext()) {
+                ObjectInstance oi = iterator.next();
+                globalRequestProcessors.addElement(oi.getObjectName());
+            }
+
+            // Query Request Processors
+            onStr = "*:type=RequestProcessor,*";
+            objectName = new ObjectName(onStr);
+            set = mBeanServer.queryMBeans(objectName, null);
+            iterator = set.iterator();
+            while (iterator.hasNext()) {
+                ObjectInstance oi = iterator.next();
+                requestProcessors.addElement(oi.getObjectName());
+            }
+
+            // Register with MBean server
+            onStr = "JMImplementation:type=MBeanServerDelegate";
+            objectName = new ObjectName(onStr);
+            mBeanServer.addNotificationListener(objectName, this, null, null);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+-----CSCI578-----

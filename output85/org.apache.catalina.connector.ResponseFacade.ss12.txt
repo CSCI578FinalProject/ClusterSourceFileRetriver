@@ -1,0 +1,42 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void flushBuffer()
+        throws IOException {
+
+        if (isFinished()) {
+            //            throw new IllegalStateException
+            //                (/*sm.getString("responseFacade.finished")*/);
+            return;
+        }
+
+        if (SecurityUtil.isPackageProtectionEnabled()){
+            try{
+                AccessController.doPrivileged(
+                        new PrivilegedExceptionAction<Void>(){
+
+                    @Override
+                    public Void run() throws IOException{
+                        response.setAppCommitted(true);
+
+                        response.flushBuffer();
+                        return null;
+                    }
+                });
+            } catch(PrivilegedActionException e){
+                Exception ex = e.getException();
+                if (ex instanceof IOException){
+                    throw (IOException)ex;
+                }
+            }
+        } else {
+            response.setAppCommitted(true);
+
+            response.flushBuffer();
+        }
+
+    }

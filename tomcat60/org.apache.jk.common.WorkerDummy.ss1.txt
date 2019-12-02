@@ -1,0 +1,89 @@
+6
+
+    /**
+     * Prepare this packet for accumulating a message from the container to
+     * the web server.  Set the write position to just after the header
+     * (but leave the length unwritten, because it is as yet unknown).
+     */
+    public void reset() {
+        len = 4;
+        pos = 4;
+    }
+    
+    // ============ Data Writing Methods ===================
+
+    /**
+     * Add an int.
+     *
+     * @param val The integer to write.
+     */
+    public void appendInt( int val ) {
+        buf[pos++]   = (byte) ((val >>>  8) & 0xFF);
+        buf[pos++] = (byte) (val & 0xFF);
+    }
+
+    public void appendByte( int val ) {
+        buf[pos++] = (byte)val;
+    }
+
+    /**
+     * Write a String out at the current write position.  Strings are
+     * encoded with the length in two bytes first, then the string, and
+     * then a terminating \0 (which is <B>not</B> included in the
+     * encoded length).  The terminator is for the convenience of the C
+     * code, where it saves a round of copying.  A null string is
+     * encoded as a string with length 0.  
+     */
+    public void appendBytes(MessageBytes mb) throws IOException {
+        if(mb==null || mb.isNull() ) {
+            appendInt( 0);
+            appendByte(0);
+            return;
+        }
+        if (mb.getType() == MessageBytes.T_BYTES) {
+            ByteChunk bc = mb.getByteChunk();
+            appendByteChunk(bc);
+        } else if (mb.getType() == MessageBytes.T_CHARS) {
+            CharChunk cc = mb.getCharChunk();
+            appendCharChunk(cc);
+        } else {
+            appendString(mb.toString());
+        }
+    }
+
+    public void appendByteChunk(ByteChunk bc) throws IOException {
+        if(bc==null) {
+            log.error("appendByteChunk() null");
+            appendInt( 0);
+            appendByte(0);
+            return;
+        }
+
+        byte[] bytes = bc.getBytes();
+        int start=bc.getStart();
+        int length = bc.getLength();
+        appendInt( length );
+        cpBytes(bytes, start, length);
+        appendByte(0);
+    }
+
+    /** 
+     * Copy a chunk of bytes into the packet, starting at the current
+     * write position.  The chunk of bytes is encoded with the length
+     * in two bytes first, then the data itself, and finally a
+     * terminating \0 (which is <B>not</B> included in the encoded
+     * length).
+     *
+     * @param b The array from which to copy bytes.
+     * @param off The offset into the array at which to start copying
+     * @param numBytes The number of bytes to copy.  
+     */
+    public void appendBytes( byte b[], int off, int numBytes ) {
+        appendInt( numBytes );
+        cpBytes( b, off, numBytes );
+        appendByte(0);
+    }
+
+    public final void setType(int i) {
+        type=i;
+    }

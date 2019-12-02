@@ -1,0 +1,150 @@
+3
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Context Methods
+
+    /**
+     * Retrieves the named object. If name is empty, returns a new instance
+     * of this context (which represents the same naming context as this
+     * context, but its environment may be modified independently and it may
+     * be accessed concurrently).
+     *
+     * @param name the name of the object to look up
+     * @return the object bound to name
+     * @exception NamingException if a naming exception is encountered
+     */
+    @Override
+    public Object lookup(Name name)
+        throws NamingException {
+        return lookup(name, true);
+    }
+
+
+
+    /**
+     * Retrieves the named object.
+     *
+     * @param name the name of the object to look up
+     * @return the object bound to name
+     * @exception NamingException if a naming exception is encountered
+     */
+    @Override
+    public Object lookup(String name)
+        throws NamingException {
+        return lookup(new CompositeName(name), true);
+    }
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Retrieves the named object.
+     *
+     * @param name the name of the object to look up
+     * @param resolveLinks If true, the links will be resolved
+     * @return the object bound to name
+     * @exception NamingException if a naming exception is encountered
+     */
+    protected Object lookup(Name name, boolean resolveLinks)
+        throws NamingException {
+
+        // Removing empty parts
+        while ((!name.isEmpty()) && (name.get(0).length() == 0))
+            name = name.getSuffix(1);
+        if (name.isEmpty()) {
+            // If name is empty, a newly allocated naming context is returned
+            return new NamingContext(env, this.name, bindings);
+        }
+
+        NamingEntry entry = bindings.get(name.get(0));
+
+        if (entry == null) {
+            throw new NameNotFoundException
+                (sm.getString("namingContext.nameNotBound", name, name.get(0)));
+        }
+
+        if (name.size() > 1) {
+            // If the size of the name is greater that 1, then we go through a
+            // number of subcontexts.
+            if (entry.type != NamingEntry.CONTEXT) {
+                throw new NamingException
+                    (sm.getString("namingContext.contextExpected"));
+            }
+            return ((Context) entry.value).lookup(name.getSuffix(1));
+        } else {
+            if ((resolveLinks) && (entry.type == NamingEntry.LINK_REF)) {
+                String link = ((LinkRef) entry.value).getLinkName();
+                if (link.startsWith(".")) {
+                    // Link relative to this context
+                    return lookup(link.substring(1));
+                } else {
+                    return (new InitialContext(env)).lookup(link);
+                }
+            } else if (entry.type == NamingEntry.REFERENCE) {
+                try {
+                    Object obj = NamingManager.getObjectInstance
+                        (entry.value, name, this, env);
+                    if(entry.value instanceof ResourceRef) {
+                        boolean singleton = Boolean.parseBoolean(
+                                    (String) ((ResourceRef) entry.value).get(
+                                        "singleton").getContent());
+                        if (singleton) {
+                            entry.type = NamingEntry.ENTRY;
+                            entry.value = obj;
+                        }
+                    }
+                    return obj;
+                } catch (NamingException e) {
+                    throw e;
+                } catch (Exception e) {
+                    log.warn(sm.getString
+                             ("namingContext.failResolvingReference"), e);
+                    throw new NamingException(e.getMessage());
+                }
+            } else {
+                return entry.value;
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Retrieves the named object, following links except for the terminal
+     * atomic component of the name. If the object bound to name is not a
+     * link, returns the object itself.
+     *
+     * @param name the name of the object to look up
+     * @return the object bound to name, not following the terminal link
+     * (if any).
+     * @exception NamingException if a naming exception is encountered
+     */
+    @Override
+    public Object lookupLink(Name name)
+        throws NamingException {
+        return lookup(name, false);
+    }
+
+
+
+    /**
+     * Retrieves the named object, following links except for the terminal
+     * atomic component of the name.
+     *
+     * @param name the name of the object to look up
+     * @return the object bound to name, not following the terminal link
+     * (if any).
+     * @exception NamingException if a naming exception is encountered
+     */
+    @Override
+    public Object lookupLink(String name)
+        throws NamingException {
+        return lookup(new CompositeName(name), false);
+    }

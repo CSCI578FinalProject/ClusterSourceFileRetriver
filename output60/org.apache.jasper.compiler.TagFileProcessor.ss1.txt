@@ -1,0 +1,95 @@
+6
+-----CSCI578-----
+
+
+    /**
+     * Parses the tag file, and collects information on the directives included
+     * in it. The method is used to obtain the info on the tag file, when the
+     * handler that it represents is referenced. The tag file is not compiled
+     * here.
+     *
+     * @param pc
+     *            the current ParserController used in this compilation
+     * @param name
+     *            the tag name as specified in the TLD
+     * @param tagfile
+     *            the path for the tagfile
+     * @param tagFileJarUrl
+     *            the url for the Jar containign the tag file
+     * @param tagLibInfo
+     *            the TagLibraryInfo object associated with this TagInfo
+     * @return a TagInfo object assembled from the directives in the tag file.
+     */
+    public static TagInfo parseTagFileDirectives(ParserController pc,
+            String name, String path, URL tagFileJarUrl, TagLibraryInfo tagLibInfo)
+            throws JasperException {
+
+        ErrorDispatcher err = pc.getCompiler().getErrorDispatcher();
+
+        Node.Nodes page = null;
+        try {
+            page = pc.parseTagFileDirectives(path, tagFileJarUrl);
+        } catch (FileNotFoundException e) {
+            err.jspError("jsp.error.file.not.found", path);
+        } catch (IOException e) {
+            err.jspError("jsp.error.file.not.found", path);
+        }
+
+        TagFileDirectiveVisitor tagFileVisitor = new TagFileDirectiveVisitor(pc
+                .getCompiler(), tagLibInfo, name, path);
+        page.visit(tagFileVisitor);
+        tagFileVisitor.postCheck();
+
+        return tagFileVisitor.getTagInfo();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Extracts tag file directive information from the given tag file.
+     *
+     * This is invoked by the compiler 
+     *
+     * @param inFileName    The name of the tag file to be parsed.
+     * @param tagFileJarUrl The location of the tag file.
+     */
+    public Node.Nodes parseTagFileDirectives(String inFileName,
+            URL tagFileJarUrl)
+            throws FileNotFoundException, JasperException, IOException {
+        boolean isTagFileSave = isTagFile;
+        boolean directiveOnlySave = directiveOnly;
+        isTagFile = true;
+        directiveOnly = true;
+        Node.Nodes page = doParse(inFileName, null, tagFileJarUrl);
+        directiveOnly = directiveOnlySave;
+        isTagFile = isTagFileSave;
+        return page;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the tag-file-name-to-JAR-file map of this compilation unit,
+     * which maps tag file names to the JAR files in which the tag files are
+     * packaged.
+     *
+     * The map is populated when parsing the tag-file elements of the TLDs
+     * of any imported taglibs. 
+     */
+    public URL getTagFileJarUrl(String tagFile) {
+        return this.tagFileJarUrls.get(tagFile);
+    }
+
+
+    /**
+     * Returns the JAR file in which the tag file for which this
+     * JspCompilationContext was created is packaged, or null if this
+     * JspCompilationContext does not correspond to a tag file, or if the
+     * corresponding tag file is not packaged in a JAR.
+     */
+    public URL getTagFileJarUrl() {
+        return this.tagFileJarUrl;
+    }
+-----CSCI578-----

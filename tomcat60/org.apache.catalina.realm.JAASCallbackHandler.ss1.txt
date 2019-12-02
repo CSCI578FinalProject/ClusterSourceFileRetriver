@@ -1,0 +1,60 @@
+2
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Retrieve the information requested in the provided <code>Callbacks</code>.
+     * This implementation only recognizes {@link NameCallback},
+     * {@link PasswordCallback} and {@link TextInputCallback}.
+     * {@link TextInputCallback} is ued to pass the various additional
+     * parameters required for DIGEST authentication. 
+     *
+     * @param callbacks The set of <code>Callback</code>s to be processed
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception UnsupportedCallbackException if the login method requests
+     *  an unsupported callback type
+     */
+    public void handle(Callback callbacks[])
+        throws IOException, UnsupportedCallbackException {
+
+        for (int i = 0; i < callbacks.length; i++) {
+
+            if (callbacks[i] instanceof NameCallback) {
+                if (realm.getContainer().getLogger().isTraceEnabled())
+                    realm.getContainer().getLogger().trace(sm.getString("jaasCallback.username", username));
+                ((NameCallback) callbacks[i]).setName(username);
+            } else if (callbacks[i] instanceof PasswordCallback) {
+                final char[] passwordcontents;
+                if (password != null) {
+                    passwordcontents = password.toCharArray();
+                } else {
+                    passwordcontents = new char[0];
+                }
+                ((PasswordCallback) callbacks[i]).setPassword
+                    (passwordcontents);
+            } else if (callbacks[i] instanceof TextInputCallback) {
+                TextInputCallback cb = ((TextInputCallback) callbacks[i]);
+                if (cb.getPrompt().equals("nonce")) {
+                    cb.setText(nonce);
+                } else if (cb.getPrompt().equals("nc")) {
+                    cb.setText(nc);
+                } else if (cb.getPrompt().equals("cnonce")) {
+                    cb.setText(cnonce);
+                } else if (cb.getPrompt().equals("qop")) {
+                    cb.setText(qop);
+                } else if (cb.getPrompt().equals("realmName")) {
+                    cb.setText(realmName);
+                } else if (cb.getPrompt().equals("md5a2")) {
+                    cb.setText(md5a2);
+                } else if (cb.getPrompt().equals("authMethod")) {
+                    cb.setText(authMethod);
+                } else {
+                    throw new UnsupportedCallbackException(callbacks[i]);
+                }
+            } else {
+                throw new UnsupportedCallbackException(callbacks[i]);
+            }
+        }
+    }

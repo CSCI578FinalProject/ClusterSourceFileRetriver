@@ -1,0 +1,162 @@
+14
+-----CSCI578-----
+
+
+    /**
+     * Performs a blocking write using the bytebuffer for data to be written and a selector to block.
+     * If the <code>selector</code> parameter is null, then it will perform a busy write that could
+     * take up a lot of CPU cycles.
+     * @param buf ByteBuffer - the buffer containing the data, we will write as long as <code>(buf.hasRemaining()==true)</code>
+     * @param socket SocketChannel - the socket to write data to
+     * @param selector Selector - the selector to use for blocking, if null then a busy write will be initiated
+     * @param writeTimeout long - the timeout for this write operation in milliseconds, -1 means no timeout
+     * @return int - returns the number of bytes written
+     * @throws EOFException if write returns -1
+     * @throws SocketTimeoutException if the write times out
+     * @throws IOException if an IO Exception occurs in the underlying socket logic
+     */
+    public int write(ByteBuffer buf, NioChannel socket, Selector selector, long writeTimeout) throws IOException {
+        return write(buf,socket,selector,writeTimeout,true,null);
+    }
+
+    
+    public int write(ByteBuffer buf, NioChannel socket, Selector selector, 
+                     long writeTimeout, boolean block,MutableInteger lastWrite) throws IOException {
+        if ( SHARED && block ) {
+            return blockingSelector.write(buf,socket,writeTimeout,lastWrite);
+        }
+        SelectionKey key = null;
+        int written = 0;
+        boolean timedout = false;
+        int keycount = 1; //assume we can write
+        long time = System.currentTimeMillis(); //start the timeout timer
+        try {
+            while ( (!timedout) && buf.hasRemaining() ) {
+                int cnt = 0;
+                if ( keycount > 0 ) { //only write if we were registered for a write
+                    cnt = socket.write(buf); //write the data
+                    if (lastWrite!=null) lastWrite.set(cnt);
+                    if (cnt == -1) throw new EOFException();
+                    
+                    written += cnt;
+                    if (cnt > 0) {
+                        time = System.currentTimeMillis(); //reset our timeout timer
+                        continue; //we successfully wrote, try again without a selector
+                    }
+                    if (cnt==0 && (!block)) break; //don't block
+                }
+                if ( selector != null ) {
+                    //register OP_WRITE to the selector
+                    if (key==null) key = socket.getIOChannel().register(selector, SelectionKey.OP_WRITE);
+                    else key.interestOps(SelectionKey.OP_WRITE);
+                    keycount = selector.select(writeTimeout);
+                }
+                if (writeTimeout > 0 && (selector == null || keycount == 0) ) timedout = (System.currentTimeMillis()-time)>=writeTimeout;
+            }//while
+            if ( timedout ) throw new SocketTimeoutException();
+        } finally {
+            if (key != null) {
+                key.cancel();
+                if (selector != null) selector.selectNow();//removes the key from this selector
+            }
+        }
+        return written;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Writes a sequence of bytes to this channel from the given buffer.
+     *
+     * @param src The buffer from which bytes are to be retrieved
+     * @return The number of bytes written, possibly zero
+     * @throws IOException If some other I/O error occurs
+     */
+    public int write(ByteBuffer src) throws IOException {
+        return sc.write(src);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Performs a blocking write using the bytebuffer for data to be written
+     * If the <code>selector</code> parameter is null, then it will perform a busy write that could
+     * take up a lot of CPU cycles.
+     * @param buf ByteBuffer - the buffer containing the data, we will write as long as <code>(buf.hasRemaining()==true)</code>
+     * @param socket SocketChannel - the socket to write data to
+     * @param writeTimeout long - the timeout for this write operation in milliseconds, -1 means no timeout
+     * @return int - returns the number of bytes written
+     * @throws EOFException if write returns -1
+     * @throws SocketTimeoutException if the write times out
+     * @throws IOException if an IO Exception occurs in the underlying socket logic
+     */
+    public int write(ByteBuffer buf, NioChannel socket, long writeTimeout,MutableInteger lastWrite) throws IOException {
+        SelectionKey key = socket.getIOChannel().keyFor(socket.getPoller().getSelector());
+        if ( key == null ) throw new IOException("Key no longer registered");
+        KeyReference reference = new KeyReference();
+        KeyAttachment att = (KeyAttachment) key.attachment();
+        int written = 0;
+        boolean timedout = false;
+        int keycount = 1; //assume we can write
+        long time = System.currentTimeMillis(); //start the timeout timer
+        try {
+            while ( (!timedout) && buf.hasRemaining()) {
+                if (keycount > 0) { //only write if we were registered for a write
+                    int cnt = socket.write(buf); //write the data
+                    lastWrite.set(cnt);
+                    if (cnt == -1)
+                        throw new EOFException();
+                    written += cnt;
+                    if (cnt > 0) {
+                        time = System.currentTimeMillis(); //reset our timeout timer
+                        continue; //we successfully wrote, try again without a selector
+                    }
+                }
+                try {
+                    if ( att.getWriteLatch()==null || att.getWriteLatch().getCount()==0) att.startWriteLatch(1);
+                    poller.add(att,SelectionKey.OP_WRITE,reference);
+                    att.awaitWriteLatch(writeTimeout,TimeUnit.MILLISECONDS);
+                }catch (InterruptedException ignore) {
+                    Thread.interrupted();
+                }
+                if ( att.getWriteLatch()!=null && att.getWriteLatch().getCount()> 0) {
+                    //we got interrupted, but we haven't received notification from the poller.
+                    keycount = 0;
+                }else {
+                    //latch countdown has happened
+                    keycount = 1;
+                    att.resetWriteLatch();
+                }
+
+                if (writeTimeout > 0 && (keycount == 0))
+                    timedout = (System.currentTimeMillis() - time) >= writeTimeout;
+            } //while
+            if (timedout) 
+                throw new SocketTimeoutException();
+        } finally {
+            poller.remove(att,SelectionKey.OP_WRITE);
+            if (timedout && reference.key!=null) {
+                poller.cancelKey(reference.key);
+            }
+            reference.key = null;
+        }
+        return written;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public SocketChannel getIOChannel() {
+        return sc;
+    }
+-----CSCI578-----
+
+    public void set(int val) {this.value = val;}
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

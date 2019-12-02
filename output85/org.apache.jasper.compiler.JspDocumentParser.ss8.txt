@@ -1,0 +1,121 @@
+7
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /*
+     * Processes the given list of included files.
+     *
+     * This is used to implement the include-prelude and include-coda
+     * subelements of the jsp-config element in web.xml
+     */
+    private void addInclude(Node parent, Collection<String> files) throws SAXException {
+        if (files != null) {
+            Iterator<String> iter = files.iterator();
+            while (iter.hasNext()) {
+                String file = iter.next();
+                AttributesImpl attrs = new AttributesImpl();
+                attrs.addAttribute("", "file", "file", "CDATA", file);
+
+                // Create a dummy Include directive node
+                    Node includeDir =
+                        new Node.IncludeDirective(attrs, null, // XXX
+    parent);
+                processIncludeDirective(file, includeDir);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /*
+     * Parses a JSP document by responding to SAX events.
+     *
+     * @throws JasperException
+     */
+    public static Node.Nodes parse(
+        ParserController pc,
+        String path,
+        Jar jar,
+        Node parent,
+        boolean isTagFile,
+        boolean directivesOnly,
+        String pageEnc,
+        String jspConfigPageEnc,
+        boolean isEncodingSpecifiedInProlog,
+        boolean isBomPresent)
+        throws JasperException {
+
+        JspDocumentParser jspDocParser =
+            new JspDocumentParser(pc, path, isTagFile, directivesOnly);
+        Node.Nodes pageNodes = null;
+
+        try {
+
+            // Create dummy root and initialize it with given page encodings
+            Node.Root dummyRoot = new Node.Root(null, parent, true);
+            dummyRoot.setPageEncoding(pageEnc);
+            dummyRoot.setJspConfigPageEncoding(jspConfigPageEnc);
+            dummyRoot.setIsEncodingSpecifiedInProlog(
+                isEncodingSpecifiedInProlog);
+            dummyRoot.setIsBomPresent(isBomPresent);
+            jspDocParser.current = dummyRoot;
+            if (parent == null) {
+                jspDocParser.addInclude(
+                    dummyRoot,
+                    jspDocParser.pageInfo.getIncludePrelude());
+            } else {
+                jspDocParser.isTop = false;
+            }
+
+            jspDocParser.isValidating = false;
+
+            // Parse the input
+            SAXParser saxParser = getSAXParser(false, jspDocParser);
+            InputSource source = JspUtil.getInputSource(path, jar, jspDocParser.ctxt);
+            try {
+                saxParser.parse(source, jspDocParser);
+            } catch (EnableDTDValidationException e) {
+                saxParser = getSAXParser(true, jspDocParser);
+                jspDocParser.isValidating = true;
+                try {
+                    source.getByteStream().close();
+                } catch (IOException e2) {
+                    // ignore
+                }
+                source = JspUtil.getInputSource(path, jar, jspDocParser.ctxt);
+                saxParser.parse(source, jspDocParser);
+            } finally {
+                try {
+                    source.getByteStream().close();
+                } catch (IOException e) {
+                    // ignore
+                }
+            }
+
+            if (parent == null) {
+                jspDocParser.addInclude(
+                    dummyRoot,
+                    jspDocParser.pageInfo.getIncludeCoda());
+            }
+
+            // Create Node.Nodes from dummy root
+            pageNodes = new Node.Nodes(dummyRoot);
+
+        } catch (IOException ioe) {
+            jspDocParser.err.jspError(ioe, "jsp.error.data.file.read", path);
+        } catch (SAXParseException e) {
+            jspDocParser.err.jspError
+                (new Mark(jspDocParser.ctxt, path, e.getLineNumber(),
+                          e.getColumnNumber()),
+                e, e.getMessage());
+        } catch (Exception e) {
+            jspDocParser.err.jspError(e, "jsp.error.data.file.processing", path);
+        }
+
+        return pageNodes;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

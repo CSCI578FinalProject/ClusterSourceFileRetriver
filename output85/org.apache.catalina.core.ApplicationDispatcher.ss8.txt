@@ -1,0 +1,335 @@
+8
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Ask the resource represented by this RequestDispatcher to process
+     * the associated request, and create (or append to) the associated
+     * response.
+     * <p>
+     * <strong>IMPLEMENTATION NOTE</strong>: This implementation assumes
+     * that no filters are applied to a forwarded or included resource,
+     * because they were already done for the original request.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    private void invoke(ServletRequest request, ServletResponse response,
+            State state) throws IOException, ServletException {
+
+        // Checking to see if the context classloader is the current context
+        // classloader. If it's not, we're saving it, and setting the context
+        // classloader to the Context classloader
+        ClassLoader oldCCL = context.bind(false, null);
+
+        // Initialize local variables we may need
+        HttpServletResponse hresponse = state.hresponse;
+        Servlet servlet = null;
+        IOException ioException = null;
+        ServletException servletException = null;
+        RuntimeException runtimeException = null;
+        boolean unavailable = false;
+
+        // Check for the servlet being marked unavailable
+        if (wrapper.isUnavailable()) {
+            wrapper.getLogger().warn(
+                    sm.getString("applicationDispatcher.isUnavailable",
+                    wrapper.getName()));
+            long available = wrapper.getAvailable();
+            if ((available > 0L) && (available < Long.MAX_VALUE))
+                hresponse.setDateHeader("Retry-After", available);
+            hresponse.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, sm
+                    .getString("applicationDispatcher.isUnavailable", wrapper
+                            .getName()));
+            unavailable = true;
+        }
+
+        // Allocate a servlet instance to process this request
+        try {
+            if (!unavailable) {
+                servlet = wrapper.allocate();
+            }
+        } catch (ServletException e) {
+            wrapper.getLogger().error(sm.getString("applicationDispatcher.allocateException",
+                             wrapper.getName()), StandardWrapper.getRootCause(e));
+            servletException = e;
+        } catch (Throwable e) {
+            ExceptionUtils.handleThrowable(e);
+            wrapper.getLogger().error(sm.getString("applicationDispatcher.allocateException",
+                             wrapper.getName()), e);
+            servletException = new ServletException
+                (sm.getString("applicationDispatcher.allocateException",
+                              wrapper.getName()), e);
+            servlet = null;
+        }
+
+        // Get the FilterChain Here
+        ApplicationFilterChain filterChain =
+                ApplicationFilterFactory.createFilterChain(request, wrapper, servlet);
+
+        // Call the service() method for the allocated servlet instance
+        try {
+            // for includes/forwards
+            if ((servlet != null) && (filterChain != null)) {
+               filterChain.doFilter(request, response);
+             }
+            // Servlet Service Method is called by the FilterChain
+        } catch (ClientAbortException e) {
+            ioException = e;
+        } catch (IOException e) {
+            wrapper.getLogger().error(sm.getString("applicationDispatcher.serviceException",
+                             wrapper.getName()), e);
+            ioException = e;
+        } catch (UnavailableException e) {
+            wrapper.getLogger().error(sm.getString("applicationDispatcher.serviceException",
+                             wrapper.getName()), e);
+            servletException = e;
+            wrapper.unavailable(e);
+        } catch (ServletException e) {
+            Throwable rootCause = StandardWrapper.getRootCause(e);
+            if (!(rootCause instanceof ClientAbortException)) {
+                wrapper.getLogger().error(sm.getString("applicationDispatcher.serviceException",
+                        wrapper.getName()), rootCause);
+            }
+            servletException = e;
+        } catch (RuntimeException e) {
+            wrapper.getLogger().error(sm.getString("applicationDispatcher.serviceException",
+                             wrapper.getName()), e);
+            runtimeException = e;
+        }
+
+        // Release the filter chain (if any) for this request
+        try {
+            if (filterChain != null)
+                filterChain.release();
+        } catch (Throwable e) {
+            ExceptionUtils.handleThrowable(e);
+            wrapper.getLogger().error(sm.getString("standardWrapper.releaseFilters",
+                             wrapper.getName()), e);
+            // FIXME: Exception handling needs to be similar to what is in the StandardWrapperValue
+        }
+
+        // Deallocate the allocated servlet instance
+        try {
+            if (servlet != null) {
+                wrapper.deallocate(servlet);
+            }
+        } catch (ServletException e) {
+            wrapper.getLogger().error(sm.getString("applicationDispatcher.deallocateException",
+                             wrapper.getName()), e);
+            servletException = e;
+        } catch (Throwable e) {
+            ExceptionUtils.handleThrowable(e);
+            wrapper.getLogger().error(sm.getString("applicationDispatcher.deallocateException",
+                             wrapper.getName()), e);
+            servletException = new ServletException
+                (sm.getString("applicationDispatcher.deallocateException",
+                              wrapper.getName()), e);
+        }
+
+        // Reset the old context class loader
+        context.unbind(false, oldCCL);
+
+        // Unwrap request/response if needed
+        // See Bugzilla 30949
+        unwrapRequest(state);
+        unwrapResponse(state);
+        // Recycle request if necessary (also BZ 30949)
+        recycleRequestWrapper(state);
+
+        // Rethrow an exception if one was thrown by the invoked servlet
+        if (ioException != null)
+            throw ioException;
+        if (servletException != null)
+            throw servletException;
+        if (runtimeException != null)
+            throw runtimeException;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Allocate an initialized instance of this Servlet that is ready to have
+     * its <code>service()</code> method called.  If the Servlet class does
+     * not implement <code>SingleThreadModel</code>, the (only) initialized
+     * instance may be returned immediately.  If the Servlet class implements
+     * <code>SingleThreadModel</code>, the Wrapper implementation must ensure
+     * that this instance is not allocated again until it is deallocated by a
+     * call to <code>deallocate()</code>.
+     *
+     * @exception ServletException if the Servlet init() method threw
+     *  an exception
+     * @exception ServletException if a loading error occurs
+     * @return a new Servlet instance
+     */
+    public Servlet allocate() throws ServletException;
+
+
+
+    /**
+     * Return this previously allocated servlet to the pool of available
+     * instances.  If this servlet class does not implement SingleThreadModel,
+     * no action is actually required.
+     *
+     * @param servlet The servlet to be returned
+     *
+     * @exception ServletException if a deallocation error occurs
+     */
+    public void deallocate(Servlet servlet) throws ServletException;
+-----CSCI578-----
+
+
+    /**
+     * Unwrap the response if we have wrapped it.
+     */
+    private void unwrapResponse(State state) {
+
+        if (state.wrapResponse == null)
+            return;
+
+        if (state.outerRequest.isAsyncStarted()) {
+            if (!state.outerRequest.getAsyncContext().hasOriginalRequestAndResponse()) {
+                return;
+            }
+        }
+
+        ServletResponse previous = null;
+        ServletResponse current = state.outerResponse;
+        while (current != null) {
+
+            // If we run into the container response we are done
+            if ((current instanceof Response)
+                || (current instanceof ResponseFacade))
+                break;
+
+            // Remove the current response if it is our wrapper
+            if (current == state.wrapResponse) {
+                ServletResponse next =
+                  ((ServletResponseWrapper) current).getResponse();
+                if (previous == null)
+                    state.outerResponse = next;
+                else
+                    ((ServletResponseWrapper) previous).setResponse(next);
+                break;
+            }
+
+            // Advance to the next response in the chain
+            previous = current;
+            current = ((ServletResponseWrapper) current).getResponse();
+
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process an UnavailableException, marking this Servlet as unavailable
+     * for the specified amount of time.
+     *
+     * @param unavailable The exception that occurred, or <code>null</code>
+     *  to mark this Servlet as permanently unavailable
+     */
+    public void unavailable(UnavailableException unavailable);
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * @return the available date/time for this servlet, in milliseconds since
+     * the epoch.  If this date/time is in the future, any request for this
+     * servlet will return an SC_SERVICE_UNAVAILABLE error.  If it is zero,
+     * the servlet is currently available.  A value equal to Long.MAX_VALUE
+     * is considered to mean that unavailability is permanent.
+     */
+    public long getAvailable();
+-----CSCI578-----
+
+
+
+    /**
+     * Allocate an initialized instance of this Servlet that is ready to have
+     * its <code>service()</code> method called.  If the Servlet class does
+     * not implement <code>SingleThreadModel</code>, the (only) initialized
+     * instance may be returned immediately.  If the Servlet class implements
+     * <code>SingleThreadModel</code>, the Wrapper implementation must ensure
+     * that this instance is not allocated again until it is deallocated by a
+     * call to <code>deallocate()</code>.
+     *
+     * @exception ServletException if the Servlet init() method threw
+     *  an exception
+     * @exception ServletException if a loading error occurs
+     * @return a new Servlet instance
+     */
+    public Servlet allocate() throws ServletException;
+
+
+
+    /**
+     * Return this previously allocated servlet to the pool of available
+     * instances.  If this servlet class does not implement SingleThreadModel,
+     * no action is actually required.
+     *
+     * @param servlet The servlet to be returned
+     *
+     * @exception ServletException if a deallocation error occurs
+     */
+    public void deallocate(Servlet servlet) throws ServletException;
+-----CSCI578-----
+
+
+
+    /**
+     * Unwrap the request if we have wrapped it.
+     */
+    private void unwrapRequest(State state) {
+
+        if (state.wrapRequest == null)
+            return;
+
+        if (state.outerRequest.isAsyncStarted()) {
+            if (!state.outerRequest.getAsyncContext().hasOriginalRequestAndResponse()) {
+                return;
+            }
+        }
+
+        ServletRequest previous = null;
+        ServletRequest current = state.outerRequest;
+        while (current != null) {
+
+            // If we run into the container request we are done
+            if ((current instanceof Request)
+                || (current instanceof RequestFacade))
+                break;
+
+            // Remove the current request if it is our wrapper
+            if (current == state.wrapRequest) {
+                ServletRequest next =
+                  ((ServletRequestWrapper) current).getRequest();
+                if (previous == null)
+                    state.outerRequest = next;
+                else
+                    ((ServletRequestWrapper) previous).setRequest(next);
+                break;
+            }
+
+            // Advance to the next request in the chain
+            previous = current;
+            current = ((ServletRequestWrapper) current).getRequest();
+
+        }
+
+    }
+-----CSCI578-----

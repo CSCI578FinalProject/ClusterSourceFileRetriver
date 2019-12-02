@@ -1,0 +1,1262 @@
+40
+-----CSCI578-----
+
+
+
+    /**
+     * Return the location of the default context file
+     */
+    public String getDefaultContextXml() {
+        if( defaultContextXml == null ) {
+            defaultContextXml=Constants.DefaultContextXml;
+        }
+
+        return (this.defaultContextXml);
+
+    }
+-----CSCI578-----
+
+
+    public String getDefaultContextXml() {
+        return defaultContextXml;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the override flag for this web application.
+     */
+    public boolean getOverride();
+-----CSCI578-----
+
+
+
+    /**
+     * Process a context.xml.
+     */
+    protected void processContextConfig(File baseDir, String resourceName) {
+
+        if (log.isDebugEnabled())
+            log.debug("Processing context [" + context.getName()
+                    + "] configuration file " + baseDir + " " + resourceName);
+
+        InputSource source = null;
+        InputStream stream = null;
+
+        File file = baseDir;
+        if (resourceName != null) {
+            file = new File(baseDir, resourceName);
+        }
+
+        try {
+            if ( !file.exists() ) {
+                if (resourceName != null) {
+                    // Use getResource and getResourceAsStream
+                    stream = getClass().getClassLoader()
+                        .getResourceAsStream(resourceName);
+                    if( stream != null ) {
+                        source = new InputSource
+                            (getClass().getClassLoader()
+                            .getResource(resourceName).toString());
+                    }
+                }
+            } else {
+                source =
+                    new InputSource("file://" + file.getAbsolutePath());
+                stream = new FileInputStream(file);
+                // Add as watched resource so that cascade reload occurs if a default
+                // config file is modified/added/removed
+                context.addWatchedResource(file.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            log.error(sm.getString("contextConfig.contextMissing",
+                      resourceName + " " + file) , e);
+        }
+
+        if (source == null)
+            return;
+        synchronized (contextDigester) {
+            try {
+                source.setByteStream(stream);
+                contextDigester.setClassLoader(this.getClass().getClassLoader());
+                contextDigester.setUseContextClassLoader(false);
+                XmlErrorHandler handler = new XmlErrorHandler();
+                contextDigester.push(context.getParent());
+                contextDigester.push(context);
+                contextDigester.setErrorHandler(handler);
+                contextDigester.parse(source);
+                if (handler.getWarnings().size() > 0 ||
+                        handler.getErrors().size() > 0) {
+                    ok = false;
+                    handler.logFindings(log, source.getSystemId());
+                }
+                if (log.isDebugEnabled())
+                    log.debug("Successfully processed context [" + context.getName()
+                            + "] configuration file " + baseDir + " " + resourceName);
+            } catch (SAXParseException e) {
+                log.error(sm.getString("contextConfig.contextParse",
+                        context.getName()), e);
+                log.error(sm.getString("contextConfig.defaultPosition",
+                                 "" + e.getLineNumber(),
+                                 "" + e.getColumnNumber()));
+                ok = false;
+            } catch (Exception e) {
+                log.error(sm.getString("contextConfig.contextParse",
+                        context.getName()), e);
+                ok = false;
+            } finally {
+                contextDigester.reset();
+                try {
+                    if (stream != null) {
+                        stream.close();
+                    }
+                } catch (IOException e) {
+                    log.error(sm.getString("contextConfig.contextClose"), e);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the path to a file to save this Context information.
+     */
+    public String getConfigFile();
+-----CSCI578-----
+
+
+
+    /**
+     * Process the default configuration file, if it exists.
+     */
+    protected void contextConfig() {
+
+        // Open the default context.xml file, if it exists
+        if( defaultContextXml==null && context instanceof StandardContext ) {
+            defaultContextXml = ((StandardContext)context).getDefaultContextXml();
+        }
+        // set the default if we don't have any overrides
+        if( defaultContextXml==null ) getDefaultContextXml();
+
+        if (!context.getOverride()) {
+            File defaultContextFile = new File(defaultContextXml);
+            if (!defaultContextFile.isAbsolute()) {
+                defaultContextFile =new File(getBaseDir(), defaultContextXml);
+            }
+            processContextConfig(defaultContextFile.getParentFile(), defaultContextFile.getName());
+            processContextConfig(getConfigBase(), getHostConfigPath(Constants.HostContextXml));
+        }
+        if (context.getConfigFile() != null)
+            processContextConfig(new File(context.getConfigFile()), null);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Expand the WAR file found at the specified URL into an unpacked
+     * directory structure, and return the absolute pathname to the expanded
+     * directory.
+     *
+     * @param host Host war is being installed for
+     * @param war URL of the web application archive to be expanded
+     *  (must start with "jar:")
+     *
+     * @exception IllegalArgumentException if this is not a "jar:" URL
+     * @exception IOException if an input/output error was encountered
+     *  during expansion
+     */
+    public static String expand(Host host, URL war)
+        throws IOException {
+
+        // Calculate the directory name of the expanded directory
+        if (host.getLogger().isDebugEnabled()) {
+            host.getLogger().debug("expand(" + war.toString() + ")");
+        }
+        String pathname = war.toString().replace('\\', '/');
+        if (pathname.endsWith("!/")) {
+            pathname = pathname.substring(0, pathname.length() - 2);
+        }
+        int period = pathname.lastIndexOf('.');
+        if (period >= pathname.length() - 4)
+            pathname = pathname.substring(0, period);
+        int slash = pathname.lastIndexOf('/');
+        if (slash >= 0) {
+            pathname = pathname.substring(slash + 1);
+        }
+        if (host.getLogger().isDebugEnabled()) {
+            host.getLogger().debug("  Proposed directory name: " + pathname);
+        }
+        return expand(host, war, pathname);
+
+    }
+
+
+
+    /**
+     * Expand the WAR file found at the specified URL into an unpacked
+     * directory structure, and return the absolute pathname to the expanded
+     * directory.
+     *
+     * @param host Host war is being installed for
+     * @param war URL of the web application archive to be expanded
+     *  (must start with "jar:")
+     * @param pathname Context path name for web application
+     *
+     * @exception IllegalArgumentException if this is not a "jar:" URL or if the
+     *            WAR file is invalid
+     * @exception IOException if an input/output error was encountered
+     *  during expansion
+     */
+    public static String expand(Host host, URL war, String pathname)
+        throws IOException {
+
+        // Make sure that there is no such directory already existing
+        File appBase = new File(host.getAppBase());
+        if (!appBase.isAbsolute()) {
+            appBase = new File(System.getProperty("catalina.base"),
+                               host.getAppBase());
+        }
+        if (!appBase.exists() || !appBase.isDirectory()) {
+            throw new IOException
+                (sm.getString("hostConfig.appBase",
+                              appBase.getAbsolutePath()));
+        }
+        
+        File docBase = new File(appBase, pathname);
+        if (docBase.exists()) {
+            // War file is already installed
+            return (docBase.getAbsolutePath());
+        }
+
+        // Create the new document base directory
+        if(!docBase.mkdir() && !docBase.isDirectory())
+            throw new IOException(sm.getString("expandWar.createFailed", docBase));
+
+        // Expand the WAR into the new document base directory
+        String canonicalDocBasePrefix = docBase.getCanonicalPath();
+        if (!canonicalDocBasePrefix.endsWith(File.separator)) {
+            canonicalDocBasePrefix += File.separator;
+        }
+        JarURLConnection juc = (JarURLConnection) war.openConnection();
+        juc.setUseCaches(false);
+        JarFile jarFile = null;
+        InputStream input = null;
+        boolean success = false;
+        try {
+            jarFile = juc.getJarFile();
+            Enumeration jarEntries = jarFile.entries();
+            while (jarEntries.hasMoreElements()) {
+                JarEntry jarEntry = (JarEntry) jarEntries.nextElement();
+                String name = jarEntry.getName();
+                File expandedFile = new File(docBase, name);
+                if (!expandedFile.getCanonicalPath().startsWith(
+                        canonicalDocBasePrefix)) {
+                    // Trying to expand outside the docBase
+                    // Throw an exception to stop the deployment
+                    throw new IllegalArgumentException(
+                            sm.getString("expandWar.illegalPath",war, name));
+                }
+                int last = name.lastIndexOf('/');
+                if (last >= 0) {
+                    File parent = new File(docBase,
+                                           name.substring(0, last));
+
+                    if(!parent.mkdirs() && !parent.isDirectory())
+                        throw new IOException(sm.getString("expandWar.createFailed", parent));
+                }
+                if (name.endsWith("/")) {
+                    continue;
+                }
+                input = jarFile.getInputStream(jarEntry);
+
+                // Bugzilla 33636
+                expand(input, expandedFile);
+                long lastModified = jarEntry.getTime();
+                if ((lastModified != -1) && (lastModified != 0)) {
+                    expandedFile.setLastModified(lastModified);
+                }
+
+                input.close();
+                input = null;
+            }
+            success = true;
+        } catch (IOException e) {
+            throw e;
+        } finally {
+            if (!success) {
+                // If something went wrong, delete expanded dir to keep things 
+                // clean
+                deleteDir(docBase);
+            }
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (Throwable t) {
+                    ;
+                }
+                input = null;
+            }
+            if (jarFile != null) {
+                try {
+                    jarFile.close();
+                } catch (Throwable t) {
+                    ;
+                }
+                jarFile = null;
+            }
+        }
+
+        // Return the absolute path to our new document base directory
+        return (docBase.getAbsolutePath());
+
+    }
+
+
+
+    /**
+     * Expand the specified input stream into the specified directory, creating
+     * a file named from the specified relative path.
+     *
+     * @param input InputStream to be copied
+     * @param docBase Document base directory into which we are expanding
+     * @param name Relative pathname of the file to be created
+     * @return A handle to the expanded File
+     *
+     * @exception IOException if an input/output error occurs
+     * 
+     * @deprecated
+     */
+    protected static File expand(InputStream input, File docBase, String name)
+        throws IOException {
+        File file = new File(docBase, name);
+        expand(input, file);
+        return file;
+    }
+
+
+
+    /**
+     * Expand the specified input stream into the specified file.
+     *
+     * @param input InputStream to be copied
+     * @param file The file to be created
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    private static void expand(InputStream input, File file)
+        throws IOException {
+        BufferedOutputStream output = null;
+        try {
+            output = 
+                new BufferedOutputStream(new FileOutputStream(file));
+            byte buffer[] = new byte[2048];
+            while (true) {
+                int n = input.read(buffer);
+                if (n <= 0)
+                    break;
+                output.write(buffer, 0, n);
+            }
+        } finally {
+            if (output != null) {
+                try {
+                    output.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Unpack WAR flag accessor.
+     */
+    public boolean getUnpackWAR() {
+
+        return (unpackWAR);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the original document root for this Context.  This can be an absolute
+     * pathname, a relative pathname, or a URL.
+     *
+     * @param docBase The orginal document root
+     */
+    public void setOriginalDocBase(String docBase) {
+
+        this.originalDocBase = docBase;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Adjust docBase.
+     */
+    protected void fixDocBase()
+        throws IOException {
+
+        Host host = (Host) context.getParent();
+        String appBase = host.getAppBase();
+
+        boolean unpackWARs = true;
+        if (host instanceof StandardHost) {
+            unpackWARs = ((StandardHost) host).isUnpackWARs()
+                && ((StandardContext) context).getUnpackWAR();
+        }
+
+        File canonicalAppBase = new File(appBase);
+        if (canonicalAppBase.isAbsolute()) {
+            canonicalAppBase = canonicalAppBase.getCanonicalFile();
+        } else {
+            canonicalAppBase =
+                new File(System.getProperty("catalina.base"), appBase)
+                .getCanonicalFile();
+        }
+
+        String docBase = context.getDocBase();
+        if (docBase == null) {
+            // Trying to guess the docBase according to the path
+            String path = context.getPath();
+            if (path == null) {
+                return;
+            }
+            if (path.equals("")) {
+                docBase = "ROOT";
+            } else {
+                if (path.startsWith("/")) {
+                    docBase = path.substring(1).replace('/', '#');
+                } else {
+                    docBase = path.replace('/', '#');
+                }
+            }
+        }
+
+        File file = new File(docBase);
+        if (!file.isAbsolute()) {
+            docBase = (new File(canonicalAppBase, docBase)).getPath();
+        } else {
+            docBase = file.getCanonicalPath();
+        }
+        file = new File(docBase);
+        String origDocBase = docBase;
+
+        String pathName = context.getPath();
+        if (pathName.equals("")) {
+            pathName = "ROOT";
+        } else {
+            // Context path must start with '/'
+            pathName = pathName.substring(1).replace('/', '#');
+        }
+        if (docBase.toLowerCase().endsWith(".war") && !file.isDirectory() && unpackWARs) {
+            URL war = new URL("jar:" + (new File(docBase)).toURI().toURL() + "!/");
+            docBase = ExpandWar.expand(host, war, pathName);
+            file = new File(docBase);
+            docBase = file.getCanonicalPath();
+            if (context instanceof StandardContext) {
+                ((StandardContext) context).setOriginalDocBase(origDocBase);
+            }
+        } else if (docBase.toLowerCase().endsWith(".war") &&
+                !file.isDirectory() && !unpackWARs) {
+            URL war =
+                new URL("jar:" + (new File (docBase)).toURI().toURL() + "!/");
+            ExpandWar.validate(host, war, pathName);
+        } else {
+            File docDir = new File(docBase);
+            if (!docDir.exists()) {
+                File warFile = new File(docBase + ".war");
+                if (warFile.exists()) {
+                    URL war =
+                        new URL("jar:" + warFile.toURI().toURL() + "!/");
+                    if (unpackWARs) {
+                        docBase = ExpandWar.expand(host, war, pathName);
+                        file = new File(docBase);
+                        docBase = file.getCanonicalPath();
+                    } else {
+                        docBase = warFile.getCanonicalPath();
+                        ExpandWar.validate(host, war, pathName);
+                    }
+                }
+                if (context instanceof StandardContext) {
+                    ((StandardContext) context).setOriginalDocBase(origDocBase);
+                }
+            }
+        }
+
+        if (docBase.startsWith(canonicalAppBase.getPath() + File.separatorChar)) {
+            docBase = docBase.substring(canonicalAppBase.getPath().length());
+            docBase = docBase.replace(File.separatorChar, '/');
+            if (docBase.startsWith("/")) {
+                docBase = docBase.substring(1);
+            }
+        } else {
+            docBase = docBase.replace(File.separatorChar, '/');
+        }
+
+        context.setDocBase(docBase);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Validate the WAR file found at the specified URL.
+     *
+     * @param host Host war is being installed for
+     * @param war URL of the web application archive to be validated
+     *  (must start with "jar:")
+     * @param pathname Context path name for web application
+     *
+     * @exception IllegalArgumentException if this is not a "jar:" URL or if the
+     *            WAR file is invalid
+     * @exception IOException if an input/output error was encountered
+     *            during validation
+     */
+    public static void validate(Host host, URL war, String pathname)
+        throws IOException {
+
+        // Make the appBase absolute
+        File appBase = new File(host.getAppBase());
+        if (!appBase.isAbsolute()) {
+            appBase = new File(System.getProperty("catalina.base"),
+                               host.getAppBase());
+        }
+        
+        File docBase = new File(appBase, pathname);
+
+        // Calculate the document base directory
+        String canonicalDocBasePrefix = docBase.getCanonicalPath();
+        if (!canonicalDocBasePrefix.endsWith(File.separator)) {
+            canonicalDocBasePrefix += File.separator;
+        }
+        JarURLConnection juc = (JarURLConnection) war.openConnection();
+        juc.setUseCaches(false);
+        JarFile jarFile = null;
+        try {
+            jarFile = juc.getJarFile();
+            Enumeration<JarEntry> jarEntries = jarFile.entries();
+            while (jarEntries.hasMoreElements()) {
+                JarEntry jarEntry = jarEntries.nextElement();
+                String name = jarEntry.getName();
+                File expandedFile = new File(docBase, name);
+                if (!expandedFile.getCanonicalPath().startsWith(
+                        canonicalDocBasePrefix)) {
+                    // Entry located outside the docBase
+                    // Throw an exception to stop the deployment
+                    throw new IllegalArgumentException(
+                            sm.getString("expandWar.illegalPath",war, name));
+                }
+            }
+        } catch (IOException e) {
+            throw e;
+        } finally {
+            if (jarFile != null) {
+                try {
+                    jarFile.close();
+                } catch (Throwable t) {
+                    // Ignore
+                }
+                jarFile = null;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Return the application root for this Host.  This can be an absolute
+     * pathname, a relative pathname, or a URL.
+     */
+    public String getAppBase();
+-----CSCI578-----
+
+    
+    
+    /**
+     * Delete the specified directory, including all of its contents and
+     * sub-directories recursively. Any failure will be logged.
+     *
+     * @param dir File object representing the directory to be deleted
+     */
+    public static boolean deleteDir(File dir) {
+        return deleteDir(dir, true);
+    }
+
+
+    /**
+     * Delete the specified directory, including all of its contents and
+     * sub-directories recursively.
+     *
+     * @param dir File object representing the directory to be deleted
+     * @param logFailure <code>true</code> if failure to delete the resource
+     *                   should be logged
+     */
+    public static boolean deleteDir(File dir, boolean logFailure) {
+
+        String files[] = dir.list();
+        if (files == null) {
+            files = new String[0];
+        }
+        for (int i = 0; i < files.length; i++) {
+            File file = new File(dir, files[i]);
+            if (file.isDirectory()) {
+                deleteDir(file, logFailure);
+            } else {
+                file.delete();
+            }
+        }
+
+        boolean result;
+        if (dir.exists()) {
+            result = dir.delete();
+        } else {
+            result = true;
+        }
+        
+        if (logFailure && !result) {
+            log.error(sm.getString(
+                    "expandWar.deleteFailed", dir.getAbsolutePath()));
+        }
+        
+        return result;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get app base.
+     */
+    protected String getAppBase() {
+        String appBase = null;
+        Container container = this;
+        while (container != null) {
+            if (container instanceof Host)
+                break;
+            container = container.getParent();
+        }
+        if (container != null) {
+            appBase = ((Host) container).getAppBase();
+        }
+        return appBase;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create and return a Digester configured to process the
+     * web application deployment descriptor (web.xml).
+     */
+    protected void createWebXmlDigester(boolean namespaceAware,
+            boolean validation) {
+
+        boolean blockExternal = context.getXmlBlockExternal();
+
+        webRuleSet = new WebRuleSet();
+        webDigester = DigesterFactory.newDigester(validation,
+                namespaceAware, webRuleSet, blockExternal);
+        webDigester.getParser();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+    /**
+     * Return the location of the default deployment descriptor
+     */
+    public String getDefaultWebXml() {
+        if( defaultWebXml == null ) {
+            defaultWebXml=Constants.DefaultWebXml;
+        }
+
+        return (this.defaultWebXml);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process a default web.xml.
+     */
+    protected void processDefaultWebConfig(Digester digester, InputStream stream,
+            InputSource source) {
+
+        if (log.isDebugEnabled())
+            log.debug("Processing context [" + context.getName()
+                    + "] web configuration resource " + source.getSystemId());
+
+        // Process the default web.xml file
+        synchronized (digester) {
+            try {
+                source.setByteStream(stream);
+
+                if (context instanceof StandardContext)
+                    ((StandardContext) context).setReplaceWelcomeFiles(true);
+                digester.setClassLoader(this.getClass().getClassLoader());
+                digester.setUseContextClassLoader(false);
+                XmlErrorHandler handler = new XmlErrorHandler();
+                digester.push(context);
+                digester.setErrorHandler(handler);
+                digester.parse(source);
+                if (handler.getWarnings().size() > 0 ||
+                        handler.getErrors().size() > 0) {
+                    ok = false;
+                    handler.logFindings(log, source.getSystemId());
+                }
+            } catch (SAXParseException e) {
+                log.error(sm.getString("contextConfig.defaultParse"), e);
+                log.error(sm.getString("contextConfig.defaultPosition",
+                                 "" + e.getLineNumber(),
+                                 "" + e.getColumnNumber()));
+                ok = false;
+            } catch (Exception e) {
+                log.error(sm.getString("contextConfig.defaultParse"), e);
+                ok = false;
+            } finally {
+                digester.reset();
+                try {
+                    if (stream != null) {
+                        stream.close();
+                    }
+                } catch (IOException e) {
+                    log.error(sm.getString("contextConfig.defaultClose"), e);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public String getDefaultWebXml() {
+        return defaultWebXml;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Process the default configuration file, if it exists.
+     * The default config must be read with the container loader - so
+     * container servlets can be loaded
+     */
+    protected void defaultWebConfig() {
+        long t1=System.currentTimeMillis();
+
+        // Open the default web.xml file, if it exists
+        if( defaultWebXml==null && context instanceof StandardContext ) {
+            defaultWebXml=((StandardContext)context).getDefaultWebXml();
+        }
+        // set the default if we don't have any overrides
+        if( defaultWebXml==null ) getDefaultWebXml();
+
+        File file = new File(this.defaultWebXml);
+        if (!file.isAbsolute()) {
+            file = new File(getBaseDir(),
+                            this.defaultWebXml);
+        }
+
+        InputStream stream = null;
+        InputSource source = null;
+
+        try {
+            if ( ! file.exists() ) {
+                // Use getResource and getResourceAsStream
+                stream = getClass().getClassLoader()
+                    .getResourceAsStream(defaultWebXml);
+                if( stream != null ) {
+                    source = new InputSource
+                            (getClass().getClassLoader()
+                            .getResource(defaultWebXml).toString());
+                }
+                if( stream== null ) {
+                    // maybe embedded
+                    stream = getClass().getClassLoader()
+                        .getResourceAsStream("web-embed.xml");
+                    if( stream != null ) {
+                        source = new InputSource
+                        (getClass().getClassLoader()
+                                .getResource("web-embed.xml").toString());
+                    }
+                }
+
+                if( stream== null ) {
+                    log.info("No default web.xml");
+                }
+            } else {
+                source =
+                    new InputSource("file://" + file.getAbsolutePath());
+                stream = new FileInputStream(file);
+                context.addWatchedResource(file.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            log.error(sm.getString("contextConfig.defaultMissing")
+                      + " " + defaultWebXml + " " + file , e);
+        }
+
+        if (stream != null) {
+            processDefaultWebConfig(webDigester, stream, source);
+            webRuleSet.recycle();
+        }
+
+        long t2=System.currentTimeMillis();
+        if( (t2-t1) > 200 )
+            log.debug("Processed default web.xml " + file + " "  + ( t2-t1));
+
+        stream = null;
+        source = null;
+
+        String resourceName = getHostConfigPath(Constants.HostWebXml);
+        file = new File(getConfigBase(), resourceName);
+
+        try {
+            if ( ! file.exists() ) {
+                // Use getResource and getResourceAsStream
+                stream = getClass().getClassLoader()
+                    .getResourceAsStream(resourceName);
+                if( stream != null ) {
+                    source = new InputSource
+                            (getClass().getClassLoader()
+                            .getResource(resourceName).toString());
+                }
+            } else {
+                source =
+                    new InputSource("file://" + file.getAbsolutePath());
+                stream = new FileInputStream(file);
+            }
+        } catch (Exception e) {
+            log.error(sm.getString("contextConfig.defaultMissing")
+                      + " " + resourceName + " " + file , e);
+        }
+
+        if (stream != null) {
+            processDefaultWebConfig(webDigester, stream, source);
+            webRuleSet.recycle();
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the "replace welcome files" property.
+     *
+     * @param replaceWelcomeFiles The new property value
+     */
+    public void setReplaceWelcomeFiles(boolean replaceWelcomeFiles) {
+
+        boolean oldReplaceWelcomeFiles = this.replaceWelcomeFiles;
+        this.replaceWelcomeFiles = replaceWelcomeFiles;
+        support.firePropertyChange("replaceWelcomeFiles",
+                                   oldReplaceWelcomeFiles,
+                                   this.replaceWelcomeFiles);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the class loader to be used for instantiating application objects
+     * when required.  This is determined based upon the following rules:
+     * <ul>
+     * <li>The class loader set by <code>setClassLoader()</code>, if any</li>
+     * <li>The thread context class loader, if it exists and the
+     *     <code>useContextClassLoader</code> property is set to true</li>
+     * <li>The class loader used to load the Digester class itself.
+     * </ul>
+     */
+    public ClassLoader getClassLoader() {
+
+        if (this.classLoader != null) {
+            return (this.classLoader);
+        }
+        if (this.useContextClassLoader) {
+            ClassLoader classLoader =
+                    Thread.currentThread().getContextClassLoader();
+            if (classLoader != null) {
+                return (classLoader);
+            }
+        }
+        return (this.getClass().getClassLoader());
+
+    }
+
+
+
+    /**
+     * Set the class loader to be used for instantiating application objects
+     * when required.
+     *
+     * @param classLoader The new class loader to use, or <code>null</code>
+     *  to revert to the standard rules
+     */
+    public void setClassLoader(ClassLoader classLoader) {
+
+        this.classLoader = classLoader;
+
+    }
+-----CSCI578-----
+
+
+    public List<SAXParseException> getWarnings() {
+        // Internal use only - don't worry about immutability
+        return warnings;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Should the next call to <code>addWelcomeFile()</code> cause replacement
+     * of any existing welcome files?  This will be set before processing the
+     * web application's deployment descriptor, so that application specified
+     * choices <strong>replace</strong>, rather than append to, those defined
+     * in the global descriptor.
+     */
+    private boolean replaceWelcomeFiles = false;
+
+
+
+    /**
+     * Add a new welcome file to the set recognized by this Context.
+     *
+     * @param name New welcome file name
+     */
+    public void addWelcomeFile(String name) {
+
+        synchronized (welcomeFilesLock) {
+            // Welcome files from the application deployment descriptor
+            // completely replace those from the default conf/web.xml file
+            if (replaceWelcomeFiles) {
+                welcomeFiles = new String[0];
+                setReplaceWelcomeFiles(false);
+            }
+            String results[] =new String[welcomeFiles.length + 1];
+            for (int i = 0; i < welcomeFiles.length; i++)
+                results[i] = welcomeFiles[i];
+            results[welcomeFiles.length] = name;
+            welcomeFiles = results;
+        }
+        postWelcomeFiles();
+        fireContainerEvent("addWelcomeFile", name);
+
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- protected Methods
+
+
+    /**
+     * Process the application classes annotations, if it exists.
+     */
+    protected void applicationAnnotationsConfig() {
+
+        long t1=System.currentTimeMillis();
+
+        WebAnnotationSet.loadApplicationAnnotations(context);
+
+        long t2=System.currentTimeMillis();
+        if (context instanceof StandardContext) {
+            ((StandardContext) context).setStartupTime(t2-t1+
+                    ((StandardContext) context).getStartupTime());
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets the time (in milliseconds) it took to start this context.
+     *
+     * @return Time (in milliseconds) it took to start this context.
+     */
+    public long getStartupTime() {
+        return startupTime;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the login configuration descriptor for this web application.
+     *
+     * @param config The new login configuration
+     */
+    public void setLoginConfig(LoginConfig config);
+-----CSCI578-----
+
+
+
+    /**
+     * Set up an Authenticator automatically if required, and one has not
+     * already been configured.
+     */
+    protected synchronized void authenticatorConfig() {
+
+        // Does this Context require an Authenticator?
+        SecurityConstraint constraints[] = context.findConstraints();
+        if ((constraints == null) || (constraints.length == 0))
+            return;
+        LoginConfig loginConfig = context.getLoginConfig();
+        if (loginConfig == null) {
+            loginConfig = DUMMY_LOGIN_CONFIG;
+            context.setLoginConfig(loginConfig);
+        }
+
+        // Has an authenticator been configured already?
+        if (context instanceof Authenticator)
+            return;
+        if (context instanceof ContainerBase) {
+            Pipeline pipeline = ((ContainerBase) context).getPipeline();
+            if (pipeline != null) {
+                Valve basic = pipeline.getBasic();
+                if ((basic != null) && (basic instanceof Authenticator))
+                    return;
+                Valve valves[] = pipeline.getValves();
+                for (int i = 0; i < valves.length; i++) {
+                    if (valves[i] instanceof Authenticator)
+                        return;
+                }
+            }
+        } else {
+            return;     // Cannot install a Valve even if it would be needed
+        }
+
+        // Has a Realm been configured for us to authenticate against?
+        if (context.getRealm() == null) {
+            log.error(sm.getString("contextConfig.missingRealm"));
+            ok = false;
+            return;
+        }
+
+        /*
+         * First check to see if there is a custom mapping for the login
+         * method. If so, use it. Otherwise, check if there is a mapping in
+         * org/apache/catalina/startup/Authenticators.properties.
+         */
+        Valve authenticator = null;
+        if (customAuthenticators != null) {
+            authenticator = (Valve)
+                customAuthenticators.get(loginConfig.getAuthMethod());
+        }
+        if (authenticator == null) {
+            // Load our mapping properties if necessary
+            if (authenticators == null) {
+                try {
+                    InputStream is=this.getClass().getClassLoader().getResourceAsStream("org/apache/catalina/startup/Authenticators.properties");
+                    if( is!=null ) {
+                        authenticators = new Properties();
+                        authenticators.load(is);
+                    } else {
+                        log.error(sm.getString(
+                                "contextConfig.authenticatorResources"));
+                        ok=false;
+                        return;
+                    }
+                } catch (IOException e) {
+                    log.error(sm.getString(
+                                "contextConfig.authenticatorResources"), e);
+                    ok = false;
+                    return;
+                }
+            }
+
+            // Identify the class name of the Valve we should configure
+            String authenticatorName = null;
+            authenticatorName =
+                    authenticators.getProperty(loginConfig.getAuthMethod());
+            if (authenticatorName == null) {
+                log.error(sm.getString("contextConfig.authenticatorMissing",
+                                 loginConfig.getAuthMethod()));
+                ok = false;
+                return;
+            }
+
+            // Instantiate and install an Authenticator of the requested class
+            try {
+                Class authenticatorClass = Class.forName(authenticatorName);
+                authenticator = (Valve) authenticatorClass.newInstance();
+            } catch (Throwable t) {
+                log.error(sm.getString(
+                                    "contextConfig.authenticatorInstantiate",
+                                    authenticatorName),
+                          t);
+                ok = false;
+            }
+        }
+
+        if (authenticator != null && context instanceof ContainerBase) {
+            Pipeline pipeline = ((ContainerBase) context).getPipeline();
+            if (pipeline != null) {
+                ((ContainerBase) context).addValve(authenticator);
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString(
+                                    "contextConfig.authenticatorConfigured",
+                                    loginConfig.getAuthMethod()));
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    public String getAuthMethod() {
+        return (this.authMethod);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * <p>Return the Valve instance that has been distinguished as the basic
+     * Valve for this Pipeline (if any).
+     */
+    public Valve getBasic();
+-----CSCI578-----
+
+
+    /**
+     * <p>Return the Valve instance that has been distinguished as the basic
+     * Valve for this Pipeline (if any).
+     */
+    public Valve getBasic() {
+
+        return (pipeline.getBasic());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Validate the usage of security role names in the web application
+     * deployment descriptor.  If any problems are found, issue warning
+     * messages (for backwards compatibility) and add the missing roles.
+     * (To make these problems fatal instead, simply set the <code>ok</code>
+     * instance variable to <code>false</code> as well).
+     */
+    protected void validateSecurityRoles() {
+
+        // Check role names used in <security-constraint> elements
+        SecurityConstraint constraints[] = context.findConstraints();
+        for (int i = 0; i < constraints.length; i++) {
+            String roles[] = constraints[i].findAuthRoles();
+            for (int j = 0; j < roles.length; j++) {
+                if (!"*".equals(roles[j]) &&
+                    !context.findSecurityRole(roles[j])) {
+                    log.warn(sm.getString("contextConfig.role.auth", roles[j]));
+                    context.addSecurityRole(roles[j]);
+                }
+            }
+        }
+
+        // Check role names used in <servlet> elements
+        Container wrappers[] = context.findChildren();
+        for (int i = 0; i < wrappers.length; i++) {
+            Wrapper wrapper = (Wrapper) wrappers[i];
+            String runAs = wrapper.getRunAs();
+            if ((runAs != null) && !context.findSecurityRole(runAs)) {
+                log.warn(sm.getString("contextConfig.role.runas", runAs));
+                context.addSecurityRole(runAs);
+            }
+            String names[] = wrapper.findSecurityReferences();
+            for (int j = 0; j < names.length; j++) {
+                String link = wrapper.findSecurityReference(names[j]);
+                if ((link != null) && !context.findSecurityRole(link)) {
+                    log.warn(sm.getString("contextConfig.role.link", link));
+                    context.addSecurityRole(link);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of security role reference names associated with
+     * this servlet, if any; otherwise return a zero-length array.
+     */
+    public String[] findSecurityReferences();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the run-as identity for this servlet.
+     */
+    public String getRunAs();
+-----CSCI578-----
+
+
+
+    /**
+     * Return <code>true</code> if the specified security role is defined
+     * for this application; otherwise return <code>false</code>.
+     *
+     * @param role Security role to verify
+     */
+    public boolean findSecurityRole(String role);
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of roles that are permitted access to the resources
+     * protected by this security constraint.  If none have been defined,
+     * a zero-length array is returned (which implies that all authenticated
+     * users are permitted access).
+     */
+    public String[] findAuthRoles() {
+
+        return (authRoles);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the security role link for the specified security role
+     * reference name, if any; otherwise return <code>null</code>.
+     *
+     * @param name Security role reference used within this servlet
+     */
+    public String findSecurityReference(String name);
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of security constraints for this web application.
+     * If there are none, a zero-length array is returned.
+     */
+    public SecurityConstraint[] findConstraints();

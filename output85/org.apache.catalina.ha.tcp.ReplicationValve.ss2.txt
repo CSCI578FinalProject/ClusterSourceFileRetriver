@@ -1,0 +1,112 @@
+7
+-----CSCI578-----
+
+
+    /**
+     * Log the interesting request parameters, invoke the next Valve in the
+     * sequence, and log the interesting response parameters.
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be created
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    @Override
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException
+    {
+        long totalstart = 0;
+
+        //this happens before the request
+        if(doStatistics()) {
+            totalstart = System.currentTimeMillis();
+        }
+        if (primaryIndicator) {
+            createPrimaryIndicator(request) ;
+        }
+        Context context = request.getContext();
+        boolean isCrossContext = context != null
+                && context instanceof StandardContext
+                && ((StandardContext) context).getCrossContext();
+        try {
+            if(isCrossContext) {
+                if(log.isDebugEnabled()) {
+                    log.debug(sm.getString("ReplicationValve.crossContext.add"));
+                }
+                //FIXME add Pool of Arraylists
+                crossContextSessions.set(new ArrayList<DeltaSession>());
+            }
+            getNext().invoke(request, response);
+            if(context != null && cluster != null
+                    && context.getManager() instanceof ClusterManager) {
+                ClusterManager clusterManager = (ClusterManager) context.getManager();
+
+                // valve cluster can access manager - other cluster handle replication
+                // at host level - hopefully!
+                if(cluster.getManager(clusterManager.getName()) == null) {
+                    return ;
+                }
+                if(cluster.hasMembers()) {
+                    sendReplicationMessage(request, totalstart, isCrossContext, clusterManager);
+                } else {
+                    resetReplicationRequest(request,isCrossContext);
+                }
+            }
+        } finally {
+            // Array must be remove: Current master request send endAccess at recycle.
+            // Don't register this request session again!
+            if(isCrossContext) {
+                if(log.isDebugEnabled()) {
+                    log.debug(sm.getString("ReplicationValve.crossContext.remove"));
+                }
+                // crossContextSessions.remove() only exist at Java 5
+                // register ArrayList at a pool
+                crossContextSessions.set(null);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return <code>true</code> if the cluster has members.
+     */
+    public boolean hasMembers();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Calc processing stats
+     * @return <code>true</code> if statistics are enabled
+     */
+    public boolean doStatistics() {
+        return doProcessingStats;
+    }
+-----CSCI578-----
+
+
+   /**
+    * Return the name of the manager, at host /context name and at engine hostname+/context.
+    * @return String
+    * @since 5.5.10
+    */
+   public String getName();
+-----CSCI578-----
+
+
+    /**
+     * Get Manager
+     * @param name The manager name
+     * @return The manager
+     */
+    public Manager getManager(String name);
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean getCrossContext() {
+        return this.crossContext;
+    }

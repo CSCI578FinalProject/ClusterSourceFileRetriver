@@ -1,0 +1,191 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void memberDataReceived(byte[] data) {
+        final Member m = MemberImpl.getMember(data);
+        if (log.isTraceEnabled()) log.trace("Mcast receive ping from member " + m);
+        Runnable t = null;
+        if (Arrays.equals(m.getCommand(), Member.SHUTDOWN_PAYLOAD)) {
+            if (log.isDebugEnabled()) log.debug("Member has shutdown:" + m);
+            membership.removeMember(m);
+            t = new Runnable() {
+                @Override
+                public void run() {
+                    String name = Thread.currentThread().getName();
+                    try {
+                        Thread.currentThread().setName("Membership-MemberDisappeared.");
+                        service.memberDisappeared(m);
+                    }finally {
+                        Thread.currentThread().setName(name);
+                    }
+                }
+            };
+        } else if (membership.memberAlive(m)) {
+            if (log.isDebugEnabled()) log.debug("Mcast add member " + m);
+            t = new Runnable() {
+                @Override
+                public void run() {
+                    String name = Thread.currentThread().getName();
+                    try {
+                        Thread.currentThread().setName("Membership-MemberAdded.");
+                        service.memberAdded(m);
+                    }finally {
+                        Thread.currentThread().setName(name);
+                    }
+                }
+            };
+        } //end if
+        if ( t != null ) {
+            executor.execute(t);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Receive a datagram packet, locking wait
+     * @throws IOException Received failed
+     */
+    public void receive() throws IOException {
+        boolean checkexpired = true;
+        try {
+
+            socket.receive(receivePacket);
+            if(receivePacket.getLength() > MAX_PACKET_SIZE) {
+                log.error(sm.getString("mcastServiceImpl.packet.tooLong",
+                        Integer.toString(receivePacket.getLength())));
+            } else {
+                byte[] data = new byte[receivePacket.getLength()];
+                System.arraycopy(receivePacket.getData(), receivePacket.getOffset(), data, 0, data.length);
+                if (XByteBuffer.firstIndexOf(data,0,MemberImpl.TRIBES_MBR_BEGIN)==0) {
+                    memberDataReceived(data);
+                } else {
+                    memberBroadcastsReceived(data);
+                }
+
+            }
+        } catch (SocketTimeoutException x ) {
+            //do nothing, this is normal, we don't want to block forever
+            //since the receive thread is the same thread
+            //that does membership expiration
+        }
+        if (checkexpired) checkExpired();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void memberBroadcastsReceived(final byte[] b) {
+        if (log.isTraceEnabled()) log.trace("Mcast received broadcasts.");
+        XByteBuffer buffer = new XByteBuffer(b,true);
+        if (buffer.countPackages(true)>0) {
+            int count = buffer.countPackages();
+            final ChannelData[] data = new ChannelData[count];
+            for (int i=0; i<count; i++) {
+                try {
+                    data[i] = buffer.extractPackage(true);
+                }catch (IllegalStateException ise) {
+                    log.debug("Unable to decode message.",ise);
+                }
+            }
+            Runnable t = new Runnable() {
+                @Override
+                public void run() {
+                    String name = Thread.currentThread().getName();
+                    try {
+                        Thread.currentThread().setName("Membership-MemberAdded.");
+                        for (int i=0; i<data.length; i++ ) {
+                            try {
+                                if (data[i]!=null && !member.equals(data[i].getAddress())) {
+                                    msgservice.messageReceived(data[i]);
+                                }
+                            } catch (Throwable t) {
+                                if (t instanceof ThreadDeath) {
+                                    throw (ThreadDeath) t;
+                                }
+                                if (t instanceof VirtualMachineError) {
+                                    throw (VirtualMachineError) t;
+                                }
+                                log.error(sm.getString("mcastServiceImpl.unableReceive.broadcastMessage"),t);
+                            }
+                        }
+                    }finally {
+                        Thread.currentThread().setName(name);
+                    }
+                }
+            };
+            executor.execute(t);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public ChannelData extractPackage(boolean clearFromBuffer) {
+        XByteBuffer xbuf = extractDataPackage(clearFromBuffer);
+        ChannelData cdata = ChannelData.getDataFromPackage(xbuf);
+        return cdata;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Deserializes a ChannelData object from a byte array
+     * @param xbuf byte[]
+     * @return ChannelData
+     */
+    public static ChannelData getDataFromPackage(XByteBuffer xbuf)  {
+        ChannelData data = new ChannelData(false);
+        int offset = 0;
+        data.setOptions(XByteBuffer.toInt(xbuf.getBytesDirect(),offset));
+        offset += 4; //options
+        data.setTimestamp(XByteBuffer.toLong(xbuf.getBytesDirect(),offset));
+        offset += 8; //timestamp
+        data.uniqueId = new byte[XByteBuffer.toInt(xbuf.getBytesDirect(),offset)];
+        offset += 4; //uniqueId length
+        System.arraycopy(xbuf.getBytesDirect(),offset,data.uniqueId,0,data.uniqueId.length);
+        offset += data.uniqueId.length; //uniqueId data
+        //byte[] addr = new byte[XByteBuffer.toInt(xbuf.getBytesDirect(),offset)];
+        int addrlen = XByteBuffer.toInt(xbuf.getBytesDirect(),offset);
+        offset += 4; //addr length
+        //System.arraycopy(xbuf.getBytesDirect(),offset,addr,0,addr.length);
+        data.setAddress(MemberImpl.getMember(xbuf.getBytesDirect(),offset,addrlen));
+        //offset += addr.length; //addr data
+        offset += addrlen;
+        int xsize = XByteBuffer.toInt(xbuf.getBytesDirect(),offset);
+        offset += 4; //xsize length
+        System.arraycopy(xbuf.getBytesDirect(),offset,xbuf.getBytesDirect(),0,xsize);
+        xbuf.setLength(xsize);
+        data.message = xbuf;
+        return data;
+
+    }
+
+
+    public static ChannelData getDataFromPackage(byte[] b)  {
+        ChannelData data = new ChannelData(false);
+        int offset = 0;
+        data.setOptions(XByteBuffer.toInt(b,offset));
+        offset += 4; //options
+        data.setTimestamp(XByteBuffer.toLong(b,offset));
+        offset += 8; //timestamp
+        data.uniqueId = new byte[XByteBuffer.toInt(b,offset)];
+        offset += 4; //uniqueId length
+        System.arraycopy(b,offset,data.uniqueId,0,data.uniqueId.length);
+        offset += data.uniqueId.length; //uniqueId data
+        byte[] addr = new byte[XByteBuffer.toInt(b,offset)];
+        offset += 4; //addr length
+        System.arraycopy(b,offset,addr,0,addr.length);
+        data.setAddress(MemberImpl.getMember(addr));
+        offset += addr.length; //addr data
+        int xsize = XByteBuffer.toInt(b,offset);
+        //data.message = new XByteBuffer(new byte[xsize],false);
+        data.message = BufferPool.getBufferPool().getBuffer(xsize,false);
+        offset += 4; //message length
+        System.arraycopy(b,offset,data.message.getBytesDirect(),0,xsize);
+        data.message.append(b,offset,xsize);
+        offset += xsize; //message data
+        return data;
+    }

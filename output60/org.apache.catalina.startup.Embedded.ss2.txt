@@ -1,0 +1,92 @@
+3
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add a new Connector to the set of defined Connectors, and associate it
+     * with this Service's Container.
+     *
+     * @param connector The Connector to be added
+     */
+    public void addConnector(Connector connector) {
+
+        synchronized (connectors) {
+            connector.setContainer(this.container);
+            connector.setService(this);
+            Connector results[] = new Connector[connectors.length + 1];
+            System.arraycopy(connectors, 0, results, 0, connectors.length);
+            results[connectors.length] = connector;
+            connectors = results;
+
+            if (initialized) {
+                try {
+                    connector.initialize();
+                } catch (LifecycleException e) {
+                    log.error(sm.getString(
+                            "standardService.connector.initFailed",
+                            connector), e);
+                }
+            }
+
+            if (started && (connector instanceof Lifecycle)) {
+                try {
+                    ((Lifecycle) connector).start();
+                } catch (LifecycleException e) {
+                    log.error(sm.getString(
+                            "standardService.connector.startFailed",
+                            connector), e);
+                }
+            }
+
+            // Report this property change to interested listeners
+            support.firePropertyChange("connector", null, connector);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Add a new Connector to the set of defined Connectors.  The newly
+     * added Connector will be associated with the most recently added Engine.
+     *
+     * @param connector The connector to be added
+     *
+     * @exception IllegalStateException if no engines have been added yet
+     */
+    public synchronized void addConnector(Connector connector) {
+
+        if( log.isDebugEnabled() ) {
+            log.debug("Adding connector (" + connector.getInfo() + ")");
+        }
+
+        // Make sure we have a Container to send requests to
+        if (engines.length < 1)
+            throw new IllegalStateException
+                (sm.getString("embedded.noEngines"));
+
+        /*
+         * Add the connector. This will set the connector's container to the
+         * most recently added Engine
+         */
+        super.addConnector(connector);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return descriptive information about this Connector implementation.
+     */
+    public String getInfo() {
+
+        return (info);
+
+    }

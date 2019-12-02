@@ -1,0 +1,51 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * The <code>Digester</code> instance used to parse registry descriptors.
+     */
+    protected static final Digester digester = createDigester();
+
+
+    /**
+     * Create and configure the Digester we will be using for setup store
+     * registry.
+     * @return the XML digester that will be used to parse the configuration
+     */
+    protected static Digester createDigester() {
+        long t1 = System.currentTimeMillis();
+        // Initialize the digester
+        Digester digester = new Digester();
+        digester.setValidating(false);
+        digester.setClassLoader(StoreRegistry.class.getClassLoader());
+
+        // Configure the actions we will be using
+        digester.addObjectCreate("Registry",
+                "org.apache.catalina.storeconfig.StoreRegistry", "className");
+        digester.addSetProperties("Registry");
+        digester
+                .addObjectCreate("Registry/Description",
+                        "org.apache.catalina.storeconfig.StoreDescription",
+                        "className");
+        digester.addSetProperties("Registry/Description");
+        digester.addRule("Registry/Description", new StoreFactoryRule(
+                "org.apache.catalina.storeconfig.StoreFactoryBase",
+                "storeFactoryClass",
+                "org.apache.catalina.storeconfig.StoreAppender",
+                "storeAppenderClass"));
+        digester.addSetNext("Registry/Description", "registerDescription",
+                "org.apache.catalina.storeconfig.StoreDescription");
+        digester.addCallMethod("Registry/Description/TransientAttribute",
+                "addTransientAttribute", 0);
+        digester.addCallMethod("Registry/Description/TransientChild",
+                "addTransientChild", 0);
+
+        long t2 = System.currentTimeMillis();
+        if (log.isDebugEnabled())
+            log.debug("Digester for server-registry.xml created " + (t2 - t1));
+        return (digester);
+
+    }

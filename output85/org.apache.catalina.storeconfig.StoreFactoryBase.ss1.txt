@@ -1,0 +1,108 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Store only elements from storeChildren methods that are not a transient
+     * child.
+     *
+     * @param aWriter Current output writer
+     * @param indent Indentation level
+     * @param aTagElement Current element
+     * @throws Exception Configuration storing error
+     */
+    protected void storeElement(PrintWriter aWriter, int indent,
+            Object aTagElement) throws Exception {
+        if (aTagElement != null) {
+            IStoreFactory elementFactory = getRegistry().findStoreFactory(
+                    aTagElement.getClass());
+
+            if (elementFactory != null) {
+                StoreDescription desc = getRegistry().findDescription(
+                        aTagElement.getClass());
+                if (!desc.isTransientChild(aTagElement.getClass().getName()))
+                    elementFactory.store(aWriter, indent, aTagElement);
+            } else {
+                log.warn(sm.getString("factory.storeNoDescriptor", aTagElement
+                        .getClass()));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Is child transient, please don't save this.
+     *
+     * @param classname The class name to check
+     * @return is classname attribute?
+     */
+    public boolean isTransientChild(String classname) {
+        if (transientChildren != null)
+            return transientChildren.contains(classname);
+        return false;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Save a array of elements.
+     * @param aWriter Current output writer
+     * @param indent Indentation level
+     * @param elements Array of elements
+     * @throws Exception Configuration storing error
+     */
+    protected void storeElementArray(PrintWriter aWriter, int indent,
+            Object[] elements) throws Exception {
+        if (elements != null) {
+            for (int i = 0; i < elements.length; i++) {
+                try {
+                    storeElement(aWriter, indent, elements[i]);
+                } catch (IOException ioe) {
+                    // ignore children report error them self!
+                    // see StandartContext.storeWithBackup()
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Find factory from class name.
+     *
+     * @param aClassName The class name
+     * @return The factory
+     */
+    public IStoreFactory findStoreFactory(String aClassName) {
+        StoreDescription desc = findDescription(aClassName);
+        if (desc != null)
+            return desc.getStoreFactory();
+        else
+            return null;
+
+    }
+
+
+    /**
+     * Find factory from class.
+     *
+     * @param aClass The class
+     * @return The factory
+     */
+    public IStoreFactory findStoreFactory(Class<?> aClass) {
+        return findStoreFactory(aClass.getName());
+    }
+-----CSCI578-----
+
+
+    /**
+     * get Registry
+     *
+     * @see org.apache.catalina.storeconfig.IStoreFactory#getRegistry()
+     */
+    @Override
+    public StoreRegistry getRegistry() {
+
+        return registry;
+    }

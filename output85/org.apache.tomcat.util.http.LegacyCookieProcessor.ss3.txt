@@ -1,0 +1,248 @@
+16
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Unescapes any double quotes in the given cookie value.
+     *
+     * @param bc The cookie value to modify
+     */
+    private static final void unescapeDoubleQuotes(ByteChunk bc) {
+
+        if (bc == null || bc.getLength() == 0 || bc.indexOf('"', 0) == -1) {
+            return;
+        }
+
+        // Take a copy of the buffer so the original cookie header is not
+        // modified by this unescaping.
+        byte[] original = bc.getBuffer();
+        int len = bc.getLength();
+
+        byte[] copy = new byte[len];
+        System.arraycopy(original, bc.getStart(), copy, 0, len);
+
+        int src = 0;
+        int dest = 0;
+
+        while (src < len) {
+            if (copy[src] == '\\' && src < len && copy[src+1]  == '"') {
+                src++;
+            }
+            copy[dest] = copy[src];
+            dest ++;
+            src ++;
+        }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private static final boolean equals(String s, byte b[], int start, int end) {
+        int blen = end-start;
+        if (b == null || blen != s.length()) {
+            return false;
+        }
+        int boff = start;
+        for (int i = 0; i < blen; i++) {
+            if (b[boff++] != s.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+            // Skip whitespace and non-token characters (separators)
+            while (pos < end &&
+                   (isHttpSeparator((char) bytes[pos]) &&
+                           !getAllowHttpSepsInV0() ||
+                    isV0Separator((char) bytes[pos]) ||
+                    isWhiteSpace(bytes[pos])))
+                {pos++; }
+
+
+            // Skip whitespace
+            while (pos < end && isWhiteSpace(bytes[pos])) {pos++; }
+
+
+
+    /**
+     * Returns true if the byte is a whitespace character as
+     * defined in RFC2619
+     * JVK
+     */
+    private static final boolean isWhiteSpace(final byte c) {
+        // This switch statement is slightly slower
+        // for my vm than the if statement.
+        // Java(TM) 2 Runtime Environment, Standard Edition (build 1.5.0_07-164)
+        /*
+        switch (c) {
+        case ' ':;
+        case '\t':;
+        case '\n':;
+        case '\r':;
+        case '\f':;
+            return true;
+        default:;
+            return false;
+        }
+        */
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f') {
+            return true;
+        } else {
+            return false;
+        }
+    }
+-----CSCI578-----
+
+
+            // Skip whitespace and non-token characters (separators)
+            while (pos < end &&
+                   (isHttpSeparator((char) bytes[pos]) &&
+                           !getAllowHttpSepsInV0() ||
+                    isV0Separator((char) bytes[pos]) ||
+                    isWhiteSpace(bytes[pos])))
+                {pos++; }
+-----CSCI578-----
+
+
+    /**
+     * Returns the byte chunk, representing the byte[] and offset/length.
+     * Valid only if T_BYTES or after a conversion was made.
+     * @return the byte chunk
+     */
+    public ByteChunk getByteChunk() {
+        return byteC;
+    }
+-----CSCI578-----
+
+
+    public int indexOf( String src, int srcOff, int srcLen, int myOff ) {
+        char first=src.charAt( srcOff );
+
+        // Look for first char
+        int srcEnd = srcOff + srcLen;
+
+        mainLoop:
+        for( int i=myOff+start; i <= (end - srcLen); i++ ) {
+            if( buff[i] != first ) {
+                continue;
+            }
+            // found first char, now look for a match
+            int myPos=i+1;
+            for( int srcPos=srcOff + 1; srcPos< srcEnd;) {
+                if( buff[myPos++] != src.charAt( srcPos++ )) {
+                    continue mainLoop;
+                }
+            }
+            return i-start; // found it
+        }
+        return -1;
+    }
+
+
+    /**
+     * Returns the first instance of the given character in this ByteChunk
+     * starting at the specified byte. If the character is not found, -1 is
+     * returned.
+     * <br>
+     * NOTE: This only works for characters in the range 0-127.
+     *
+     * @param c         The character
+     * @param starting  The start position
+     * @return          The position of the first instance of the character or
+     *                      -1 if the character is not found.
+     */
+    public int indexOf(char c, int starting) {
+        int ret = indexOf(buff, start + starting, end, c);
+        return (ret >= start) ? ret - start : -1;
+    }
+
+
+    /**
+     * Returns the first instance of the given character in the given byte array
+     * between the specified start and end.
+     * <br>
+     * NOTE: This only works for characters in the range 0-127.
+     *
+     * @param bytes The byte array to search
+     * @param start The point to start searching from in the byte array
+     * @param end   The point to stop searching in the byte array
+     * @param c     The character to search for
+     * @return      The position of the first instance of the character or -1
+     *                  if the character is not found.
+     */
+    public static int indexOf(byte bytes[], int start, int end, char c) {
+        int offset = start;
+
+        while (offset < end) {
+            byte b=bytes[offset];
+            if (b == c) {
+                return offset;
+            }
+            offset++;
+        }
+        return -1;
+    }
+-----CSCI578-----
+
+
+        /**
+         * Some browsers (e.g. IE6 and IE7) do not handle quoted Path values even
+         * when Version is set to 1. To allow for this, we support a property
+         * FWD_SLASH_IS_SEPARATOR which, when false, means a '/' character will not
+         * be treated as a separator, potentially avoiding quoting and the ensuing
+         * side effect of having the cookie upgraded to version 1.
+         *
+         * For now, we apply this rule globally rather than just to the Path attribute.
+         */
+        if (!getAllowHttpSepsInV0() && !getForwardSlashIsSeparator()) {
+            allowedWithoutQuotes.set('/');
+        }
+
+
+            // Skip whitespace and non-token characters (separators)
+            while (pos < end &&
+                   (isHttpSeparator((char) bytes[pos]) &&
+                           !getAllowHttpSepsInV0() ||
+                    isV0Separator((char) bytes[pos]) ||
+                    isWhiteSpace(bytes[pos])))
+                {pos++; }
+-----CSCI578-----
+
+            if (version == 0 && !allowedWithoutQuotes.get(c) ||
+                    version == 1 && isHttpSeparator(c)) {
+                return true;
+            }
+
+
+            // Skip whitespace and non-token characters (separators)
+            while (pos < end &&
+                   (isHttpSeparator((char) bytes[pos]) &&
+                           !getAllowHttpSepsInV0() ||
+                    isV0Separator((char) bytes[pos]) ||
+                    isWhiteSpace(bytes[pos])))
+                {pos++; }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+        /**
+         * Some browsers (e.g. IE6 and IE7) do not handle quoted Path values even
+         * when Version is set to 1. To allow for this, we support a property
+         * FWD_SLASH_IS_SEPARATOR which, when false, means a '/' character will not
+         * be treated as a separator, potentially avoiding quoting and the ensuing
+         * side effect of having the cookie upgraded to version 1.
+         *
+         * For now, we apply this rule globally rather than just to the Path attribute.
+         */
+        if (!getAllowHttpSepsInV0() && !getForwardSlashIsSeparator()) {
+            allowedWithoutQuotes.set('/');
+        }
+-----CSCI578-----

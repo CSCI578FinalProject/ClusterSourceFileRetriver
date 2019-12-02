@@ -1,0 +1,63 @@
+2
+-----CSCI578-----
+
+    
+    /**
+     * Sends a SSL close message, will not physically close the connection here.<br>
+     * To close the connection, you could do something like
+     * <pre><code>
+     *   close();
+     *   while (isOpen() && !myTimeoutFunction()) Thread.sleep(25);
+     *   if ( isOpen() ) close(true); //forces a close if you timed out
+     * </code></pre>
+     * @throws IOException if an I/O error occurs
+     * @throws IOException if there is data on the outgoing network buffer and we are unable to flush it
+     */
+    public void close() throws IOException {
+        if (closing) return;
+        closing = true;
+        sslEngine.closeOutbound();
+
+        if (!flush(netOutBuffer)) {
+            throw new IOException("Remaining data in the network buffer, can't send SSL close message, force a close with close(true) instead");
+        }
+        //prep the buffer for the close message
+        netOutBuffer.clear();
+        //perform the close, since we called sslEngine.closeOutbound
+        SSLEngineResult handshake = sslEngine.wrap(getEmptyBuf(), netOutBuffer);
+        //we should be in a close state
+        if (handshake.getStatus() != SSLEngineResult.Status.CLOSED) {
+            throw new IOException("Invalid close state, will not send network data.");
+        }
+        //prepare the buffer for writing
+        netOutBuffer.flip();
+        //if there is data to be written
+        flush(netOutBuffer);
+
+        //is the channel closed?
+        closed = (!netOutBuffer.hasRemaining() && (handshake.getHandshakeStatus() != HandshakeStatus.NEED_WRAP));
+    }
+
+
+    /**
+     * Force a close, can throw an IOException
+     * @param force boolean
+     * @throws IOException
+     */
+    public void close(boolean force) throws IOException {
+        try {
+            close();
+        }finally {
+            if ( force || closed ) {
+                closed = true;
+                sc.socket().close();
+                sc.close();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public ByteBuffer getEmptyBuf() {
+        return emptyBuf;
+    }

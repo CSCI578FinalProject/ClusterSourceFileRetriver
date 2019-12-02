@@ -1,0 +1,128 @@
+7
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Format and publish a <tt>LogRecord</tt>.
+     *
+     * @param  record  description of the log event
+     */
+    public void publish(LogRecord record) {
+
+        if (!isLoggable(record)) {
+            return;
+        }
+
+        // Construct the timestamp we will use, if requested
+        Timestamp ts = new Timestamp(System.currentTimeMillis());
+        String tsString = ts.toString().substring(0, 19);
+        String tsDate = tsString.substring(0, 10);
+
+        writerLock.readLock().lock();
+        // If the date has changed, switch log files
+        if (rotatable && !date.equals(tsDate)) {
+            // Update to writeLock before we switch
+            writerLock.readLock().unlock();
+            writerLock.writeLock().lock();
+            try {
+                // Make sure another thread hasn't already done this
+                if (!date.equals(tsDate)) {
+                    closeWriter();
+                    date = tsDate;
+                    openWriter();
+                }
+                // Down grade to read-lock. This ensures the writer remains valid
+                // until the log message is written
+                writerLock.readLock().lock();
+            } finally {
+                writerLock.writeLock().unlock();
+            }
+        }
+
+        try {
+            String result = null;
+            try {
+                result = getFormatter().format(record);
+            } catch (Exception e) {
+                reportError(null, e, ErrorManager.FORMAT_FAILURE);
+                return;
+            }
+
+            try {
+                if (writer!=null) {
+                    writer.write(result);
+                    if (bufferSize < 0) {
+                        writer.flush();
+                    }
+                } else {
+                    reportError("FileHandler is closed or not yet initialized, unable to log ["+result+"]", null, ErrorManager.WRITE_FAILURE);
+                }
+            } catch (Exception e) {
+                reportError(null, e, ErrorManager.WRITE_FAILURE);
+                return;
+            }
+        } finally {
+            writerLock.readLock().unlock();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected void closeWriter() {
+        
+        writerLock.writeLock().lock();
+        try {
+            if (writer == null)
+                return;
+            writer.write(getFormatter().getTail(this));
+            writer.flush();
+            writer.close();
+            writer = null;
+            date = "";
+        } catch (Exception e) {
+            reportError(null, e, ErrorManager.CLOSE_FAILURE);
+        } finally {
+            writerLock.writeLock().unlock();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Close the currently open log file (if any).
+     */
+    public void close() {
+        closeWriter();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Flush the writer.
+     */
+    public void flush() {
+
+        writerLock.readLock().lock();
+        try {
+            if (writer == null)
+                return;
+            writer.flush();
+        } catch (Exception e) {
+            reportError(null, e, ErrorManager.FLUSH_FAILURE);
+        } finally {
+            writerLock.readLock().unlock();
+        }
+        
+    }

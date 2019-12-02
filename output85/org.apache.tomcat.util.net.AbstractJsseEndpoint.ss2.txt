@@ -1,0 +1,70 @@
+4
+-----CSCI578-----
+
+
+    protected SSLEngine createSSLEngine(String sniHostName, List<Cipher> clientRequestedCiphers) {
+        SSLHostConfig sslHostConfig = getSSLHostConfig(sniHostName);
+
+        SSLHostConfigCertificate certificate = selectCertificate(sslHostConfig, clientRequestedCiphers);
+
+        SSLContext sslContext = certificate.getSslContext();
+        if (sslContext == null) {
+            throw new IllegalStateException(
+                    sm.getString("endpoint.jsse.noSslContext", sniHostName));
+        }
+
+        SSLEngine engine = sslContext.createSSLEngine();
+        switch (sslHostConfig.getCertificateVerification()) {
+        case NONE:
+            engine.setNeedClientAuth(false);
+            engine.setWantClientAuth(false);
+            break;
+        case OPTIONAL:
+        case OPTIONAL_NO_CA:
+            engine.setWantClientAuth(true);
+            break;
+        case REQUIRED:
+            engine.setNeedClientAuth(true);
+            break;
+        }
+        engine.setUseClientMode(false);
+        engine.setEnabledCipherSuites(sslHostConfig.getEnabledCiphers());
+        engine.setEnabledProtocols(sslHostConfig.getEnabledProtocols());
+
+        SSLParameters sslParameters = engine.getSSLParameters();
+        if (sslHostConfig.getHonorCipherOrder()) {
+            // SSLParameters#setUseCipherSuiteOrder is java 8 and upwards
+            try {
+                Method m = SSLParameters.class.getMethod(
+                        "setUseCipherSuitesOrder", Boolean.TYPE);
+                m.invoke(sslParameters, Boolean.TRUE);
+            } catch (NoSuchMethodException | SecurityException
+                    | IllegalAccessException | IllegalArgumentException
+                    | InvocationTargetException e) {
+                throw new UnsupportedOperationException(
+                        sm.getString("endpoint.jsse.cannotHonorServerCipherOrder"),
+                        e);
+            }
+        }
+        // In case the getter returns a defensive copy
+        engine.setSSLParameters(sslParameters);
+
+        return engine;
+    }
+-----CSCI578-----
+
+
+    public SSLEngine createSSLEngine();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @see SSLUtil#getEnabledCiphers()
+     *
+     * @return The ciphers enabled for this TLS virtual host
+     */
+    public String[] getEnabledCiphers() {
+        return enabledCiphers;
+    }

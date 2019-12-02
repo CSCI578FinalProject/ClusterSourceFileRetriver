@@ -1,0 +1,53 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Call postConstruct method on the specified instance.
+     */
+    public void postConstruct(Object instance)
+        throws IllegalAccessException, InvocationTargetException {
+        
+        Class<?> clazz = instance.getClass();
+        
+        while (clazz != null) {
+            Method[] methods = null;
+            if (Globals.IS_SECURITY_ENABLED) {
+                final Class<?> clazz2 = clazz;
+                methods = AccessController.doPrivileged(
+                        new PrivilegedAction<Method[]>(){
+                    public Method[] run(){
+                        return clazz2.getDeclaredMethods();
+                    }
+                });
+            } else {
+                methods = clazz.getDeclaredMethods();
+            }
+            Method postConstruct = null;
+            for (int i = 0; i < methods.length; i++) {
+                if (methods[i].isAnnotationPresent(PostConstruct.class)) {
+                    if ((postConstruct != null) 
+                            || (methods[i].getParameterTypes().length != 0)
+                            || (Modifier.isStatic(methods[i].getModifiers())) 
+                            || (methods[i].getExceptionTypes().length > 0)
+                            || (!methods[i].getReturnType().getName().equals("void"))) {
+                        throw new IllegalArgumentException("Invalid PostConstruct annotation");
+                    }
+                    postConstruct = methods[i];
+                }
+            }
+    
+            // At the end the postconstruct annotated 
+            // method is invoked
+            if (postConstruct != null) {
+                boolean accessibility = postConstruct.isAccessible();
+                postConstruct.setAccessible(true);
+                postConstruct.invoke(instance);
+                postConstruct.setAccessible(accessibility);
+            }
+        
+            clazz = clazz.getSuperclass();
+        }
+    }
+-----CSCI578-----

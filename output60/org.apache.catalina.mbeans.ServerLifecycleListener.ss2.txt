@@ -1,0 +1,117 @@
+10
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Process the addition of a new child Container to a parent Container.
+     *
+     * @param parent Parent container
+     * @param child Child container
+     */
+    protected void processContainerAddChild(Container parent,
+                                            Container child) {
+
+        if (log.isDebugEnabled())
+            log.debug("Process addChild[parent=" + parent + ",child=" + child + "]");
+
+        try {
+            if (child instanceof Context) {
+                createMBeans((Context) child);
+            } else if (child instanceof Engine) {
+                createMBeans((Engine) child);
+            } else if (child instanceof Host) {
+                createMBeans((Host) child);
+            }
+        } catch (MBeanException t) {
+            Exception e = t.getTargetException();
+            if (e == null)
+                e = t;
+            log.error("processContainerAddChild: MBeanException", e);
+        } catch (Throwable t) {
+            log.error("processContainerAddChild: Throwable", t);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------- ContainerListener Methods
+
+
+    /**
+     * Handle a <code>ContainerEvent</code> from one of the Containers we are
+     * interested in.
+     *
+     * @param event The event that has occurred
+     */
+    public void containerEvent(ContainerEvent event) {
+
+        try {
+            String type = event.getType();
+            if (Container.ADD_CHILD_EVENT.equals(type)) {
+                processContainerAddChild(event.getContainer(),
+                                         (Container) event.getData());
+            } else if (Container.REMOVE_CHILD_EVENT.equals(type)) {
+                processContainerRemoveChild(event.getContainer(),
+                                            (Container) event.getData());
+            }
+        } catch (Exception e) {
+            log.error("Exception processing event " + event, e);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Container on which this event occurred.
+     */
+    public Container getContainer() {
+
+        return (this.container);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the event type of this event.
+     */
+    public String getType() {
+
+        return (this.type);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the event data of this event.
+     */
+    public Object getData() {
+
+        return (this.data);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return a string representation of this event.
+     */
+    public String toString() {
+
+        return ("ContainerEvent['" + getContainer() + "','" +
+                getType() + "','" + getData() + "']");
+
+    }
+-----CSCI578-----

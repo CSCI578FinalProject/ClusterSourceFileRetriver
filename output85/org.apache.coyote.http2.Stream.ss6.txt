@@ -1,0 +1,87 @@
+5
+-----CSCI578-----
+
+
+
+    String getProperty(String key) {
+        return socketWrapper.getEndpoint().getProperty(key);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void emitHeader(String name, String value, boolean neverIndex) {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("stream.header.debug", getConnectionId(), getIdentifier(),
+                    name, value));
+        }
+
+        switch(name) {
+        case ":method": {
+            coyoteRequest.method().setString(value);
+            break;
+        }
+        case ":scheme": {
+            coyoteRequest.scheme().setString(value);
+            break;
+        }
+        case ":path": {
+            int queryStart = value.indexOf('?');
+            if (queryStart == -1) {
+                coyoteRequest.requestURI().setString(value);
+                coyoteRequest.decodedURI().setString(coyoteRequest.getURLDecoder().convert(value, false));
+            } else {
+                String uri = value.substring(0, queryStart);
+                String query = value.substring(queryStart + 1);
+                coyoteRequest.requestURI().setString(uri);
+                coyoteRequest.decodedURI().setString(coyoteRequest.getURLDecoder().convert(uri, false));
+                coyoteRequest.queryString().setString(coyoteRequest.getURLDecoder().convert(query, true));
+            }
+            break;
+        }
+        case ":authority": {
+            int i = value.lastIndexOf(':');
+            if (i > -1) {
+                coyoteRequest.serverName().setString(value.substring(0, i));
+                coyoteRequest.setServerPort(Integer.parseInt(value.substring(i + 1)));
+            } else {
+                coyoteRequest.serverName().setString(value);
+                boolean secure = Boolean.parseBoolean(handler.getProperty("secure"));
+                if (secure) {
+                    coyoteRequest.setServerPort(443);
+                } else {
+                    coyoteRequest.setServerPort(80);
+                }
+            }
+            break;
+        }
+        default: {
+            if ("expect".equals(name) && "100-continue".equals(value)) {
+                coyoteRequest.setExpectation(true);
+            }
+            // Assume other HTTP header
+            coyoteRequest.getMimeHeaders().addValue(name).setString(value);
+        }
+        }
+    }
+-----CSCI578-----
+
+
+    public void setServerPort(int serverPort ) {
+        this.serverPort=serverPort;
+    }
+-----CSCI578-----
+
+
+
+    public UDecoder getURLDecoder() {
+        return urlDecoder;
+    }
+-----CSCI578-----
+
+
+
+    public void setExpectation(boolean expectation) {
+        this.expectation = expectation;
+    }

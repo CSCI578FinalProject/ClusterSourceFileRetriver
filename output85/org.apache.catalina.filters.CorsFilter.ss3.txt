@@ -1,0 +1,118 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Determines the request type.
+     *
+     * @param request The HTTP Servlet request
+     * @return the CORS type
+     */
+    protected CORSRequestType checkRequestType(final HttpServletRequest request) {
+        CORSRequestType requestType = CORSRequestType.INVALID_CORS;
+        if (request == null) {
+            throw new IllegalArgumentException(
+                    sm.getString("corsFilter.nullRequest"));
+        }
+        String originHeader = request.getHeader(REQUEST_HEADER_ORIGIN);
+        // Section 6.1.1 and Section 6.2.1
+        if (originHeader != null) {
+            if (originHeader.isEmpty()) {
+                requestType = CORSRequestType.INVALID_CORS;
+            } else if (!isValidOrigin(originHeader)) {
+                requestType = CORSRequestType.INVALID_CORS;
+            } else if (isLocalOrigin(request, originHeader)) {
+                return CORSRequestType.NOT_CORS;
+            } else {
+                String method = request.getMethod();
+                if (method != null) {
+                    if ("OPTIONS".equals(method)) {
+                        String accessControlRequestMethodHeader =
+                                request.getHeader(
+                                        REQUEST_HEADER_ACCESS_CONTROL_REQUEST_METHOD);
+                        if (accessControlRequestMethodHeader != null &&
+                                !accessControlRequestMethodHeader.isEmpty()) {
+                            requestType = CORSRequestType.PRE_FLIGHT;
+                        } else if (accessControlRequestMethodHeader != null &&
+                                accessControlRequestMethodHeader.isEmpty()) {
+                            requestType = CORSRequestType.INVALID_CORS;
+                        } else {
+                            requestType = CORSRequestType.ACTUAL;
+                        }
+                    } else if ("GET".equals(method) || "HEAD".equals(method)) {
+                        requestType = CORSRequestType.SIMPLE;
+                    } else if ("POST".equals(method)) {
+                        String mediaType = getMediaType(request.getContentType());
+                        if (mediaType != null) {
+                            if (SIMPLE_HTTP_REQUEST_CONTENT_TYPE_VALUES
+                                    .contains(mediaType)) {
+                                requestType = CORSRequestType.SIMPLE;
+                            } else {
+                                requestType = CORSRequestType.ACTUAL;
+                            }
+                        }
+                    } else {
+                        requestType = CORSRequestType.ACTUAL;
+                    }
+                }
+            }
+        } else {
+            requestType = CORSRequestType.NOT_CORS;
+        }
+
+        return requestType;
+    }
+-----CSCI578-----
+
+
+
+    private boolean isLocalOrigin(HttpServletRequest request, String origin) {
+
+        // Build scheme://host:port from request
+        StringBuilder target = new StringBuilder();
+        String scheme = request.getScheme();
+        if (scheme == null) {
+            return false;
+        } else {
+            scheme = scheme.toLowerCase(Locale.ENGLISH);
+        }
+        target.append(scheme);
+        target.append("://");
+
+        String host = request.getServerName();
+        if (host == null) {
+            return false;
+        }
+        target.append(host);
+
+        int port = request.getServerPort();
+        if ("http".equals(scheme) && port != 80 ||
+                "https".equals(scheme) && port != 443) {
+            target.append(':');
+            target.append(port);
+        }
+
+        return origin.equalsIgnoreCase(target.toString());
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the lower case, trimmed value of the media type from the content
+     * type.
+     */
+    private String getMediaType(String contentType) {
+        if (contentType == null) {
+            return null;
+        }
+        String result = contentType.toLowerCase(Locale.ENGLISH);
+        int firstSemiColonIndex = result.indexOf(';');
+        if (firstSemiColonIndex > -1) {
+            result = result.substring(0, firstSemiColonIndex);
+        }
+        result = result.trim();
+        return result;
+    }

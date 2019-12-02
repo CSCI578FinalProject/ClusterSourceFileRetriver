@@ -1,0 +1,130 @@
+17
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public WebResource getResource(String path) {
+        checkPath(path);
+
+        String webAppMount = getWebAppMount();
+        WebResourceRoot root = getRoot();
+        if (path.equals(webAppMount)) {
+            File f = file("", true);
+            if (f == null) {
+                return new EmptyResource(root, path);
+            }
+            return new FileResource(root, path, f, isReadOnly(), null);
+        }
+
+        if (path.charAt(path.length() - 1) != '/') {
+            path = path + '/';
+        }
+
+        if (webAppMount.startsWith(path)) {
+            String name = path.substring(0, path.length() - 1);
+            name = name.substring(name.lastIndexOf('/') + 1);
+            if (name.length() > 0) {
+                return new VirtualResource(root, path, name);
+            }
+        }
+        return new EmptyResource(root, path);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public String[] list(String path) {
+        checkPath(path);
+
+        if (path.charAt(path.length() - 1) != '/') {
+            path = path + '/';
+        }
+        String webAppMount = getWebAppMount();
+
+        if (webAppMount.startsWith(path)) {
+            webAppMount = webAppMount.substring(path.length());
+            if (webAppMount.equals(getFileBase().getName())) {
+                return new String[] {getFileBase().getName()};
+            } else {
+                // Virtual directory
+                int i = webAppMount.indexOf('/');
+                if (i > 0) {
+                    return new String[] {webAppMount.substring(0, i)};
+                }
+            }
+        }
+
+        return EMPTY_STRING_ARRAY;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Set<String> listWebAppPaths(String path) {
+        checkPath(path);
+
+        ResourceSet<String> result = new ResourceSet<>();
+
+        if (path.charAt(path.length() - 1) != '/') {
+            path = path + '/';
+        }
+        String webAppMount = getWebAppMount();
+
+        if (webAppMount.startsWith(path)) {
+            webAppMount = webAppMount.substring(path.length());
+            if (webAppMount.equals(getFileBase().getName())) {
+                result.add(path + getFileBase().getName());
+            } else {
+                // Virtual directory
+                int i = webAppMount.indexOf('/');
+                if (i > 0) {
+                    result.add(path + webAppMount.substring(0, i + 1));
+                }
+            }
+        }
+
+        result.setLocked(true);
+        return result;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean mkdir(String path) {
+        checkPath(path);
+        return false;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean write(String path, InputStream is, boolean overwrite) {
+        checkPath(path);
+        return false;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the locked state of this parameter map.
+     *
+     * @param locked The new locked state
+     */
+    public void setLocked(boolean locked) {
+
+        this.locked = locked;
+
+    }
+-----CSCI578-----

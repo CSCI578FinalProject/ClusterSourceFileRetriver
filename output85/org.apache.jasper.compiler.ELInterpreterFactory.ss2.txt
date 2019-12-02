@@ -1,0 +1,53 @@
+2
+-----CSCI578-----
+
+
+
+    private static ELInterpreter createInstance(ServletContext context,
+            String className) throws Exception {
+        return (ELInterpreter) context.getClassLoader().loadClass(
+                    className).newInstance();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain the correct EL Interpreter for the given web application.
+     * @param context The Servlet context
+     * @return the EL interpreter
+     * @throws Exception If an error occurs creating the interpreter
+     */
+    public static ELInterpreter getELInterpreter(ServletContext context)
+            throws Exception {
+
+        ELInterpreter result = null;
+
+        // Search for an implementation
+        // 1. ServletContext attribute (set by application or cached by a
+        //    previous call to this method).
+        Object attribute = context.getAttribute(EL_INTERPRETER_CLASS_NAME);
+        if (attribute instanceof ELInterpreter) {
+            return (ELInterpreter) attribute;
+        } else if (attribute instanceof String) {
+            result = createInstance(context, (String) attribute);
+        }
+
+        // 2. ServletContext init parameter
+        if (result == null) {
+            String className =
+                    context.getInitParameter(EL_INTERPRETER_CLASS_NAME);
+            if (className != null) {
+                result = createInstance(context, className);
+            }
+        }
+
+        // 3. Default
+        if (result == null) {
+            result = DEFAULT_INSTANCE;
+        }
+
+        // Cache the result for next time
+        context.setAttribute(EL_INTERPRETER_CLASS_NAME, result);
+        return result;
+    }

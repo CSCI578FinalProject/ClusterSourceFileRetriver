@@ -1,0 +1,74 @@
+6
+-----CSCI578-----
+
+
+    /** Set the id of the worker. We use an id for faster dispatch.
+     *  Since we expect a decent number of handler in system, the
+     *  id is unique - that means we may have to allocate bigger
+     *  dispatch tables. ( easy to fix if needed )
+     */
+    public void setId( int id ) {
+        this.id=id;
+    }
+-----CSCI578-----
+
+
+    public int getId() {
+        return id;
+    }
+-----CSCI578-----
+
+
+    /** Set the name of the handler. Will allways be called by
+     *  worker env after creating the worker.
+     */
+    public void setName(String s ) {
+        name=s;
+    }
+-----CSCI578-----
+
+
+    public void addHandler( String name, JkHandler w ) {
+        JkHandler oldH = getHandler(name);
+        if(oldH == w) {
+            // Already added
+            return;
+        }
+        w.setWorkerEnv( this );
+        w.setName( name );
+        handlersMap.put( name, w );
+        if( handlerCount > handlersTable.length ) {
+            JkHandler newT[]=new JkHandler[ 2 * handlersTable.length ];
+            System.arraycopy( handlersTable, 0, newT, 0, handlersTable.length );
+            handlersTable=newT;
+        }
+        if(oldH == null) {
+            handlersTable[handlerCount]=w;
+            w.setId( handlerCount );
+            handlerCount++;
+        } else {
+            handlersTable[oldH.getId()]=w;
+            w.setId(oldH.getId());
+        }
+
+        // Notify all other handlers of the new one
+        // XXX Could be a Coyote action ?
+        for( int i=0; i< handlerCount ; i++ ) {
+            handlersTable[i].addHandlerCallback( w );
+        }
+    }
+-----CSCI578-----
+
+
+    /** Experimental, will be replaced. This allows handlers to be
+     *  notified when other handlers are added.
+     */
+    public void addHandlerCallback( JkHandler w ) {
+
+    }
+-----CSCI578-----
+
+    
+    public void setWorkerEnv( WorkerEnv we ) {
+        this.wEnv=we;
+    }

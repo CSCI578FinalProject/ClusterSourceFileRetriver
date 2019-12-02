@@ -1,0 +1,94 @@
+7
+-----CSCI578-----
+
+
+    /**
+     * End the access and register to ReplicationValve (crossContext support)
+     */
+    public void endAccess() {
+    	super.endAccess() ;
+    	if(manager instanceof DeltaManager) {
+            ((DeltaManager)manager).registerSessionAtReplicationValve(this);   	
+    	}
+    }
+-----CSCI578-----
+
+
+    /**
+     * Register cross context session at replication valve thread local
+     * @param session cross context session
+     */
+    protected void registerSessionAtReplicationValve(DeltaSession session) {
+        if(replicationValve == null) {
+            if(container instanceof StandardContext && ((StandardContext)container).getCrossContext()) {
+                Cluster cluster = getCluster() ;
+                if(cluster != null && cluster instanceof CatalinaCluster) {
+                    Valve[] valves = ((CatalinaCluster)cluster).getValves();
+                    if(valves != null && valves.length > 0) {
+                        for(int i=0; replicationValve == null && i < valves.length ; i++ ){
+                            if(valves[i] instanceof ReplicationValve) replicationValve = (ReplicationValve)valves[i] ;
+                        }//for
+
+                        if(replicationValve == null && log.isDebugEnabled()) {
+                            log.debug("no ReplicationValve found for CrossContext Support");
+                        }//endif 
+                    }//end if
+                }//endif
+            }//end if
+        }//end if
+        if(replicationValve != null) {
+            replicationValve.registerReplicationSession(session);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * End the access.
+     */
+    public void endAccess() {
+
+        isNew = false;
+
+        if (ACTIVITY_CHECK) {
+            accessCount.decrementAndGet();
+        }
+
+    }
+-----CSCI578-----
+
+    public Valve[] getValves();
+-----CSCI578-----
+
+    
+    
+    // --------------------------------------------------------- Public Methods
+    
+    /**
+     * Register all cross context sessions inside endAccess.
+     * Use a list with contains check, that the Portlet API can include a lot of fragments from same or
+     * different applications with session changes.
+     *
+     * @param session cross context session
+     */
+    public void registerReplicationSession(DeltaSession session) {
+        List sessions = (List)crossContextSessions.get();
+        if(sessions != null) {
+            if(!sessions.contains(session)) {
+                if(log.isDebugEnabled())
+                    log.debug(sm.getString("ReplicationValve.crossContext.registerSession",
+                        session.getIdInternal(),
+                        session.getManager().getContainer().getName()));
+                sessions.add(session);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * The string manager for this package.
+     */
+    protected static StringManager sm = StringManager.getManager(Constants.Package);

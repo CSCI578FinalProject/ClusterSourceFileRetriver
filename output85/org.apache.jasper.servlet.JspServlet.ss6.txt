@@ -1,0 +1,228 @@
+11
+-----CSCI578-----
+
+
+
+    @Override
+    public void periodicEvent() {
+        rctxt.checkUnload();
+        rctxt.checkCompile();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Removes any element of the list and returns its content.
+     *
+     * @param element The element to remove
+     */
+    public synchronized void remove(final Entry element) {
+        if (element == null || !element.getValid()) {
+            return;
+        }
+        Entry next = element.getNext();
+        Entry prev = element.getPrevious();
+        if (next != null) {
+            next.setPrevious(prev);
+        } else {
+            last = prev;
+        }
+        if (prev != null) {
+            prev.setNext(next);
+        } else {
+            first = next;
+        }
+        size--;
+        element.invalidate();
+    }
+
+
+    /**
+     * Moves the element in front.
+     *
+     * Could also be implemented as remove() and
+     * push(), but explicitely coding might be a bit faster.
+     *
+     * @param element the entry to move in front.
+     * */
+    public synchronized void moveFirst(final Entry element) {
+        if (element.getValid() &&
+            element.getPrevious() != null) {
+            Entry prev = element.getPrevious();
+            Entry next = element.getNext();
+            prev.setNext(next);
+            if (next != null) {
+                next.setPrevious(prev);
+            } else {
+                last = prev;
+            }
+            first.setPrevious(element);
+            element.setNext(first);
+            element.setPrevious(null);
+            first = element;
+        }
+    }
+
+
+    /**
+     * Moves the element to the back.
+     *
+     * Could also be implemented as remove() and
+     * unpop(), but explicitly coding might be a bit faster.
+     *
+     * @param element the entry to move to the back.
+     * */
+    public synchronized void moveLast(final Entry element) {
+        if (element.getValid() &&
+            element.getNext() != null) {
+            Entry next = element.getNext();
+            Entry prev = element.getPrevious();
+            next.setPrevious(prev);
+            if (prev != null) {
+                prev.setNext(next);
+            } else {
+                first = next;
+            }
+            last.setNext(element);
+            element.setPrevious(last);
+            element.setNext(null);
+            last = element;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the lastUsageTime.
+     */
+    public long getLastUsageTime() {
+        return lastUsageTime;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Method used by background thread to check if any JSP's should be unloaded.
+     */
+    public void checkUnload() {
+
+        if (log.isTraceEnabled()) {
+            int queueLength = -1;
+            if (jspQueue != null) {
+                queueLength = jspQueue.getSize();
+            }
+            log.trace(Localizer.getMessage("jsp.message.jsp_unload_check",
+                                           context.getContextPath(), "" + jsps.size(), "" + queueLength));
+        }
+        long now = System.currentTimeMillis();
+        if (jspIdleTimeout > 0) {
+            long unloadBefore = now - jspIdleTimeout;
+            Object [] wrappers = jsps.values().toArray();
+            for (int i = 0; i < wrappers.length; i++ ) {
+                JspServletWrapper jsw = (JspServletWrapper)wrappers[i];
+                synchronized(jsw) {
+                    if (jsw.getLastUsageTime() < unloadBefore) {
+                        if (log.isDebugEnabled()) {
+                            log.debug(Localizer.getMessage("jsp.message.jsp_removed_idle",
+                                                           jsw.getJspUri(), context.getContextPath(),
+                                                           "" + (now-jsw.getLastUsageTime())));
+                        }
+                        if (jspQueue != null) {
+                            jspQueue.remove(jsw.getUnloadHandle());
+                        }
+                        unloadJspServletWrapper(jsw);
+                    }
+                }
+            }
+        }
+        lastJspQueueUpdate = now;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Method used by background thread to check the JSP dependencies
+     * registered with this class for JSP's.
+     */
+    public void checkCompile() {
+
+        if (lastCompileCheck < 0) {
+            // Checking was disabled
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now > (lastCompileCheck + (options.getCheckInterval() * 1000L))) {
+            lastCompileCheck = now;
+        } else {
+            return;
+        }
+
+        Object [] wrappers = jsps.values().toArray();
+        for (int i = 0; i < wrappers.length; i++ ) {
+            JspServletWrapper jsw = (JspServletWrapper)wrappers[i];
+            JspCompilationContext ctxt = jsw.getJspEngineContext();
+            // JspServletWrapper also synchronizes on this when
+            // it detects it has to do a reload
+            synchronized(jsw) {
+                try {
+                    ctxt.compile();
+                } catch (FileNotFoundException ex) {
+                    ctxt.incrementRemoved();
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    jsw.getServletContext().log("Background compile failed",
+                                                t);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    public ServletContext getServletContext() {
+        return ctxt.getServletContext();
+    }
+-----CSCI578-----
+
+
+    public FastRemovalDequeue<JspServletWrapper>.Entry getUnloadHandle() {
+        return unloadHandle;
+    }
+-----CSCI578-----
+
+
+    // ==================== Removal ====================
+
+    public void incrementRemoved() {
+        if (removed == false && rctxt != null) {
+            rctxt.removeWrapper(jspUri);
+        }
+        removed = true;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Remove a  JspServletWrapper.
+     *
+     * @param jspUri JSP URI of JspServletWrapper to remove
+     */
+    public void removeWrapper(String jspUri) {
+        jsps.remove(jspUri);
+    }
+-----CSCI578-----
+
+
+    public ServletContext getServletContext() {
+        return context;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return background compile thread check interval in seconds
+     */
+    public int getCheckInterval();

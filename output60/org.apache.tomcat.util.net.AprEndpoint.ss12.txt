@@ -1,0 +1,28 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Process given socket.
+     */
+    protected boolean processSocketWithOptions(long socket) {
+        Long key = Long.valueOf(socket);
+        locks.put(key, new Object());
+        try {
+            if (executor == null) {
+                getWorkerThread().assignWithOptions(socket);
+            } else {
+                executor.execute(new SocketWithOptionsProcessor(socket));
+            }
+        } catch (Throwable t) {
+            // This means we got an OOM or similar creating a thread, or that
+            // the pool and its queue are full
+            log.error(sm.getString("endpoint.process.fail"), t);
+            locks.remove(key);
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----

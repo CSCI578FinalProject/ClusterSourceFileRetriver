@@ -1,0 +1,144 @@
+4
+
+    public Object getAttribute(final String name) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return AccessController.doPrivileged(new PrivilegedAction() {
+                public Object run() {
+                    return doGetAttribute(name);
+                }
+            });
+        } else {
+            return doGetAttribute(name);
+        }
+
+    }
+
+    public Object getAttribute(final String name, final int scope) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return AccessController.doPrivileged(new PrivilegedAction() {
+                public Object run() {
+                    return doGetAttribute(name, scope);
+                }
+            });
+        } else {
+            return doGetAttribute(name, scope);
+        }
+
+    }
+
+    public int getAttributesScope(final String name) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return ((Integer) AccessController
+                    .doPrivileged(new PrivilegedAction() {
+                        public Object run() {
+                            return new Integer(doGetAttributeScope(name));
+                        }
+                    })).intValue();
+        } else {
+            return doGetAttributeScope(name);
+        }
+    }
+
+    public Enumeration<String> getAttributeNamesInScope(final int scope) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Enumeration) AccessController
+                    .doPrivileged(new PrivilegedAction() {
+                        public Object run() {
+                            return doGetAttributeNamesInScope(scope);
+                        }
+                    });
+        } else {
+            return doGetAttributeNamesInScope(scope);
+        }
+    }
+
+    private Object doGetAttribute(String name) {
+        return attributes.get(name);
+    }
+
+    private Object doGetAttribute(String name, int scope) {
+        switch (scope) {
+        case PAGE_SCOPE:
+            return attributes.get(name);
+
+        case REQUEST_SCOPE:
+            return request.getAttribute(name);
+
+        case SESSION_SCOPE:
+            if (session == null) {
+                throw new IllegalStateException(Localizer
+                        .getMessage("jsp.error.page.noSession"));
+            }
+            return session.getAttribute(name);
+
+        case APPLICATION_SCOPE:
+            return context.getAttribute(name);
+
+        default:
+            throw new IllegalArgumentException("Invalid scope");
+        }
+    }
+
+    private int doGetAttributeScope(String name) {
+        if (attributes.get(name) != null)
+            return PAGE_SCOPE;
+
+        if (request.getAttribute(name) != null)
+            return REQUEST_SCOPE;
+
+        if (session != null) {
+            try {
+                if (session.getAttribute(name) != null)
+                    return SESSION_SCOPE;
+            } catch(IllegalStateException ise) {
+                // Session has been invalidated.
+                // Ignore and fall through to application scope.
+            }
+        }
+
+        if (context.getAttribute(name) != null)
+            return APPLICATION_SCOPE;
+
+        return 0;
+    }
+
+    private Enumeration doGetAttributeNamesInScope(int scope) {
+        switch (scope) {
+        case PAGE_SCOPE:
+            return new Enumerator(attributes.keySet().iterator());
+
+        case REQUEST_SCOPE:
+            return request.getAttributeNames();
+
+        case SESSION_SCOPE:
+            if (session == null) {
+                throw new IllegalStateException(Localizer
+                        .getMessage("jsp.error.page.noSession"));
+            }
+            return session.getAttributeNames();
+
+        case APPLICATION_SCOPE:
+            return context.getAttributeNames();
+
+        default:
+            throw new IllegalArgumentException("Invalid scope");
+        }
+    }

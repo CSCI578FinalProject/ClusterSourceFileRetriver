@@ -1,0 +1,222 @@
+7
+-----CSCI578-----
+
+
+
+    /**
+     * Process a GET request for the specified resource.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    @Override
+    public void doGet(HttpServletRequest request,
+                      HttpServletResponse response)
+        throws IOException, ServletException {
+
+        StringManager smClient = StringManager.getManager(
+                Constants.Package, request.getLocales());
+
+        // Identify the request parameters that we need
+        String command = request.getPathInfo();
+        if (command == null)
+            command = request.getServletPath();
+        String name = request.getParameter("name");
+
+        // Prepare our output writer to generate the response message
+        response.setContentType("text/plain; charset=" + Constants.CHARSET);
+        PrintWriter writer = response.getWriter();
+
+        // Process the requested command
+        if (command == null) {
+            writer.println(sm.getString("hostManagerServlet.noCommand"));
+        } else if (command.equals("/add")) {
+            add(request, writer, name, false, smClient);
+        } else if (command.equals("/remove")) {
+            remove(writer, name, smClient);
+        } else if (command.equals("/list")) {
+            list(writer, smClient);
+        } else if (command.equals("/start")) {
+            start(writer, name, smClient);
+        } else if (command.equals("/stop")) {
+            stop(writer, name, smClient);
+        } else if (command.equals("/persist")) {
+            persist(writer, smClient);
+        } else {
+            writer.println(sm.getString("hostManagerServlet.unknownCommand",
+                                        command));
+        }
+
+        // Finish up the response
+        writer.flush();
+        writer.close();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Render a list of the currently active Contexts in our virtual host.
+     *
+     * @param writer Writer to render to
+     * @param smClient StringManager for the client's locale
+     */
+    protected void list(PrintWriter writer, StringManager smClient) {
+
+        if (debug >= 1) {
+            log(sm.getString("hostManagerServlet.list", engine.getName()));
+        }
+
+        writer.println(smClient.getString("hostManagerServlet.listed",
+                engine.getName()));
+        Container[] hosts = engine.findChildren();
+        for (int i = 0; i < hosts.length; i++) {
+            Host host = (Host) hosts[i];
+            String name = host.getName();
+            String[] aliases = host.findAliases();
+            StringBuilder buf = new StringBuilder();
+            if (aliases.length > 0) {
+                buf.append(aliases[0]);
+                for (int j = 1; j < aliases.length; j++) {
+                    buf.append(',').append(aliases[j]);
+                }
+            }
+            writer.println(smClient.getString("hostManagerServlet.listitem",
+                                        name, buf.toString()));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Start the host with the specified name.
+     *
+     * @param writer Writer to render to
+     * @param name Host name
+     * @param smClient StringManager for the client's locale
+     */
+    protected void start(PrintWriter writer, String name,
+            StringManager smClient) {
+
+        if (debug >= 1) {
+            log(sm.getString("hostManagerServlet.start", name));
+        }
+
+        // Validate the requested host name
+        if ((name == null) || name.length() == 0) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.invalidHostName", name));
+            return;
+        }
+
+        Container host = engine.findChild(name);
+
+        // Check if host exists
+        if (host == null) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.noHost", name));
+            return;
+        }
+
+        // Prevent starting our own host
+        if (host == installedHost) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.cannotStartOwnHost", name));
+            return;
+        }
+
+        // Don't start host if already started
+        if (host.getState().isAvailable()) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.alreadyStarted", name));
+            return;
+        }
+
+        // Start host
+        try {
+            host.start();
+            writer.println(smClient.getString(
+                    "hostManagerServlet.started", name));
+        } catch (Exception e) {
+            getServletContext().log
+                (sm.getString("hostManagerServlet.startFailed", name), e);
+            writer.println(smClient.getString(
+                    "hostManagerServlet.startFailed", name));
+            writer.println(smClient.getString(
+                    "hostManagerServlet.exception", e.toString()));
+            return;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Stop the host with the specified name.
+     *
+     * @param writer Writer to render to
+     * @param name Host name
+     * @param smClient StringManager for the client's locale
+     */
+    protected void stop(PrintWriter writer, String name,
+            StringManager smClient) {
+
+        if (debug >= 1) {
+            log(sm.getString("hostManagerServlet.stop", name));
+        }
+
+        // Validate the requested host name
+        if ((name == null) || name.length() == 0) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.invalidHostName", name));
+            return;
+        }
+
+        Container host = engine.findChild(name);
+
+        // Check if host exists
+        if (host == null) {
+            writer.println(smClient.getString("hostManagerServlet.noHost",
+                    name));
+            return;
+        }
+
+        // Prevent stopping our own host
+        if (host == installedHost) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.cannotStopOwnHost", name));
+            return;
+        }
+
+        // Don't stop host if already stopped
+        if (!host.getState().isAvailable()) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.alreadyStopped", name));
+            return;
+        }
+
+        // Stop host
+        try {
+            host.stop();
+            writer.println(smClient.getString("hostManagerServlet.stopped",
+                    name));
+        } catch (Exception e) {
+            getServletContext().log(sm.getString(
+                    "hostManagerServlet.stopFailed", name), e);
+            writer.println(smClient.getString("hostManagerServlet.stopFailed",
+                    name));
+            writer.println(smClient.getString("hostManagerServlet.exception",
+                    e.toString()));
+            return;
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----

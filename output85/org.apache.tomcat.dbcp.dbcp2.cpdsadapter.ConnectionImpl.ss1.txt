@@ -1,0 +1,209 @@
+16
+-----CSCI578-----
+
+
+    //
+    // Methods for accessing the delegate connection
+    //
+
+    /**
+     * If false, getDelegate() and getInnermostDelegate() will return null.
+     * @return true if access is allowed to the underlying connection
+     * @see ConnectionImpl
+     */
+    public boolean isAccessToUnderlyingConnectionAllowed() {
+        return accessToUnderlyingConnectionAllowed;
+    }
+
+
+    /**
+     * Get the delegated connection, if allowed.
+     * @return the internal connection, or null if access is not allowed.
+     * @see #isAccessToUnderlyingConnectionAllowed()
+     */
+    @Override
+    public Connection getDelegate() {
+        if (isAccessToUnderlyingConnectionAllowed()) {
+            return getDelegateInternal();
+        }
+        return null;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    //
+    // Methods for accessing the delegate connection
+    //
+
+    /**
+     * If false, getDelegate() and getInnermostDelegate() will return null.
+     * @return true if access is allowed to the underlying connection
+     * @see ConnectionImpl
+     */
+    public boolean isAccessToUnderlyingConnectionAllowed() {
+        return accessToUnderlyingConnectionAllowed;
+    }
+
+
+    /**
+     * Get the delegated connection, if allowed.
+     * @return the internal connection, or null if access is not allowed.
+     * @see #isAccessToUnderlyingConnectionAllowed()
+     */
+    @Override
+    public Connection getDelegate() {
+        if (isAccessToUnderlyingConnectionAllowed()) {
+            return getDelegateInternal();
+        }
+        return null;
+    }
+
+
+    /**
+     * Get the innermost connection, if allowed.
+     * @return the innermost internal connection, or null if access is not allowed.
+     * @see #isAccessToUnderlyingConnectionAllowed()
+     */
+    @Override
+    public Connection getInnermostDelegate() {
+        if (isAccessToUnderlyingConnectionAllowed()) {
+            return super.getInnermostDelegateInternal();
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    //
+    // Methods for accessing the delegate connection
+    //
+
+    /**
+     * If false, getDelegate() and getInnermostDelegate() will return null.
+     * @return true if access is allowed to the underlying connection
+     * @see ConnectionImpl
+     */
+    public boolean isAccessToUnderlyingConnectionAllowed() {
+        return accessToUnderlyingConnectionAllowed;
+    }
+
+
+    /**
+     * Get the innermost connection, if allowed.
+     * @return the innermost internal connection, or null if access is not allowed.
+     * @see #isAccessToUnderlyingConnectionAllowed()
+     */
+    @Override
+    public Connection getInnermostDelegate() {
+        if (isAccessToUnderlyingConnectionAllowed()) {
+            return super.getInnermostDelegateInternal();
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Although this method is public, it is part of the internal API and should
+     * not be used by clients. The signature of this method may change at any
+     * time including in ways that break backwards compatibility.
+     * @return the connection
+     */
+    public final Connection getInnermostDelegateInternal() {
+        Connection c = _conn;
+        while(c != null && c instanceof DelegatingConnection) {
+            c = ((DelegatingConnection<?>)c).getDelegateInternal();
+            if(this == c) {
+                return null;
+            }
+        }
+        return c;
+    }
+-----CSCI578-----
+
+
+    protected final C getDelegateInternal() {
+        return _conn;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Returns a string representation of the metadata associated with
+     * the innermost delegate connection.
+     */
+    @Override
+    public String toString() {
+        String s = null;
+
+        Connection c = this.getInnermostDelegateInternal();
+        if (c != null) {
+            try {
+                if (c.isClosed()) {
+                    s = "connection is closed";
+                }
+                else {
+                    StringBuffer sb = new StringBuffer();
+                    sb.append(hashCode());
+                    DatabaseMetaData meta = c.getMetaData();
+                    if (meta != null) {
+                        sb.append(", URL=");
+                        sb.append(meta.getURL());
+                        sb.append(", UserName=");
+                        sb.append(meta.getUserName());
+                        sb.append(", ");
+                        sb.append(meta.getDriverName());
+                        s = sb.toString();
+                    }
+                }
+            }
+            catch (SQLException ex) {
+                // Ignore
+            }
+        }
+
+        if (s == null) {
+            s = super.toString();
+        }
+
+        return s;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Compares innermost delegate to the given connection.
+     *
+     * @param c connection to compare innermost delegate with
+     * @return true if innermost delegate equals <code>c</code>
+     */
+    public boolean innermostDelegateEquals(Connection c) {
+        Connection innerCon = getInnermostDelegateInternal();
+        if (innerCon == null) {
+            return c == null;
+        }
+        return innerCon.equals(c);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Returns the value of the accessToUnderlyingConnectionAllowed property.
+     *
+     * @return <code>true</code> if access to the underlying is allowed,
+     *  <code>false</code> otherwise.
+     */
+    protected boolean isAccessToUnderlyingConnectionAllowed() {
+        return accessToUnderlyingConnectionAllowed;
+    }

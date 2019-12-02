@@ -1,0 +1,576 @@
+44
+-----CSCI578-----
+
+
+
+    private void unbind(Context context) {
+        if (clBindRequired) {
+            context.unbind(Globals.IS_SECURITY_ENABLED, MY_CLASSLOADER);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Select the appropriate child Context to process this request,
+     * based on the specified request URI.  If no matching Context can
+     * be found, return an appropriate HTTP error.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     *
+     * @exception IOException if an input/output error occurred
+     * @exception ServletException if a servlet error occurred
+     */
+    @Override
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        // Select the Context to be used for this Request
+        Context context = request.getContext();
+        if (context == null) {
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    sm.getString("standardHost.noContext"));
+            return;
+        }
+
+        // Update the session last access time for our session (if any)
+        String sessionId = request.getRequestedSessionId();
+        Manager manager = context.getManager();
+        if (sessionId != null && manager instanceof StoreManager) {
+            Store store = ((StoreManager) manager).getStore();
+            if (store != null) {
+                Session session = null;
+                try {
+                    session = store.load(sessionId);
+                } catch (Exception e) {
+                    container.getLogger().error("deserializeError");
+                }
+                if (session != null) {
+                    if (!session.isValid() ||
+                        isSessionStale(session, System.currentTimeMillis())) {
+                        if (container.getLogger().isDebugEnabled()) {
+                            container.getLogger().debug("session swapped in is invalid or expired");
+                        }
+                        session.expire();
+                        store.remove(sessionId);
+                    } else {
+                        session.setManager(manager);
+                        // session.setId(sessionId); Only if new ???
+                        manager.add(session);
+                        // ((StandardSession)session).activate();
+                        session.access();
+                        session.endAccess();
+                    }
+                }
+            }
+        }
+        if (container.getLogger().isDebugEnabled()) {
+            container.getLogger().debug("sessionId: " + sessionId);
+        }
+
+        // Ask the next valve to process the request.
+        getNext().invoke(request, response);
+
+        // If still processing async, don't try to store the session
+        if (!request.isAsync()) {
+            // Read the sessionid after the response.
+            // HttpSession hsess = hreq.getSession(false);
+            Session hsess;
+            try {
+                hsess = request.getSessionInternal(false);
+            } catch (Exception ex) {
+                hsess = null;
+            }
+            String newsessionId = null;
+            if (hsess!=null) {
+                newsessionId = hsess.getIdInternal();
+            }
+
+            if (container.getLogger().isDebugEnabled()) {
+                container.getLogger().debug("newsessionId: " + newsessionId);
+            }
+            if (newsessionId!=null) {
+                try {
+                    bind(context);
+
+                    /* store the session and remove it from the manager */
+                    if (manager instanceof StoreManager) {
+                        Session session = manager.findSession(newsessionId);
+                        Store store = ((StoreManager) manager).getStore();
+                        if (store != null && session != null && session.isValid() &&
+                                !isSessionStale(session, System.currentTimeMillis())) {
+                            store.save(session);
+                            ((StoreManager) manager).removeSuper(session);
+                            session.recycle();
+                        } else {
+                            if (container.getLogger().isDebugEnabled()) {
+                                container.getLogger().debug("newsessionId store: " +
+                                        store + " session: " + session +
+                                        " valid: " +
+                                        (session == null ? "N/A" : Boolean.toString(
+                                                session.isValid())) +
+                                        " stale: " + isSessionStale(session,
+                                                System.currentTimeMillis()));
+                            }
+
+                        }
+                    } else {
+                        if (container.getLogger().isDebugEnabled()) {
+                            container.getLogger().debug("newsessionId Manager: " +
+                                    manager);
+                        }
+                    }
+                } finally {
+                    unbind(context);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Remove this Session from the active Sessions for this Manager,
+     * but not from the Store. (Used by the PersistentValve)
+     *
+     * @param session Session to be removed
+     */
+    void removeSuper(Session session);
+-----CSCI578-----
+
+
+
+    private void bind(Context context) {
+        if (clBindRequired) {
+            context.bind(Globals.IS_SECURITY_ENABLED, MY_CLASSLOADER);
+        }
+    }
+
+
+
+    private void unbind(Context context) {
+        if (clBindRequired) {
+            context.unbind(Globals.IS_SECURITY_ENABLED, MY_CLASSLOADER);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Indicate whether the session has been idle for longer
+     * than its expiration date as of the supplied time.
+     *
+     * FIXME: Probably belongs in the Session class.
+     * @param session The session to check
+     * @param timeNow The current time to check for
+     * @return <code>true</code> if the session is past its expiration
+     */
+    protected boolean isSessionStale(Session session, long timeNow) {
+
+        if (session != null) {
+            int maxInactiveInterval = session.getMaxInactiveInterval();
+            if (maxInactiveInterval >= 0) {
+                int timeIdle = // Truncate, do not round up
+                    (int) ((timeNow - session.getThisAccessedTime()) / 1000L);
+                if (timeIdle >= maxInactiveInterval) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the Store object which manages persistent Session
+     * storage for this Manager.
+     */
+    Store getStore();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * @return the Manager with which this Context is associated.  If there is
+     * no associated Manager, return <code>null</code>.
+     */
+    public Manager getManager();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the session identifier included in this request, if any.
+     */
+    @Override
+    public String getRequestedSessionId() {
+        return requestedSessionId;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the session identifier for this session.
+     */
+    public String getIdInternal();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the maximum time interval, in seconds, between client requests
+     * before the servlet container will invalidate the session.  A negative
+     * time indicates that the session should never time out.
+     */
+    public int getMaxInactiveInterval();
+-----CSCI578-----
+
+
+
+    /**
+     * Perform the internal processing required to invalidate this session,
+     * without triggering an exception if the session has already expired.
+     */
+    public void expire();
+-----CSCI578-----
+
+
+    public boolean isAsync() {
+        if (asyncContext == null) {
+            return false;
+        }
+
+        AtomicBoolean result = new AtomicBoolean(false);
+        coyoteRequest.action(ActionCode.ASYNC_IS_ASYNC, result);
+        return result.get();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * End access to the session.
+     */
+    public void endAccess();
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if the session is still valid
+     */
+    public boolean isValid();
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Update the accessed time information for this session.  This method
+     * should be called by the context when a request comes in for a particular
+     * session, even if the application does not reference it.
+     */
+    public void access();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the last time the client sent a request associated with this
+     * session, as the number of milliseconds since midnight, January 1, 1970
+     * GMT.  Actions that your application takes, such as getting or setting
+     * a value associated with the session, do not affect the access time.
+     * This one gets updated whenever a request starts.
+     */
+    public long getThisAccessedTime();
+
+
+    /**
+     * @return the last client access time without invalidation check
+     * @see #getThisAccessedTime()
+     */
+    public long getThisAccessedTimeInternal();
+-----CSCI578-----
+
+
+
+    /**
+     * Load and return the Session associated with the specified session
+     * identifier from this Store, without removing it.  If there is no
+     * such stored Session, return <code>null</code>.
+     *
+     * @param id Session identifier of the session to load
+     *
+     * @exception ClassNotFoundException if a deserialization error occurs
+     * @exception IOException if an input/output error occurs
+     * @return the loaded Session instance
+     */
+    public Session load(String id)
+        throws ClassNotFoundException, IOException;
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the Session with the specified session identifier from
+     * this Store, if present.  If no such Session is present, this method
+     * takes no action.
+     *
+     * @param id Session identifier of the Session to be removed
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public void remove(String id) throws IOException;
+-----CSCI578-----
+
+
+
+    /**
+     * Save the specified Session into this Store.  Any previously saved
+     * information for the associated session identifier is replaced.
+     *
+     * @param session Session to be saved
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public void save(Session session) throws IOException;
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Manager within which this Session is valid.
+     *
+     * @param manager The new Manager
+     */
+    public void setManager(Manager manager);
+-----CSCI578-----
+
+
+
+    /**
+     * Release all object references, and initialize instance variables, in
+     * preparation for reuse of this object.
+     */
+    public void recycle();
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Add this Session to the set of active Sessions for this Manager.
+     *
+     * @param session Session to be added
+     */
+    public void add(Session session);
+-----CSCI578-----
+
+
+
+    /**
+     * Return the session associated with this Request, creating one
+     * if necessary.
+     */
+    @Override
+    public HttpSession getSession() {
+        return (getSession(true));
+    }
+
+
+
+    /**
+     * Return the session associated with this Request, creating one
+     * if necessary and requested.
+     *
+     * @param create Create a new session if one does not exist
+     */
+    @Override
+    public HttpSession getSession(boolean create) {
+
+        if (crossContext) {
+
+            // There cannot be a session if no context has been assigned yet
+            if (context == null)
+                return (null);
+
+            // Return the current session if it exists and is valid
+            if (session != null && session.isValid()) {
+                return (session.getSession());
+            }
+
+            HttpSession other = super.getSession(false);
+            if (create && (other == null)) {
+                // First create a session in the first context: the problem is
+                // that the top level request is the only one which can
+                // create the cookie safely
+                other = super.getSession(true);
+            }
+            if (other != null) {
+                Session localSession = null;
+                try {
+                    localSession =
+                        context.getManager().findSession(other.getId());
+                    if (localSession != null && !localSession.isValid()) {
+                        localSession = null;
+                    }
+                } catch (IOException e) {
+                    // Ignore
+                }
+                if (localSession == null && create) {
+                    localSession =
+                        context.getManager().createSession(other.getId());
+                }
+                if (localSession != null) {
+                    localSession.access();
+                    session = localSession;
+                    return session.getSession();
+                }
+            }
+            return null;
+
+        } else {
+            return super.getSession(create);
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public static long getTTLForSession(Session in_session) {
+        try {
+            long diffMilliSeconds = (1000*in_session.getMaxInactiveInterval()) - (System.currentTimeMillis() - in_session.getThisAccessedTime());
+            return diffMilliSeconds;
+        } catch (IllegalStateException ise) {
+            //ignore: invalidated session
+            return -1;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public static long getUsedTimeForSession(Session in_session) {
+        try {
+            long diffMilliSeconds = in_session.getThisAccessedTime() - in_session.getCreationTime();
+            return diffMilliSeconds;
+        } catch (IllegalStateException ise) {
+            //ignore: invalidated session
+            return -1;
+        }
+    }
+-----CSCI578-----
+
+
+    public static long getInactiveTimeForSession(Session in_session) {
+        try {
+            long diffMilliSeconds =  System.currentTimeMillis() - in_session.getThisAccessedTime();
+            return diffMilliSeconds;
+        } catch (IllegalStateException ise) {
+            //ignore: invalidated session
+            return -1;
+        }
+    }
+-----CSCI578-----
+
+
+    public static String getDisplayUsedTimeForSession(Session in_session) {
+        try {
+            if (in_session.getCreationTime() == 0) {
+                return "";
+            }
+        } catch (IllegalStateException ise) {
+            //ignore: invalidated session
+            return "";
+        }
+        return secondsToTimeString(SessionUtils.getUsedTimeForSession(in_session)/1000);
+    }
+-----CSCI578-----
+
+
+    public static String getDisplayTTLForSession(Session in_session) {
+        try {
+            if (in_session.getCreationTime() == 0) {
+                return "";
+            }
+        } catch (IllegalStateException ise) {
+            //ignore: invalidated session
+            return "";
+        }
+        return secondsToTimeString(SessionUtils.getTTLForSession(in_session)/1000);
+    }
+-----CSCI578-----
+
+
+    public static String getDisplayInactiveTimeForSession(Session in_session) {
+        try {
+            if (in_session.getCreationTime() == 0) {
+                return "";
+            }
+        } catch (IllegalStateException ise) {
+            //ignore: invalidated session
+            return "";
+        }
+        return secondsToTimeString(SessionUtils.getInactiveTimeForSession(in_session)/1000);
+    }
+-----CSCI578-----
+
+
+    public long getThisAccessedTimestamp( String sessionId ) {
+        Session s=sessions.get(sessionId);
+        if(s== null)
+            return -1 ;
+        return s.getThisAccessedTime();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public static String secondsToTimeString(long in_seconds) {
+        StringBuilder buff = new StringBuilder(9);
+        if (in_seconds < 0) {
+            buff.append('-');
+            in_seconds = -in_seconds;
+        }
+        long rest = in_seconds;
+        long hour = rest / 3600;
+        rest = rest % 3600;
+        long minute = rest / 60;
+        rest = rest % 60;
+        long second = rest;
+        if (hour < 10) {
+            buff.append('0');
+        }
+        buff.append(hour);
+        buff.append(':');
+        if (minute < 10) {
+            buff.append('0');
+        }
+        buff.append(minute);
+        buff.append(':');
+        if (second < 10) {
+            buff.append('0');
+        }
+        buff.append(second);
+        return buff.toString();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

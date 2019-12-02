@@ -1,0 +1,41 @@
+7
+-----CSCI578-----
+
+
+
+    private NioSender[] setupForSend(Member[] destination) throws ChannelException {
+        ChannelException cx = null;
+        NioSender[] result = new NioSender[destination.length];
+        for ( int i=0; i<destination.length; i++ ) {
+            NioSender sender = nioSenders.get(destination[i]);
+            try {
+
+                if (sender == null) {
+                    sender = new NioSender();
+                    AbstractSender.transferProperties(this, sender);
+                    nioSenders.put(destination[i], sender);
+                }
+                sender.reset();
+                sender.setDestination(destination[i]);
+                sender.setSelector(selector);
+                sender.setUdpBased(isUdpBased());
+                result[i] = sender;
+            }catch ( UnknownHostException x ) {
+                if (cx == null) cx = new ChannelException(sm.getString("parallelNioSender.unable.setup.NioSender"), x);
+                cx.addFaultyMember(destination[i], x);
+            }
+        }
+        if ( cx != null ) throw cx;
+        else return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setSelector(Selector selector) {
+        this.selector = selector;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

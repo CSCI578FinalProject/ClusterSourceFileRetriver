@@ -1,0 +1,97 @@
+6
+-----CSCI578-----
+
+
+
+    protected PojoMethodMapping getMethodMapping() { return methodMapping; }
+-----CSCI578-----
+
+
+    protected Object getPojo() { return pojo; }
+-----CSCI578-----
+
+
+
+    protected final void doOnOpen(Session session, EndpointConfig config) {
+        PojoMethodMapping methodMapping = getMethodMapping();
+        Object pojo = getPojo();
+        Map<String,String> pathParameters = getPathParameters();
+
+        // Add message handlers before calling onOpen since that may trigger a
+        // message which in turn could trigger a response and/or close the
+        // session
+        for (MessageHandler mh : methodMapping.getMessageHandlers(pojo,
+                pathParameters, session, config)) {
+            session.addMessageHandler(mh);
+        }
+
+        if (methodMapping.getOnOpen() != null) {
+            try {
+                methodMapping.getOnOpen().invoke(pojo,
+                        methodMapping.getOnOpenArgs(
+                                pathParameters, session, config));
+
+            } catch (IllegalAccessException e) {
+                // Reflection related problems
+                log.error(sm.getString(
+                        "pojoEndpointBase.onOpenFail",
+                        pojo.getClass().getName()), e);
+                handleOnOpenOrCloseError(session, e);
+                return;
+            } catch (InvocationTargetException e) {
+                Throwable cause = e.getCause();
+                handleOnOpenOrCloseError(session, cause);
+                return;
+            } catch (Throwable t) {
+                handleOnOpenOrCloseError(session, t);
+                return;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    public Object[] getOnOpenArgs(Map<String,String> pathParameters,
+            Session session, EndpointConfig config) throws DecodeException {
+        return buildArgs(onOpenParams, pathParameters, session, config, null,
+                null);
+    }
+-----CSCI578-----
+
+
+
+    protected Map<String,String> getPathParameters() { return pathParameters; }
+-----CSCI578-----
+
+
+
+    private static Object[] buildArgs(PojoPathParam[] pathParams,
+            Map<String,String> pathParameters, Session session,
+            EndpointConfig config, Throwable throwable, CloseReason closeReason)
+            throws DecodeException {
+        Object[] result = new Object[pathParams.length];
+        for (int i = 0; i < pathParams.length; i++) {
+            Class<?> type = pathParams[i].getType();
+            if (type.equals(Session.class)) {
+                result[i] = session;
+            } else if (type.equals(EndpointConfig.class)) {
+                result[i] = config;
+            } else if (type.equals(Throwable.class)) {
+                result[i] = throwable;
+            } else if (type.equals(CloseReason.class)) {
+                result[i] = closeReason;
+            } else {
+                String name = pathParams[i].getName();
+                String value = pathParameters.get(name);
+                try {
+                    result[i] = Util.coerceToType(type, value);
+                } catch (Exception e) {
+                    throw new DecodeException(value, sm.getString(
+                            "pojoMethodMapping.decodePathParamFail",
+                            value, type), e);
+                }
+            }
+        }
+        return result;
+    }

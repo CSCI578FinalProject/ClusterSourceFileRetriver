@@ -1,0 +1,72 @@
+6
+
+
+    // -------------------- Netscape serves static mode --------------------
+    // This is not going to work for all apps. We fall back to stupid mode.
+    
+    protected void generateContextMappings(Context context, PrintWriter objfile )
+    {
+        String ctxPath  = context.getPath();
+	String nPath=("".equals(ctxPath)) ? "/" : ctxPath;
+
+        if( noRoot &&  "".equals(ctxPath) ) {
+            log.debug("Ignoring root context in non-forward-all mode  ");
+            return;
+        } 
+	objfile.println("<Object name=" + context.getName() + ">");
+        // Static files will be served by Netscape
+        objfile.println("#########################################################");		    
+        objfile.println("# Auto configuration for the " + nPath + " context starts.");
+        objfile.println("#########################################################");		    
+        objfile.println();
+
+        // XXX Need to determine what if/how static mappings are done
+
+	// InvokerInterceptor - it doesn't have a container,
+	// but it's implemented using a special module.
+	
+	// XXX we need to better collect all mappings
+	if(context.getLoginConfig() != null) {
+	    String loginPage = context.getLoginConfig().getLoginPage();
+	    if(loginPage != null) {
+		int lpos = loginPage.lastIndexOf("/");
+		String jscurl = loginPage.substring(0,lpos+1) + "j_security_check";
+		addMapping( ctxPath, jscurl, objfile);
+	    }
+	}
+	
+	String [] servletMaps=context.findServletMappings();
+	for(int ii=0; ii < servletMaps.length; ii++) {
+	    addMapping( ctxPath , servletMaps[ii] , objfile );
+	}
+	objfile.println("</Object>");
+    }
+
+    /** Add a Netscape extension mapping.
+     */
+    protected boolean addMapping( String ctxPath, String ext,
+					 PrintWriter objfile )
+    {
+        if( log.isDebugEnabled() )
+            log.debug( "Adding extension map for " + ctxPath + "/*." + ext );
+	if(! ext.startsWith("/") )
+	    ext = "/" + ext;
+	if(ext.length() > 1)
+	    objfile.println("NameTrans fn=\"assign-name\" from=\"" +
+                    ctxPath  + ext + "\" name=\"" + objectName + "\""); 
+	return true;
+    }
+
+    /** Add a fulling specified Netscape mapping.
+     */
+    protected boolean addMapping( String fullPath, PrintWriter objfile ) {
+        if( log.isDebugEnabled() )
+            log.debug( "Adding map for " + fullPath );
+        objfile.println("NameTrans fn=\"assign-name\" from=\"" +
+                        fullPath + "\" name=\"" + objectName + "\""); 
+	return true;
+    }
+
+    public String getLoginPage() {
+        return (this.loginPage);
+    }

@@ -1,0 +1,58 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected void openWriter() {
+
+        // Create the directory if necessary
+        File dir = new File(directory);
+        if (!dir.mkdirs() && !dir.isDirectory()) {
+            reportError("Unable to create [" + dir + "]", null,
+                    ErrorManager.OPEN_FAILURE);
+            writer = null;
+            return;
+        }
+
+        // Open the current log file
+        writerLock.writeLock().lock();
+        FileOutputStream fos = null;
+        OutputStream os = null;
+        try {
+            File pathname = new File(dir.getAbsoluteFile(), prefix
+                    + (rotatable ? date : "") + suffix);
+            File parent = pathname.getParentFile();
+            if (!parent.mkdirs() && !parent.isDirectory()) {
+                reportError("Unable to create [" + parent + "]", null,
+                        ErrorManager.OPEN_FAILURE);
+                writer = null;
+                return;
+            }
+            String encoding = getEncoding();
+            fos = new FileOutputStream(pathname, true);
+            os = bufferSize>0?new BufferedOutputStream(fos,bufferSize):fos;
+            writer = new PrintWriter(
+                    (encoding != null) ? new OutputStreamWriter(os, encoding)
+                                       : new OutputStreamWriter(os), false);
+            writer.write(getFormatter().getHead(this));
+        } catch (Exception e) {
+            reportError(null, e, ErrorManager.OPEN_FAILURE);
+            writer = null;
+            if (fos != null) {
+                try {
+                    fos.close();
+                } catch (IOException e1) {
+                    // Ignore
+                }
+            }
+            if (os != null) {
+                try {
+                    os.close();
+                } catch (IOException e1) {
+                    // Ignore
+                }
+            }
+        } finally {
+            writerLock.writeLock().unlock();
+        }
+    }

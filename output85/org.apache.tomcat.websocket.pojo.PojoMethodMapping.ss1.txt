@@ -1,0 +1,174 @@
+11
+-----CSCI578-----
+
+
+
+    private void checkPublic(Method m) throws DeploymentException {
+        if (!Modifier.isPublic(m.getModifiers())) {
+            throw new DeploymentException(sm.getString(
+                    "pojoMethodMapping.methodNotPublic", m.getName()));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private boolean isMethodOverride(Method method1, Method method2) {
+        return (method1.getName().equals(method2.getName())
+                && method1.getReturnType().equals(method2.getReturnType())
+                && Arrays.equals(method1.getParameterTypes(), method2.getParameterTypes()));
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private boolean isOverridenWithoutAnnotation(Method[] methods,
+            Method superclazzMethod, Class<? extends Annotation> annotation) {
+        for (Method method : methods) {
+            if (isMethodOverride(method, superclazzMethod)
+                    && (method.getAnnotation(annotation) == null)) {
+                return true;
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    private static PojoPathParam[] getPathParams(Method m,
+            MethodType methodType) throws DeploymentException {
+        if (m == null) {
+            return new PojoPathParam[0];
+        }
+        boolean foundThrowable = false;
+        Class<?>[] types = m.getParameterTypes();
+        Annotation[][] paramsAnnotations = m.getParameterAnnotations();
+        PojoPathParam[] result = new PojoPathParam[types.length];
+        for (int i = 0; i < types.length; i++) {
+            Class<?> type = types[i];
+            if (type.equals(Session.class)) {
+                result[i] = new PojoPathParam(type, null);
+            } else if (methodType == MethodType.ON_OPEN &&
+                    type.equals(EndpointConfig.class)) {
+                result[i] = new PojoPathParam(type, null);
+            } else if (methodType == MethodType.ON_ERROR
+                    && type.equals(Throwable.class)) {
+                foundThrowable = true;
+                result[i] = new PojoPathParam(type, null);
+            } else if (methodType == MethodType.ON_CLOSE &&
+                    type.equals(CloseReason.class)) {
+                result[i] = new PojoPathParam(type, null);
+            } else {
+                Annotation[] paramAnnotations = paramsAnnotations[i];
+                for (Annotation paramAnnotation : paramAnnotations) {
+                    if (paramAnnotation.annotationType().equals(
+                            PathParam.class)) {
+                        // Check that the type is valid. "0" coerces to every
+                        // valid type
+                        try {
+                            Util.coerceToType(type, "0");
+                        } catch (IllegalArgumentException iae) {
+                            throw new DeploymentException(sm.getString(
+                                    "pojoMethodMapping.invalidPathParamType"),
+                                    iae);
+                        }
+                        result[i] = new PojoPathParam(type,
+                                ((PathParam) paramAnnotation).value());
+                        break;
+                    }
+                }
+                // Parameters without annotations are not permitted
+                if (result[i] == null) {
+                    throw new DeploymentException(sm.getString(
+                            "pojoMethodMapping.paramWithoutAnnotation",
+                            type, m.getName(), m.getClass().getName()));
+                }
+            }
+        }
+        if (methodType == MethodType.ON_ERROR && !foundThrowable) {
+            throw new DeploymentException(sm.getString(
+                    "pojoMethodMapping.onErrorNoThrowable",
+                    m.getName(), m.getDeclaringClass().getName()));
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    public static Object coerceToType(Class<?> type, String value) {
+        if (type.equals(String.class)) {
+            return value;
+        } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
+            return Boolean.valueOf(value);
+        } else if (type.equals(byte.class) || type.equals(Byte.class)) {
+            return Byte.valueOf(value);
+        } else if (type.equals(char.class) || type.equals(Character.class)) {
+            return Character.valueOf(value.charAt(0));
+        } else if (type.equals(double.class) || type.equals(Double.class)) {
+            return Double.valueOf(value);
+        } else if (type.equals(float.class) || type.equals(Float.class)) {
+            return Float.valueOf(value);
+        } else if (type.equals(int.class) || type.equals(Integer.class)) {
+            return Integer.valueOf(value);
+        } else if (type.equals(long.class) || type.equals(Long.class)) {
+            return Long.valueOf(value);
+        } else if (type.equals(short.class) || type.equals(Short.class)) {
+            return Short.valueOf(value);
+        } else {
+            throw new IllegalArgumentException(sm.getString(
+                    "util.invalidType", value, type.getName()));
+        }
+    }
+-----CSCI578-----
+
+
+
+    public static boolean isPrimitive(Class<?> clazz) {
+        if (clazz.isPrimitive()) {
+            return true;
+        } else if(clazz.equals(Boolean.class) ||
+                clazz.equals(Byte.class) ||
+                clazz.equals(Character.class) ||
+                clazz.equals(Double.class) ||
+                clazz.equals(Float.class) ||
+                clazz.equals(Integer.class) ||
+                clazz.equals(Long.class) ||
+                clazz.equals(Short.class)) {
+            return true;
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected Object decode(String message) throws DecodeException {
+        // Handle primitives
+        if (primitiveType != null) {
+            return Util.coerceToType(primitiveType, message);
+        }
+        // Handle full decoders
+        for (Decoder decoder : decoders) {
+            if (decoder instanceof Text) {
+                if (((Text<?>) decoder).willDecode(message)) {
+                    return ((Text<?>) decoder).decode(message);
+                }
+            } else {
+                StringReader r = new StringReader(message);
+                try {
+                    return ((TextStream<?>) decoder).decode(r);
+                } catch (IOException ioe) {
+                    throw new DecodeException(message, sm.getString(
+                            "pojoMessageHandlerWhole.decodeIoFail"), ioe);
+                }
+            }
+        }
+        return null;
+    }

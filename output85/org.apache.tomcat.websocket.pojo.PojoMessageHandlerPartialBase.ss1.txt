@@ -1,0 +1,34 @@
+3
+-----CSCI578-----
+
+
+
+    @Override
+    public final void onMessage(T message, boolean last) {
+        if (params.length == 1 && params[0] instanceof DecodeException) {
+            ((WsSession) session).getLocal().onError(session,
+                    (DecodeException) params[0]);
+            return;
+        }
+        Object[] parameters = params.clone();
+        if (indexBoolean != -1) {
+            parameters[indexBoolean] = Boolean.valueOf(last);
+        }
+        if (indexSession != -1) {
+            parameters[indexSession] = session;
+        }
+        if (convert) {
+            parameters[indexPayload] = ((ByteBuffer) message).array();
+        } else {
+            parameters[indexPayload] = message;
+        }
+        Object result = null;
+        try {
+            result = method.invoke(pojo, parameters);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            handlePojoMethodException(e);
+        }
+        processResult(result);
+    }
+-----CSCI578-----
+-----CSCI578-----

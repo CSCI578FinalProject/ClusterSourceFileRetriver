@@ -1,0 +1,153 @@
+4
+    /**
+     * @see SSICommand
+     */
+    public long process(SSIMediator ssiMediator, String commandName,
+            String[] paramNames, String[] paramValues, PrintWriter writer) {
+        long lastModified = 0;
+        String configErrMsg = ssiMediator.getConfigErrMsg();
+        for (int i = 0; i < paramNames.length; i++) {
+            String paramName = paramNames[i];
+            String paramValue = paramValues[i];
+            String substitutedValue = ssiMediator
+                    .substituteVariables(paramValue);
+            try {
+                if (paramName.equalsIgnoreCase("file")
+                        || paramName.equalsIgnoreCase("virtual")) {
+                    boolean virtual = paramName.equalsIgnoreCase("virtual");
+                    lastModified = ssiMediator.getFileLastModified(
+                    		 substitutedValue, virtual);
+                    String text = ssiMediator.getFileText(substitutedValue,
+                            virtual);
+                    writer.write(text);
+                } else {
+                    ssiMediator.log("#include--Invalid attribute: "
+                            + paramName);
+                    writer.write(configErrMsg);
+                }
+            } catch (IOException e) {
+                ssiMediator.log("#include--Couldn't include file: "
+                        + substitutedValue, e);
+                writer.write(configErrMsg);
+            }
+        }
+        return lastModified;
+    }
+
+
+    /**
+     * Applies variable substitution to the specified String and returns the
+     * new resolved string.
+     */
+    public String substituteVariables(String val) {
+        // If it has no references or HTML entities then no work
+        // need to be done
+        if (val.indexOf('$') < 0 && val.indexOf('&') < 0) return val;
+        
+        // HTML decoding
+        val = val.replace("&lt;", "<");
+        val = val.replace("&gt;", ">");
+        val = val.replace("&quot;", "\"");
+        val = val.replace("&amp;", "&");
+
+        StringBuffer sb = new StringBuffer(val);
+        int charStart = sb.indexOf("&#");
+        while (charStart > -1) {
+            int charEnd = sb.indexOf(";", charStart);
+            if (charEnd > -1) {
+                char c = (char) Integer.parseInt(
+                        sb.substring(charStart + 2, charEnd));
+                sb.delete(charStart, charEnd + 1);
+                sb.insert(charStart, c);
+                charStart = sb.indexOf("&#");
+            } else {
+                break;
+            }
+        }
+
+        for (int i = 0; i < sb.length();) {
+            // Find the next $
+            for (; i < sb.length(); i++) {
+                if (sb.charAt(i) == '$') {
+                    i++;
+                    break;
+                }
+            }
+            if (i == sb.length()) break;
+            // Check to see if the $ is escaped
+            if (i > 1 && sb.charAt(i - 2) == '\\') {
+                sb.deleteCharAt(i - 2);
+                i--;
+                continue;
+            }
+            int nameStart = i;
+            int start = i - 1;
+            int end = -1;
+            int nameEnd = -1;
+            char endChar = ' ';
+            // Check for {} wrapped var
+            if (sb.charAt(i) == '{') {
+                nameStart++;
+                endChar = '}';
+            }
+            // Find the end of the var reference
+            for (; i < sb.length(); i++) {
+                if (sb.charAt(i) == endChar) break;
+            }
+            end = i;
+            nameEnd = end;
+            if (endChar == '}') end++;
+            // We should now have enough to extract the var name
+            String varName = sb.substring(nameStart, nameEnd);
+            String value = getVariableValue(varName);
+            if (value == null) value = "";
+            // Replace the var name with its value
+            sb.replace(start, end, value);
+            // Start searching for the next $ after the value
+            // that was just substituted.
+            i = start + value.length();
+        }
+        return retVal;
+    }
+
+
+    public void log(String message) {
+        ssiExternalResolver.log(message, null);
+    }
+
+
+    public void log(String message, Throwable throwable) {
+    /**
+     * @see SSICommand
+     */
+    public long process(SSIMediator ssiMediator, String commandName,
+            String[] paramNames, String[] paramValues, PrintWriter writer)
+            throws SSIStopProcessingException {
+        long lastModified = 0;
+        String errorMessage = ssiMediator.getConfigErrMsg();
+        String variableName = null;
+        for (int i = 0; i < paramNames.length; i++) {
+            String paramName = paramNames[i];
+            String paramValue = paramValues[i];
+            if (paramName.equalsIgnoreCase("var")) {
+                variableName = paramValue;
+            } else if (paramName.equalsIgnoreCase("value")) {
+                if (variableName != null) {
+                    String substitutedValue = ssiMediator
+                            .substituteVariables(paramValue);
+                    ssiMediator.setVariableValue(variableName,
+                            substitutedValue);
+                    lastModified = System.currentTimeMillis();
+                } else {
+                    ssiMediator.log("#set--no variable specified");
+                    writer.write(errorMessage);
+                    throw new SSIStopProcessingException();
+                }
+            } else {
+                ssiMediator.log("#set--Invalid attribute: " + paramName);
+                writer.write(errorMessage);
+                throw new SSIStopProcessingException();
+            }
+        }
+        return lastModified;
+    }

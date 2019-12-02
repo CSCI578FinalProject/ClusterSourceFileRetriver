@@ -1,0 +1,164 @@
+10
+-----CSCI578-----
+
+
+
+    @Override
+    public WebResource[] getClassLoaderResources(String path) {
+        return getResources("/WEB-INF/classes" + path, true);
+    }
+-----CSCI578-----
+
+
+    protected boolean validateResources(boolean useClassLoaderResources) {
+        long now = System.currentTimeMillis();
+
+        if (webResources == null) {
+            synchronized (this) {
+                if (webResources == null) {
+                    webResources = root.getResourcesInternal(
+                            webAppPath, useClassLoaderResources);
+                    nextCheck = ttl + now;
+                    return true;
+                }
+            }
+        }
+
+        if (now < nextCheck) {
+            return true;
+        }
+
+        // At this point, always expire the entry as re-populating it is likely
+        // to be as expensive as validating it.
+        return false;
+    }
+-----CSCI578-----
+
+
+    protected WebResource[] getResourcesInternal(String path,
+            boolean useClassLoaderResources) {
+        List<WebResource> result = new ArrayList<>();
+        for (List<WebResourceSet> list : allResources) {
+            for (WebResourceSet webResourceSet : list) {
+                if (useClassLoaderResources || !webResourceSet.getClassLoaderOnly()) {
+                    WebResource webResource = webResourceSet.getResource(path);
+                    if (webResource.exists()) {
+                        result.add(webResource);
+                    }
+                }
+            }
+        }
+
+        if (result.size() == 0) {
+            result.add(main.getResource(path));
+        }
+
+        return result.toArray(new WebResource[result.size()]);
+    }
+-----CSCI578-----
+
+
+    WebResource[] getWebResources() {
+        return webResources;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public WebResource[] getResources(String path) {
+        return getResources(path, false);
+    }
+
+
+    private WebResource[] getResources(String path,
+            boolean useClassLoaderResources) {
+        path = validate(path);
+
+        if (isCachingAllowed()) {
+            return cache.getResources(path, useClassLoaderResources);
+        } else {
+            return getResourcesInternal(path, useClassLoaderResources);
+        }
+    }
+-----CSCI578-----
+
+
+    protected WebResource[] getResources(String path, boolean useClassLoaderResources) {
+        lookupCount.incrementAndGet();
+
+        // Don't call noCache(path) since the class loader only caches
+        // individual resources. Therefore, always cache collections here
+
+        CachedResource cacheEntry = resourceCache.get(path);
+
+        if (cacheEntry != null && !cacheEntry.validateResources(useClassLoaderResources)) {
+            removeCacheEntry(path);
+            cacheEntry = null;
+        }
+
+        if (cacheEntry == null) {
+            // Local copy to ensure consistency
+            int objectMaxSizeBytes = getObjectMaxSizeBytes();
+            CachedResource newCacheEntry =
+                    new CachedResource(this, root, path, getTtl(), objectMaxSizeBytes);
+
+            // Concurrent callers will end up with the same CachedResource
+            // instance
+            cacheEntry = resourceCache.putIfAbsent(path, newCacheEntry);
+
+            if (cacheEntry == null) {
+                // newCacheEntry was inserted into the cache - validate it
+                cacheEntry = newCacheEntry;
+                cacheEntry.validateResources(useClassLoaderResources);
+
+                // Content will not be cached but we still need metadata size
+                long delta = cacheEntry.getSize();
+                size.addAndGet(delta);
+
+                if (size.get() > maxSize) {
+                    // Process resources unordered for speed. Trades cache
+                    // efficiency (younger entries may be evicted before older
+                    // ones) for speed since this is on the critical path for
+                    // request processing
+                    long targetSize =
+                            maxSize * (100 - TARGET_FREE_PERCENT_GET) / 100;
+                    long newSize = evict(
+                            targetSize, resourceCache.values().iterator());
+                    if (newSize > maxSize) {
+                        // Unable to create sufficient space for this resource
+                        // Remove it from the cache
+                        removeCacheEntry(path);
+                        log.warn(sm.getString("cache.addFail", path));
+                    }
+                }
+            } else {
+                // Another thread added the entry to the cache
+                // Make sure it is validated
+                cacheEntry.validateResources(useClassLoaderResources);
+            }
+        } else {
+            hitCount.incrementAndGet();
+        }
+
+        return cacheEntry.getWebResources();
+    }
+-----CSCI578-----
+
+
+    public int getObjectMaxSizeBytes() {
+        return objectMaxSize;
+    }
+-----CSCI578-----
+
+
+    public long getTtl() {
+        return ttl;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public long getCacheTtl() {
+        return cache.getTtl();
+    }

@@ -1,0 +1,70 @@
+1
+-----CSCI578-----
+
+
+
+    /**
+     * Register context.
+     */
+    private void registerContext(Context context) {
+
+        String contextPath = context.getPath();
+        if ("/".equals(contextPath)) {
+            contextPath = "";
+        }
+        Host host = (Host)context.getParent();
+
+        WebResourceRoot resources = context.getResources();
+        String[] welcomeFiles = context.findWelcomeFiles();
+        List<WrapperMappingInfo> wrappers = new ArrayList<>();
+
+        for (Container container : context.findChildren()) {
+            prepareWrapperMappingInfo(context, (Wrapper) container, wrappers);
+
+            if(log.isDebugEnabled()) {
+                log.debug(sm.getString("mapperListener.registerWrapper",
+                        container.getName(), contextPath, service));
+            }
+        }
+
+        mapper.addContextVersion(host.getName(), host, contextPath,
+                context.getWebappVersion(), context, welcomeFiles, resources,
+                wrappers);
+
+        if(log.isDebugEnabled()) {
+            log.debug(sm.getString("mapperListener.registerContext",
+                    contextPath, service));
+        }
+    }
+
+
+
+    /**
+     * Unregister context.
+     */
+    private void unregisterContext(Context context) {
+
+        String contextPath = context.getPath();
+        if ("/".equals(contextPath)) {
+            contextPath = "";
+        }
+        String hostName = context.getParent().getName();
+
+        if (context.getPaused()) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("mapperListener.pauseContext",
+                        contextPath, service));
+            }
+
+            mapper.pauseContextVersion(context, hostName, contextPath,
+                    context.getWebappVersion());
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("mapperListener.unregisterContext",
+                        contextPath, service));
+            }
+
+            mapper.removeContextVersion(context, hostName, contextPath,
+                    context.getWebappVersion());
+        }
+    }

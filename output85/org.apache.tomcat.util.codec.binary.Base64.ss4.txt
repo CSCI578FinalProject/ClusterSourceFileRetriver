@@ -1,0 +1,189 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Encodes binary data using the base64 algorithm but does not chunk the output.
+     *
+     * @param binaryData
+     *            binary data to encode
+     * @return byte[] containing Base64 characters in their UTF-8 representation.
+     */
+    public static byte[] encodeBase64(final byte[] binaryData) {
+        return encodeBase64(binaryData, false);
+    }
+
+
+    /**
+     * Encodes binary data using the base64 algorithm, optionally chunking the output into 76 character blocks.
+     *
+     * @param binaryData
+     *            Array containing binary data to encode.
+     * @param isChunked
+     *            if <code>true</code> this encoder will chunk the base64 output into 76 character blocks
+     * @param urlSafe
+     *            if <code>true</code> this encoder will emit - and _ instead of the usual + and / characters.
+     *            <b>Note: no padding is added when encoding using the URL-safe alphabet.</b>
+     * @param maxResultSize
+     *            The maximum result size to accept.
+     * @return Base64-encoded data.
+     * @throws IllegalArgumentException
+     *             Thrown when the input array needs an output array bigger than maxResultSize
+     * @since 1.4
+     */
+    public static byte[] encodeBase64(final byte[] binaryData, final boolean isChunked,
+                                      final boolean urlSafe, final int maxResultSize) {
+        if (binaryData == null || binaryData.length == 0) {
+            return binaryData;
+        }
+
+        // Create this so can use the super-class method
+        // Also ensures that the same roundings are performed by the ctor and the code
+        final Base64 b64 = isChunked ? new Base64(urlSafe) : new Base64(0, CHUNK_SEPARATOR, urlSafe);
+        final long len = b64.getEncodedLength(binaryData);
+        if (len > maxResultSize) {
+            throw new IllegalArgumentException("Input array too big, the output array would be bigger (" +
+                len +
+                ") than the specified maximum size of " +
+                maxResultSize);
+        }
+
+        return b64.encode(binaryData);
+    }
+-----CSCI578-----
+
+
+    // The static final fields above are used for the original static byte[] methods on Base64.
+    // The private member fields below are used with the new streaming approach, which requires
+    // some state be preserved between calls of encode() and decode().
+
+    /**
+     * Encode table to use: either STANDARD or URL_SAFE. Note: the DECODE_TABLE above remains static because it is able
+     * to decode both STANDARD and URL_SAFE streams, but the encodeTable must be a member variable so we can switch
+     * between the two modes.
+     */
+    private final byte[] encodeTable;
+
+
+    /**
+     * <p>
+     * Encodes all of the provided data, starting at inPos, for inAvail bytes. Must be called at least twice: once with
+     * the data to encode, and once with inAvail set to "-1" to alert encoder that EOF has been reached, to flush last
+     * remaining bytes (if not multiple of 3).
+     * </p>
+     * <p><b>Note: no padding is added when encoding using the URL-safe alphabet.</b></p>
+     * <p>
+     * Thanks to "commons" project in ws.apache.org for the bitwise operations, and general approach.
+     * http://svn.apache.org/repos/asf/webservices/commons/trunk/modules/util/
+     * </p>
+     *
+     * @param in
+     *            byte[] array of binary data to base64 encode.
+     * @param inPos
+     *            Position to start reading data from.
+     * @param inAvail
+     *            Amount of bytes available from input for encoding.
+     * @param context
+     *            the context to be used
+     */
+    @Override
+    void encode(final byte[] in, int inPos, final int inAvail, final Context context) {
+        if (context.eof) {
+            return;
+        }
+        // inAvail < 0 is how we're informed of EOF in the underlying data we're
+        // encoding.
+        if (inAvail < 0) {
+            context.eof = true;
+            if (0 == context.modulus && lineLength == 0) {
+                return; // no leftovers to process and not using chunking
+            }
+            final byte[] buffer = ensureBufferSize(encodeSize, context);
+            final int savedPos = context.pos;
+            switch (context.modulus) { // 0-2
+                case 0 : // nothing to do here
+                    break;
+                case 1 : // 8 bits = 6 + 2
+                    // top 6 bits:
+                    buffer[context.pos++] = encodeTable[(context.ibitWorkArea >> 2) & MASK_6BITS];
+                    // remaining 2:
+                    buffer[context.pos++] = encodeTable[(context.ibitWorkArea << 4) & MASK_6BITS];
+                    // URL-SAFE skips the padding to further reduce size.
+                    if (encodeTable == STANDARD_ENCODE_TABLE) {
+                        buffer[context.pos++] = pad;
+                        buffer[context.pos++] = pad;
+                    }
+                    break;
+
+                case 2 : // 16 bits = 6 + 6 + 4
+                    buffer[context.pos++] = encodeTable[(context.ibitWorkArea >> 10) & MASK_6BITS];
+                    buffer[context.pos++] = encodeTable[(context.ibitWorkArea >> 4) & MASK_6BITS];
+                    buffer[context.pos++] = encodeTable[(context.ibitWorkArea << 2) & MASK_6BITS];
+                    // URL-SAFE skips the padding to further reduce size.
+                    if (encodeTable == STANDARD_ENCODE_TABLE) {
+                        buffer[context.pos++] = pad;
+                    }
+                    break;
+                default:
+                    throw new IllegalStateException("Impossible modulus "+context.modulus);
+            }
+            context.currentLinePos += context.pos - savedPos; // keep track of current line position
+            // if currentPos == 0 we are at the start of a line, so don't add CRLF
+            if (lineLength > 0 && context.currentLinePos > 0) {
+                System.arraycopy(lineSeparator, 0, buffer, context.pos, lineSeparator.length);
+                context.pos += lineSeparator.length;
+            }
+        } else {
+            for (int i = 0; i < inAvail; i++) {
+                final byte[] buffer = ensureBufferSize(encodeSize, context);
+                context.modulus = (context.modulus+1) % BYTES_PER_UNENCODED_BLOCK;
+                int b = in[inPos++];
+                if (b < 0) {
+                    b += 256;
+                }
+                context.ibitWorkArea = (context.ibitWorkArea << 8) + b; //  BITS_PER_BYTE
+                if (0 == context.modulus) { // 3 bytes = 24 bits = 4 * 6 bits to extract
+                    buffer[context.pos++] = encodeTable[(context.ibitWorkArea >> 18) & MASK_6BITS];
+                    buffer[context.pos++] = encodeTable[(context.ibitWorkArea >> 12) & MASK_6BITS];
+                    buffer[context.pos++] = encodeTable[(context.ibitWorkArea >> 6) & MASK_6BITS];
+                    buffer[context.pos++] = encodeTable[context.ibitWorkArea & MASK_6BITS];
+                    context.currentLinePos += BYTES_PER_ENCODED_BLOCK;
+                    if (lineLength > 0 && lineLength <= context.currentLinePos) {
+                        System.arraycopy(lineSeparator, 0, buffer, context.pos, lineSeparator.length);
+                        context.pos += lineSeparator.length;
+                        context.currentLinePos = 0;
+                    }
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Encodes binary data using a URL-safe variation of the base64 algorithm but does not chunk the output. The
+     * url-safe variation emits - and _ instead of + and / characters.
+     * <b>Note: no padding is added.</b>
+     * @param binaryData
+     *            binary data to encode
+     * @return byte[] containing Base64 characters in their UTF-8 representation.
+     * @since 1.4
+     */
+    public static byte[] encodeBase64URLSafe(final byte[] binaryData) {
+        return encodeBase64(binaryData, false, true);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Encodes binary data using the base64 algorithm and chunks the encoded output into 76 character blocks
+     *
+     * @param binaryData
+     *            binary data to encode
+     * @return Base64 characters chunked in 76 character blocks
+     */
+    public static byte[] encodeBase64Chunked(final byte[] binaryData) {
+        return encodeBase64(binaryData, true);
+    }

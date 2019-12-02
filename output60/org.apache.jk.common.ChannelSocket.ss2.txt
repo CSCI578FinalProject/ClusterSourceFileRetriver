@@ -1,0 +1,160 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /** Called after you change some fields at runtime using jmx.
+        Experimental for now.
+    */
+    public void reinit() throws IOException {
+        destroy();
+        init();
+    }
+
+
+    /**
+     * jmx:managed-operation
+     */
+    public void init() throws IOException {
+        // Find a port.
+        if (startPort < 0) {
+            port = 0;
+            if(log.isInfoEnabled())
+                log.info("JK: ajp13 disabling channelSocket");
+            running = true;
+            return;
+        }
+        if (startPort == 0) {
+            // Let operating system to choose a random free port
+            try {
+                if( inet == null ) {
+                    sSocket = new ServerSocket( 0, backlog );
+                } else {
+                    sSocket=new ServerSocket( 0, backlog, inet );
+                }
+            } catch( IOException ex ) {
+                log.error("Can't find free port", ex);
+                sSocket = null;
+                return;
+            }
+
+            port = sSocket.getLocalPort();
+        } else {
+            int endPort = maxPort;
+            if (endPort < startPort)
+                endPort = startPort;
+            for( int i=startPort; i<=endPort; i++ ) {
+                try {
+                    if( inet == null ) {
+                        sSocket = new ServerSocket( i, backlog );
+                    } else {
+                        sSocket=new ServerSocket( i, backlog, inet );
+                    }
+                    port=i;
+                    break;
+                } catch( IOException ex ) {
+                    if(log.isInfoEnabled())
+                        log.info("Port busy " + i + " " + ex.toString());
+                    continue;
+                }
+            }
+
+            if( sSocket==null ) {
+                log.error("Can't find free port " + startPort + " " + endPort );
+                return;
+            }
+        }
+        if(log.isInfoEnabled())
+            log.info("JK: ajp13 listening on " + getAddress() + ":" + port );
+
+        // If this is not the base port and we are the 'main' channleSocket and
+        // SHM didn't already set the localId - we'll set the instance id
+        if( "channelSocket".equals( name ) &&
+            port != startPort &&
+            (wEnv.getLocalId()==0) ) {
+            wEnv.setLocalId(  port - startPort );
+        }
+        if( serverTimeout > 0 )
+            sSocket.setSoTimeout( serverTimeout );
+
+        // XXX Reverse it -> this is a notification generator !!
+        if( next==null && wEnv!=null ) {
+            if( nextName!=null )
+                setNext( wEnv.getHandler( nextName ) );
+            if( next==null )
+                next=wEnv.getHandler( "dispatch" );
+            if( next==null )
+                next=wEnv.getHandler( "request" );
+        }
+        JMXRequestNote =wEnv.getNoteId( WorkerEnv.ENDPOINT_NOTE, "requestNote");
+        running = true;
+
+        // Run a thread that will accept connections.
+        // XXX Try to find a thread first - not sure how...
+        if( this.domain != null ) {
+            try {
+                tpOName=new ObjectName(domain + ":type=ThreadPool,name=" + 
+                                       getChannelName());
+
+                Registry.getRegistry(null, null)
+                    .registerComponent(tp, tpOName, null);
+
+                rgOName = new ObjectName
+                    (domain+":type=GlobalRequestProcessor,name=" + getChannelName());
+                Registry.getRegistry(null, null)
+                    .registerComponent(global, rgOName, null);
+            } catch (Exception e) {
+                log.error("Can't register threadpool" );
+            }
+        }
+
+        tp.start();
+        SocketAcceptor acceptAjp=new SocketAcceptor(  this );
+        tp.runIt( acceptAjp);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setLocalId(int id) {
+        localId=id;
+    }
+-----CSCI578-----
+
+
+    public String getAddress() {
+        if( inet!=null)
+            return inet.toString();
+        return "/0.0.0.0";
+    }
+-----CSCI578-----
+
+    
+    public String getChannelName() {
+        String encodedAddr = "";
+        if (inet != null && !"0.0.0.0".equals(inet.getHostAddress())) {
+            encodedAddr = getAddress();
+            if (encodedAddr.startsWith("/"))
+                encodedAddr = encodedAddr.substring(1);
+	    encodedAddr = URLEncoder.encode(encodedAddr) + "-";
+        }
+        return ("jk-" + encodedAddr + port);
+    }
+-----CSCI578-----
+
+
+    /** Called after you change some fields at runtime using jmx.
+        Experimental for now.
+    */
+    public void reinit() throws IOException {
+        destroy();
+        init();
+    }
+-----CSCI578-----
+
+
+    public void start() throws IOException{
+        if( sSocket==null )
+            init();
+    }

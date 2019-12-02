@@ -1,0 +1,59 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    protected void setConverter() 
+        throws IOException {
+
+        if (coyoteResponse != null)
+            enc = coyoteResponse.getCharacterEncoding();
+
+        gotEnc = true;
+        if (enc == null)
+            enc = DEFAULT_ENCODING;
+        conv = (C2BConverter) encoders.get(enc);
+        if (conv == null) {
+            
+            if (Globals.IS_SECURITY_ENABLED){
+                try{
+                    conv = (C2BConverter)AccessController.doPrivileged(
+                            new PrivilegedExceptionAction(){
+
+                                public Object run() throws IOException{
+                                    return new C2BConverter(bb, enc);
+                                }
+
+                            }
+                    );              
+                }catch(PrivilegedActionException ex){
+                    Exception e = ex.getException();
+                    if (e instanceof IOException)
+                        throw (IOException)e; 
+                }
+            } else {
+                conv = new C2BConverter(bb, enc);
+            }
+            
+            encoders.put(enc, conv);
+
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void checkConverter() 
+        throws IOException {
+
+        if (!gotEnc)
+            setConverter();
+
+    }
+-----CSCI578-----
+
+
+    public String getCharacterEncoding() {
+        return characterEncoding;
+    }

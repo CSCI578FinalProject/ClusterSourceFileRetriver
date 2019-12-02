@@ -1,0 +1,113 @@
+7
+-----CSCI578-----
+
+
+
+    @Override
+    protected void stopInternal() throws LifecycleException {
+        cleanUp();
+        setState(LifecycleState.STOPPING);
+        fireLifecycleEvent(CONFIGURE_STOP_EVENT, null);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Close those resources that an explicit close may help clean-up faster.
+     */
+    private void cleanUp() {
+        if (resources.size() == 0) {
+            return;
+        }
+        javax.naming.Context ctxt;
+        try {
+            if (container instanceof Server) {
+                ctxt = ((Server) container).getGlobalNamingContext();
+            } else {
+                ctxt = ContextBindings.getClassLoader();
+                ctxt = (javax.naming.Context) ctxt.lookup("comp/env");
+            }
+        } catch (NamingException e) {
+            log.warn(sm.getString("namingResources.cleanupNoContext",
+                    container), e);
+            return;
+        }
+        for (ContextResource cr: resources.values()) {
+            if (cr.getSingleton()) {
+                String closeMethod = cr.getCloseMethod();
+                if (closeMethod != null && closeMethod.length() > 0) {
+                    String name = cr.getName();
+                    Object resource;
+                    try {
+                         resource = ctxt.lookup(name);
+                    } catch (NamingException e) {
+                        log.warn(sm.getString(
+                                "namingResources.cleanupNoResource",
+                                cr.getName(), container), e);
+                        continue;
+                    }
+                    cleanUp(resource, name, closeMethod);
+                }
+            }
+        }
+    }
+
+
+
+    /**
+     * Clean up a resource by calling the defined close method. For example,
+     * closing a database connection pool will close it's open connections. This
+     * will happen on GC but that leaves db connections open that may cause
+     * issues.
+     *
+     * @param resource  The resource to close.
+     */
+    private void cleanUp(Object resource, String name, String closeMethod) {
+        // Look for a zero-arg close() method
+        Method m = null;
+        try {
+            m = resource.getClass().getMethod(closeMethod, (Class<?>[]) null);
+        } catch (SecurityException e) {
+            log.debug(sm.getString("namingResources.cleanupCloseSecurity",
+                    closeMethod, name, container));
+            return;
+        } catch (NoSuchMethodException e) {
+            log.debug(sm.getString("namingResources.cleanupNoClose",
+                    name, container, closeMethod));
+            return;
+        }
+        try {
+            m.invoke(resource, (Object[]) null);
+        } catch (IllegalArgumentException | IllegalAccessException e) {
+            log.warn(sm.getString("namingResources.cleanupCloseFailed",
+                    closeMethod, name, container), e);
+        } catch (InvocationTargetException e) {
+            Throwable t = ExceptionUtils.unwrapInvocationTargetException(e);
+            ExceptionUtils.handleThrowable(t);
+            log.warn(sm.getString("namingResources.cleanupCloseFailed",
+                    closeMethod, name, container), t);
+        }
+    }
+-----CSCI578-----
+
+
+    public String getCloseMethod() {
+        return closeMethod;
+    }
+-----CSCI578-----
+
+
+    public boolean getSingleton() {
+        return singleton;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    protected void startInternal() throws LifecycleException {
+        fireLifecycleEvent(CONFIGURE_START_EVENT, null);
+        setState(LifecycleState.STARTING);
+    }

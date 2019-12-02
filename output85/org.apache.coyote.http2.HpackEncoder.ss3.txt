@@ -1,0 +1,59 @@
+6
+-----CSCI578-----
+
+
+    private void addToDynamicTable(String headerName, String val) {
+        int pos = entryPositionCounter++;
+        DynamicTableEntry d = new DynamicTableEntry(headerName, val, -pos);
+        List<TableEntry> existing = dynamicTable.get(headerName);
+        if (existing == null) {
+            dynamicTable.put(headerName, existing = new ArrayList<>(1));
+        }
+        existing.add(d);
+        evictionQueue.add(d);
+        currentTableSize += d.size;
+        runEvictionIfRequired();
+        if (entryPositionCounter == Integer.MAX_VALUE) {
+            //prevent rollover
+            preventPositionRollover();
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    private void preventPositionRollover() {
+        //if the position counter is about to roll over we iterate all the table entries
+        //and set their position to their actual position
+        for (Map.Entry<String, List<TableEntry>> entry : dynamicTable.entrySet()) {
+            for (TableEntry t : entry.getValue()) {
+                t.position = t.getPosition();
+            }
+        }
+        entryPositionCounter = 0;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void writeHuffmanEncodableValue(ByteBuffer target, String headerName, String val) {
+        if (hpackHeaderFunction.shouldUseHuffman(headerName, val)) {
+            if (!HPackHuffman.encode(target, val, false)) {
+                writeValueString(target, val);
+            }
+        } else {
+            writeValueString(target, val);
+        }
+    }
+-----CSCI578-----
+
+
+    private void writeValueString(ByteBuffer target, String val) {
+        target.put((byte) 0); //to use encodeInteger we need to place the first byte in the buffer.
+        Hpack.encodeInteger(target, val.length(), 7);
+        for (int j = 0; j < val.length(); ++j) {
+            target.put((byte) val.charAt(j));
+        }
+    }

@@ -1,0 +1,68 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public Stream sorted() {
+        Iterator<Object> downStream = new OpIterator() {
+
+            private Iterator<Object> sorted = null;
+
+            @Override
+            protected void findNext() {
+                if (sorted == null) {
+                    sort();
+                }
+                if (sorted.hasNext()) {
+                    next = sorted.next();
+                    foundNext = true;
+                }
+            }
+
+            @SuppressWarnings({ "rawtypes", "unchecked" })
+            private final void sort() {
+                List list = new ArrayList<>();
+                while (iterator.hasNext()) {
+                    list.add(iterator.next());
+                }
+                Collections.sort(list);
+                sorted = list.iterator();
+            }
+        };
+        return new Stream(downStream);
+    }
+
+
+
+    public Stream sorted(final LambdaExpression le) {
+        Iterator<Object> downStream = new OpIterator() {
+
+            private Iterator<Object> sorted = null;
+
+            @Override
+            protected void findNext() {
+                if (sorted == null) {
+                    sort(le);
+                }
+                if (sorted.hasNext()) {
+                    next = sorted.next();
+                    foundNext = true;
+                }
+            }
+
+            @SuppressWarnings({ "rawtypes", "unchecked" })
+            private final void sort(LambdaExpression le) {
+                List list = new ArrayList<>();
+                Comparator<Object> c = new LambdaExpressionComparator(le);
+                while (iterator.hasNext()) {
+                    list.add(iterator.next());
+                }
+                Collections.sort(list, c);
+                sorted = list.iterator();
+            }
+        };
+        return new Stream(downStream);
+    }
+-----CSCI578-----
+-----CSCI578-----

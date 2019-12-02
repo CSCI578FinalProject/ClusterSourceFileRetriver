@@ -1,0 +1,87 @@
+30
+
+    public final static void checkType(final Object obj, final Class type)
+        throws ELException {
+        if (String.class.equals(type)) {
+            coerceToString(obj);
+        }
+        if (ELArithmetic.isNumberType(type)) {
+            coerceToNumber(obj, type);
+        }
+        if (Character.class.equals(type) || Character.TYPE == type) {
+            coerceToCharacter(obj);
+        }
+        if (Boolean.class.equals(type) || Boolean.TYPE == type) {
+            coerceToBoolean(obj);
+        }
+        if (type.isEnum()) {
+            coerceToEnum(obj, type);
+        }
+    }
+
+    /**
+     * Returns the <tt>Class</tt> object associated with the class or
+     * interface with the given string name.
+     *
+     * <p> The <tt>Class</tt> object is determined by passing the given string
+     * name to the <tt>Class.forName()</tt> method, unless the given string
+     * name represents a primitive type, in which case it is converted to a
+     * <tt>Class</tt> object by appending ".class" to it (e.g., "int.class").
+     */
+    public static Class toClass(String type, ClassLoader loader)
+        throws ClassNotFoundException {
+
+    Class c = null;
+    int i0 = type.indexOf('[');
+    int dims = 0;
+    if (i0 > 0) {
+        // This is an array.  Count the dimensions
+        for (int i = 0; i < type.length(); i++) {
+        if (type.charAt(i) == '[')
+            dims++;
+        }
+        type = type.substring(0, i0);
+    }
+
+    if ("boolean".equals(type))
+        c = boolean.class;
+    else if ("char".equals(type))
+        c = char.class;
+    else if ("byte".equals(type))
+        c =  byte.class;
+    else if ("short".equals(type))
+        c = short.class;
+    else if ("int".equals(type))
+        c = int.class;
+    else if ("long".equals(type))
+        c = long.class;
+    else if ("float".equals(type))
+        c = float.class;
+    else if ("double".equals(type))
+        c = double.class;
+    else if ("void".equals(type))
+        c = void.class;
+    else if (type.indexOf('[') < 0)
+        c = loader.loadClass(type);
+
+    if (dims == 0)
+        return c;
+
+    if (dims == 1)
+        return java.lang.reflect.Array.newInstance(c, 1).getClass();
+
+    // Array of more than i dimension
+    return java.lang.reflect.Array.newInstance(c, new int[dims]).getClass();
+    }
+
+        /**
+         * For the same reason as above, the source line information in the
+         * contained TemplateText node should be used.
+         */
+        public Mark getStart() {
+            if (text == null && body != null && body.size() > 0) {
+                return body.getNode(0).getStart();
+            } else {
+                return super.getStart();
+            }
+        }

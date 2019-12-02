@@ -1,0 +1,61 @@
+2
+-----CSCI578-----
+
+
+    public HashMap getAttributes() {
+        return attributes;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified request attribute if it exists.
+     *
+     * @param name Name of the request attribute to remove
+     */
+    public void removeAttribute(String name) {
+        Object value = null;
+        boolean found = false;
+
+        // Remove the specified attribute
+        // Check for read only attribute
+        // requests are per thread so synchronization unnecessary
+        if (readOnlyAttributes.containsKey(name)) {
+            return;
+        }
+
+        // Pass special attributes to the native layer
+        if (name.startsWith("org.apache.tomcat.")) {
+            coyoteRequest.getAttributes().remove(name);
+        }
+
+        found = attributes.containsKey(name);
+        if (found) {
+            value = attributes.get(name);
+            attributes.remove(name);
+        } else {
+            return;
+        }
+
+        // Notify interested application event listeners
+        Object listeners[] = context.getApplicationEventListeners();
+        if ((listeners == null) || (listeners.length == 0))
+            return;
+        ServletRequestAttributeEvent event =
+          new ServletRequestAttributeEvent(context.getServletContext(),
+                                           getRequest(), name, value);
+        for (int i = 0; i < listeners.length; i++) {
+            if (!(listeners[i] instanceof ServletRequestAttributeListener))
+                continue;
+            ServletRequestAttributeListener listener =
+                (ServletRequestAttributeListener) listeners[i];
+            try {
+                listener.attributeRemoved(event);
+            } catch (Throwable t) {
+                context.getLogger().error(sm.getString("coyoteRequest.attributeEvent"), t);
+                // Error valve will pick this execption up and display it to user
+                attributes.put( Globals.EXCEPTION_ATTR, t );
+            }
+        }
+    }

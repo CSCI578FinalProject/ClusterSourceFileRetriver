@@ -1,0 +1,117 @@
+5
+-----CSCI578-----
+
+    
+    
+    /**
+     * Set content length.
+     * 
+     * @param contentLength New content length value
+     */
+    public void setContentLength(long contentLength) {
+        this.contentLength = contentLength;
+        if (attributes != null)
+            attributes.put(CONTENT_LENGTH, new Long(contentLength));
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Creation date mutator.
+     * 
+     * @param creationDate New creation date
+     */
+    public void setCreationDate(Date creationDate) {
+        this.creation = creationDate.getTime();
+        this.creationDate = creationDate;
+        if (attributes != null)
+            attributes.put(CREATION_DATE, creationDate);
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Type mutator.
+     * 
+     * @param resourceType New resource type
+     */
+    public void setResourceType(String resourceType) {
+        collection = resourceType.equals(COLLECTION_TYPE);
+        if (attributes != null)
+            attributes.put(TYPE, resourceType);
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- DirContext Methods
+
+
+    /**
+     * Retrieves selected attributes associated with a named object. 
+     * See the class description regarding attribute models, attribute type 
+     * names, and operational attributes.
+     * 
+     * @return the requested attributes; never null
+     * @param name the name of the object from which to retrieve attributes
+     * @param attrIds the identifiers of the attributes to retrieve. null 
+     * indicates that all attributes should be retrieved; an empty array 
+     * indicates that none should be retrieved
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Attributes getAttributes(String name, String[] attrIds)
+        throws NamingException {
+        return getAttributes(new CompositeName(name), attrIds);
+    }
+
+
+
+    /**
+     * Retrieves all of the attributes associated with a named object. 
+     * 
+     * @return the set of attributes associated with name. 
+     * Returns an empty attribute set if name has no attributes; never null.
+     * @param name the name of the object from which to retrieve attributes
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Attributes getAttributes(Name name, String[] attrIds)
+        throws NamingException {
+        
+        Entry entry = null;
+        if (name.isEmpty())
+            entry = entries;
+        else
+            entry = treeLookup(name);
+        if (entry == null)
+            throw new NamingException
+                (sm.getString("resources.notFound", name));
+        
+        ZipEntry zipEntry = entry.getEntry();
+
+        ResourceAttributes attrs = new ResourceAttributes();
+        attrs.setCreationDate(new Date(zipEntry.getTime()));
+        attrs.setName(entry.getName());
+        if (!zipEntry.isDirectory())
+            attrs.setResourceType("");
+        attrs.setContentLength(zipEntry.getSize());
+        attrs.setLastModified(zipEntry.getTime());
+        
+        return attrs;
+        
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set name.
+     * 
+     * @param name New name value
+     */
+    public void setName(String name) {
+        this.name = name;
+        if (attributes != null)
+            attributes.put(NAME, name);
+    }

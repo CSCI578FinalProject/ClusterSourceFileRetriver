@@ -1,0 +1,171 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Set the value of a specific attribute of this MBean.
+     *
+     * @param attribute The identification of the attribute to be set
+     *  and the new value
+     *
+     * @exception AttributeNotFoundException if this attribute is not
+     *  supported by this MBean
+     * @exception MBeanException if the initializer of an object
+     *  throws an exception
+     * @exception ReflectionException if a Java reflection exception
+     *  occurs when invoking the getter
+     */
+    @Override
+    public void setAttribute(Attribute attribute)
+        throws AttributeNotFoundException, MBeanException,
+        ReflectionException
+    {
+        if( log.isDebugEnabled() )
+            log.debug("Setting attribute " + this + " " + attribute );
+
+        if( (resource instanceof DynamicMBean) &&
+             ! ( resource instanceof BaseModelMBean )) {
+            try {
+                ((DynamicMBean)resource).setAttribute(attribute);
+            } catch (InvalidAttributeValueException e) {
+                throw new MBeanException(e);
+            }
+            return;
+        }
+
+        // Validate the input parameters
+        if (attribute == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Attribute is null"),
+                 "Attribute is null");
+
+        String name = attribute.getName();
+        Object value = attribute.getValue();
+
+        if (name == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Attribute name is null"),
+                 "Attribute name is null");
+
+        Object oldValue=null;
+        //if( getAttMap.get(name) != null )
+        //    oldValue=getAttribute( name );
+
+        Method m=managedBean.getSetter(name,this,resource);
+
+        try {
+            if( m.getDeclaringClass().isAssignableFrom( this.getClass()) ) {
+                m.invoke(this, new Object[] { value });
+            } else {
+                m.invoke(resource, new Object[] { value });
+            }
+        } catch (InvocationTargetException e) {
+            Throwable t = e.getTargetException();
+            if (t == null)
+                t = e;
+            if (t instanceof RuntimeException)
+                throw new RuntimeOperationsException
+                    ((RuntimeException) t, "Exception invoking method " + name);
+            else if (t instanceof Error)
+                throw new RuntimeErrorException
+                    ((Error) t, "Error invoking method " + name);
+            else
+                throw new MBeanException
+                    (e, "Exception invoking method " + name);
+        } catch (Exception e) {
+            log.error("Exception invoking method " + name , e );
+            throw new MBeanException
+                (e, "Exception invoking method " + name);
+        }
+        try {
+            sendAttributeChangeNotification(new Attribute( name, oldValue),
+                    attribute);
+        } catch(Exception ex) {
+            log.error("Error sending notification " + name, ex);
+        }
+        //attributes.put( name, value );
+//        if( source != null ) {
+//            // this mbean is associated with a source - maybe we want to persist
+//            source.updateField(oname, name, value);
+//        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Send the specified notification to all interested listeners.
+     *
+     * @param notification The notification to be sent
+     */
+    public void sendNotification(Notification notification) {
+
+        synchronized (entries) {
+            Iterator<BaseNotificationBroadcasterEntry> items =
+                entries.iterator();
+            while (items.hasNext()) {
+                BaseNotificationBroadcasterEntry item = items.next();
+                if ((item.filter != null) &&
+                    (!item.filter.isNotificationEnabled(notification)))
+                    continue;
+                item.listener.handleNotification(notification, item.handback);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Send a <code>Notification</code> to all registered listeners as a
+     * <code>jmx.modelmbean.general</code> notification.
+     *
+     * @param notification The <code>Notification</code> that will be passed
+     *
+     * @exception MBeanException if an object initializer throws an
+     *  exception
+     * @exception RuntimeOperationsException wraps IllegalArgumentException
+     *  when the specified notification is <code>null</code> or invalid
+     */
+    @Override
+    public void sendNotification(Notification notification)
+        throws MBeanException, RuntimeOperationsException {
+
+        if (notification == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Notification is null"),
+                 "Notification is null");
+        if (generalBroadcaster == null)
+            return; // This means there are no registered listeners
+        generalBroadcaster.sendNotification(notification);
+
+    }
+
+
+
+    /**
+     * Send a <code>Notification</code> which contains the specified string
+     * as a <code>jmx.modelmbean.generic</code> notification.
+     *
+     * @param message The message string to be passed
+     *
+     * @exception MBeanException if an object initializer throws an
+     *  exception
+     * @exception RuntimeOperationsException wraps IllegalArgumentException
+     *  when the specified notification is <code>null</code> or invalid
+     */
+    @Override
+    public void sendNotification(String message)
+        throws MBeanException, RuntimeOperationsException {
+
+        if (message == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Message is null"),
+                 "Message is null");
+        Notification notification = new Notification
+            ("jmx.modelmbean.generic", this, 1, message);
+        sendNotification(notification);
+
+    }

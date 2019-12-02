@@ -1,0 +1,91 @@
+13
+
+
+    /*
+     * @return true if there is something left in EL expression buffer other
+     * than white spaces.
+     */
+    private boolean hasNext() {
+        skipSpaces();
+        return hasNextChar();
+    }
+
+    private boolean hasNextChar() {
+        return index < expression.length();
+    }
+
+    /*
+     * A collection of low level parse methods dealing with character in the EL
+     * expression buffer.
+     */
+
+    private void skipSpaces() {
+        int start = index;
+        while (hasNextChar()) {
+            char c = expression.charAt(index);
+            if (c > ' ')
+                break;
+            index++;
+        }
+        whiteSpace = expression.substring(start, index);
+    }
+
+    private String getAndResetWhiteSpace() {
+        String result = whiteSpace;
+        whiteSpace = "";
+        return result;
+    }
+    
+    /*
+     * Implementation note: This method assumes that it is always preceded by a
+     * call to hasNext() in order for whitespace handling to be correct.
+     *
+     * @return The next token in the EL expression buffer.
+     */
+    private Token nextToken() {
+        if (hasNextChar()) {
+            char ch = nextChar();
+            if (Character.isJavaIdentifierStart(ch)) {
+                int start = index - 1;
+                while (index < expression.length() &&
+                        Character.isJavaIdentifierPart(
+                                ch = expression.charAt(index))) {
+                    nextChar();
+                }
+                return new Id(getAndResetWhiteSpace(), expression.substring(start, index));
+            }
+
+            if (ch == '\'' || ch == '"') {
+                return parseQuotedChars(ch);
+            } else {
+                // For now...
+                return new Char(getAndResetWhiteSpace(), ch);
+            }
+        }
+        return null;
+    }
+
+    private int getIndex() {
+        return index;
+    }
+
+    private void setIndex(int i) {
+        index = i;
+    }
+
+        return ELexpr;
+    }
+
+    /**
+     * Parse for a function FunctionInvokation ::= (identifier ':')? identifier
+     * '(' (Expression (,Expression)*)? ')' Note: currently we don't parse
+     * arguments
+     */
+    private boolean parseFunction() {
+        return false;
+    }
+
+    /**
+     * Test if an id is a reserved word in EL
+     */
+    private boolean isELReserved(String id) {

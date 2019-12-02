@@ -1,0 +1,974 @@
+49
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if sufficient data was present to complete the
+     *         processing of the header
+     */
+    private boolean processRemainingHeader() throws IOException {
+        // Ignore the 2 bytes already read. 4 for the mask
+        int headerLength;
+        if (isMasked()) {
+            headerLength = 4;
+        } else {
+            headerLength = 0;
+        }
+        // Add additional bytes depending on length
+        if (payloadLength == 126) {
+            headerLength += 2;
+        } else if (payloadLength == 127) {
+            headerLength += 8;
+        }
+        if (writePos - readPos < headerLength) {
+            return false;
+        }
+        // Calculate new payload length if necessary
+        if (payloadLength == 126) {
+            payloadLength = byteArrayToLong(inputBuffer, readPos, 2);
+            readPos += 2;
+        } else if (payloadLength == 127) {
+            payloadLength = byteArrayToLong(inputBuffer, readPos, 8);
+            readPos += 8;
+        }
+        if (Util.isControl(opCode)) {
+            if (payloadLength > 125) {
+                throw new WsIOException(new CloseReason(
+                        CloseCodes.PROTOCOL_ERROR,
+                        sm.getString("wsFrame.controlPayloadTooBig",
+                                Long.valueOf(payloadLength))));
+            }
+            if (!fin) {
+                throw new WsIOException(new CloseReason(
+                        CloseCodes.PROTOCOL_ERROR,
+                        sm.getString("wsFrame.controlNoFin")));
+            }
+        }
+        if (isMasked()) {
+            System.arraycopy(inputBuffer, readPos, mask, 0, 4);
+            readPos += 4;
+        }
+        state = State.DATA;
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    protected static long byteArrayToLong(byte[] b, int start, int len)
+            throws IOException {
+        if (len > 8) {
+            throw new IOException(sm.getString("wsFrame.byteToLongFail",
+                    Long.valueOf(len)));
+        }
+        int shift = 0;
+        long result = 0;
+        for (int i = start + len - 1; i >= start; i--) {
+            result = result + ((b[i] & 0xFF) << shift);
+            shift += 8;
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    protected abstract boolean isMasked();
+-----CSCI578-----
+
+
+
+    private void checkRoomPayload() {
+        if (inputBuffer.length - readPos - payloadLength + payloadWritten < 0) {
+            makeRoom();
+        }
+    }
+-----CSCI578-----
+
+
+
+    private boolean processDataControl() throws IOException {
+        TransformationResult tr = transformation.getMoreData(opCode, fin, rsv, controlBufferBinary);
+        if (TransformationResult.UNDERFLOW.equals(tr)) {
+            return false;
+        }
+        // Control messages have fixed message size so
+        // TransformationResult.OVERFLOW is not possible here
+
+        controlBufferBinary.flip();
+        if (opCode == Constants.OPCODE_CLOSE) {
+            open = false;
+            String reason = null;
+            int code = CloseCodes.NORMAL_CLOSURE.getCode();
+            if (controlBufferBinary.remaining() == 1) {
+                controlBufferBinary.clear();
+                // Payload must be zero or 2+ bytes long
+                throw new WsIOException(new CloseReason(
+                        CloseCodes.PROTOCOL_ERROR,
+                        sm.getString("wsFrame.oneByteCloseCode")));
+            }
+            if (controlBufferBinary.remaining() > 1) {
+                code = controlBufferBinary.getShort();
+                if (controlBufferBinary.remaining() > 0) {
+                    CoderResult cr = utf8DecoderControl.decode(
+                            controlBufferBinary, controlBufferText, true);
+                    if (cr.isError()) {
+                        controlBufferBinary.clear();
+                        controlBufferText.clear();
+                        throw new WsIOException(new CloseReason(
+                                CloseCodes.PROTOCOL_ERROR,
+                                sm.getString("wsFrame.invalidUtf8Close")));
+                    }
+                    // There will be no overflow as the output buffer is big
+                    // enough. There will be no underflow as all the data is
+                    // passed to the decoder in a single call.
+                    controlBufferText.flip();
+                    reason = controlBufferText.toString();
+                }
+            }
+            wsSession.onClose(new CloseReason(Util.getCloseCode(code), reason));
+        } else if (opCode == Constants.OPCODE_PING) {
+            if (wsSession.isOpen()) {
+                wsSession.getBasicRemote().sendPong(controlBufferBinary);
+            }
+        } else if (opCode == Constants.OPCODE_PONG) {
+            MessageHandler.Whole<PongMessage> mhPong =
+                    wsSession.getPongMessageHandler();
+            if (mhPong != null) {
+                try {
+                    mhPong.onMessage(new WsPongMessage(controlBufferBinary));
+                } catch (Throwable t) {
+                    handleThrowableOnSend(t);
+                } finally {
+                    controlBufferBinary.clear();
+                }
+            }
+        } else {
+            // Should have caught this earlier but just in case...
+            controlBufferBinary.clear();
+            throw new WsIOException(new CloseReason(
+                    CloseCodes.PROTOCOL_ERROR,
+                    sm.getString("wsFrame.invalidOpCode",
+                            Integer.valueOf(opCode))));
+        }
+        controlBufferBinary.clear();
+        newFrame();
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    private boolean processDataText() throws IOException {
+        // Copy the available data to the buffer
+        TransformationResult tr = transformation.getMoreData(opCode, fin, rsv, messageBufferBinary);
+        while (!TransformationResult.END_OF_FRAME.equals(tr)) {
+            // Frame not complete - we ran out of something
+            // Convert bytes to UTF-8
+            messageBufferBinary.flip();
+            while (true) {
+                CoderResult cr = utf8DecoderMessage.decode(
+                        messageBufferBinary, messageBufferText, false);
+                if (cr.isError()) {
+                    throw new WsIOException(new CloseReason(
+                            CloseCodes.NOT_CONSISTENT,
+                            sm.getString("wsFrame.invalidUtf8")));
+                } else if (cr.isOverflow()) {
+                    // Ran out of space in text buffer - flush it
+                    if (usePartial()) {
+                        messageBufferText.flip();
+                        sendMessageText(false);
+                        messageBufferText.clear();
+                    } else {
+                        throw new WsIOException(new CloseReason(
+                                CloseCodes.TOO_BIG,
+                                sm.getString("wsFrame.textMessageTooBig")));
+                    }
+                } else if (cr.isUnderflow()) {
+                    // Compact what we have to create as much space as possible
+                    messageBufferBinary.compact();
+
+                    // Need more input
+                    // What did we run out of?
+                    if (TransformationResult.OVERFLOW.equals(tr)) {
+                        // Ran out of message buffer - exit inner loop and
+                        // refill
+                        break;
+                    } else {
+                        // TransformationResult.UNDERFLOW
+                        // Ran out of input data - get some more
+                        return false;
+                    }
+                }
+            }
+            // Read more input data
+            tr = transformation.getMoreData(opCode, fin, rsv, messageBufferBinary);
+        }
+
+        messageBufferBinary.flip();
+        boolean last = false;
+        // Frame is fully received
+        // Convert bytes to UTF-8
+        while (true) {
+            CoderResult cr = utf8DecoderMessage.decode(messageBufferBinary,
+                    messageBufferText, last);
+            if (cr.isError()) {
+                throw new WsIOException(new CloseReason(
+                        CloseCodes.NOT_CONSISTENT,
+                        sm.getString("wsFrame.invalidUtf8")));
+            } else if (cr.isOverflow()) {
+                // Ran out of space in text buffer - flush it
+                if (usePartial()) {
+                    messageBufferText.flip();
+                    sendMessageText(false);
+                    messageBufferText.clear();
+                } else {
+                    throw new WsIOException(new CloseReason(
+                            CloseCodes.TOO_BIG,
+                            sm.getString("wsFrame.textMessageTooBig")));
+                }
+            } else if (cr.isUnderflow() && !last) {
+                // End of frame and possible message as well.
+
+                if (continuationExpected) {
+                    // If partial messages are supported, send what we have
+                    // managed to decode
+                    if (usePartial()) {
+                        messageBufferText.flip();
+                        sendMessageText(false);
+                        messageBufferText.clear();
+                    }
+                    messageBufferBinary.compact();
+                    newFrame();
+                    // Process next frame
+                    return true;
+                } else {
+                    // Make sure coder has flushed all output
+                    last = true;
+                }
+            } else {
+                // End of message
+                messageBufferText.flip();
+                sendMessageText(true);
+
+                newMessage();
+                return true;
+            }
+        }
+    }
+-----CSCI578-----
+
+    long getMaxMessageSize();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public RemoteEndpoint.Basic getBasicRemote() {
+        checkState();
+        return remoteEndpointBasic;
+    }
+-----CSCI578-----
+
+
+
+    private boolean swallowInput() {
+        long toSkip = Math.min(payloadLength - payloadWritten, writePos - readPos);
+        readPos += toSkip;
+        payloadWritten += toSkip;
+        if (payloadWritten == payloadLength) {
+            if (continuationExpected) {
+                newFrame();
+            } else {
+                newMessage();
+            }
+            return true;
+        } else {
+            return false;
+        }
+    }
+-----CSCI578-----
+
+
+
+    static CloseCode getCloseCode(int code) {
+        if (code > 2999 && code < 5000) {
+            return CloseCodes.getCloseCode(code);
+        }
+        switch (code) {
+            case 1000:
+                return CloseCodes.NORMAL_CLOSURE;
+            case 1001:
+                return CloseCodes.GOING_AWAY;
+            case 1002:
+                return CloseCodes.PROTOCOL_ERROR;
+            case 1003:
+                return CloseCodes.CANNOT_ACCEPT;
+            case 1004:
+                // Should not be used in a close frame
+                // return CloseCodes.RESERVED;
+                return CloseCodes.PROTOCOL_ERROR;
+            case 1005:
+                // Should not be used in a close frame
+                // return CloseCodes.NO_STATUS_CODE;
+                return CloseCodes.PROTOCOL_ERROR;
+            case 1006:
+                // Should not be used in a close frame
+                // return CloseCodes.CLOSED_ABNORMALLY;
+                return CloseCodes.PROTOCOL_ERROR;
+            case 1007:
+                return CloseCodes.NOT_CONSISTENT;
+            case 1008:
+                return CloseCodes.VIOLATED_POLICY;
+            case 1009:
+                return CloseCodes.TOO_BIG;
+            case 1010:
+                return CloseCodes.NO_EXTENSION;
+            case 1011:
+                return CloseCodes.UNEXPECTED_CONDITION;
+            case 1012:
+                // Not in RFC6455
+                // return CloseCodes.SERVICE_RESTART;
+                return CloseCodes.PROTOCOL_ERROR;
+            case 1013:
+                // Not in RFC6455
+                // return CloseCodes.TRY_AGAIN_LATER;
+                return CloseCodes.PROTOCOL_ERROR;
+            case 1015:
+                // Should not be used in a close frame
+                // return CloseCodes.TLS_HANDSHAKE_FAILURE;
+                return CloseCodes.PROTOCOL_ERROR;
+            default:
+                return CloseCodes.PROTOCOL_ERROR;
+        }
+    }
+-----CSCI578-----
+
+
+
+    @SuppressWarnings("unchecked")
+    private void sendMessageText(boolean last) throws WsIOException {
+        if (textMsgHandler instanceof WrappedMessageHandler) {
+            long maxMessageSize =
+                    ((WrappedMessageHandler) textMsgHandler).getMaxMessageSize();
+            if (maxMessageSize > -1 &&
+                    messageBufferText.remaining() > maxMessageSize) {
+                throw new WsIOException(new CloseReason(CloseCodes.TOO_BIG,
+                        sm.getString("wsFrame.messageTooBig",
+                                Long.valueOf(messageBufferText.remaining()),
+                                Long.valueOf(maxMessageSize))));
+            }
+        }
+
+        try {
+            if (textMsgHandler instanceof MessageHandler.Partial<?>) {
+                ((MessageHandler.Partial<String>) textMsgHandler).onMessage(
+                        messageBufferText.toString(), last);
+            } else {
+                // Caller ensures last == true if this branch is used
+                ((MessageHandler.Whole<String>) textMsgHandler).onMessage(
+                        messageBufferText.toString());
+            }
+        } catch (Throwable t) {
+            handleThrowableOnSend(t);
+        } finally {
+            messageBufferText.clear();
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void handleThrowableOnSend(Throwable t) throws WsIOException {
+        ExceptionUtils.handleThrowable(t);
+        wsSession.getLocal().onError(wsSession, t);
+        CloseReason cr = new CloseReason(CloseCodes.CLOSED_ABNORMALLY,
+                sm.getString("wsFrame.ioeTriggeredClose"));
+        throw new WsIOException(cr);
+    }
+-----CSCI578-----
+
+
+
+    private boolean processData() throws IOException {
+        boolean result;
+        if (Util.isControl(opCode)) {
+            result = processDataControl();
+        } else if (textMessage) {
+            if (textMsgHandler == null) {
+                result = swallowInput();
+            } else {
+                result = processDataText();
+            }
+        } else {
+            if (binaryMsgHandler == null) {
+                result = swallowInput();
+            } else {
+                result = processDataBinary();
+            }
+        }
+        checkRoomPayload();
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    @SuppressWarnings("unchecked")
+    private void sendMessageBinary(ByteBuffer msg, boolean last)
+            throws WsIOException {
+        if (binaryMsgHandler instanceof WrappedMessageHandler) {
+            long maxMessageSize =
+                    ((WrappedMessageHandler) binaryMsgHandler).getMaxMessageSize();
+            if (maxMessageSize > -1 && msg.remaining() > maxMessageSize) {
+                throw new WsIOException(new CloseReason(CloseCodes.TOO_BIG,
+                        sm.getString("wsFrame.messageTooBig",
+                                Long.valueOf(msg.remaining()),
+                                Long.valueOf(maxMessageSize))));
+            }
+        }
+        try {
+            if (binaryMsgHandler instanceof MessageHandler.Partial<?>) {
+                ((MessageHandler.Partial<ByteBuffer>) binaryMsgHandler).onMessage(msg, last);
+            } else {
+                // Caller ensures last == true if this branch is used
+                ((MessageHandler.Whole<ByteBuffer>) binaryMsgHandler).onMessage(msg);
+            }
+        } catch(Throwable t) {
+            handleThrowableOnSend(t);
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void newMessage() {
+        messageBufferBinary.clear();
+        messageBufferText.clear();
+        utf8DecoderMessage.reset();
+        continuationExpected = false;
+        newFrame();
+    }
+-----CSCI578-----
+
+
+
+    protected MessageHandler.Whole<PongMessage> getPongMessageHandler() {
+        return pongMessageHandler;
+    }
+-----CSCI578-----
+
+
+
+    private boolean usePartial() {
+        if (Util.isControl(opCode)) {
+            return false;
+        } else if (textMessage) {
+            return textMsgHandler instanceof MessageHandler.Partial;
+        } else {
+            // Must be binary
+            return binaryMsgHandler instanceof MessageHandler.Partial;
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void makeRoom() {
+        System.arraycopy(inputBuffer, readPos, inputBuffer, 0,
+                writePos - readPos);
+        writePos = writePos - readPos;
+        readPos = 0;
+    }
+-----CSCI578-----
+
+
+
+    private boolean processDataBinary() throws IOException {
+        // Copy the available data to the buffer
+        TransformationResult tr = transformation.getMoreData(opCode, fin, rsv, messageBufferBinary);
+        while (!TransformationResult.END_OF_FRAME.equals(tr)) {
+            // Frame not complete - what did we run out of?
+            if (TransformationResult.UNDERFLOW.equals(tr)) {
+                // Ran out of input data - get some more
+                return false;
+            }
+
+            // Ran out of message buffer - flush it
+            if (!usePartial()) {
+                CloseReason cr = new CloseReason(CloseCodes.TOO_BIG,
+                        sm.getString("wsFrame.bufferTooSmall",
+                                Integer.valueOf(
+                                        messageBufferBinary.capacity()),
+                                Long.valueOf(payloadLength)));
+                throw new WsIOException(cr);
+            }
+            messageBufferBinary.flip();
+            ByteBuffer copy =
+                    ByteBuffer.allocate(messageBufferBinary.limit());
+            copy.put(messageBufferBinary);
+            copy.flip();
+            sendMessageBinary(copy, false);
+            messageBufferBinary.clear();
+            // Read more data
+            tr = transformation.getMoreData(opCode, fin, rsv, messageBufferBinary);
+        }
+
+        // Frame is fully received
+        // Send the message if either:
+        // - partial messages are supported
+        // - the message is complete
+        if (usePartial() || !continuationExpected) {
+            messageBufferBinary.flip();
+            ByteBuffer copy =
+                    ByteBuffer.allocate(messageBufferBinary.limit());
+            copy.put(messageBufferBinary);
+            copy.flip();
+            sendMessageBinary(copy, !continuationExpected);
+            messageBufferBinary.clear();
+        }
+
+        if (continuationExpected) {
+            // More data for this message expected, start a new frame
+            newFrame();
+        } else {
+            // Message is complete, start a new message
+            newMessage();
+        }
+
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    static boolean isControl(byte opCode) {
+        return (opCode & 0x08) > 0;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Obtain more input data.
+     *
+     * @param opCode    The opcode for the frame currently being processed
+     * @param fin       Is this the final frame in this WebSocket message?
+     * @param rsv       The reserved bits for the frame currently being
+     *                      processed
+     * @param dest      The buffer in which the data is to be written
+     *
+     * @return The result of trying to read more data from the transform
+     *
+     * @throws IOException If an I/O error occurs while reading data from the
+     *         transform
+     */
+    TransformationResult getMoreData(byte opCode, boolean fin, int rsv, ByteBuffer dest) throws IOException;
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public TransformationResult getMoreData(byte opCode, boolean fin, int rsv, ByteBuffer dest)
+            throws IOException {
+        // Control frames are never compressed and may appear in the middle of
+        // a WebSocket method. Pass them straight through.
+        if (Util.isControl(opCode)) {
+            return next.getMoreData(opCode, fin, rsv, dest);
+        }
+
+        if (!Util.isContinuation(opCode)) {
+            // First frame in new message
+            skipDecompression = (rsv & RSV_BITMASK) == 0;
+        }
+
+        // Pass uncompressed frames straight through.
+        if (skipDecompression) {
+            return next.getMoreData(opCode, fin, rsv, dest);
+        }
+
+        int written;
+        boolean usedEomBytes = false;
+
+        while (dest.remaining() > 0) {
+            // Space available in destination. Try and fill it.
+            try {
+                written = inflater.inflate(
+                        dest.array(), dest.arrayOffset() + dest.position(), dest.remaining());
+            } catch (DataFormatException e) {
+                throw new IOException(sm.getString("perMessageDeflate.deflateFailed"), e);
+            }
+            dest.position(dest.position() + written);
+
+            if (inflater.needsInput() && !usedEomBytes ) {
+                if (dest.hasRemaining()) {
+                    readBuffer.clear();
+                    TransformationResult nextResult =
+                            next.getMoreData(opCode, fin, (rsv ^ RSV_BITMASK), readBuffer);
+                    inflater.setInput(
+                            readBuffer.array(), readBuffer.arrayOffset(), readBuffer.position());
+                    if (TransformationResult.UNDERFLOW.equals(nextResult)) {
+                        return nextResult;
+                    } else if (TransformationResult.END_OF_FRAME.equals(nextResult) &&
+                            readBuffer.position() == 0) {
+                        if (fin) {
+                            inflater.setInput(EOM_BYTES);
+                            usedEomBytes = true;
+                        } else {
+                            return TransformationResult.END_OF_FRAME;
+                        }
+                    }
+                }
+            } else if (written == 0) {
+                if (fin && (isServer && !clientContextTakeover ||
+                        !isServer && !serverContextTakeover)) {
+                    inflater.reset();
+                }
+                return TransformationResult.END_OF_FRAME;
+            }
+        }
+
+        return TransformationResult.OVERFLOW;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean validateRsv(int rsv, byte opCode) {
+        if (Util.isControl(opCode)) {
+            if ((rsv & RSV_BITMASK) > 0) {
+                return false;
+            } else {
+                if (next == null) {
+                    return true;
+                } else {
+                    return next.validateRsv(rsv, opCode);
+                }
+            }
+        } else {
+            int rsvNext = rsv;
+            if ((rsv & RSV_BITMASK) > 0) {
+                rsvNext = rsv ^ RSV_BITMASK;
+            }
+            if (next == null) {
+                return true;
+            } else {
+                return next.validateRsv(rsvNext, opCode);
+            }
+        }
+    }
+-----CSCI578-----
+
+    protected abstract Log getLog();
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if sufficient data was present to process all
+     *         of the initial header
+     */
+    private boolean processInitialHeader() throws IOException {
+        // Need at least two bytes of data to do this
+        if (writePos - readPos < 2) {
+            return false;
+        }
+        int b = inputBuffer[readPos++];
+        fin = (b & 0x80) > 0;
+        rsv = (b & 0x70) >>> 4;
+        opCode = (byte) (b & 0x0F);
+        if (!transformation.validateRsv(rsv, opCode)) {
+            throw new WsIOException(new CloseReason(
+                    CloseCodes.PROTOCOL_ERROR,
+                    sm.getString("wsFrame.wrongRsv", Integer.valueOf(rsv),
+                            Integer.valueOf(opCode))));
+        }
+
+        if (Util.isControl(opCode)) {
+            if (!fin) {
+                throw new WsIOException(new CloseReason(
+                        CloseCodes.PROTOCOL_ERROR,
+                        sm.getString("wsFrame.controlFragmented")));
+            }
+            if (opCode != Constants.OPCODE_PING &&
+                    opCode != Constants.OPCODE_PONG &&
+                    opCode != Constants.OPCODE_CLOSE) {
+                throw new WsIOException(new CloseReason(
+                        CloseCodes.PROTOCOL_ERROR,
+                        sm.getString("wsFrame.invalidOpCode",
+                                Integer.valueOf(opCode))));
+            }
+        } else {
+            if (continuationExpected) {
+                if (!Util.isContinuation(opCode)) {
+                    throw new WsIOException(new CloseReason(
+                            CloseCodes.PROTOCOL_ERROR,
+                            sm.getString("wsFrame.noContinuation")));
+                }
+            } else {
+                try {
+                    if (opCode == Constants.OPCODE_BINARY) {
+                        // New binary message
+                        textMessage = false;
+                        int size = wsSession.getMaxBinaryMessageBufferSize();
+                        if (size != messageBufferBinary.capacity()) {
+                            messageBufferBinary = ByteBuffer.allocate(size);
+                        }
+                        binaryMsgHandler = wsSession.getBinaryMessageHandler();
+                        textMsgHandler = null;
+                    } else if (opCode == Constants.OPCODE_TEXT) {
+                        // New text message
+                        textMessage = true;
+                        int size = wsSession.getMaxTextMessageBufferSize();
+                        if (size != messageBufferText.capacity()) {
+                            messageBufferText = CharBuffer.allocate(size);
+                        }
+                        binaryMsgHandler = null;
+                        textMsgHandler = wsSession.getTextMessageHandler();
+                    } else {
+                        throw new WsIOException(new CloseReason(
+                                CloseCodes.PROTOCOL_ERROR,
+                                sm.getString("wsFrame.invalidOpCode",
+                                        Integer.valueOf(opCode))));
+                    }
+                } catch (IllegalStateException ise) {
+                    // Thrown if the session is already closed
+                    throw new WsIOException(new CloseReason(
+                            CloseCodes.PROTOCOL_ERROR,
+                            sm.getString("wsFrame.sessionClosed")));
+                }
+            }
+            continuationExpected = !fin;
+        }
+        b = inputBuffer[readPos++];
+        // Client data must be masked
+        if ((b & 0x80) == 0 && isMasked()) {
+            throw new WsIOException(new CloseReason(
+                    CloseCodes.PROTOCOL_ERROR,
+                    sm.getString("wsFrame.notMasked")));
+        }
+        payloadLength = b & 0x7F;
+        state = State.PARTIAL_HEADER;
+        if (getLog().isDebugEnabled()) {
+            getLog().debug(sm.getString("wsFrame.partialHeaderComplete", Boolean.toString(fin),
+                    Integer.toString(rsv), Integer.toString(opCode), Long.toString(payloadLength)));
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    protected MessageHandler getBinaryMessageHandler() {
+        return binaryMessageHandler;
+    }
+-----CSCI578-----
+
+
+
+    protected MessageHandler getTextMessageHandler() {
+        return textMessageHandler;
+    }
+-----CSCI578-----
+
+
+
+    static boolean isContinuation(byte opCode) {
+        return opCode == Constants.OPCODE_CONTINUATION;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Validates the RSV and opcode combination (assumed to have been extracted
+     * from a WebSocket Frame) for this extension. The implementation is
+     * expected to unset any RSV bits it has validated before passing the
+     * remaining RSV bits to the next transformation in the pipeline.
+     *
+     * @param rsv       The RSV bits received as an int in the range zero to
+     *                  seven with RSV1 as the MSB and RSV3 as the LSB
+     * @param opCode    The opCode received
+     *
+     * @return <code>true</code> if the RSV is valid otherwise
+     *         <code>false</code>
+     */
+    boolean validateRsv(int rsv, byte opCode);
+-----CSCI578-----
+
+
+
+    @Override
+    public int getMaxBinaryMessageBufferSize() {
+        checkState();
+        return maxBinaryMessageBufferSize;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public int getMaxTextMessageBufferSize() {
+        checkState();
+        return maxTextMessageBufferSize;
+    }
+-----CSCI578-----
+
+
+
+    private void checkState() {
+        if (state == State.CLOSED) {
+            /*
+             * As per RFC 6455, a WebSocket connection is considered to be
+             * closed once a peer has sent and received a WebSocket close frame.
+             */
+            throw new IllegalStateException(sm.getString("wsSession.closed", id));
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public WebSocketContainer getContainer() {
+        checkState();
+        return webSocketContainer;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Set<MessageHandler> getMessageHandlers() {
+        checkState();
+        Set<MessageHandler> result = new HashSet<>();
+        if (binaryMessageHandler != null) {
+            result.add(binaryMessageHandler);
+        }
+        if (textMessageHandler != null) {
+            result.add(textMessageHandler);
+        }
+        if (pongMessageHandler != null) {
+            result.add(pongMessageHandler);
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getProtocolVersion() {
+        checkState();
+        return Constants.WS_VERSION_HEADER_VALUE;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getNegotiatedSubprotocol() {
+        checkState();
+        return subProtocol;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public List<Extension> getNegotiatedExtensions() {
+        checkState();
+        return negotiatedExtensions;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isSecure() {
+        checkState();
+        return secure;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public long getMaxIdleTimeout() {
+        checkState();
+        return maxIdleTimeout;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setMaxIdleTimeout(long timeout) {
+        checkState();
+        this.maxIdleTimeout = timeout;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setMaxBinaryMessageBufferSize(int max) {
+        checkState();
+        this.maxBinaryMessageBufferSize = max;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setMaxTextMessageBufferSize(int max) {
+        checkState();
+        this.maxTextMessageBufferSize = max;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public RemoteEndpoint.Async getAsyncRemote() {
+        checkState();
+        return remoteEndpointAsync;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public URI getRequestURI() {
+        checkState();
+        return requestUri;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Map<String,List<String>> getRequestParameterMap() {
+        checkState();
+        return requestParameterMap;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getQueryString() {
+        checkState();
+        return queryString;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Map<String,String> getPathParameters() {
+        checkState();
+        return pathParameters;
+    }

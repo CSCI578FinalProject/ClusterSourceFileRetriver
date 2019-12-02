@@ -1,0 +1,137 @@
+2
+-----CSCI578-----
+
+
+
+    synchronized void addJar(String jar, JarFile jarFile, File file)
+        throws IOException {
+
+        if (jar == null)
+            return;
+        if (jarFile == null)
+            return;
+        if (file == null)
+            return;
+
+        if (log.isDebugEnabled())
+            log.debug("addJar(" + jar + ")");
+
+        int i;
+
+        if ((jarPath != null) && (jar.startsWith(jarPath))) {
+
+            String jarName = jar.substring(jarPath.length());
+            while (jarName.startsWith("/"))
+                jarName = jarName.substring(1);
+
+            String[] result = new String[jarNames.length + 1];
+            for (i = 0; i < jarNames.length; i++) {
+                result[i] = jarNames[i];
+            }
+            result[jarNames.length] = jarName;
+            jarNames = result;
+
+        }
+
+        try {
+
+            // Register the JAR for tracking
+
+            long lastModified =
+                ((ResourceAttributes) resources.getAttributes(jar))
+                .getLastModified();
+
+            String[] result = new String[paths.length + 1];
+            for (i = 0; i < paths.length; i++) {
+                result[i] = paths[i];
+            }
+            result[paths.length] = jar;
+            paths = result;
+
+            long[] result3 = new long[lastModifiedDates.length + 1];
+            for (i = 0; i < lastModifiedDates.length; i++) {
+                result3[i] = lastModifiedDates[i];
+            }
+            result3[lastModifiedDates.length] = lastModified;
+            lastModifiedDates = result3;
+
+        } catch (NamingException e) {
+            // Ignore
+        }
+
+        // If the JAR currently contains invalid classes, don't actually use it
+        // for classloading
+        if (!validateJarFile(file))
+            return;
+
+        JarFile[] result2 = new JarFile[jarFiles.length + 1];
+        for (i = 0; i < jarFiles.length; i++) {
+            result2[i] = jarFiles[i];
+        }
+        result2[jarFiles.length] = jarFile;
+        jarFiles = result2;
+
+        // Add the file to the list
+        File[] result4 = new File[jarRealFiles.length + 1];
+        for (i = 0; i < jarRealFiles.length; i++) {
+            result4[i] = jarRealFiles[i];
+        }
+        result4[jarRealFiles.length] = file;
+        jarRealFiles = result4;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Check the specified JAR file, and return <code>true</code> if it does
+     * not contain any of the trigger classes.
+     *
+     * @param file  The JAR file to be checked
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    protected boolean validateJarFile(File file)
+        throws IOException {
+
+        if (triggers == null)
+            return (true);
+
+        JarFile jarFile = null;
+        try {
+            jarFile = new JarFile(file);
+            for (int i = 0; i < triggers.length; i++) {
+                Class<?> clazz = null;
+                try {
+                    if (parent != null) {
+                        clazz = parent.loadClass(triggers[i]);
+                    } else {
+                        clazz = Class.forName(triggers[i]);
+                    }
+                } catch (Throwable t) {
+                    clazz = null;
+                }
+                if (clazz == null)
+                    continue;
+                String name = triggers[i].replace('.', '/') + ".class";
+                if (log.isDebugEnabled())
+                    log.debug(" Checking for " + name);
+                JarEntry jarEntry = jarFile.getJarEntry(name);
+                if (jarEntry != null) {
+                    log.info("validateJarFile(" + file +
+                        ") - jar not loaded. See Servlet Spec 2.3, "
+                        + "section 9.7.2. Offending class: " + name);
+                    return false;
+                }
+            }
+            return true;
+        } finally {
+            if (jarFile != null) {
+                try {
+                    jarFile.close();
+                } catch (IOException ioe) {
+                    // Ignore
+                }
+            }
+        }
+    }

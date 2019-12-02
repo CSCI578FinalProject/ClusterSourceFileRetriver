@@ -1,0 +1,46 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Switches the underlying output stream from a memory based stream to one
+     * that is backed by disk. This is the point at which we realise that too
+     * much data is being written to keep in memory, so we elect to switch to
+     * disk-based storage.
+     *
+     * @exception IOException if an error occurs.
+     */
+    @Override
+    protected void thresholdReached() throws IOException
+    {
+        if (prefix != null) {
+            outputFile = File.createTempFile(prefix, suffix, directory);
+        }
+        FileOutputStream fos = new FileOutputStream(outputFile);
+        memoryOutputStream.writeTo(fos);
+        currentOutputStream = fos;
+        memoryOutputStream = null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Writes the entire contents of this byte stream to the
+     * specified output stream.
+     *
+     * @param out  the output stream to write to
+     * @throws IOException if an I/O error occurs, such as if the stream is closed
+     * @see java.io.ByteArrayOutputStream#writeTo(OutputStream)
+     */
+    public synchronized void writeTo(OutputStream out) throws IOException {
+        int remaining = count;
+        for (byte[] buf : buffers) {
+            int c = Math.min(buf.length, remaining);
+            out.write(buf, 0, c);
+            remaining -= c;
+            if (remaining == 0) {
+                break;
+            }
+        }
+    }

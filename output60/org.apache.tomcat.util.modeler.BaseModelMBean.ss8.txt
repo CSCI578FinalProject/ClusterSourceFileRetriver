@@ -1,0 +1,159 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain and return the values of several attributes of this MBean.
+     *
+     * @param names Names of the requested attributes
+     */
+    public AttributeList getAttributes(String names[]) {
+
+        // Validate the input parameters
+        if (names == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Attribute names list is null"),
+                 "Attribute names list is null");
+
+        // Prepare our response, eating all exceptions
+        AttributeList response = new AttributeList();
+        for (int i = 0; i < names.length; i++) {
+            try {
+                response.add(new Attribute(names[i],getAttribute(names[i])));
+            } catch (Exception e) {
+                ; // Not having a particular attribute in the response
+                ; // is the indication of a getter problem
+            }
+        }
+        return (response);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * The name of the property getter method, if non-standard.
+     */
+    public String getGetMethod() {
+        if(getMethod == null) 
+            getMethod = getMethodName(getName(), true, isIs());
+        return (this.getMethod);
+    }
+-----CSCI578-----
+
+
+    Method getGetter(String aname, BaseModelMBean mbean, Object resource) 
+            throws AttributeNotFoundException, MBeanException, ReflectionException {
+        // TODO: do we need caching ? JMX is for management, it's not supposed to require lots of performance.
+        Method m=null; // (Method)getAttMap.get( name );
+
+        if( m==null ) {
+            AttributeInfo attrInfo = (AttributeInfo)attributes.get(aname);
+            // Look up the actual operation to be used
+            if (attrInfo == null)
+                throw new AttributeNotFoundException(" Cannot find attribute " + aname + " for " + resource);
+            
+            String getMethod = attrInfo.getGetMethod();
+            if (getMethod == null)
+                throw new AttributeNotFoundException("Cannot find attribute " + aname + " get method name");
+
+            Object object = null;
+            NoSuchMethodException exception = null;
+            try {
+                object = mbean;
+                m = object.getClass().getMethod(getMethod, NO_ARGS_PARAM_SIG);
+            } catch (NoSuchMethodException e) {
+                exception = e;;
+            }
+            if( m== null && resource != null ) {
+                try {
+                    object = resource;
+                    m = object.getClass().getMethod(getMethod, NO_ARGS_PARAM_SIG);
+                    exception=null;
+                } catch (NoSuchMethodException e) {
+                    exception = e;
+                }
+            }
+            if( exception != null )
+                throw new ReflectionException(exception,
+                                              "Cannot find getter method " + getMethod);
+            //getAttMap.put( name, m );
+        }
+
+        return m;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Is this a boolean attribute with an "is" getter?
+     */
+    public boolean isIs() {
+        return (this.is);
+    }
+-----CSCI578-----
+
+
+    // key: operation val: invoke method
+    //private Hashtable invokeAttMap=new Hashtable();
+
+    /**
+     * Obtain and return the value of a specific attribute of this MBean.
+     *
+     * @param name Name of the requested attribute
+     *
+     * @exception AttributeNotFoundException if this attribute is not
+     *  supported by this MBean
+     * @exception MBeanException if the initializer of an object
+     *  throws an exception
+     * @exception ReflectionException if a Java reflection exception
+     *  occurs when invoking the getter
+     */
+    public Object getAttribute(String name)
+        throws AttributeNotFoundException, MBeanException,
+            ReflectionException {
+        // Validate the input parameters
+        if (name == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Attribute name is null"),
+                 "Attribute name is null");
+
+        if( (resource instanceof DynamicMBean) && 
+             ! ( resource instanceof BaseModelMBean )) {
+            return ((DynamicMBean)resource).getAttribute(name);
+        }
+        
+        Method m=managedBean.getGetter(name, this, resource);
+        Object result = null;
+        try {
+            Class declaring=m.getDeclaringClass();
+            // workaround for catalina weird mbeans - the declaring class is BaseModelMBean.
+            // but this is the catalina class.
+            if( declaring.isAssignableFrom(this.getClass()) ) {
+                result = m.invoke(this, NO_ARGS_PARAM );
+            } else {
+                result = m.invoke(resource, NO_ARGS_PARAM );
+            }
+        } catch (InvocationTargetException e) {
+            Throwable t = e.getTargetException();
+            if (t == null)
+                t = e;
+            if (t instanceof RuntimeException)
+                throw new RuntimeOperationsException
+                    ((RuntimeException) t, "Exception invoking method " + name);
+            else if (t instanceof Error)
+                throw new RuntimeErrorException
+                    ((Error) t, "Error invoking method " + name);
+            else
+                throw new MBeanException
+                    (e, "Exception invoking method " + name);
+        } catch (Exception e) {
+            throw new MBeanException
+                (e, "Exception invoking method " + name);
+        }
+
+        // Return the results of this method invocation
+        // FIXME - should we validate the return type?
+        return (result);
+    }

@@ -1,0 +1,1196 @@
+70
+-----CSCI578-----
+
+
+
+    /**
+     * Is this context using version 2.2 of the Servlet spec?
+     *
+     * @return <code>true</code> for a legacy Servlet 2.2 webapp
+     */
+    boolean isServlet22();
+-----CSCI578-----
+
+
+    private void convertJsp(ServletDef servletDef,
+            Map<String,String> jspInitParams) {
+        servletDef.setServletClass(org.apache.catalina.core.Constants.JSP_SERVLET_CLASS);
+        String jspFile = servletDef.getJspFile();
+        if ((jspFile != null) && !jspFile.startsWith("/")) {
+            if (context.isServlet22()) {
+                if(log.isDebugEnabled()) {
+                    log.debug(sm.getString("contextConfig.jspFile.warning",
+                                       jspFile));
+                }
+                jspFile = "/" + jspFile;
+            } else {
+                throw new IllegalArgumentException
+                    (sm.getString("contextConfig.jspFile.error", jspFile));
+            }
+        }
+        servletDef.getParameterMap().put("jspFile", jspFile);
+        servletDef.setJspFile(null);
+        for (Map.Entry<String, String> initParam: jspInitParams.entrySet()) {
+            servletDef.addInitParameter(initParam.getKey(), initParam.getValue());
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void convertJsps(WebXml webXml) {
+        Map<String,String> jspInitParams;
+        ServletDef jspServlet = webXml.getServlets().get("jsp");
+        if (jspServlet == null) {
+            jspInitParams = new HashMap<>();
+            Wrapper w = (Wrapper) context.findChild("jsp");
+            if (w != null) {
+                String[] params = w.findInitParameters();
+                for (String param : params) {
+                    jspInitParams.put(param, w.findInitParameter(param));
+                }
+            }
+        } else {
+            jspInitParams = jspServlet.getParameterMap();
+        }
+        for (ServletDef servletDef: webXml.getServlets().values()) {
+            if (servletDef.getJspFile() != null) {
+                convertJsp(servletDef, jspInitParams);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the value for the specified initialization parameter name,
+     * if any; otherwise return <code>null</code>.
+     *
+     * @param name Name of the requested initialization parameter
+     */
+    public String findInitParameter(String name);
+-----CSCI578-----
+
+
+
+    /**
+     * @return the names of all defined initialization parameters for this
+     * servlet.
+     */
+    public String[] findInitParameters();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Map<String, String> getParameterMap() {
+
+        return (this.parameters);
+
+    }
+-----CSCI578-----
+
+
+    public String getJspFile() {
+        return (this.jspFile);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Scan JARs for ServletContainerInitializer implementations.
+     */
+    protected void processServletContainerInitializers() {
+
+        List<ServletContainerInitializer> detectedScis;
+        try {
+            WebappServiceLoader<ServletContainerInitializer> loader = new WebappServiceLoader<>(context);
+            detectedScis = loader.load(ServletContainerInitializer.class);
+        } catch (IOException e) {
+            log.error(sm.getString(
+                    "contextConfig.servletContainerInitializerFail",
+                    context.getName()),
+                e);
+            ok = false;
+            return;
+        }
+
+        for (ServletContainerInitializer sci : detectedScis) {
+            initializerClassMap.put(sci, new HashSet<Class<?>>());
+
+            HandlesTypes ht;
+            try {
+                ht = sci.getClass().getAnnotation(HandlesTypes.class);
+            } catch (Exception e) {
+                if (log.isDebugEnabled()) {
+                    log.info(sm.getString("contextConfig.sci.debug",
+                            sci.getClass().getName()),
+                            e);
+                } else {
+                    log.info(sm.getString("contextConfig.sci.info",
+                            sci.getClass().getName()));
+                }
+                continue;
+            }
+            if (ht == null) {
+                continue;
+            }
+            Class<?>[] types = ht.value();
+            if (types == null) {
+                continue;
+            }
+
+            for (Class<?> type : types) {
+                if (type.isAnnotation()) {
+                    handlesTypesAnnotations = true;
+                } else {
+                    handlesTypesNonAnnotations = true;
+                }
+                Set<ServletContainerInitializer> scis =
+                        typeInitializerMap.get(type);
+                if (scis == null) {
+                    scis = new HashSet<>();
+                    typeInitializerMap.put(type, scis);
+                }
+                scis.add(sci);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    private WebXml getDefaultWebXmlFragment(WebXmlParser webXmlParser) {
+
+        // Host should never be null
+        Host host = (Host) context.getParent();
+
+        DefaultWebXmlCacheEntry entry = hostWebXmlCache.get(host);
+
+        InputSource globalWebXml = getGlobalWebXmlSource();
+        InputSource hostWebXml = getHostWebXmlSource();
+
+        long globalTimeStamp = 0;
+        long hostTimeStamp = 0;
+
+        if (globalWebXml != null) {
+            URLConnection uc = null;
+            try {
+                URL url = new URL(globalWebXml.getSystemId());
+                uc = url.openConnection();
+                globalTimeStamp = uc.getLastModified();
+            } catch (IOException e) {
+                globalTimeStamp = -1;
+            } finally {
+                if (uc != null) {
+                    try {
+                        uc.getInputStream().close();
+                    } catch (IOException e) {
+                        ExceptionUtils.handleThrowable(e);
+                        globalTimeStamp = -1;
+                    }
+                }
+            }
+        }
+
+        if (hostWebXml != null) {
+            URLConnection uc = null;
+            try {
+                URL url = new URL(hostWebXml.getSystemId());
+                uc = url.openConnection();
+                hostTimeStamp = uc.getLastModified();
+            } catch (IOException e) {
+                hostTimeStamp = -1;
+            } finally {
+                if (uc != null) {
+                    try {
+                        uc.getInputStream().close();
+                    } catch (IOException e) {
+                        ExceptionUtils.handleThrowable(e);
+                        hostTimeStamp = -1;
+                    }
+                }
+            }
+        }
+
+        if (entry != null && entry.getGlobalTimeStamp() == globalTimeStamp &&
+                entry.getHostTimeStamp() == hostTimeStamp) {
+            return entry.getWebXml();
+        }
+
+        // Parsing global web.xml is relatively expensive. Use a sync block to
+        // make sure it only happens once. Use the pipeline since a lock will
+        // already be held on the host by another thread
+        synchronized (host.getPipeline()) {
+            entry = hostWebXmlCache.get(host);
+            if (entry != null && entry.getGlobalTimeStamp() == globalTimeStamp &&
+                    entry.getHostTimeStamp() == hostTimeStamp) {
+                return entry.getWebXml();
+            }
+
+            WebXml webXmlDefaultFragment = createWebXml();
+            webXmlDefaultFragment.setOverridable(true);
+            // Set to distributable else every app will be prevented from being
+            // distributable when the default fragment is merged with the main
+            // web.xml
+            webXmlDefaultFragment.setDistributable(true);
+            // When merging, the default welcome files are only used if the app has
+            // not defined any welcomes files.
+            webXmlDefaultFragment.setAlwaysAddWelcomeFiles(false);
+
+            // Parse global web.xml if present
+            if (globalWebXml == null) {
+                // This is unusual enough to log
+                log.info(sm.getString("contextConfig.defaultMissing"));
+            } else {
+                if (!webXmlParser.parseWebXml(
+                        globalWebXml, webXmlDefaultFragment, false)) {
+                    ok = false;
+                }
+            }
+
+            // Parse host level web.xml if present
+            // Additive apart from welcome pages
+            webXmlDefaultFragment.setReplaceWelcomeFiles(true);
+
+            if (!webXmlParser.parseWebXml(
+                    hostWebXml, webXmlDefaultFragment, false)) {
+                ok = false;
+            }
+
+            // Don't update the cache if an error occurs
+            if (globalTimeStamp != -1 && hostTimeStamp != -1) {
+                entry = new DefaultWebXmlCacheEntry(webXmlDefaultFragment,
+                        globalTimeStamp, hostTimeStamp);
+                hostWebXmlCache.put(host, entry);
+            }
+
+            return webXmlDefaultFragment;
+        }
+    }
+-----CSCI578-----
+
+    /**
+     * When merging from this web.xml, should the welcome files be added to the
+     * target web.xml even if it already contains welcome file definitions.
+     * @param alwaysAddWelcomeFiles <code>true</code> to add welcome files
+     */
+    public void setAlwaysAddWelcomeFiles(boolean alwaysAddWelcomeFiles) {
+        this.alwaysAddWelcomeFiles = alwaysAddWelcomeFiles;
+    }
+-----CSCI578-----
+
+    public void setOverridable(boolean overridable) {
+        this.overridable = overridable;
+    }
+-----CSCI578-----
+
+    /**
+     * When merging/parsing web.xml files into this web.xml should the current
+     * set be completely replaced?
+     * @param replaceWelcomeFiles <code>true</code> to replace welcome files
+     *  rather than add to the list
+     */
+    public void setReplaceWelcomeFiles(boolean replaceWelcomeFiles) {
+        this.replaceWelcomeFiles = replaceWelcomeFiles;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Utility method to create an input source from the specified XML file.
+     * @param filename  Name of the file (possibly with one or more leading path
+     *                  segments) to read
+     * @param path      Location that filename is relative to
+     * @return the input source
+     */
+    protected InputSource getWebXmlSource(String filename, String path) {
+        File file = new File(filename);
+        if (!file.isAbsolute()) {
+            file = new File(path, filename);
+        }
+
+        InputStream stream = null;
+        InputSource source = null;
+
+        try {
+            if (!file.exists()) {
+                // Use getResource and getResourceAsStream
+                stream =
+                    getClass().getClassLoader().getResourceAsStream(filename);
+                if(stream != null) {
+                    source =
+                        new InputSource(getClass().getClassLoader().getResource(
+                                filename).toURI().toString());
+                }
+            } else {
+                source = new InputSource(file.getAbsoluteFile().toURI().toString());
+                stream = new FileInputStream(file);
+            }
+
+            if (stream != null && source != null) {
+                source.setByteStream(stream);
+            }
+        } catch (Exception e) {
+            log.error(sm.getString(
+                    "contextConfig.defaultError", filename, file), e);
+        } finally {
+            if (source == null && stream != null) {
+                try {
+                    stream.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+        }
+
+        return source;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Identify the host web.xml to be used and obtain an input source for
+     * it.
+     * @return an input source to the default per host web.xml
+     */
+    protected InputSource getHostWebXmlSource() {
+        File hostConfigBase = getHostConfigBase();
+        if (hostConfigBase == null)
+            return null;
+
+        return getWebXmlSource(Constants.HostWebXml, hostConfigBase.getPath());
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected String[] processAnnotationsStringArray(ElementValue ev) {
+        ArrayList<String> values = new ArrayList<>();
+        if (ev instanceof ArrayElementValue) {
+            ElementValue[] arrayValues =
+                ((ArrayElementValue) ev).getElementValuesArray();
+            for (ElementValue value : arrayValues) {
+                values.add(value.stringifyValue());
+            }
+        } else {
+            values.add(ev.stringifyValue());
+        }
+        String[] result = new String[values.size()];
+        return values.toArray(result);
+    }
+-----CSCI578-----
+
+
+    public final ElementValue getValue()
+    {
+        return elementValue;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getNameString()
+    {
+        ConstantUtf8 c = (ConstantUtf8) constantPool.getConstant(
+                elementNameIndex, Const.CONSTANT_Utf8);
+        return c.getBytes();
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the annotation type name
+     */
+    public String getAnnotationType() {
+        final ConstantUtf8 c = (ConstantUtf8) constant_pool.getConstant(type_index, Const.CONSTANT_Utf8);
+        return c.getBytes();
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Class name.
+     */
+    public String getClassName() {
+        return class_name;
+    }
+-----CSCI578-----
+
+
+    public ElementValue[] getElementValuesArray()
+    {
+        return evalues;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the element value pairs in this annotation entry
+     */
+    public List<ElementValuePair> getElementValuePairs() {
+        return element_value_pairs;
+    }
+-----CSCI578-----
+
+
+
+    protected void processAnnotationsStream(InputStream is, WebXml fragment,
+            boolean handlesTypesOnly, Map<String,JavaClassCacheEntry> javaClassCache)
+            throws ClassFormatException, IOException {
+
+        ClassParser parser = new ClassParser(is);
+        JavaClass clazz = parser.parse();
+        checkHandlesTypes(clazz, javaClassCache);
+
+        if (handlesTypesOnly) {
+            return;
+        }
+
+        AnnotationEntry[] annotationsEntries = clazz.getAnnotationEntries();
+        if (annotationsEntries != null) {
+            String className = clazz.getClassName();
+            for (AnnotationEntry ae : annotationsEntries) {
+                String type = ae.getAnnotationType();
+                if ("Ljavax/servlet/annotation/WebServlet;".equals(type)) {
+                    processAnnotationWebServlet(className, ae, fragment);
+                }else if ("Ljavax/servlet/annotation/WebFilter;".equals(type)) {
+                    processAnnotationWebFilter(className, ae, fragment);
+                }else if ("Ljavax/servlet/annotation/WebListener;".equals(type)) {
+                    fragment.addListener(className);
+                } else {
+                    // Unknown annotation - ignore
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public abstract String stringifyValue();
+-----CSCI578-----
+
+
+
+    /**
+     * @return Data converted to string.
+     */
+    public final String getBytes() {
+        return bytes;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String stringifyValue()
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.append("[");
+        for (int i = 0; i < evalues.length; i++)
+        {
+            sb.append(evalues[i].stringifyValue());
+            if ((i + 1) < evalues.length) {
+                sb.append(",");
+            }
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Scan /WEB-INF/lib for JARs and for each one found add it and any
+     * /META-INF/web-fragment.xml to the resulting Map. web-fragment.xml files
+     * will be parsed before being added to the map. Every JAR will be added and
+     * <code>null</code> will be used if no web-fragment.xml was found. Any JARs
+     * known not contain fragments will be skipped.
+     *
+     * @param application The main web.xml metadata
+     * @param webXmlParser The parser to use to process the web.xml file
+     * @return A map of JAR name to processed web fragment (if any)
+     */
+    protected Map<String,WebXml> processJarsForWebFragments(WebXml application,
+            WebXmlParser webXmlParser) {
+
+        JarScanner jarScanner = context.getJarScanner();
+        boolean delegate = false;
+        if (context instanceof StandardContext) {
+            delegate = ((StandardContext) context).getDelegate();
+        }
+        boolean parseRequired = true;
+        Set<String> absoluteOrder = application.getAbsoluteOrdering();
+        if (absoluteOrder != null && absoluteOrder.isEmpty() &&
+                !context.getXmlValidation()) {
+            // Skip parsing when there is an empty absolute ordering and
+            // validation is not enabled
+            parseRequired = false;
+        }
+        FragmentJarScannerCallback callback =
+                new FragmentJarScannerCallback(webXmlParser, delegate, parseRequired);
+
+        jarScanner.scan(JarScanType.PLUGGABILITY,
+                context.getServletContext(), callback);
+
+        if (!callback.isOk()) {
+            ok = false;
+        }
+        return callback.getFragments();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get the Jar Scanner to be used to scan for JAR resources for this
+     * context.
+     * @return  The Jar Scanner configured for this context.
+     */
+    public JarScanner getJarScanner();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the "follow standard delegation model" flag used to configure
+     * our ClassLoader.
+     *
+     * @return <code>true</code> if classloading delegates to the parent classloader first
+     */
+    public boolean getDelegate() {
+
+        return (this.delegate);
+
+    }
+-----CSCI578-----
+
+
+    protected void processAnnotations(Set<WebXml> fragments,
+            boolean handlesTypesOnly, Map<String,JavaClassCacheEntry> javaClassCache) {
+        for(WebXml fragment : fragments) {
+            // Only need to scan for @HandlesTypes matches if any of the
+            // following are true:
+            // - it has already been determined only @HandlesTypes is required
+            //   (e.g. main web.xml has metadata-complete="true"
+            // - this fragment is for a container JAR (Servlet 3.1 section 8.1)
+            // - this fragment has metadata-complete="true"
+            boolean htOnly = handlesTypesOnly || !fragment.getWebappJar() ||
+                    fragment.isMetadataComplete();
+
+            WebXml annotations = new WebXml();
+            // no impact on distributable
+            annotations.setDistributable(true);
+            URL url = fragment.getURL();
+            processAnnotationsUrl(url, annotations, htOnly, javaClassCache);
+            Set<WebXml> set = new HashSet<>();
+            set.add(annotations);
+            // Merge annotations into fragment - fragment takes priority
+            fragment.merge(set);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add an error page for the specified error or Java exception.
+     *
+     * @param errorPage The error page definition to be added
+     */
+    public void addErrorPage(ErrorPage errorPage);
+-----CSCI578-----
+
+
+
+    /**
+     * Add a filter definition to this Context.
+     *
+     * @param filterDef The filter definition to be added
+     */
+    public void addFilterDef(FilterDef filterDef);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the display name of this web application.
+     *
+     * @param displayName The new display name
+     */
+    public void setDisplayName(String displayName);
+-----CSCI578-----
+
+
+    /**
+     * Add a post construct method definition for the given class, if there is
+     * an existing definition for the specified class - IllegalArgumentException
+     * will be thrown.
+     *
+     * @param clazz Fully qualified class name
+     * @param method
+     *            Post construct method name
+     * @throws IllegalArgumentException
+     *             if the fully qualified class name or method name are
+     *             <code>NULL</code>; if there is already post construct method
+     *             definition for the given class
+     */
+    public void addPostConstructMethod(String clazz, String method);
+-----CSCI578-----
+
+
+    /**
+     * Sets the enabled attribute for the associated servlet.
+     *
+     * @param enabled the new value
+     */
+    public void setEnabled(boolean enabled);
+-----CSCI578-----
+
+
+    /**
+     * Add a pre destroy method definition for the given class, if there is an
+     * existing definition for the specified class - IllegalArgumentException
+     * will be thrown.
+     *
+     * @param clazz Fully qualified class name
+     * @param method
+     *            Post construct method name
+     * @throws IllegalArgumentException
+     *             if the fully qualified class name or method name are
+     *             <code>NULL</code>; if there is already pre destroy method
+     *             definition for the given class
+     */
+    public void addPreDestroyMethod(String clazz, String method);
+-----CSCI578-----
+
+
+
+    /**
+     * Add a security constraint to the set for this web application.
+     *
+     * @param constraint The security constraint that should be added
+     */
+    public void addConstraint(SecurityConstraint constraint);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the effective major version of the Servlet spec used by this
+     * context.
+     *
+     * @param major Set the version number
+     */
+    public void setEffectiveMajorVersion(int major);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the boolean on the annotations parsing for this web
+     * application.
+     *
+     * @param ignoreAnnotations The boolean on the annotations parsing
+     */
+    public void setIgnoreAnnotations(boolean ignoreAnnotations);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the distributable flag for this web application.
+     *
+     * @param distributable The new distributable flag
+     */
+    public void setDistributable(boolean distributable);
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Add a new Listener class name to the set of Listeners
+     * configured for this application.
+     *
+     * @param listener Java class name of a listener class
+     */
+    public void addApplicationListener(String listener);
+-----CSCI578-----
+
+
+    /**
+     * Set the JspConfigDescriptor for this context.
+     * A null value indicates there is not JSP configuration.
+     *
+     * @param descriptor the new JSP configuration
+     */
+    public void setJspConfigDescriptor(JspConfigDescriptor descriptor);
+-----CSCI578-----
+
+
+    /**
+     * Add a local EJB resource reference for this web application.
+     *
+     * @param ejb New EJB resource reference
+     */
+    public void addLocalEjb(ContextLocalEjb ejb) {
+
+        if (entries.contains(ejb.getName())) {
+            return;
+        } else {
+            entries.add(ejb.getName());
+        }
+
+        synchronized (localEjbs) {
+            ejb.setNamingResources(this);
+            localEjbs.put(ejb.getName(), ejb);
+        }
+        support.firePropertyChange("localEjb", null, ejb);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Called in the unlikely event that an application defines a role named
+     * "**".
+     */
+    public void treatAllAuthenticatedUsersAsApplicationRole() {
+        if (authenticatedUsers) {
+            authenticatedUsers = false;
+
+            String results[] = new String[authRoles.length + 1];
+            for (int i = 0; i < authRoles.length; i++)
+                results[i] = authRoles[i];
+            results[authRoles.length] = ROLE_ALL_AUTHENTICATED_USERS;
+            authRoles = results;
+            authConstraint = true;
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the public identifier of the deployment descriptor DTD that is
+     * currently being parsed.
+     *
+     * @param publicId The public identifier
+     */
+    public void setPublicId(String publicId);
+-----CSCI578-----
+
+
+
+    /**
+     * Add an EJB resource reference for this web application.
+     *
+     * @param ejb New EJB resource reference
+     */
+    public void addEjb(ContextEjb ejb) {
+
+        if (entries.contains(ejb.getName())) {
+            return;
+        } else {
+            entries.add(ejb.getName());
+        }
+
+        synchronized (ejbs) {
+            ejb.setNamingResources(this);
+            ejbs.put(ejb.getName(), ejb);
+        }
+        support.firePropertyChange("ejb", null, ejb);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a Locale Encoding Mapping (see Sec 5.4 of Servlet spec 2.4)
+     *
+     * @param locale locale to map an encoding for
+     * @param encoding encoding to be used for a give locale
+     */
+    public void addLocaleEncodingMappingParameter(String locale, String encoding);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the deny-uncovered-http-methods flag for this web application.
+     *
+     * @param denyUncoveredHttpMethods The new deny-uncovered-http-methods flag
+     */
+    public void setDenyUncoveredHttpMethods(boolean denyUncoveredHttpMethods);
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new security role reference record to the set of records for
+     * this servlet.
+     *
+     * @param name Role name used within this servlet
+     * @param link Role name used within the web application
+     */
+    public void addSecurityReference(String name, String link);
+-----CSCI578-----
+
+
+    public boolean isOverridable() {
+        return overridable;
+    }
+-----CSCI578-----
+
+
+
+    private void configureContext(WebXml webxml) {
+        // As far as possible, process in alphabetical order so it is easy to
+        // check everything is present
+        // Some validation depends on correct public ID
+        context.setPublicId(webxml.getPublicId());
+
+        // Everything else in order
+        context.setEffectiveMajorVersion(webxml.getMajorVersion());
+        context.setEffectiveMinorVersion(webxml.getMinorVersion());
+
+        for (Entry<String, String> entry : webxml.getContextParams().entrySet()) {
+            context.addParameter(entry.getKey(), entry.getValue());
+        }
+        context.setDenyUncoveredHttpMethods(
+                webxml.getDenyUncoveredHttpMethods());
+        context.setDisplayName(webxml.getDisplayName());
+        context.setDistributable(webxml.isDistributable());
+        for (ContextLocalEjb ejbLocalRef : webxml.getEjbLocalRefs().values()) {
+            context.getNamingResources().addLocalEjb(ejbLocalRef);
+        }
+        for (ContextEjb ejbRef : webxml.getEjbRefs().values()) {
+            context.getNamingResources().addEjb(ejbRef);
+        }
+        for (ContextEnvironment environment : webxml.getEnvEntries().values()) {
+            context.getNamingResources().addEnvironment(environment);
+        }
+        for (ErrorPage errorPage : webxml.getErrorPages().values()) {
+            context.addErrorPage(errorPage);
+        }
+        for (FilterDef filter : webxml.getFilters().values()) {
+            if (filter.getAsyncSupported() == null) {
+                filter.setAsyncSupported("false");
+            }
+            context.addFilterDef(filter);
+        }
+        for (FilterMap filterMap : webxml.getFilterMappings()) {
+            context.addFilterMap(filterMap);
+        }
+        context.setJspConfigDescriptor(webxml.getJspConfigDescriptor());
+        for (String listener : webxml.getListeners()) {
+            context.addApplicationListener(listener);
+        }
+        for (Entry<String, String> entry :
+                webxml.getLocaleEncodingMappings().entrySet()) {
+            context.addLocaleEncodingMappingParameter(entry.getKey(),
+                    entry.getValue());
+        }
+        // Prevents IAE
+        if (webxml.getLoginConfig() != null) {
+            context.setLoginConfig(webxml.getLoginConfig());
+        }
+        for (MessageDestinationRef mdr :
+                webxml.getMessageDestinationRefs().values()) {
+            context.getNamingResources().addMessageDestinationRef(mdr);
+        }
+
+        // messageDestinations were ignored in Tomcat 6, so ignore here
+
+        context.setIgnoreAnnotations(webxml.isMetadataComplete());
+        for (Entry<String, String> entry :
+                webxml.getMimeMappings().entrySet()) {
+            context.addMimeMapping(entry.getKey(), entry.getValue());
+        }
+        // Name is just used for ordering
+        for (ContextResourceEnvRef resource :
+                webxml.getResourceEnvRefs().values()) {
+            context.getNamingResources().addResourceEnvRef(resource);
+        }
+        for (ContextResource resource : webxml.getResourceRefs().values()) {
+            context.getNamingResources().addResource(resource);
+        }
+        boolean allAuthenticatedUsersIsAppRole =
+                webxml.getSecurityRoles().contains(
+                        SecurityConstraint.ROLE_ALL_AUTHENTICATED_USERS);
+        for (SecurityConstraint constraint : webxml.getSecurityConstraints()) {
+            if (allAuthenticatedUsersIsAppRole) {
+                constraint.treatAllAuthenticatedUsersAsApplicationRole();
+            }
+            context.addConstraint(constraint);
+        }
+        for (String role : webxml.getSecurityRoles()) {
+            context.addSecurityRole(role);
+        }
+        for (ContextService service : webxml.getServiceRefs().values()) {
+            context.getNamingResources().addService(service);
+        }
+        for (ServletDef servlet : webxml.getServlets().values()) {
+            Wrapper wrapper = context.createWrapper();
+            // Description is ignored
+            // Display name is ignored
+            // Icons are ignored
+
+            // jsp-file gets passed to the JSP Servlet as an init-param
+
+            if (servlet.getLoadOnStartup() != null) {
+                wrapper.setLoadOnStartup(servlet.getLoadOnStartup().intValue());
+            }
+            if (servlet.getEnabled() != null) {
+                wrapper.setEnabled(servlet.getEnabled().booleanValue());
+            }
+            wrapper.setName(servlet.getServletName());
+            Map<String,String> params = servlet.getParameterMap();
+            for (Entry<String, String> entry : params.entrySet()) {
+                wrapper.addInitParameter(entry.getKey(), entry.getValue());
+            }
+            wrapper.setRunAs(servlet.getRunAs());
+            Set<SecurityRoleRef> roleRefs = servlet.getSecurityRoleRefs();
+            for (SecurityRoleRef roleRef : roleRefs) {
+                wrapper.addSecurityReference(
+                        roleRef.getName(), roleRef.getLink());
+            }
+            wrapper.setServletClass(servlet.getServletClass());
+            MultipartDef multipartdef = servlet.getMultipartDef();
+            if (multipartdef != null) {
+                if (multipartdef.getMaxFileSize() != null &&
+                        multipartdef.getMaxRequestSize()!= null &&
+                        multipartdef.getFileSizeThreshold() != null) {
+                    wrapper.setMultipartConfigElement(new MultipartConfigElement(
+                            multipartdef.getLocation(),
+                            Long.parseLong(multipartdef.getMaxFileSize()),
+                            Long.parseLong(multipartdef.getMaxRequestSize()),
+                            Integer.parseInt(
+                                    multipartdef.getFileSizeThreshold())));
+                } else {
+                    wrapper.setMultipartConfigElement(new MultipartConfigElement(
+                            multipartdef.getLocation()));
+                }
+            }
+            if (servlet.getAsyncSupported() != null) {
+                wrapper.setAsyncSupported(
+                        servlet.getAsyncSupported().booleanValue());
+            }
+            wrapper.setOverridable(servlet.isOverridable());
+            context.addChild(wrapper);
+        }
+        for (Entry<String, String> entry :
+                webxml.getServletMappings().entrySet()) {
+            context.addServletMapping(entry.getKey(), entry.getValue());
+        }
+        SessionConfig sessionConfig = webxml.getSessionConfig();
+        if (sessionConfig != null) {
+            if (sessionConfig.getSessionTimeout() != null) {
+                context.setSessionTimeout(
+                        sessionConfig.getSessionTimeout().intValue());
+            }
+            SessionCookieConfig scc =
+                context.getServletContext().getSessionCookieConfig();
+            scc.setName(sessionConfig.getCookieName());
+            scc.setDomain(sessionConfig.getCookieDomain());
+            scc.setPath(sessionConfig.getCookiePath());
+            scc.setComment(sessionConfig.getCookieComment());
+            if (sessionConfig.getCookieHttpOnly() != null) {
+                scc.setHttpOnly(sessionConfig.getCookieHttpOnly().booleanValue());
+            }
+            if (sessionConfig.getCookieSecure() != null) {
+                scc.setSecure(sessionConfig.getCookieSecure().booleanValue());
+            }
+            if (sessionConfig.getCookieMaxAge() != null) {
+                scc.setMaxAge(sessionConfig.getCookieMaxAge().intValue());
+            }
+            if (sessionConfig.getSessionTrackingModes().size() > 0) {
+                context.getServletContext().setSessionTrackingModes(
+                        sessionConfig.getSessionTrackingModes());
+            }
+        }
+
+        // Context doesn't use version directly
+
+        for (String welcomeFile : webxml.getWelcomeFiles()) {
+            /*
+             * The following will result in a welcome file of "" so don't add
+             * that to the context
+             * <welcome-file-list>
+             *   <welcome-file/>
+             * </welcome-file-list>
+             */
+            if (welcomeFile != null && welcomeFile.length() > 0) {
+                context.addWelcomeFile(welcomeFile);
+            }
+        }
+
+        // Do this last as it depends on servlets
+        for (JspPropertyGroup jspPropertyGroup :
+                webxml.getJspPropertyGroups()) {
+            String jspServletName = context.findServletMapping("*.jsp");
+            if (jspServletName == null) {
+                jspServletName = "jsp";
+            }
+            if (context.findChild(jspServletName) != null) {
+                for (String urlPattern : jspPropertyGroup.getUrlPatterns()) {
+                    context.addServletMapping(urlPattern, jspServletName, true);
+                }
+            } else {
+                if(log.isDebugEnabled()) {
+                    for (String urlPattern : jspPropertyGroup.getUrlPatterns()) {
+                        log.debug("Skiping " + urlPattern + " , no servlet " +
+                                jspServletName);
+                    }
+                }
+            }
+        }
+
+        for (Entry<String, String> entry :
+                webxml.getPostConstructMethods().entrySet()) {
+            context.addPostConstructMethod(entry.getKey(), entry.getValue());
+        }
+
+        for (Entry<String, String> entry :
+            webxml.getPreDestroyMethods().entrySet()) {
+            context.addPreDestroyMethod(entry.getKey(), entry.getValue());
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new context initialization parameter, replacing any existing
+     * value for the specified name.
+     *
+     * @param name Name of the new parameter
+     * @param value Value of the new  parameter
+     */
+    public void addParameter(String name, String value);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the effective minor version of the Servlet spec used by this
+     * context.
+     *
+     * @param minor Set the version number
+     */
+    public void setEffectiveMinorVersion(int minor);
+-----CSCI578-----
+
+
+
+    /**
+     * Add a filter mapping to this Context.
+     *
+     * @param filterMap The filter mapping to be added
+     */
+    public void addFilterMap(FilterMap filterMap);
+-----CSCI578-----
+
+
+    /**
+     * Set the async support for the associated Servlet.
+     *
+     * @param asyncSupport the new value
+     */
+    public void setAsyncSupported(boolean asyncSupport);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the multi-part configuration for the associated Servlet. To clear the
+     * multi-part configuration specify <code>null</code> as the new value.
+     *
+     * @param multipartConfig The configuration associated with the Servlet
+     */
+    public void setMultipartConfigElement(
+            MultipartConfigElement multipartConfig);
+-----CSCI578-----
+
+
+
+    /**
+     * @return the servlet name mapped by the specified pattern (if any);
+     * otherwise return <code>null</code>.
+     *
+     * @param pattern Pattern for which a mapping is requested
+     */
+    public String findServletMapping(String pattern);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    public String getPublicId() { return publicId; }
+-----CSCI578-----
+
+
+    @Override
+    public void setAsyncSupported(boolean asyncSupported) {
+        wrapper.setAsyncSupported(asyncSupported);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setMultipartConfig(MultipartConfigElement multipartConfig) {
+        wrapper.setMultipartConfigElement(multipartConfig);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any EJB resource reference with the specified name.
+     *
+     * @param name Name of the EJB resource reference to remove
+     */
+    public void removeEjb(String name) {
+
+        entries.remove(name);
+
+        ContextEjb ejb = null;
+        synchronized (ejbs) {
+            ejb = ejbs.remove(name);
+        }
+        if (ejb != null) {
+            support.firePropertyChange("ejb", ejb, null);
+            ejb.setNamingResources(null);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any local EJB resource reference with the specified name.
+     *
+     * @param name Name of the EJB resource reference to remove
+     */
+    public void removeLocalEjb(String name) {
+
+        entries.remove(name);
+
+        ContextLocalEjb localEjb = null;
+        synchronized (localEjbs) {
+            localEjb = localEjbs.remove(name);
+        }
+        if (localEjb != null) {
+            support.firePropertyChange("localEjb", localEjb, null);
+            localEjb.setNamingResources(null);
+        }
+
+    }

@@ -1,0 +1,687 @@
+39
+-----CSCI578-----
+
+
+    public AnnotationEntry getAnnotationEntry()
+    {
+        return annotationEntry;
+    }
+-----CSCI578-----
+
+
+    protected Map<String,String> processAnnotationWebInitParams(
+            ElementValue ev) {
+        Map<String, String> result = new HashMap<>();
+        if (ev instanceof ArrayElementValue) {
+            ElementValue[] arrayValues =
+                ((ArrayElementValue) ev).getElementValuesArray();
+            for (ElementValue value : arrayValues) {
+                if (value instanceof AnnotationElementValue) {
+                    List<ElementValuePair> evps = ((AnnotationElementValue) value)
+                            .getAnnotationEntry().getElementValuePairs();
+                    String initParamName = null;
+                    String initParamValue = null;
+                    for (ElementValuePair evp : evps) {
+                        if ("name".equals(evp.getNameString())) {
+                            initParamName = evp.getValue().stringifyValue();
+                        } else if ("value".equals(evp.getNameString())) {
+                            initParamValue = evp.getValue().stringifyValue();
+                        } else {
+                            // Ignore
+                        }
+                    }
+                    result.put(initParamName, initParamValue);
+                }
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private String classHierarchyToString(String className,
+            JavaClassCacheEntry entry, Map<String,JavaClassCacheEntry> javaClassCache) {
+        JavaClassCacheEntry start = entry;
+        StringBuilder msg = new StringBuilder(className);
+        msg.append("->");
+
+        String parentName = entry.getSuperclassName();
+        JavaClassCacheEntry parent = javaClassCache.get(parentName);
+        int count = 0;
+
+        while (count < 100 && parent != null && parent != start) {
+            msg.append(parentName);
+            msg.append("->");
+
+            count ++;
+            parentName = parent.getSuperclassName();
+            parent = javaClassCache.get(parentName);
+        }
+
+        msg.append(parentName);
+
+        return msg.toString();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * @return Access flags of the object aka. "modifiers".
+     */
+    public final int getAccessFlags() {
+        return access_flags;
+    }
+-----CSCI578-----
+
+
+    private static final String getClassName(String internalForm) {
+        if (!internalForm.startsWith("L")) {
+            return internalForm;
+        }
+
+        // Assume starts with L, ends with ; and uses / rather than .
+        return internalForm.substring(1,
+                internalForm.length() - 1).replace('/', '.');
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected void processAnnotationWebServlet(String className,
+            AnnotationEntry ae, WebXml fragment) {
+        String servletName = null;
+        // must search for name s. Spec Servlet API 3.0 - 8.2.3.3.n.ii page 81
+        List<ElementValuePair> evps = ae.getElementValuePairs();
+        for (ElementValuePair evp : evps) {
+            String name = evp.getNameString();
+            if ("name".equals(name)) {
+                servletName = evp.getValue().stringifyValue();
+                break;
+            }
+        }
+        if (servletName == null) {
+            // classname is default servletName as annotation has no name!
+            servletName = className;
+        }
+        ServletDef servletDef = fragment.getServlets().get(servletName);
+
+        boolean isWebXMLservletDef;
+        if (servletDef == null) {
+            servletDef = new ServletDef();
+            servletDef.setServletName(servletName);
+            servletDef.setServletClass(className);
+            isWebXMLservletDef = false;
+        } else {
+            isWebXMLservletDef = true;
+        }
+
+        boolean urlPatternsSet = false;
+        String[] urlPatterns = null;
+
+        // List<ElementValuePair> evps = ae.getElementValuePairs();
+        for (ElementValuePair evp : evps) {
+            String name = evp.getNameString();
+            if ("value".equals(name) || "urlPatterns".equals(name)) {
+                if (urlPatternsSet) {
+                    throw new IllegalArgumentException(sm.getString(
+                            "contextConfig.urlPatternValue", className));
+                }
+                urlPatternsSet = true;
+                urlPatterns = processAnnotationsStringArray(evp.getValue());
+            } else if ("description".equals(name)) {
+                if (servletDef.getDescription() == null) {
+                    servletDef.setDescription(evp.getValue().stringifyValue());
+                }
+            } else if ("displayName".equals(name)) {
+                if (servletDef.getDisplayName() == null) {
+                    servletDef.setDisplayName(evp.getValue().stringifyValue());
+                }
+            } else if ("largeIcon".equals(name)) {
+                if (servletDef.getLargeIcon() == null) {
+                    servletDef.setLargeIcon(evp.getValue().stringifyValue());
+                }
+            } else if ("smallIcon".equals(name)) {
+                if (servletDef.getSmallIcon() == null) {
+                    servletDef.setSmallIcon(evp.getValue().stringifyValue());
+                }
+            } else if ("asyncSupported".equals(name)) {
+                if (servletDef.getAsyncSupported() == null) {
+                    servletDef.setAsyncSupported(evp.getValue()
+                            .stringifyValue());
+                }
+            } else if ("loadOnStartup".equals(name)) {
+                if (servletDef.getLoadOnStartup() == null) {
+                    servletDef
+                            .setLoadOnStartup(evp.getValue().stringifyValue());
+                }
+            } else if ("initParams".equals(name)) {
+                Map<String, String> initParams = processAnnotationWebInitParams(evp
+                        .getValue());
+                if (isWebXMLservletDef) {
+                    Map<String, String> webXMLInitParams = servletDef
+                            .getParameterMap();
+                    for (Map.Entry<String, String> entry : initParams
+                            .entrySet()) {
+                        if (webXMLInitParams.get(entry.getKey()) == null) {
+                            servletDef.addInitParameter(entry.getKey(), entry
+                                    .getValue());
+                        }
+                    }
+                } else {
+                    for (Map.Entry<String, String> entry : initParams
+                            .entrySet()) {
+                        servletDef.addInitParameter(entry.getKey(), entry
+                                .getValue());
+                    }
+                }
+            }
+        }
+        if (!isWebXMLservletDef && urlPatterns != null) {
+            fragment.addServlet(servletDef);
+        }
+        if (urlPatterns != null) {
+            if (!fragment.getServletMappings().containsValue(servletName)) {
+                for (String urlPattern : urlPatterns) {
+                    fragment.addServletMapping(urlPattern, servletName);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+-----CSCI578-----
+
+
+    public String getSmallIcon() {
+        return (this.smallIcon);
+    }
+-----CSCI578-----
+
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+-----CSCI578-----
+
+
+    public void setServletName(String servletName) {
+        if (servletName == null || servletName.equals("")) {
+            throw new IllegalArgumentException(
+                    sm.getString("servletDef.invalidServletName", servletName));
+        }
+        this.servletName = servletName;
+    }
+-----CSCI578-----
+
+
+    public String getLargeIcon() {
+        return (this.largeIcon);
+    }
+-----CSCI578-----
+
+
+    public void setLargeIcon(String largeIcon) {
+        this.largeIcon = largeIcon;
+    }
+-----CSCI578-----
+
+
+    public void setSmallIcon(String smallIcon) {
+        this.smallIcon = smallIcon;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setLargeIcon(String largeIcon) {
+        this.largeIcon = largeIcon;
+    }
+-----CSCI578-----
+
+    public void addFilter(FilterDef filter) {
+        if (filters.containsKey(filter.getFilterName())) {
+            // Filter names must be unique within a web(-fragment).xml
+            throw new IllegalArgumentException(
+                    sm.getString("webXml.duplicateFilter",
+                            filter.getFilterName()));
+        }
+        filters.put(filter.getFilterName(), filter);
+    }
+-----CSCI578-----
+
+
+    public void setSmallIcon(String smallIcon) {
+        this.smallIcon = smallIcon;
+    }
+-----CSCI578-----
+
+
+    /**
+     * process filter annotation and merge with existing one!
+     * FIXME: refactoring method too long and has redundant subroutines with
+     *        processAnnotationWebServlet!
+     * @param className The filter class name
+     * @param ae The filter annotation
+     * @param fragment The corresponding fragment
+     */
+    protected void processAnnotationWebFilter(String className,
+            AnnotationEntry ae, WebXml fragment) {
+        String filterName = null;
+        // must search for name s. Spec Servlet API 3.0 - 8.2.3.3.n.ii page 81
+        List<ElementValuePair> evps = ae.getElementValuePairs();
+        for (ElementValuePair evp : evps) {
+            String name = evp.getNameString();
+            if ("filterName".equals(name)) {
+                filterName = evp.getValue().stringifyValue();
+                break;
+            }
+        }
+        if (filterName == null) {
+            // classname is default filterName as annotation has no name!
+            filterName = className;
+        }
+        FilterDef filterDef = fragment.getFilters().get(filterName);
+        FilterMap filterMap = new FilterMap();
+
+        boolean isWebXMLfilterDef;
+        if (filterDef == null) {
+            filterDef = new FilterDef();
+            filterDef.setFilterName(filterName);
+            filterDef.setFilterClass(className);
+            isWebXMLfilterDef = false;
+        } else {
+            isWebXMLfilterDef = true;
+        }
+
+        boolean urlPatternsSet = false;
+        boolean servletNamesSet = false;
+        boolean dispatchTypesSet = false;
+        String[] urlPatterns = null;
+
+        for (ElementValuePair evp : evps) {
+            String name = evp.getNameString();
+            if ("value".equals(name) || "urlPatterns".equals(name)) {
+                if (urlPatternsSet) {
+                    throw new IllegalArgumentException(sm.getString(
+                            "contextConfig.urlPatternValue", className));
+                }
+                urlPatterns = processAnnotationsStringArray(evp.getValue());
+                urlPatternsSet = urlPatterns.length > 0;
+                for (String urlPattern : urlPatterns) {
+                    filterMap.addURLPattern(urlPattern);
+                }
+            } else if ("servletNames".equals(name)) {
+                String[] servletNames = processAnnotationsStringArray(evp
+                        .getValue());
+                servletNamesSet = servletNames.length > 0;
+                for (String servletName : servletNames) {
+                    filterMap.addServletName(servletName);
+                }
+            } else if ("dispatcherTypes".equals(name)) {
+                String[] dispatcherTypes = processAnnotationsStringArray(evp
+                        .getValue());
+                dispatchTypesSet = dispatcherTypes.length > 0;
+                for (String dispatcherType : dispatcherTypes) {
+                    filterMap.setDispatcher(dispatcherType);
+                }
+            } else if ("description".equals(name)) {
+                if (filterDef.getDescription() == null) {
+                    filterDef.setDescription(evp.getValue().stringifyValue());
+                }
+            } else if ("displayName".equals(name)) {
+                if (filterDef.getDisplayName() == null) {
+                    filterDef.setDisplayName(evp.getValue().stringifyValue());
+                }
+            } else if ("largeIcon".equals(name)) {
+                if (filterDef.getLargeIcon() == null) {
+                    filterDef.setLargeIcon(evp.getValue().stringifyValue());
+                }
+            } else if ("smallIcon".equals(name)) {
+                if (filterDef.getSmallIcon() == null) {
+                    filterDef.setSmallIcon(evp.getValue().stringifyValue());
+                }
+            } else if ("asyncSupported".equals(name)) {
+                if (filterDef.getAsyncSupported() == null) {
+                    filterDef
+                            .setAsyncSupported(evp.getValue().stringifyValue());
+                }
+            } else if ("initParams".equals(name)) {
+                Map<String, String> initParams = processAnnotationWebInitParams(evp
+                        .getValue());
+                if (isWebXMLfilterDef) {
+                    Map<String, String> webXMLInitParams = filterDef
+                            .getParameterMap();
+                    for (Map.Entry<String, String> entry : initParams
+                            .entrySet()) {
+                        if (webXMLInitParams.get(entry.getKey()) == null) {
+                            filterDef.addInitParameter(entry.getKey(), entry
+                                    .getValue());
+                        }
+                    }
+                } else {
+                    for (Map.Entry<String, String> entry : initParams
+                            .entrySet()) {
+                        filterDef.addInitParameter(entry.getKey(), entry
+                                .getValue());
+                    }
+                }
+
+            }
+        }
+        if (!isWebXMLfilterDef) {
+            fragment.addFilter(filterDef);
+            if (urlPatternsSet || servletNamesSet) {
+                filterMap.setFilterName(filterName);
+                fragment.addFilterMapping(filterMap);
+            }
+        }
+        if (urlPatternsSet || dispatchTypesSet) {
+            Set<FilterMap> fmap = fragment.getFilterMappings();
+            FilterMap descMap = null;
+            for (FilterMap map : fmap) {
+                if (filterName.equals(map.getFilterName())) {
+                    descMap = map;
+                    break;
+                }
+            }
+            if (descMap != null) {
+                String[] urlsPatterns = descMap.getURLPatterns();
+                if (urlPatternsSet
+                        && (urlsPatterns == null || urlsPatterns.length == 0)) {
+                    for (String urlPattern : filterMap.getURLPatterns()) {
+                        descMap.addURLPattern(urlPattern);
+                    }
+                }
+                String[] dispatcherNames = descMap.getDispatcherNames();
+                if (dispatchTypesSet
+                        && (dispatcherNames == null || dispatcherNames.length == 0)) {
+                    for (String dis : filterMap.getDispatcherNames()) {
+                        descMap.setDispatcher(dis);
+                    }
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+-----CSCI578-----
+
+
+    public String getLargeIcon() {
+        return (this.largeIcon);
+    }
+-----CSCI578-----
+
+
+    public String getSmallIcon() {
+        return (this.smallIcon);
+    }
+-----CSCI578-----
+
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setFilterName(String filterName) {
+        if (filterName == null || filterName.equals("")) {
+            throw new IllegalArgumentException(
+                    sm.getString("filterDef.invalidFilterName", filterName));
+        }
+        this.filterName = filterName;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setFilterName(String filterName) {
+        this.filterName = filterName;
+    }
+-----CSCI578-----
+
+
+    /**
+     * This method will be used to set the current state of the FilterMap
+     * representing the state of when filters should be applied.
+     * @param dispatcherString the dispatcher type which should
+     *  match this filter
+     */
+    public void setDispatcher(String dispatcherString) {
+        String dispatcher = dispatcherString.toUpperCase(Locale.ENGLISH);
+
+        if (dispatcher.equals(DispatcherType.FORWARD.name())) {
+            // apply FORWARD to the global dispatcherMapping.
+            dispatcherMapping |= FORWARD;
+        } else if (dispatcher.equals(DispatcherType.INCLUDE.name())) {
+            // apply INCLUDE to the global dispatcherMapping.
+            dispatcherMapping |= INCLUDE;
+        } else if (dispatcher.equals(DispatcherType.REQUEST.name())) {
+            // apply REQUEST to the global dispatcherMapping.
+            dispatcherMapping |= REQUEST;
+        }  else if (dispatcher.equals(DispatcherType.ERROR.name())) {
+            // apply ERROR to the global dispatcherMapping.
+            dispatcherMapping |= ERROR;
+        }  else if (dispatcher.equals(DispatcherType.ASYNC.name())) {
+            // apply ERROR to the global dispatcherMapping.
+            dispatcherMapping |= ASYNC;
+        }
+    }
+-----CSCI578-----
+
+
+    public void addServletName(String servletName) {
+        if ("*".equals(servletName)) {
+            this.matchAllServletNames = true;
+        } else {
+            String[] results = new String[servletNames.length + 1];
+            System.arraycopy(servletNames, 0, results, 0, servletNames.length);
+            results[servletNames.length] = servletName;
+            servletNames = results;
+        }
+    }
+-----CSCI578-----
+
+
+    public void addURLPattern(String urlPattern) {
+        if ("*".equals(urlPattern)) {
+            this.matchAllUrlPatterns = true;
+        } else {
+            String[] results = new String[urlPatterns.length + 1];
+            System.arraycopy(urlPatterns, 0, results, 0, urlPatterns.length);
+            results[urlPatterns.length] = UDecoder.URLDecode(urlPattern);
+            urlPatterns = results;
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void addMappingForServletNames(
+            EnumSet<DispatcherType> dispatcherTypes, boolean isMatchAfter,
+            String... servletNames) {
+
+        FilterMap filterMap = new FilterMap();
+
+        filterMap.setFilterName(filterDef.getFilterName());
+
+        if (dispatcherTypes != null) {
+            for (DispatcherType dispatcherType : dispatcherTypes) {
+                filterMap.setDispatcher(dispatcherType.name());
+            }
+        }
+
+        if (servletNames != null) {
+            for (String servletName : servletNames) {
+                filterMap.addServletName(servletName);
+            }
+
+            if (isMatchAfter) {
+                context.addFilterMap(filterMap);
+            } else {
+                context.addFilterMapBefore(filterMap);
+            }
+        }
+        // else error?
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void addMappingForUrlPatterns(
+            EnumSet<DispatcherType> dispatcherTypes, boolean isMatchAfter,
+            String... urlPatterns) {
+
+        FilterMap filterMap = new FilterMap();
+
+        filterMap.setFilterName(filterDef.getFilterName());
+
+        if (dispatcherTypes != null) {
+            for (DispatcherType dispatcherType : dispatcherTypes) {
+                filterMap.setDispatcher(dispatcherType.name());
+            }
+        }
+
+        if (urlPatterns != null) {
+            for (String urlPattern : urlPatterns) {
+                filterMap.addURLPattern(urlPattern);
+            }
+
+            if (isMatchAfter) {
+                context.addFilterMap(filterMap);
+            } else {
+                context.addFilterMapBefore(filterMap);
+            }
+        }
+        // else error?
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Add a filter mapping to this Context before the mappings defined in the
+     * deployment descriptor but after any other mappings added via this method.
+     *
+     * @param filterMap The filter mapping to be added
+     *
+     * @exception IllegalArgumentException if the specified filter name
+     *  does not match an existing filter definition, or the filter mapping
+     *  is malformed
+     */
+    public void addFilterMapBefore(FilterMap filterMap);
+-----CSCI578-----
+
+
+
+    protected void processAnnotationsUrl(URL url, WebXml fragment,
+            boolean handlesTypesOnly, Map<String,JavaClassCacheEntry> javaClassCache) {
+        if (url == null) {
+            // Nothing to do.
+            return;
+        } else if ("jar".equals(url.getProtocol())) {
+            processAnnotationsJar(url, fragment, handlesTypesOnly, javaClassCache);
+        } else if ("file".equals(url.getProtocol())) {
+            try {
+                processAnnotationsFile(
+                        new File(url.toURI()), fragment, handlesTypesOnly, javaClassCache);
+            } catch (URISyntaxException e) {
+                log.error(sm.getString("contextConfig.fileUrl", url), e);
+            }
+        } else {
+            log.error(sm.getString("contextConfig.unknownUrlProtocol",
+                    url.getProtocol(), url));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    protected void processAnnotationsJar(URL url, WebXml fragment,
+            boolean handlesTypesOnly, Map<String,JavaClassCacheEntry> javaClassCache) {
+
+        try (Jar jar = JarFactory.newInstance(url)) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString(
+                        "contextConfig.processAnnotationsJar.debug", url));
+            }
+
+            jar.nextEntry();
+            String entryName = jar.getEntryName();
+            while (entryName != null) {
+                if (entryName.endsWith(".class")) {
+                    try (InputStream is = jar.getEntryInputStream()) {
+                        processAnnotationsStream(is, fragment, handlesTypesOnly, javaClassCache);
+                    } catch (IOException e) {
+                        log.error(sm.getString("contextConfig.inputStreamJar",
+                                entryName, url),e);
+                    } catch (ClassFormatException e) {
+                        log.error(sm.getString("contextConfig.inputStreamJar",
+                                entryName, url),e);
+                    }
+                }
+                jar.nextEntry();
+                entryName = jar.getEntryName();
+            }
+        } catch (IOException e) {
+            log.error(sm.getString("contextConfig.jarFile", url), e);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Obtains the input stream for the current entry.
+     *
+     * @return  The input stream
+     * @throws IOException  If the stream cannot be obtained
+     */
+    InputStream getEntryInputStream() throws IOException;
+-----CSCI578-----
+
+
+
+    protected void processAnnotationsFile(File file, WebXml fragment,
+            boolean handlesTypesOnly, Map<String,JavaClassCacheEntry> javaClassCache) {
+
+        if (file.isDirectory()) {
+            // Returns null if directory is not readable
+            String[] dirs = file.list();
+            if (dirs != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString(
+                            "contextConfig.processAnnotationsDir.debug", file));
+                }
+                for (String dir : dirs) {
+                    processAnnotationsFile(
+                            new File(file,dir), fragment, handlesTypesOnly, javaClassCache);
+                }
+            }
+        } else if (file.getName().endsWith(".class") && file.canRead()) {
+            try (FileInputStream fis = new FileInputStream(file)) {
+                processAnnotationsStream(fis, fragment, handlesTypesOnly, javaClassCache);
+            } catch (IOException e) {
+                log.error(sm.getString("contextConfig.inputStreamFile",
+                        file.getAbsolutePath()),e);
+            } catch (ClassFormatException e) {
+                log.error(sm.getString("contextConfig.inputStreamFile",
+                        file.getAbsolutePath()),e);
+            }
+        }
+    }

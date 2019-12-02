@@ -1,0 +1,83 @@
+4
+-----CSCI578-----
+
+
+    public boolean isStateTransferred() {
+        return stateTransferred;
+    }
+-----CSCI578-----
+
+
+    //somehow start() gets called more than once
+    protected boolean mChannelStarted = false;
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called after <code>configure()</code>,
+     * and before any of the public methods of the component are utilized.<BR>
+     * Starts the cluster communication channel, this will connect with the other nodes
+     * in the cluster, and request the current session state to be transferred to this node.
+     * @exception IllegalStateException if this component has already been
+     *  started
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+        mManagerRunning = true;
+        super.start();
+        try {
+            //the channel is already running
+            if ( mChannelStarted ) return;
+            if(log.isInfoEnabled())
+                log.info("Starting clustering manager...:"+getName());
+            if ( cluster == null ) {
+                log.error("Starting... no cluster associated with this context:"+getName());
+                return;
+            }
+            cluster.registerManager(this);
+
+            if (cluster.getMembers().length > 0) {
+                Member mbr = cluster.getMembers()[0];
+                SessionMessage msg =
+                    new SessionMessageImpl(this.getName(),
+                                       SessionMessage.EVT_GET_ALL_SESSIONS,
+                                       null,
+                                       "GET-ALL",
+                                       "GET-ALL-"+this.getName());
+                cluster.send(msg, mbr);
+                if(log.isWarnEnabled())
+                     log.warn("Manager["+getName()+"], requesting session state from "+mbr+
+                         ". This operation will timeout if no session state has been received within "+
+                         "60 seconds");
+                long reqStart = System.currentTimeMillis();
+                long reqNow = 0;
+                boolean isTimeout=false;
+                do {
+                    try {
+                        Thread.sleep(100);
+                    }catch ( Exception sleep) {}
+                    reqNow = System.currentTimeMillis();
+                    isTimeout=((reqNow-reqStart)>(1000*60));
+                } while ( (!isStateTransferred()) && (!isTimeout));
+                if ( isTimeout || (!isStateTransferred()) ) {
+                    log.error("Manager["+getName()+"], No session state received, timing out.");
+                }else {
+                    if(log.isInfoEnabled())
+                        log.info("Manager["+getName()+"], session state received in "+(reqNow-reqStart)+" ms.");
+                }
+            } else {
+                if(log.isInfoEnabled())
+                    log.info("Manager["+getName()+"], skipping state transfer. No members active in cluster group.");
+            }//end if
+            mChannelStarted = true;
+        }  catch ( Exception x ) {
+            log.error("Unable to start SimpleTcpReplicationManager",x);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getName() {
+        return this.name;
+    }

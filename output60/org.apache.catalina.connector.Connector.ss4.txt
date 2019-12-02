@@ -1,0 +1,104 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Terminate processing requests via this Connector.
+     *
+     * @exception LifecycleException if a fatal shutdown error occurs
+     */
+    public void stop() throws LifecycleException {
+
+        // Validate and update our current state
+        if (!started) {
+            log.error(sm.getString("coyoteConnector.notStarted"));
+            return;
+
+        }
+        lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+        started = false;
+
+        try {
+            mapperListener.destroy();
+            Registry.getRegistry(null, null).unregisterComponent
+                (createObjectName(this.domain,"Mapper"));
+            Registry.getRegistry(null, null).unregisterComponent
+                (createObjectName(this.domain,"ProtocolHandler"));
+        } catch (MalformedObjectNameException e) {
+            log.error( sm.getString
+                    ("coyoteConnector.protocolUnregistrationFailed"), e);
+        }
+        try {
+            protocolHandler.destroy();
+        } catch (Exception e) {
+            throw new LifecycleException
+                (sm.getString
+                 ("coyoteConnector.protocolHandlerDestroyFailed", e));
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * unregister this from JMImplementation:type=MBeanServerDelegate
+     */
+    public void destroy() {
+        if (mBeanServer == null) {
+            return;
+        }
+        try {
+            ObjectName objectName = new ObjectName(
+                    "JMImplementation:type=MBeanServerDelegate");
+            mBeanServer.removeNotificationListener(objectName, this);
+        } catch (Exception e) {
+            log.warn("Error unregistering MBeanServerDelegate", e);
+        }
+    }
+-----CSCI578-----
+
+
+    public void postDeregister() {
+        try {
+            if( started ) {
+                stop();
+            }
+        } catch( Throwable t ) {
+            log.error( "Unregistering - can't stop", t);
+        }
+    }
+-----CSCI578-----
+
+
+    public void destroy()
+        throws Exception;
+-----CSCI578-----
+
+
+
+    protected ObjectName createObjectName(String domain, String type)
+            throws MalformedObjectNameException {
+        Object addressObj = getProperty("address");
+
+        StringBuilder sb = new StringBuilder(domain);
+        sb.append(":type=");
+        sb.append(type);
+        sb.append(",port=");
+        int port = getPort();
+        if (port > 0) {
+            sb.append(port);
+        } else {
+            sb.append("auto-");
+            sb.append(getProperty("nameIndex"));
+        }
+        if (addressObj != null) {
+            String address = addressObj.toString();
+            if (address.length() > 0) {
+                sb.append(",address=");
+                sb.append(ObjectName.quote(address));
+            }
+        }
+        ObjectName _oname = new ObjectName(sb.toString());
+        return _oname;
+    }

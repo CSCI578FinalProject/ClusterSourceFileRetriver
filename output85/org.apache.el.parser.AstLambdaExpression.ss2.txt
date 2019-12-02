@@ -1,0 +1,48 @@
+5
+-----CSCI578-----
+
+
+
+    private void setNestedState(NestedState nestedState) {
+        if (this.nestedState != null) {
+            // Should never happen
+            throw new IllegalStateException("nestedState may only be set once");
+        }
+        this.nestedState = nestedState;
+
+        // Increment the nesting count for the current expression
+        nestedState.incrementNestingCount();
+
+        if (jjtGetNumChildren() > 1) {
+            Node firstChild = jjtGetChild(0);
+            if (firstChild instanceof AstLambdaParameters) {
+                if (firstChild.jjtGetNumChildren() > 0) {
+                    nestedState.setHasFormalParameters();
+                }
+            } else {
+                // Can't be a lambda expression
+                return;
+            }
+            Node secondChild = jjtGetChild(1);
+            if (secondChild instanceof AstLambdaExpression) {
+                ((AstLambdaExpression) secondChild).setNestedState(nestedState);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private NestedState getNestedState() {
+        if (nestedState == null) {
+            setNestedState(new NestedState());
+        }
+        return nestedState;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+  /** Return the number of children the node has. */
+  public int jjtGetNumChildren();

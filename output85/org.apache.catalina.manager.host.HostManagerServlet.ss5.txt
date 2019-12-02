@@ -1,0 +1,182 @@
+8
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add an alias name that should be mapped to this same Host.
+     *
+     * @param alias The alias to be added
+     */
+    @Override
+    public void addAlias(String alias) {
+
+        alias = alias.toLowerCase(Locale.ENGLISH);
+
+        synchronized (aliasesLock) {
+            // Skip duplicate aliases
+            for (int i = 0; i < aliases.length; i++) {
+                if (aliases[i].equals(alias))
+                    return;
+            }
+            // Add this alias to the list
+            String newAliases[] = new String[aliases.length + 1];
+            for (int i = 0; i < aliases.length; i++)
+                newAliases[i] = aliases[i];
+            newAliases[aliases.length] = alias;
+            aliases = newAliases;
+        }
+        // Inform interested listeners
+        fireContainerEvent(ADD_ALIAS_EVENT, alias);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Extract boolean value from checkbox with default.
+     * @param request The Servlet request
+     * @param parameter The parameter name
+     * @param theDefault Default value
+     * @param htmlMode Flag value
+     * @return the boolean value for the parameter
+     */
+    protected boolean booleanParameter(HttpServletRequest request,
+            String parameter, boolean theDefault, boolean htmlMode) {
+        String value = request.getParameter(parameter);
+        boolean booleanValue = theDefault;
+        if (value != null) {
+            if (htmlMode) {
+                if (value.equals("on")) {
+                    booleanValue = true;
+                }
+            } else if (theDefault) {
+                if (value.equals("false")) {
+                    booleanValue = false;
+                }
+            } else if (value.equals("true")) {
+                booleanValue = true;
+            }
+        } else if (htmlMode)
+            booleanValue = false;
+        return booleanValue;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Add host with the given parameters.
+     *
+     * @param request The request
+     * @param writer The output writer
+     * @param name The host name
+     * @param htmlMode Flag value
+     * @param smClient StringManager for the client's locale
+    */
+    protected void add(HttpServletRequest request, PrintWriter writer,
+            String name, boolean htmlMode, StringManager smClient) {
+        String aliases = request.getParameter("aliases");
+        String appBase = request.getParameter("appBase");
+        boolean manager = booleanParameter(request, "manager", false, htmlMode);
+        boolean autoDeploy = booleanParameter(request, "autoDeploy", true, htmlMode);
+        boolean deployOnStartup = booleanParameter(request, "deployOnStartup", true, htmlMode);
+        boolean deployXML = booleanParameter(request, "deployXML", true, htmlMode);
+        boolean unpackWARs = booleanParameter(request, "unpackWARs", true, htmlMode);
+        boolean copyXML = booleanParameter(request, "copyXML", false, htmlMode);
+        add(writer, name, aliases, appBase, manager,
+            autoDeploy,
+            deployOnStartup,
+            deployXML,
+            unpackWARs,
+            copyXML,
+            smClient);
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Support Methods
+
+    /**
+     * Get config base.
+     * @param hostName The host name
+     * @return the config base for the host
+     */
+    protected File getConfigBase(String hostName) {
+        File configBase = new File(context.getCatalinaBase(), "conf");
+        if (!configBase.exists()) {
+            return null;
+        }
+        if (engine != null) {
+            configBase = new File(configBase, engine.getName());
+        }
+        if (installedHost != null) {
+            configBase = new File(configBase, hostName);
+        }
+        if (!configBase.mkdirs() && !configBase.isDirectory()) {
+            return null;
+        }
+        return configBase;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the copy XML config file flag for this component.
+     *
+     * @param copyXML The new copy XML flag
+     */
+    public void setCopyXML(boolean copyXML) {
+
+        this.copyXML = copyXML;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified alias name from the aliases for this Host.
+     *
+     * @param alias Alias name to be removed
+     */
+    @Override
+    public void removeAlias(String alias) {
+
+        alias = alias.toLowerCase(Locale.ENGLISH);
+
+        synchronized (aliasesLock) {
+
+            // Make sure this alias is currently present
+            int n = -1;
+            for (int i = 0; i < aliases.length; i++) {
+                if (aliases[i].equals(alias)) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified alias
+            int j = 0;
+            String results[] = new String[aliases.length - 1];
+            for (int i = 0; i < aliases.length; i++) {
+                if (i != n)
+                    results[j++] = aliases[i];
+            }
+            aliases = results;
+
+        }
+
+        // Inform interested listeners
+        fireContainerEvent(REMOVE_ALIAS_EVENT, alias);
+
+    }

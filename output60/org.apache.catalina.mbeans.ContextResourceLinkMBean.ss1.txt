@@ -1,0 +1,122 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- Instance Variables
+
+
+    // ------------------------------------------------------------- Attributes
+
+    
+    /**
+     * Set the value of a specific attribute of this MBean.
+     *
+     * @param attribute The identification of the attribute to be set
+     *  and the new value
+     *
+     * @exception AttributeNotFoundException if this attribute is not
+     *  supported by this MBean
+     * @exception MBeanException if the initializer of an object
+     *  throws an exception
+     * @exception ReflectionException if a Java reflection exception
+     *  occurs when invoking the getter
+     */
+     public void setAttribute(Attribute attribute)
+        throws AttributeNotFoundException, MBeanException,
+        ReflectionException {
+
+        super.setAttribute(attribute);
+        
+        ContextResourceLink crl = null;
+        try {
+            crl = (ContextResourceLink) getManagedResource();
+        } catch (InstanceNotFoundException e) {
+            throw new MBeanException(e);
+        } catch (InvalidTargetObjectTypeException e) {
+             throw new MBeanException(e);
+        }
+        
+        // cannot use side-efects.  It's removed and added back each time 
+        // there is a modification in a resource.
+        NamingResources nr = crl.getNamingResources();
+        nr.removeResourceLink(crl.getName());
+        nr.addResourceLink(crl);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any resource link with the specified name.
+     *
+     * @param name Name of the resource link to remove
+     */
+    public void removeResourceLink(String name) {
+
+        entries.remove(name);
+
+        ContextResourceLink resourceLink = null;
+        synchronized (resourceLinks) {
+            resourceLink = (ContextResourceLink) resourceLinks.remove(name);
+        }
+        if (resourceLink != null) {
+            support.firePropertyChange("resourceLink", resourceLink, null);
+            resourceLink.setNamingResources(null);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a resource link for this web application.
+     *
+     * @param resourceLink New resource link
+     */
+    public void addResourceLink(ContextResourceLink resourceLink) {
+
+        if (entries.containsKey(resourceLink.getName())) {
+            return;
+        } else {
+            Object value = resourceLink.getType();
+            if (value == null) {
+                value = "";
+            }
+            entries.put(resourceLink.getName(), value);
+        }
+
+        synchronized (resourceLinks) {
+            resourceLink.setNamingResources(this);
+            resourceLinks.put(resourceLink.getName(), resourceLink);
+        }
+        support.firePropertyChange("resourceLink", null, resourceLink);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    /**
+     * Remove any resource link reference with the specified name.
+     *
+     * @param resourceLinkName Name of the resource link reference to remove
+     */
+    public void removeResourceLink(String resourceLinkName) {
+
+        resourceLinkName = ObjectName.unquote(resourceLinkName);
+        NamingResources nresources = (NamingResources) this.resource;
+        if (nresources == null) {
+            return;
+        }
+        ContextResourceLink resourceLink = 
+                            nresources.findResourceLink(resourceLinkName);
+        if (resourceLink == null) {
+            throw new IllegalArgumentException
+                ("Invalid resource Link name '" + resourceLinkName + "'");
+        }
+        nresources.removeResourceLink(resourceLinkName);
+    }

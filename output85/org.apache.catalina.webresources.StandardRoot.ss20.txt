@@ -1,0 +1,110 @@
+9
+-----CSCI578-----
+
+
+    @Override
+    public WebResource[] listResources(String path) {
+        return listResources(path, true);
+    }
+
+
+    private WebResource[] listResources(String path, boolean validate) {
+        if (validate) {
+            path = validate(path);
+        }
+
+        String[] resources = list(path, false);
+        WebResource[] result = new WebResource[resources.length];
+        for (int i = 0; i < resources.length; i++) {
+            if (path.charAt(path.length() - 1) == '/') {
+                result[i] = getResource(path + resources[i], false, false);
+            } else {
+                result[i] = getResource(path + '/' + resources[i], false, false);
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // TODO: Should the createWebResourceSet() methods be removed to some
+    //       utility class for file system based resource sets?
+
+    @Override
+    public void createWebResourceSet(ResourceSetType type, String webAppMount,
+            URL url, String internalPath) {
+        BaseLocation baseLocation = new BaseLocation(url);
+        createWebResourceSet(type, webAppMount, baseLocation.getBasePath(),
+                baseLocation.getArchivePath(), internalPath);
+    }
+
+
+    @Override
+    public void createWebResourceSet(ResourceSetType type, String webAppMount,
+            String base, String archivePath, String internalPath) {
+        List<WebResourceSet> resourceList;
+        WebResourceSet resourceSet;
+
+        switch (type) {
+            case PRE:
+                resourceList = preResources;
+                break;
+            case CLASSES_JAR:
+                resourceList = classResources;
+                break;
+            case RESOURCE_JAR:
+                resourceList = jarResources;
+                break;
+            case POST:
+                resourceList = postResources;
+                break;
+            default:
+                throw new IllegalArgumentException(
+                        sm.getString("standardRoot.createUnknownType", type));
+        }
+
+        // This implementation assumes that the base for all resources will be a
+        // file.
+        File file = new File(base);
+
+        if (file.isFile()) {
+            if (archivePath != null) {
+                // Must be a JAR nested inside a WAR if archivePath is non-null
+                resourceSet = new JarWarResourceSet(this, webAppMount, base,
+                        archivePath, internalPath);
+            } else if (file.getName().toLowerCase(Locale.ENGLISH).endsWith(".jar")) {
+                resourceSet = new JarResourceSet(this, webAppMount, base,
+                        internalPath);
+            } else {
+                resourceSet = new FileResourceSet(this, webAppMount, base,
+                        internalPath);
+            }
+        } else if (file.isDirectory()) {
+            resourceSet =
+                    new DirResourceSet(this, webAppMount, base, internalPath);
+        } else {
+            throw new IllegalArgumentException(
+                    sm.getString("standardRoot.createInvalidFile", file));
+        }
+
+        if (type.equals(ResourceSetType.CLASSES_JAR)) {
+            resourceSet.setClassLoaderOnly(true);
+        } else if (type.equals(ResourceSetType.RESOURCE_JAR)) {
+            resourceSet.setStaticOnly(true);
+        }
+
+        resourceList.add(resourceSet);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    void setClassLoaderOnly(boolean classLoaderOnly);
+-----CSCI578-----
+
+
+    void setStaticOnly(boolean staticOnly);
+-----CSCI578-----

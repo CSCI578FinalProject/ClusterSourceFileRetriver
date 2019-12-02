@@ -1,0 +1,71 @@
+3
+-----CSCI578-----
+
+
+    /* -------------------- Interface to the jk_bean object -------------------- */
+    /* Each jk component is 'wrapped' as a bean, with a specified lifecycle
+     *
+     */
+    
+    /** Get a native component
+     *  @return 0 if the component is not found.
+     */
+    public native long getJkHandler(long xEnv, String compName );
+-----CSCI578-----
+
+
+    /** You must call initNative() inside the component init()
+     */
+    public void init() throws IOException {
+        // static field init, temp
+    }
+
+
+    protected void initNative(String nativeComponentName) {
+        apr=(AprImpl)wEnv.getHandler("apr");
+        if( apr==null ) {
+            // In most cases we can just load it automatically.
+            // that requires all libs to be installed in standard places
+            // ( LD_LIBRARY_PATH, /usr/lib
+            try {
+                apr=new AprImpl();
+                wEnv.addHandler("apr", apr);
+                apr.init();
+                if( oname != null ) {
+                    ObjectName aprname=new ObjectName(oname.getDomain() +
+                            ":type=JkHandler, name=apr");
+                    Registry.getRegistry(null, null).registerComponent(apr, aprname, null);
+                }
+            } catch( Throwable t ) {
+                log.debug("Can't load apr", t);
+                apr=null;
+            }
+        }
+        if( apr==null || ! apr.isLoaded() ) {
+            if( log.isDebugEnabled() )
+                log.debug("No apr, disabling jni proxy ");
+            apr=null;
+            return;
+        }
+
+        try {
+            long xEnv=apr.getJkEnv();
+            nativeJkHandlerP=apr.getJkHandler(xEnv, nativeComponentName );
+            
+            if( nativeJkHandlerP==0 ) {
+                log.debug("Component not found, creating it " + nativeComponentName );
+                nativeJkHandlerP=apr.createJkHandler(xEnv, nativeComponentName);
+            }
+            log.debug("Native proxy " + nativeJkHandlerP );
+            apr.releaseJkEnv(xEnv);
+        } catch( Throwable t ) {
+            apr=null;
+            log.info("Error calling apr ", t);
+        }
+   }
+-----CSCI578-----
+
+
+    /** Clean the temp pool, put back the env in the pool
+     */
+    public native void releaseJkEnv(long xEnv);

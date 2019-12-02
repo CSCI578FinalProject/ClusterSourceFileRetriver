@@ -1,0 +1,136 @@
+17
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ***********************************************************************
+    // java.sql.ConnectionEventListener implementation
+    // ***********************************************************************
+
+    /**
+     * This will be called if the Connection returned by the getConnection
+     * method came from a PooledConnection, and the user calls the close()
+     * method of this connection object. What we need to do here is to
+     * release this PooledConnection from our pool...
+     */
+    @Override
+    public void connectionClosed(ConnectionEvent event) {
+        PooledConnection pc = (PooledConnection)event.getSource();
+        // if this event occurred because we were validating, or if this
+        // connection has been marked for removal, ignore it
+        // otherwise return the connection to the pool.
+        if (!validatingSet.contains(pc)) {
+            PooledConnectionAndInfo pci = pcMap.get(pc);
+            if (pci == null) {
+                throw new IllegalStateException(NO_KEY_MESSAGE);
+            }
+            try {
+                _pool.returnObject(pci.getUserPassKey(), pci);
+            } catch (Exception e) {
+                System.err.println("CLOSING DOWN CONNECTION AS IT COULD " +
+                "NOT BE RETURNED TO THE POOL");
+                pc.removeConnectionEventListener(this);
+                try {
+                    _pool.invalidateObject(pci.getUserPassKey(), pci);
+                } catch (Exception e3) {
+                    System.err.println("EXCEPTION WHILE DESTROYING OBJECT " +
+                            pci);
+                    e3.printStackTrace();
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * If a fatal error occurs, close the underlying physical connection so as
+     * not to be returned in the future
+     */
+    @Override
+    public void connectionErrorOccurred(ConnectionEvent event) {
+        PooledConnection pc = (PooledConnection)event.getSource();
+        if (null != event.getSQLException()) {
+            System.err
+                .println("CLOSING DOWN CONNECTION DUE TO INTERNAL ERROR (" +
+                         event.getSQLException() + ")");
+        }
+        pc.removeConnectionEventListener(this);
+
+        PooledConnectionAndInfo info = pcMap.get(pc);
+        if (info == null) {
+            throw new IllegalStateException(NO_KEY_MESSAGE);
+        }
+        try {
+            _pool.invalidateObject(info.getUserPassKey(), info);
+        } catch (Exception e) {
+            System.err.println("EXCEPTION WHILE DESTROYING OBJECT " + info);
+            e.printStackTrace();
+        }
+    }
+-----CSCI578-----
+
+
+    // ***********************************************************************
+    // PooledConnectionManager implementation
+    // ***********************************************************************
+
+    /**
+     * Invalidates the PooledConnection in the pool.  The KeyedCPDSConnectionFactory
+     * closes the connection and pool counters are updated appropriately.
+     * Also clears any idle instances associated with the username that was used
+     * to create the PooledConnection.  Connections associated with this user
+     * are not affected and they will not be automatically closed on return to the pool.
+     */
+    @Override
+    public void invalidate(PooledConnection pc) throws SQLException {
+        PooledConnectionAndInfo info = pcMap.get(pc);
+        if (info == null) {
+            throw new IllegalStateException(NO_KEY_MESSAGE);
+        }
+        UserPassKey key = info.getUserPassKey();
+        try {
+            _pool.invalidateObject(key, info);  // Destroy and update pool counters
+            _pool.clear(key); // Remove any idle instances with this key
+        } catch (Exception ex) {
+            throw new SQLException("Error invalidating connection", ex);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Clears the pool, removing all pooled instances (optional operation).
+     *
+     * @throws UnsupportedOperationException when this implementation doesn't
+     *                                       support the operation
+     *
+     * @throws Exception if the pool cannot be cleared
+     */
+    void clear() throws Exception, UnsupportedOperationException;
+
+
+    /**
+     * Clears the specified pool, removing all pooled instances corresponding to
+     * the given <code>key</code> (optional operation).
+     *
+     * @param key the key to clear
+     *
+     * @throws UnsupportedOperationException when this implementation doesn't
+     *                                       support the operation
+     *
+     * @throws Exception if the key cannot be cleared
+     */
+    void clear(K key) throws Exception, UnsupportedOperationException;
+-----CSCI578-----
+-----CSCI578-----

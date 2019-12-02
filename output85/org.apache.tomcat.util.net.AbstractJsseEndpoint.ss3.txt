@@ -1,0 +1,87 @@
+12
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * The set of enabled protocols is the intersection of the implemented
+     * protocols and the configured protocols. If no protocols are explicitly
+     * configured, then all of the implemented protocols will be included in the
+     * returned array.
+     *
+     * @return The protocols currently enabled and available for clients to
+     *         select from for the associated connection
+     *
+     * @throws IllegalArgumentException  If there is no intersection between the
+     *         implemented and configured protocols
+     */
+    public String[] getEnabledProtocols() throws IllegalArgumentException;
+-----CSCI578-----
+
+
+    public TrustManager[] getTrustManagers() throws Exception;
+-----CSCI578-----
+
+
+    public abstract SSLUtil getSSLUtil(SSLHostConfigCertificate certificate);
+-----CSCI578-----
+
+
+
+    protected void initialiseSsl() throws Exception {
+        if (isSSLEnabled()) {
+            sslImplementation = SSLImplementation.getInstance(getSslImplementationName());
+
+            for (SSLHostConfig sslHostConfig : sslHostConfigs.values()) {
+                boolean firstCertificate = true;
+                for (SSLHostConfigCertificate certificate : sslHostConfig.getCertificates(true)) {
+                    SSLUtil sslUtil = sslImplementation.getSSLUtil(certificate);
+                    if (firstCertificate) {
+                        firstCertificate = false;
+                        sslHostConfig.setEnabledProtocols(sslUtil.getEnabledProtocols());
+                        sslHostConfig.setEnabledCiphers(sslUtil.getEnabledCiphers());
+                    }
+
+                    SSLContext sslContext = sslUtil.createSSLContext(negotiableProtocols);
+                    sslContext.init(sslUtil.getKeyManagers(), sslUtil.getTrustManagers(), null);
+
+                    SSLSessionContext sessionContext = sslContext.getServerSessionContext();
+                    if (sessionContext != null) {
+                        sslUtil.configureSessionContext(sessionContext);
+                    }
+                    certificate.setSslContext(sslContext);
+                }
+            }
+
+        }
+    }
+-----CSCI578-----
+
+
+    public void configureSessionContext(SSLSessionContext sslSessionContext);
+-----CSCI578-----
+
+
+    public SSLSessionContext getServerSessionContext();
+-----CSCI578-----
+
+
+    public KeyManager[] getKeyManagers() throws Exception;
+-----CSCI578-----
+
+
+    public SSLContext createSSLContext(List<String> negotiableProtocols) throws Exception;
+-----CSCI578-----
+
+
+    public String getSslImplementationName() {
+        return sslImplementationName;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public void setSslContext(SSLContext sslContext) {
+        this.sslContext = sslContext;
+    }

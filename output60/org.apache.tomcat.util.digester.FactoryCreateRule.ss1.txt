@@ -1,0 +1,123 @@
+6
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the beginning of this element.
+     *
+     * @param attributes The attribute list of this element
+     */
+    public void begin(String namespace, String name, Attributes attributes) throws Exception {
+        
+        if (ignoreCreateExceptions) {
+        
+            if (exceptionIgnoredStack == null) {
+                exceptionIgnoredStack = new ArrayStack();
+            }
+            
+            try {
+                Object instance = getFactory(attributes).createObject(attributes);
+                
+                if (digester.log.isDebugEnabled()) {
+                    digester.log.debug("[FactoryCreateRule]{" + digester.match +
+                            "} New " + instance.getClass().getName());
+                }
+                digester.push(instance);
+                exceptionIgnoredStack.push(Boolean.FALSE);
+                
+            } catch (Exception e) {
+                // log message and error
+                if (digester.log.isInfoEnabled()) {
+                    digester.log.info("[FactoryCreateRule] Create exception ignored: " +
+                        ((e.getMessage() == null) ? e.getClass().getName() : e.getMessage()));
+                    if (digester.log.isDebugEnabled()) {
+                        digester.log.debug("[FactoryCreateRule] Ignored exception:", e);
+                    }
+                }
+                exceptionIgnoredStack.push(Boolean.TRUE);
+            }
+            
+        } else {
+            Object instance = getFactory(attributes).createObject(attributes);
+            
+            if (digester.log.isDebugEnabled()) {
+                digester.log.debug("[FactoryCreateRule]{" + digester.match +
+                        "} New " + instance.getClass().getName());
+            }
+            digester.push(instance);
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Return an instance of our associated object creation factory,
+     * creating one if necessary.
+     *
+     * @param attributes Attributes passed to our factory creation element
+     *
+     * @exception Exception if any error occurs
+     */
+    protected ObjectCreationFactory getFactory(Attributes attributes)
+            throws Exception {
+
+        if (creationFactory == null) {
+            String realClassName = className;
+            if (attributeName != null) {
+                String value = attributes.getValue(attributeName);
+                if (value != null) {
+                    realClassName = value;
+                }
+            }
+            if (digester.log.isDebugEnabled()) {
+                digester.log.debug("[FactoryCreateRule]{" + digester.match +
+                        "} New factory " + realClassName);
+            }
+            Class clazz = digester.getClassLoader().loadClass(realClassName);
+            creationFactory = (ObjectCreationFactory)
+                    clazz.newInstance();
+            creationFactory.setDigester(digester);
+        }
+        return (creationFactory);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the class loader to be used for instantiating application objects
+     * when required.  This is determined based upon the following rules:
+     * <ul>
+     * <li>The class loader set by <code>setClassLoader()</code>, if any</li>
+     * <li>The thread context class loader, if it exists and the
+     *     <code>useContextClassLoader</code> property is set to true</li>
+     * <li>The class loader used to load the Digester class itself.
+     * </ul>
+     */
+    public ClassLoader getClassLoader() {
+
+        if (this.classLoader != null) {
+            return (this.classLoader);
+        }
+        if (this.useContextClassLoader) {
+            ClassLoader classLoader =
+                    Thread.currentThread().getContextClassLoader();
+            if (classLoader != null) {
+                return (classLoader);
+            }
+        }
+        return (this.getClass().getClassLoader());
+
+    }
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,43 @@
+2
+-----CSCI578-----
+
+
+    @Override
+    public void handlePageException(Exception ex) throws IOException,
+            ServletException {
+        // Should never be called since handleException() called with a
+        // Throwable in the generated servlet.
+        handlePageException((Throwable) ex);
+    }
+
+
+    @Override
+    public void handlePageException(final Throwable t) throws IOException,
+            ServletException {
+        if (t == null)
+            throw new NullPointerException("null Throwable");
+
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                AccessController.doPrivileged(
+                        new PrivilegedExceptionAction<Void>() {
+                    @Override
+                    public Void run() throws Exception {
+                        doHandlePageException(t);
+                        return null;
+                    }
+                });
+            } catch (PrivilegedActionException e) {
+                Exception ex = e.getException();
+                if (ex instanceof IOException) {
+                    throw (IOException) ex;
+                } else {
+                    throw (ServletException) ex;
+                }
+            }
+        } else {
+            doHandlePageException(t);
+        }
+
+    }
+-----CSCI578-----

@@ -1,0 +1,229 @@
+13
+
+    public static String guessInstall(String installSysProp,
+            String homeSysProp, String jarName) {
+        return guessInstall(installSysProp, homeSysProp, jarName, null);
+    }
+
+    /**
+     * Guess a product install/home by analyzing the class path. It works for
+     * product using the pattern: lib/executable.jar or if executable.jar is
+     * included in classpath by a shell script. ( java -jar also works )
+     * 
+     * Insures both "install" and "home" System properties are set. If either or
+     * both System properties are unset, "install" and "home" will be set to the
+     * same value. This value will be the other System property that is set, or
+     * the guessed value if neither is set.
+     */
+    public static String guessInstall(String installSysProp,
+            String homeSysProp, String jarName, String classFile) {
+        String install = null;
+        String home = null;
+
+        if (installSysProp != null)
+            install = System.getProperty(installSysProp);
+
+        if (homeSysProp != null)
+            home = System.getProperty(homeSysProp);
+
+        if (install != null) {
+            if (home == null)
+                System.getProperties().put(homeSysProp, install);
+            return install;
+        }
+
+        // Find the directory where jarName.jar is located
+
+        String cpath = System.getProperty("java.class.path");
+        String pathSep = System.getProperty("path.separator");
+        StringTokenizer st = new StringTokenizer(cpath, pathSep);
+        while (st.hasMoreTokens()) {
+            String path = st.nextToken();
+            //	    log( "path " + path );
+            if (path.endsWith(jarName)) {
+                home = path.substring(0, path.length() - jarName.length());
+                try {
+                    if ("".equals(home)) {
+                        home = new File("./").getCanonicalPath();
+                    } else if (home.endsWith(File.separator)) {
+                        home = home.substring(0, home.length() - 1);
+                    }
+                    File f = new File(home);
+                    String parentDir = f.getParent();
+                    if (parentDir == null)
+                        parentDir = home; // unix style
+                    File f1 = new File(parentDir);
+                    install = f1.getCanonicalPath();
+                    if (installSysProp != null)
+                        System.getProperties().put(installSysProp, install);
+                    if (home == null && homeSysProp != null)
+                        System.getProperties().put(homeSysProp, install);
+                    return install;
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+            } else {
+                String fname = path + (path.endsWith("/") ? "" : "/")
+                        + classFile;
+                if (new File(fname).exists()) {
+                    try {
+                        File f = new File(path);
+                        String parentDir = f.getParent();
+                        if (parentDir == null)
+                            parentDir = path; // unix style
+                        File f1 = new File(parentDir);
+                        install = f1.getCanonicalPath();
+                        if (installSysProp != null)
+                            System.getProperties().put(installSysProp, install);
+                        if (home == null && homeSysProp != null)
+                            System.getProperties().put(homeSysProp, install);
+                        return install;
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                    }
+                }
+            }
+        }
+
+        // if install directory can't be found, use home as the default
+        if (home != null) {
+            System.getProperties().put(installSysProp, home);
+            return home;
+        }
+
+        return null;
+    }
+
+    public String getJkHome() {
+        return home;
+    }
+    private InetAddress bind;
+    
+    /**
+     * recursive bind to find the next available port
+     * @param socket ServerSocket
+     * @param portstart int
+     * @param retries int
+     * @return int
+     * @throws IOException
+     */
+    protected int bind(ServerSocket socket, int portstart, int retries) throws IOException {
+        InetSocketAddress addr = null;
+        while ( retries > 0 ) {
+            try {
+                addr = new InetSocketAddress(getBind(), portstart);
+                socket.bind(addr);
+                setPort(portstart);
+                log.info("Receiver Server Socket bound to:"+addr);
+                return 0;
+            }catch ( IOException x) {
+                retries--;
+                if ( retries <= 0 ) {
+                    log.info("Unable to bind server socket to:"+addr+" throwing error.");
+                    throw x;
+                }
+                portstart++;
+                try {Thread.sleep(25);}catch( InterruptedException ti){Thread.currentThread().interrupted();}
+                retries = bind(socket,portstart,retries);
+            }
+        }
+        return retries;
+    }
+
+
+    /**
+     * @param bind The bind to set.
+     */
+    public void setBind(java.net.InetAddress bind) {
+        this.bind = bind;
+    }
+
+
+    /**
+     * The Log to which most logging calls will be made.
+     */
+    protected Log log =
+        LogFactory.getLog("org.apache.tomcat.util.digester.Digester");
+
+
+    /**
+     * The Log to which all SAX event related logging calls will be made.
+     */
+    protected Log saxLog =
+        LogFactory.getLog("org.apache.tomcat.util.digester.Digester.sax");
+
+
+    /**
+     * The schema language supported. By default, we use this one.
+     */
+    protected static final String W3C_XML_SCHEMA =
+        "http://www.w3.org/2001/XMLSchema";
+
+    /** Stacks used for interrule communication, indexed by name String */
+    private HashMap stacksByName = new HashMap();
+
+
+    /**
+     * Set the current logger for this Digester.
+     */
+    public void setLogger(Log log) {
+
+        this.log = log;
+
+    }
+
+
+    // ------------------------------------------------------- Public Methods
+
+
+    /**
+     * Log a message to our associated logger.
+     *
+     * @param message The message to be logged
+     * @deprecated Call getLogger() and use it's logging methods
+     */
+    public void log(String message) {
+
+        log.info(message);
+
+    }
+
+
+    /**
+     * Log a message and exception to our associated logger.
+     *
+     * @param message The message to be logged
+     * @deprecated Call getLogger() and use it's logging methods
+     */
+    public void log(String message, Throwable exception) {
+
+        log.error(message, exception);
+
+    }
+
+    private static Log log = LogFactory.getLog(ThreadPool.class);
+
+    private static void logFull(Log loghelper, int currentThreadCount,
+                                int maxThreads) {
+	if( logfull ) {
+            log.error(sm.getString("threadpool.busy",
+                                   new Integer(currentThreadCount),
+                                   new Integer(maxThreads)));
+            logfull=false;
+        } else if( log.isDebugEnabled() ) {
+            log.debug("All threads are busy " + currentThreadCount + " " +
+                      maxThreads );
+        }
+    }
+
+    public void setPort(int port) {
+        this.port = port;
+    }
+
+    /**
+     * @deprecated use setPort
+     * @param tcpListenPort int
+     */
+    public void setTcpListenPort(int tcpListenPort) {
+        setPort(tcpListenPort);
+    }

@@ -1,0 +1,73 @@
+2
+-----CSCI578-----
+
+    
+    
+    /**
+     * Initialize this <code>LoginModule</code> with the specified
+     * configuration information.
+     *
+     * @param subject The <code>Subject</code> to be authenticated
+     * @param callbackHandler A <code>CallbackHandler</code> for communicating
+     *  with the end user as necessary
+     * @param sharedState State information shared with other
+     *  <code>LoginModule</code> instances
+     * @param options Configuration information for this specific
+     *  <code>LoginModule</code> instance
+     */
+    public void initialize(Subject subject, CallbackHandler callbackHandler,
+                           Map sharedState, Map options) {
+        log.debug("Init");
+
+        // Save configuration values
+        this.subject = subject;
+        this.callbackHandler = callbackHandler;
+        this.sharedState = sharedState;
+        this.options = options;
+
+        // Perform instance-specific initialization
+        if (options.get("pathname") != null)
+            this.pathname = (String) options.get("pathname");
+
+        // Load our defined Principals
+        load();
+
+    }
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------------------- Realm Methods
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Load the contents of our configuration file.
+     */
+    protected void load() {
+
+        // Validate the existence of our configuration file
+        File file = new File(pathname);
+        if (!file.isAbsolute())
+            file = new File(System.getProperty("catalina.base"), pathname);
+        if (!file.exists() || !file.canRead()) {
+            log.warn("Cannot load configuration file " + file.getAbsolutePath());
+            return;
+        }
+
+        // Load the contents of our configuration file
+        Digester digester = new Digester();
+        digester.setValidating(false);
+        digester.addRuleSet(new MemoryRuleSet());
+        try {
+            digester.push(this);
+            digester.parse(file);
+        } catch (Exception e) {
+            log.warn("Error processing configuration file " +
+                file.getAbsolutePath(), e);
+            return;
+        } finally {
+            digester.reset();
+        }
+
+    }

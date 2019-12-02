@@ -1,0 +1,46 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Send a message and wait for the response.
+     * @param destination Member[] - the destination for the message, and the members you request a reply from
+     * @param message Serializable - the message you are sending out
+     * @param rpcOptions int - FIRST_REPLY, MAJORITY_REPLY or ALL_REPLY
+     * @param channelOptions channel sender options
+     * @param timeout long - timeout in milliseconds, if no reply is received within this time null is returned
+     * @return Response[] - an array of response objects.
+     * @throws ChannelException Error sending message
+     */
+    public Response[] send(Member[] destination,
+                           Serializable message,
+                           int rpcOptions,
+                           int channelOptions,
+                           long timeout) throws ChannelException {
+
+        if ( destination==null || destination.length == 0 ) return new Response[0];
+
+        //avoid dead lock
+        int sendOptions =
+            channelOptions & ~Channel.SEND_OPTIONS_SYNCHRONIZED_ACK;
+
+        RpcCollectorKey key = new RpcCollectorKey(UUIDGenerator.randomUUID(false));
+        RpcCollector collector = new RpcCollector(key,rpcOptions,destination.length);
+        try {
+            synchronized (collector) {
+                if ( rpcOptions != NO_REPLY ) responseMap.put(key, collector);
+                RpcMessage rmsg = new RpcMessage(rpcId, key.id, message);
+                channel.send(destination, rmsg, sendOptions);
+                if ( rpcOptions != NO_REPLY ) collector.wait(timeout);
+            }
+        } catch ( InterruptedException ix ) {
+            Thread.currentThread().interrupt();
+        }finally {
+            responseMap.remove(key);
+        }
+        return collector.getResponses();
+    }
+-----CSCI578-----
+-----CSCI578-----

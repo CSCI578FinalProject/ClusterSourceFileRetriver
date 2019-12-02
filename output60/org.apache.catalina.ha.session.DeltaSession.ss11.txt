@@ -1,0 +1,345 @@
+17
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Set the authenticated Principal that is associated with this Session.
+     * This provides an <code>Authenticator</code> with a means to cache a
+     * previously authenticated Principal, and avoid potentially expensive
+     * <code>Realm.authenticate()</code> calls on every request.
+     *
+     * @param principal
+     *            The new Principal, or <code>null</code> if none
+     */
+    public void setPrincipal(Principal principal) {
+        setPrincipal(principal, true);
+    }
+
+
+    public void setPrincipal(Principal principal, boolean addDeltaRequest) {
+        try { 
+            lock();
+            super.setPrincipal(principal);
+            if (addDeltaRequest && (deltaRequest != null))
+                deltaRequest.setPrincipal(principal);
+        } finally {
+            unlock();
+        }
+    }
+-----CSCI578-----
+
+
+    protected void addAction(int type,
+                             int action,
+                             String name,
+                             Object value) {
+        AttributeInfo info = null;
+        if ( this.actionPool.size() > 0 ) {
+            try {
+                info = (AttributeInfo) actionPool.removeFirst();
+            }catch ( Exception x ) {
+                log.error("Unable to remove element:",x);
+                info = new AttributeInfo(type, action, name, value);
+            }
+            info.init(type,action,name,value);
+        } else {
+            info = new AttributeInfo(type, action, name, value);
+        }
+        //if we have already done something to this attribute, make sure
+        //we don't send multiple actions across the wire
+        if ( !recordAllActions) {
+            try {
+                actions.remove(info);
+            } catch (java.util.NoSuchElementException x) {
+                //do nothing, we wanted to remove it anyway
+            }
+        }
+        //add the action
+        actions.addLast(info);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the authenticated Principal that is associated with this Session.
+     * This provides an <code>Authenticator</code> with a means to cache a
+     * previously authenticated Principal, and avoid potentially expensive
+     * <code>Realm.authenticate()</code> calls on every request.
+     *
+     * @param principal The new Principal, or <code>null</code> if none
+     */
+    public void setPrincipal(Principal principal) {
+
+        Principal oldPrincipal = this.principal;
+        this.principal = principal;
+        support.firePropertyChange("principal", oldPrincipal, this.principal);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the authenticated Principal that is associated with this Session.
+     * This provides an <code>Authenticator</code> with a means to cache a
+     * previously authenticated Principal, and avoid potentially expensive
+     * <code>Realm.authenticate()</code> calls on every request.
+     *
+     * @param principal The new Principal, or <code>null</code> if none
+     */
+    public void setPrincipal(Principal principal) {
+        super.setPrincipal(principal);
+        setIsDirty(true);
+    }
+-----CSCI578-----
+
+
+    protected void removeAttributeInternal(String name, boolean notify,
+                                           boolean addDeltaRequest) {
+        try {
+            lock();
+            // Remove this attribute from our collection
+            Object value = attributes.get(name);
+            if (value == null) return;
+
+            super.removeAttributeInternal(name,notify);
+            if (addDeltaRequest && deltaRequest != null && !exclude(name, null)) {
+                deltaRequest.removeAttribute(name);
+            }
+
+        }finally {
+            unlock();
+        }
+    }
+-----CSCI578-----
+
+
+    public void removeAttribute(String name) {
+        int action = ACTION_REMOVE;
+        addAction(TYPE_ATTRIBUTE,action,name,null);
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------- HttpSession Properties
+
+    // ----------------------------------------------HttpSession Public Methods
+
+
+    /**
+     * Remove the object bound with the specified name from this session. If the
+     * session does not have an object bound with this name, this method does
+     * nothing.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueUnbound()</code> on the object.
+     *
+     * @param name
+     *            Name of the object to remove from this session.
+     * @param notify
+     *            Should we notify interested listeners that this attribute is
+     *            being removed?
+     *
+     * @exception IllegalStateException
+     *                if this method is called on an invalidated session
+     */
+    public void removeAttribute(String name, boolean notify) {
+        removeAttribute(name, notify, true);
+    }
+
+
+    public void removeAttribute(String name, boolean notify,boolean addDeltaRequest) {
+        // Validate our current state
+        if (!isValid()) throw new IllegalStateException(sm.getString("standardSession.removeAttribute.ise"));
+        removeAttributeInternal(name, notify, addDeltaRequest);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the <code>isValid</code> flag for this session.
+     */
+    public boolean isValid() {
+        if (this.expiring) {
+            return true;
+        }
+        if (!this.isValid) {
+            return false;
+        }
+        if (ACTIVITY_CHECK && accessCount.get() > 0) {
+            return true;
+        }
+        if (maxInactiveInterval >= 0) {
+            long timeNow = System.currentTimeMillis();
+            int timeIdle = (int) ( (timeNow - thisAccessedTime) / 1000L);
+            if (isPrimarySession()) {
+                if (timeIdle >= maxInactiveInterval) {
+                    expire(true);
+                }
+            } else {
+                if (timeIdle >= (2 * maxInactiveInterval)) {
+                    //if the session has been idle twice as long as allowed,
+                    //the primary session has probably crashed, and no other
+                    //requests are coming in. that is why we do this. otherwise
+                    //we would have a memory leak
+                    expire(true, false);
+                }
+            }
+        }
+        return (this.isValid);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Bind an object to this session, using the specified name. If an object of
+     * the same name is already bound to this session, the object is replaced.
+     * <p>
+     * After this method executes, and if the object implements
+     * <code>HttpSessionBindingListener</code>, the container calls
+     * <code>valueBound()</code> on the object.
+     *
+     * @param name
+     *            Name to which the object is bound, cannot be null
+     * @param value
+     *            Object to be bound, cannot be null
+     *
+     * @exception IllegalArgumentException
+     *                if an attempt is made to add a non-serializable object in
+     *                an environment marked distributable.
+     * @exception IllegalStateException
+     *                if this method is called on an invalidated session
+     */
+    public void setAttribute(String name, Object value) {
+        setAttribute(name, value, true, true);
+    }
+
+
+    public void setAttribute(String name, Object value, boolean notify,boolean addDeltaRequest) {
+
+        // Name cannot be null
+        if (name == null) throw new IllegalArgumentException(sm.getString("standardSession.setAttribute.namenull"));
+
+        // Null value is the same as removeAttribute()
+        if (value == null) {
+            removeAttribute(name);
+            return;
+        }
+
+        try {
+            lock();
+            super.setAttribute(name,value, notify);
+            if (addDeltaRequest && deltaRequest != null && !exclude(name, value)) {
+                deltaRequest.setAttribute(name, value);
+            }
+        } finally {
+            unlock();
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void setAttribute(String name, Object value) {
+        int action = (value==null)?ACTION_REMOVE:ACTION_SET;
+        addAction(TYPE_ATTRIBUTE,action,name,value);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the <code>isNew</code> flag for this session.
+     *
+     * @param isNew
+     *            The new value for the <code>isNew</code> flag
+     */
+    public void setNew(boolean isNew) {
+        setNew(isNew, true);
+    }
+
+
+    public void setNew(boolean isNew, boolean addDeltaRequest) {
+        super.setNew(isNew);
+        if (addDeltaRequest && (deltaRequest != null)){
+            try {
+                lock();
+                deltaRequest.setNew(isNew);
+            }finally{
+                unlock();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public void setNew(boolean n) {
+        int action = ACTION_SET;
+        addAction(TYPE_ISNEW,action,NAME_ISNEW,new Boolean(n));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>isNew</code> flag for this session.
+     *
+     * @param isNew The new value for the <code>isNew</code> flag
+     */
+    public void setNew(boolean isNew) {
+
+        this.isNew = isNew;
+
+    }
+-----CSCI578-----
+
+
+    public void setAuthType(String authType) {
+        int action = (authType==null)?ACTION_REMOVE:ACTION_SET;
+        addAction(TYPE_AUTHTYPE,action,NAME_AUTHTYPE, authType);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the authentication type used to authenticate our cached
+     * Principal, if any.
+     *
+     * @param authType The new cached authentication type
+     */
+    @Override
+    public void setAuthType(String authType) {
+        setAuthType(authType, true);
+    }
+
+
+    public void setAuthType(String authType, boolean addDeltaRequest) {
+        try { 
+            lock();
+            super.setAuthType(authType);
+            if (addDeltaRequest && (deltaRequest != null))
+                deltaRequest.setAuthType(authType);
+        } finally {
+            unlock();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the authentication type used to authenticate our cached
+     * Principal, if any.
+     *
+     * @param authType The new cached authentication type
+     */
+    public void setAuthType(String authType) {
+
+        String oldAuthType = this.authType;
+        this.authType = authType;
+        support.firePropertyChange("authType", oldAuthType, this.authType);
+
+    }

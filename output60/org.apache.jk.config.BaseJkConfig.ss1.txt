@@ -1,0 +1,259 @@
+22
+-----CSCI578-----
+
+    protected void generateContextMappings(Context context, PrintWriter mod_jk){
+    }
+-----CSCI578-----
+
+
+    /** 
+     *  Generate configuration files.  Override with method to generate
+     *  web server specific configuration.
+     */
+    protected void executeEngine(Engine egn, PrintWriter mod_jk) {
+        if(egn.getJvmRoute() != null) {
+            jkWorker = egn.getJvmRoute();
+        }
+        executeServer(egn.getService().getServer(), mod_jk);
+        Container [] children = egn.findChildren();
+        for(int ii=0; ii < children.length; ii++) {
+            if( children[ii] instanceof Host ) {
+                executeHost((Host)children[ii], mod_jk);
+            } else if( children[ii] instanceof Context ) {
+                executeContext((Context)children[ii], mod_jk);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /** 
+     * Generate Virtual Host start
+     */
+    protected void generateVhostHead(Host host, PrintWriter mod_jk) {
+    }
+-----CSCI578-----
+
+
+    // -------------------- Tomcat callbacks --------------------
+
+
+    // Auto-config should be able to react to dynamic config changes,
+    // and regenerate the config.
+
+    /** 
+     *  Generate the configuration - only when the server is
+     *  completely initialized ( before starting )
+     */
+    public void lifecycleEvent(LifecycleEvent evt) {
+        if(Lifecycle.START_EVENT.equals(evt.getType())) {
+           execute( evt );
+        } 
+    }
+-----CSCI578-----
+
+
+    /** 
+     *  Generate configuration files.  Override with method to generate
+     *  web server specific configuration.
+     */
+    public void execute(LifecycleEvent evt) {
+        initProperties();
+        PrintWriter mod_jk = null;
+        try {
+            mod_jk = getWriter();
+        } catch(IOException iex) {
+            log.warn("Unable to open config file");
+            return;
+        }
+        Lifecycle who = evt.getLifecycle();
+        if( who instanceof Server ) {
+            executeServer((Server)who, mod_jk);
+        } else if(who instanceof Engine) {
+            executeEngine((Engine)who, mod_jk);
+        } else if ( who instanceof Host ) {
+            executeHost((Host)who, mod_jk);
+        } else if( who instanceof Context ) {
+            executeContext((Context)who, mod_jk);
+        }
+        mod_jk.close();
+    }
+
+    
+    /**
+     *  set a path to the parent directory of the
+     *  conf folder.  That is, the parent directory
+     *  within which path setters would be resolved against,
+     *  if relative.  For example if ConfigHome is set to "/home/tomcat"
+     *  and regConfig is set to "conf/mod_jk.conf" then the resulting 
+     *  path used would be: 
+     *  "/home/tomcat/conf/mod_jk.conf".</p>
+     *  <p>
+     *  However, if the path is set to an absolute path,
+     *  this attribute is ignored.
+     *  <p>
+     *  If not set, execute() will set this to TOMCAT_HOME.
+     *  @param dir - path to a directory
+     */
+    public void setConfigHome(String dir){
+        if( dir==null ) return;
+        File f=new File(dir);
+        if(!f.isDirectory()){
+            throw new IllegalArgumentException(
+                "BaseConfig.setConfigHome(): "+
+                "Configuration Home must be a directory! : "+dir);
+        }
+        configHome = f;
+    }
+-----CSCI578-----
+
+
+    /** 
+     * Generate Virtual Host end
+     */
+    protected void generateVhostTail(Host host, PrintWriter mod_jk) {
+    }
+-----CSCI578-----
+
+    /** 
+     *  Generate configuration files.  Override with method to generate
+     *  web server specific configuration.
+     */
+    public void executeServer(Server svr, PrintWriter mod_jk) {
+        if(! append ) {
+            if( ! generateJkHead(mod_jk) )
+                return;
+            generateSSLConfig(mod_jk);
+            generateJkTail(mod_jk);
+        }
+    }
+-----CSCI578-----
+
+
+    protected void generateStupidMappings(Context context, PrintWriter mod_jk){
+    }
+-----CSCI578-----
+
+
+    /** 
+     * Generate SSL options
+     */
+    protected void generateSSLConfig(PrintWriter mod_jk) {
+    }
+-----CSCI578-----
+
+
+    /** 
+     * Generate general options
+     */
+    protected void generateJkTail(PrintWriter mod_jk) {
+    }
+-----CSCI578-----
+
+    /**
+     *   executes the ApacheConfig interceptor. This method generates apache
+     *   configuration files for use with  mod_jk.
+     *   @param context a Context object.
+     *   @param mod_jk Writer for output.
+    */
+    public void executeContext(Context context, PrintWriter mod_jk){
+
+        if(context.getPath().length() > 0 || ! noRoot ) {
+            String docRoot = context.getServletContext().getRealPath("/");
+            if( forwardAll || docRoot == null)
+                generateStupidMappings( context, mod_jk );
+            else
+                generateContextMappings( context, mod_jk);
+        }
+    }
+-----CSCI578-----
+
+
+    /** 
+     *  Get the output Writer.  Override with method to generate
+     *  web server specific configuration.
+     */
+    protected PrintWriter getWriter() throws IOException {
+        return null;
+    }
+-----CSCI578-----
+
+
+    /** 
+     * Generate general options
+     */
+    protected boolean generateJkHead(PrintWriter mod_jk)  {
+        return true;
+    }
+-----CSCI578-----
+
+    /**
+     *  Generate configuration files.  Override with method to generate
+     *  web server specific configuration.
+     */
+    protected void executeHost(Host hst, PrintWriter mod_jk) {
+        generateVhostHead(hst, mod_jk);
+        Container [] children = hst.findChildren();
+        for(int ii=0; ii < children.length; ii++) {
+            if(children[ii] instanceof Context) {
+                executeContext((Context)children[ii],mod_jk);
+            }
+        }
+        generateVhostTail(hst, mod_jk);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the event type of this event.
+     */
+    public String getType() {
+
+        return (this.type);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Lifecycle on which this event occurred.
+     */
+    public Lifecycle getLifecycle() {
+
+        return (this.lifecycle);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the <code>Service</code> with which we are associated (if any).
+     */
+    public Service getService();
+-----CSCI578-----
+
+
+    /**
+     * Return the <code>Server</code> with which we are associated (if any).
+     */
+    public Server getServer();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Retrieve the JvmRouteId for this engine.
+     */
+    public String getJvmRoute();
+-----CSCI578-----
+//15 seconds
+
+    public void lifecycleEvent(LifecycleEvent event) {
+        if ( event.getType() == AFTER_START_EVENT )
+            startComplete = true;
+    }

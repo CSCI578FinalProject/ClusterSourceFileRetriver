@@ -1,0 +1,699 @@
+223
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setDoctypeName(String doctypeName) {
+        this.doctypeName = doctypeName;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void addBean(Node.UseBean n, String s, String type, String scope)
+        throws JasperException {
+
+        if (!(scope == null || scope.equals("page") || scope.equals("request")
+                || scope.equals("session") || scope.equals("application"))) {
+            errDispatcher.jspError(n, "jsp.error.usebean.badScope");
+        }
+
+        beanTypes.put(s, type);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public ExpressionFactory getExpressionFactory() {
+        return expressionFactory;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setDoctypeSystem(String doctypeSystem) {
+        this.doctypeSystem = doctypeSystem;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setDoctypePublic(String doctypePublic) {
+        this.doctypePublic = doctypePublic;
+    }
+-----CSCI578-----
+
+
+    public boolean isScriptingInvalid() {
+        return scriptingInvalid;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Checks to see if the given scope is valid.
+     *
+     * @param scope
+     *            The scope to be checked
+     * @param n
+     *            The Node containing the 'scope' attribute whose value is to be
+     *            checked
+     * @param err
+     *            error dispatcher
+     *
+     * @throws JasperException
+     *             if scope is not null and different from &quot;page&quot;,
+     *             &quot;request&quot;, &quot;session&quot;, and
+     *             &quot;application&quot;
+     */
+    public static void checkScope(String scope, Node n, ErrorDispatcher err)
+            throws JasperException {
+        if (scope != null && !scope.equals("page") && !scope.equals("request")
+                && !scope.equals("session") && !scope.equals("application")) {
+            err.jspError(n, "jsp.error.invalid.scope", scope);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setOmitXmlDecl(String omit) {
+        omitXmlDecl = omit;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean isELIgnored() {
+        return isELIgnored;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean checkVariable(String bean) {
+        return beanTypes.containsKey(bean);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean isSession() {
+        return isSession;
+    }
+-----CSCI578-----
+
+
+    public String getOmitXmlDecl() {
+        return omitXmlDecl;
+    }
+-----CSCI578-----
+
+
+    public String getDoctypeName() {
+        return doctypeName;
+    }
+-----CSCI578-----
+
+
+    public String getDoctypePublic() {
+        return doctypePublic;
+    }
+-----CSCI578-----
+
+
+    public String getDoctypeSystem() {
+        return doctypeSystem;
+    }
+-----CSCI578-----
+
+
+    public BeanRepository getBeanRepository() {
+        return beanRepository;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /*
+     * Gets this Node's attributes.
+     *
+     * In the case of a Node parsed from standard syntax, this method returns
+     * all the Node's attributes.
+     *
+     * In the case of a Node parsed from XML syntax, this method returns only
+     * those attributes whose name does not start with xmlns.
+     */
+    public Attributes getAttributes() {
+        return this.attrs;
+    }
+-----CSCI578-----
+
+
+    public String getAttributeValue(String name) {
+        return (attrs == null) ? null : attrs.getValue(name);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Searches all subnodes of this node for jsp:attribute standard actions,
+     * and returns that set of nodes as a Node.Nodes object.
+     *
+     * @return Possibly empty Node.Nodes object containing any jsp:attribute
+     *         subnodes of this Node
+     */
+    public Node.Nodes getNamedAttributeNodes() {
+
+        if (namedAttributeNodes != null) {
+            return namedAttributeNodes;
+        }
+
+        Node.Nodes result = new Node.Nodes();
+
+        // Look for the attribute in NamedAttribute children
+        Nodes nodes = getBody();
+        if (nodes != null) {
+            int numChildNodes = nodes.size();
+            for (int i = 0; i < numChildNodes; i++) {
+                Node n = nodes.getNode(i);
+                if (n instanceof NamedAttribute) {
+                    result.add(n);
+                } else if (!(n instanceof Comment)) {
+                    // Nothing can come before jsp:attribute, and only
+                    // jsp:body can come after it.
+                    break;
+                }
+            }
+        }
+
+        namedAttributeNodes = result;
+        return result;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Searches all sub-nodes of this node for jsp:attribute standard actions
+     * with the given name.
+     * <p>
+     * This should always be called and only be called for nodes that accept
+     * dynamic runtime attribute expressions.
+     *
+     * @param name The name of the attribute
+     * @return the NamedAttribute node of the matching named attribute, nor null
+     *         if no such node is found.
+     */
+    public NamedAttribute getNamedAttributeNode(String name) {
+        NamedAttribute result = null;
+
+        // Look for the attribute in NamedAttribute children
+        Nodes nodes = getNamedAttributeNodes();
+        int numChildNodes = nodes.size();
+        for (int i = 0; i < numChildNodes; i++) {
+            NamedAttribute na = (NamedAttribute) nodes.getNode(i);
+            boolean found = false;
+            int index = name.indexOf(':');
+            if (index != -1) {
+                // qualified name
+                found = na.getName().equals(name);
+            } else {
+                found = na.getLocalName().equals(name);
+            }
+            if (found) {
+                result = na;
+                break;
+            }
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get the attribute that is non request time expression, either from the
+     * attribute of the node, or from a jsp:attrbute
+     *
+     * @param name The name of the attribute
+     *
+     * @return The attribute value
+     */
+    public String getTextAttribute(String name) {
+
+        String attr = getAttributeValue(name);
+        if (attr != null) {
+            return attr;
+        }
+
+        NamedAttribute namedAttribute = getNamedAttributeNode(name);
+        if (namedAttribute == null) {
+            return null;
+        }
+
+        return namedAttribute.getText();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean isDeferredSyntaxAllowedAsLiteral() {
+        return deferredSyntaxAllowedAsLiteral;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Handle the beginning of an XML element.
+     *
+     * @param attributes The attributes of this element
+     *
+     * @exception Exception if a processing error occurs
+     */
+    @Override
+    public void begin(String namespace, String name, Attributes attributes)
+        throws Exception {
+
+        Container c = (Container) digester.peek();
+        Container p = null;
+        Object obj = digester.peek(1);
+        if (obj instanceof Container) {
+            p = (Container) obj;
+        }
+
+        String className = null;
+
+        // Check the container for the specified attribute
+        if (attributeName != null) {
+            String value = attributes.getValue(attributeName);
+            if (value != null)
+                className = value;
+        }
+
+        // Check the container's parent for the specified attribute
+        if (p != null && className == null) {
+            String configClass =
+                (String) IntrospectionUtils.getProperty(p, attributeName);
+            if (configClass != null && configClass.length() > 0) {
+                className = configClass;
+            }
+        }
+
+        // Use the default
+        if (className == null) {
+            className = listenerClass;
+        }
+
+        // Instantiate a new LifecyleListener implementation object
+        Class<?> clazz = Class.forName(className);
+        LifecycleListener listener =
+            (LifecycleListener) clazz.newInstance();
+
+        // Add this LifecycleListener to our associated component
+        c.addLifecycleListener(listener);
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Handle the beginning of an XML element.
+     *
+     * @param attributes The attributes of this element
+     *
+     * @exception Exception if a processing error occurs
+     */
+    @Override
+    public void begin(String namespace, String nameX, Attributes attributes)
+        throws Exception {
+
+        for (int i = 0; i < attributes.getLength(); i++) {
+            String name = attributes.getLocalName(i);
+            if ("".equals(name)) {
+                name = attributes.getQName(i);
+            }
+            String value = attributes.getValue(i);
+            if ( !excludes.containsKey(name)) {
+                if (!digester.isFakeAttribute(digester.peek(), name)
+                        && !IntrospectionUtils.setProperty(digester.peek(), name, value)
+                        && digester.getRulesValidation()) {
+                    digester.getLogger().warn("[SetAllPropertiesRule]{" + digester.getMatch() +
+                            "} Setting property '" + name + "' to '" +
+                            value + "' did not find a matching property.");
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------------- Constructors
+
+
+    // ----------------------------------------------------- Instance Variables
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Handle the beginning of an XML element.
+     *
+     * @param attributes The attributes of this element
+     *
+     * @exception Exception if a processing error occurs
+     */
+    @Override
+    public void begin(String namespace, String nameX, Attributes attributes)
+        throws Exception {
+
+        for (int i = 0; i < attributes.getLength(); i++) {
+            String name = attributes.getLocalName(i);
+            if ("".equals(name)) {
+                name = attributes.getQName(i);
+            }
+            if ("path".equals(name) || "docBase".equals(name)) {
+                continue;
+            }
+            String value = attributes.getValue(i);
+            if (!digester.isFakeAttribute(digester.peek(), name)
+                    && !IntrospectionUtils.setProperty(digester.peek(), name, value)
+                    && digester.getRulesValidation()) {
+                digester.getLogger().warn("[SetContextPropertiesRule]{" + digester.getMatch() +
+                        "} Setting property '" + name + "' to '" +
+                        value + "' did not find a matching property.");
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Process the beginning of this element.
+     *
+     * @param namespace the namespace URI of the matching element, or an
+     *   empty string if the parser is not namespace aware or the element has
+     *   no namespace
+     * @param theName the local name if the parser is namespace aware, or just
+     *   the element name otherwise
+     * @param attributes The attribute list for this element
+     */
+    @Override
+    public void begin(String namespace, String theName, Attributes attributes)
+            throws Exception {
+
+        // Populate the corresponding properties of the top object
+        Object top = digester.peek();
+        if (digester.log.isDebugEnabled()) {
+            if (top != null) {
+                digester.log.debug("[SetPropertiesRule]{" + digester.match +
+                                   "} Set " + top.getClass().getName() +
+                                   " properties");
+            } else {
+                digester.log.debug("[SetPropertiesRule]{" + digester.match +
+                                   "} Set NULL properties");
+            }
+        }
+
+        for (int i = 0; i < attributes.getLength(); i++) {
+            String name = attributes.getLocalName(i);
+            if ("".equals(name)) {
+                name = attributes.getQName(i);
+            }
+            String value = attributes.getValue(i);
+
+            if (digester.log.isDebugEnabled()) {
+                digester.log.debug("[SetPropertiesRule]{" + digester.match +
+                        "} Setting property '" + name + "' to '" +
+                        value + "'");
+            }
+            if (!digester.isFakeAttribute(top, name)
+                    && !IntrospectionUtils.setProperty(top, name, value)
+                    && digester.getRulesValidation()) {
+                digester.log.warn("[SetPropertiesRule]{" + digester.match +
+                        "} Setting property '" + name + "' to '" +
+                        value + "' did not find a matching property.");
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Determine if an attribute is a fake attribute.
+     * @param object The object
+     * @param name The attribute name
+     * @return <code>true</code> if this is a fake attribute
+     */
+    public boolean isFakeAttribute(Object object, String name) {
+
+        if (fakeAttributes == null) {
+            return false;
+        }
+        List<String> result = fakeAttributes.get(object.getClass());
+        if (result == null) {
+            result = fakeAttributes.get(Object.class);
+        }
+        if (result == null) {
+            return false;
+        } else {
+            return result.contains(name);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the rules validation flag.
+     */
+    public boolean getRulesValidation() {
+
+        return (this.rulesValidation);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Stack whose elements are List objects, each containing a list of
+     * Rule objects as returned from Rules.getMatch(). As each xml element
+     * in the input is entered, the matching rules are pushed onto this
+     * stack. After the end tag is reached, the matches are popped again.
+     * The depth of is stack is therefore exactly the same as the current
+     * "nesting" level of the input xml.
+     *
+     * @since 1.6
+     */
+    protected ArrayStack<List<Rule>> matches = new ArrayStack<>(10);
+
+
+    /**
+     * @return the current rule match path
+     */
+    public String getMatch() {
+
+        return match;
+
+    }
+-----CSCI578-----
+
+
+    public void setJspVersion(String jspVersion) {
+        this.jspVersion = jspVersion;
+    }

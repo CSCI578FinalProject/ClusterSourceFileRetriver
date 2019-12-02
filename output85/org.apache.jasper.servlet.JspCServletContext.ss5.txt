@@ -1,0 +1,124 @@
+19
+-----CSCI578-----
+
+    public boolean isScanAllDirectories() {
+        return scanAllDirectories;
+    }
+-----CSCI578-----
+
+    @Override
+    public void setJarScanFilter(JarScanFilter jarScanFilter) {
+        this.jarScanFilter = jarScanFilter;
+    }
+-----CSCI578-----
+
+    public boolean isScanClassPath() {
+        return scanClassPath;
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * Since class loader hierarchies can get complicated, this method attempts
+     * to apply the following rule: A class loader is a web application class
+     * loader unless it loaded this class (StandardJarScanner) or is a parent
+     * of the class loader that loaded this class.
+     *
+     * This should mean:
+     *   the webapp class loader is an application class loader
+     *   the shared class loader is an application class loader
+     *   the server class loader is not an application class loader
+     *   the common class loader is not an application class loader
+     *   the system class loader is not an application class loader
+     *   the bootstrap class loader is not an application class loader
+     */
+    private boolean isWebappClassLoader(ClassLoader classLoader) {
+        ClassLoader nonWebappLoader = StandardJarScanner.class.getClassLoader();
+
+        while (nonWebappLoader != null) {
+            if (nonWebappLoader == classLoader) {
+                return false;
+            }
+            nonWebappLoader = nonWebappLoader.getParent();
+        }
+        return true;
+    }
+-----CSCI578-----
+
+    @Override
+    public JarScanFilter getJarScanFilter() {
+        return jarScanFilter;
+    }
+-----CSCI578-----
+
+
+    /**
+     *
+     * @param jarScanType   The type of JAR scan currently being performed
+     * @param jarName       The name of the JAR file (without any path
+     *                          information) to be checked to see if it should
+     *                          be included in the results or not
+     * @return <code>true</code> if the JAR should be returned in the results,
+     *             <code>false</code> if it should be excluded
+     */
+    boolean check(JarScanType jarScanType, String jarName);
+-----CSCI578-----
+
+    public void setScanClassPath(boolean scanClassPath) {
+        this.scanClassPath = scanClassPath;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * A directory structure was found within the web application at
+     * /WEB-INF/classes that should be handled as an unpacked JAR. Note that all
+     * resource access must be via the ServletContext to ensure that any
+     * additional resources are visible.
+     *
+     * @throws IOException if an I/O error occurs while scanning WEB-INF/classes
+     */
+    public void scanWebInfClasses() throws IOException;
+-----CSCI578-----
+
+
+    private Map<String, WebXml> scanForFragments(WebXmlParser webXmlParser) throws JasperException {
+        StandardJarScanner scanner = new StandardJarScanner();
+        // TODO - enabling this means initializing the classloader first in JspC
+        scanner.setScanClassPath(false);
+        // TODO - configure filter rules from Ant rather then system properties
+        scanner.setJarScanFilter(new StandardJarScanFilter());
+
+        FragmentJarScannerCallback callback =
+                new FragmentJarScannerCallback(webXmlParser, false, true);
+        scanner.scan(JarScanType.PLUGGABILITY, this, callback);
+        if (!callback.isOk()) {
+            throw new JasperException(Localizer.getMessage("jspc.error.invalidFragment"));
+        }
+        return callback.getFragments();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    public boolean isScanBootstrapClassPath() {
+        return scanBootstrapClassPath;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean isOk() {
+        return ok;
+    }
+-----CSCI578-----
+
+
+    public Map<String,WebXml> getFragments() {
+        return fragments;
+    }
+-----CSCI578-----

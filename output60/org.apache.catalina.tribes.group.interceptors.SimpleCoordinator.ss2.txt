@@ -1,0 +1,74 @@
+7
+-----CSCI578-----
+
+
+    private void installViewWhenStable() {
+        int stableCount = 0;
+
+        while (stableCount < 10) {
+            if (membershipChanged.compareAndSet(true, false)) {
+                stableCount = 0;
+            } else {
+                stableCount++;
+            }
+            try {
+                MILLISECONDS.sleep(250);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        final Member[] members = getMembers();
+        final Member[] view = new Member[members.length+1];
+        System.arraycopy(members, 0, view, 0, members.length);
+        view[members.length] = getLocalMember(false);
+        Arrays.sort(view, AbsoluteOrder.comp);
+        if (Arrays.equals(view, this.view)) {
+            return;
+        }
+        this.view = view;
+        viewChange(view);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Override to receive view changes.
+     * 
+     * @param view
+     */
+    protected void viewChange(final Member[] view) {
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void memberAdded(final Member member) {
+        super.memberAdded(member);
+        membershipChanged();
+        installViewWhenStable();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void memberDisappeared(final Member member) {
+        super.memberDisappeared(member);
+        membershipChanged();
+        installViewWhenStable();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void start(int svc) throws ChannelException {
+        super.start(svc);
+        installViewWhenStable();
+    }
+-----CSCI578-----
+
+
+    private void membershipChanged() {
+        membershipChanged.set(true);
+    }

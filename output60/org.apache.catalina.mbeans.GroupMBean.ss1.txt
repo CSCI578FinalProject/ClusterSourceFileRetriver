@@ -1,0 +1,31 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the MBean Names of all users that are members of this group.
+     */
+    public String[] getUsers() {
+
+        Group group = (Group) this.resource;
+        ArrayList results = new ArrayList();
+        Iterator users = group.getUsers();
+        while (users.hasNext()) {
+            User user = null;
+            try {
+                user = (User) users.next();
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), user);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for user " + user);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }

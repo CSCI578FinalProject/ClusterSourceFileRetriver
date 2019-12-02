@@ -1,0 +1,40 @@
+4
+-----CSCI578-----
+
+
+    @Override
+    public String getWebappPath() {
+        return webAppPath;
+    }
+-----CSCI578-----
+
+
+    private long evict(long targetSize, Iterator<CachedResource> iter) {
+
+        long now = System.currentTimeMillis();
+
+        long newSize = size.get();
+
+        while (newSize > targetSize && iter.hasNext()) {
+            CachedResource resource = iter.next();
+
+            // Don't expire anything that has been checked within the TTL
+            if (resource.getNextCheck() > now) {
+                continue;
+            }
+
+            // Remove the entry from the cache
+            removeCacheEntry(resource.getWebappPath());
+
+            newSize = size.get();
+        }
+
+        return newSize;
+    }
+-----CSCI578-----
+
+
+    protected long getNextCheck() {
+        return nextCheck;
+    }
+-----CSCI578-----

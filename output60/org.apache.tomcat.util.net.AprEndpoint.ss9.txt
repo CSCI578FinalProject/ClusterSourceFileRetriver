@@ -1,0 +1,113 @@
+6
+-----CSCI578-----
+
+
+
+    /**
+     * Process the specified connection.
+     */
+    protected boolean setSocketOptions(long socket) {
+        // Process the connection
+        int step = 1;
+        try {
+
+            // 1: Set socket options: timeout, linger, etc
+            if (soLinger >= 0)
+                Socket.optSet(socket, Socket.APR_SO_LINGER, soLinger);
+            if (tcpNoDelay)
+                Socket.optSet(socket, Socket.APR_TCP_NODELAY, (tcpNoDelay ? 1 : 0));
+            if (soTimeout > 0)
+                Socket.timeoutSet(socket, soTimeout * 1000);
+
+            // 2: SSL handshake
+            step = 2;
+            if (sslContext != 0) {
+                SSLSocket.attach(sslContext, socket);
+                if (SSLSocket.handshake(socket) != 0) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("endpoint.err.handshake") + ": " + SSL.getLastError());
+                    }
+                    return false;
+                }
+            }
+
+        } catch (Throwable t) {
+            if (log.isDebugEnabled()) {
+                if (step == 2) {
+                    log.debug(sm.getString("endpoint.err.handshake"), t);
+                } else {
+                    log.debug(sm.getString("endpoint.err.unexpected"), t);
+                }
+            }
+            // Tell to close the socket
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return last SSL error string
+     */
+    public static native String getLastError();
+-----CSCI578-----
+
+
+    /**
+     * Do a SSL handshake.
+     * @param thesocket The socket to use
+     */
+    public static native int handshake(long thesocket);
+-----CSCI578-----
+
+
+    /**
+     * Attach APR socket on a SSL connection.
+     * @param ctx SSLContext to use.
+     * @param sock APR Socket that already did physical connect or accept.
+     * @return APR_STATUS code.
+     */
+    public static native int attach(long ctx, long sock)
+        throws Exception;
+-----CSCI578-----
+
+
+    /**
+     * Setup socket timeout for the specified socket
+     * @param sock The socket to set up.
+     * @param t Value for the timeout in microseconds.
+     * <PRE>
+     * t &gt; 0  -- read and write calls return APR_TIMEUP if specified time
+     *           elapses with no data read or written
+     * t == 0 -- read and write calls never block
+     * t &lt; 0  -- read and write calls block
+     * </PRE>
+     */
+    public static native int timeoutSet(long sock, long t);
+-----CSCI578-----
+
+
+    /**
+     * Setup socket options for the specified socket
+     * @param sock The socket to set up.
+     * @param opt The option we would like to configure.  One of:
+     * <PRE>
+     * APR_SO_DEBUG      --  turn on debugging information
+     * APR_SO_KEEPALIVE  --  keep connections active
+     * APR_SO_LINGER     --  lingers on close if data is present
+     * APR_SO_NONBLOCK   --  Turns blocking on/off for socket
+     *                       When this option is enabled, use
+     *                       the APR_STATUS_IS_EAGAIN() macro to
+     *                       see if a send or receive function
+     *                       could not transfer data without
+     *                       blocking.
+     * APR_SO_REUSEADDR  --  The rules used in validating addresses
+     *                       supplied to bind should allow reuse
+     *                       of local addresses.
+     * APR_SO_SNDBUF     --  Set the SendBufferSize
+     * APR_SO_RCVBUF     --  Set the ReceiveBufferSize
+     * </PRE>
+     * @param on Value for the option.
+     */
+    public static native int optSet(long sock, int opt, int on);

@@ -1,0 +1,99 @@
+6
+-----CSCI578-----
+
+
+    public boolean getOverride() {
+        return (this.override);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add an environment entry for this web application.
+     *
+     * @param environment New environment entry
+     */
+    public void addEnvironment(ContextEnvironment environment) {
+
+        if (entries.containsKey(environment.getName())) {
+            ContextEnvironment ce = findEnvironment(environment.getName());
+            ContextResourceLink rl = findResourceLink(environment.getName());
+            if (ce != null) {
+                if (ce.getOverride()) {
+                    removeEnvironment(environment.getName());
+                } else {
+                    return;
+                }
+            } else if (rl != null) {
+                // Link. Need to look at the global resources
+                NamingResources global =
+                    ServerFactory.getServer().getGlobalNamingResources();
+                if (global.findEnvironment(rl.getGlobal()) != null) {
+                    if (global.findEnvironment(rl.getGlobal()).getOverride()) {
+                        removeResourceLink(environment.getName());
+                    } else {
+                        return;
+                    }
+                }
+            } else {
+                // It exists but it isn't an env or a res link...
+                return;
+            }
+        }
+        
+        entries.put(environment.getName(), environment.getType());
+
+        synchronized (envs) {
+            environment.setNamingResources(this);
+            envs.put(environment.getName(), environment);
+        }
+        support.firePropertyChange("environment", null, environment);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the environment entry with the specified name, if any;
+     * otherwise, return <code>null</code>.
+     *
+     * @param name Name of the desired environment entry
+     */
+    public ContextEnvironment findEnvironment(String name) {
+
+        synchronized (envs) {
+            return ((ContextEnvironment) envs.get(name));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the resource link with the specified name, if any;
+     * otherwise return <code>null</code>.
+     *
+     * @param name Name of the desired resource link
+     */
+    public ContextResourceLink findResourceLink(String name) {
+
+        synchronized (resourceLinks) {
+            return ((ContextResourceLink) resourceLinks.get(name));
+        }
+
+    }
+-----CSCI578-----
+
+
+    public String getType() {
+        return (this.type);
+    }
+-----CSCI578-----
+
+
+    public String getGlobal() {
+        return (this.global);
+    }

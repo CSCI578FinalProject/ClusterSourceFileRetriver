@@ -1,0 +1,55 @@
+4
+-----CSCI578-----
+
+
+   /**
+    * Release lock for in/out messages election is completed
+    */
+   protected void release() {
+
+   }
+-----CSCI578-----
+
+
+    /**
+    * Block in/out messages while a election is going on
+    */
+   protected void halt() {
+
+   }
+-----CSCI578-----
+
+
+    @Override
+    public void stop(int svc) throws ChannelException {
+        try {
+            halt();
+            synchronized (electionMutex) {
+                if (!started)return;
+                started = false;
+                fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_STOP, this, "Before stop"));
+                super.stop(startsvc);
+                this.view = null;
+                this.viewId = null;
+                this.suggestedView = null;
+                this.suggestedviewId = null;
+                this.membership.reset();
+                fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_STOP, this, "After stop"));
+            }
+        }finally {
+            release();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Reset the membership and start over fresh. i.e., delete all the members
+     * and wait for them to ping again and join this membership.
+     */
+    public void reset() {
+        synchronized (membersLock) {
+            map.clear();
+            members = EMPTY_MEMBERS ;
+        }
+    }

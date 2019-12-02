@@ -1,0 +1,67 @@
+7
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response,
+            FilterChain chain) throws IOException, ServletException {
+
+        ServletResponse wResponse = null;
+
+        if (request instanceof HttpServletRequest &&
+                response instanceof HttpServletResponse) {
+
+            HttpServletRequest req = (HttpServletRequest) request;
+            HttpServletResponse res = (HttpServletResponse) response;
+
+            boolean skipNonceCheck = false;
+
+            if (Constants.METHOD_GET.equals(req.getMethod())
+                    && entryPoints.contains(getRequestedPath(req))) {
+                skipNonceCheck = true;
+            }
+
+            HttpSession session = req.getSession(false);
+
+            @SuppressWarnings("unchecked")
+            LruCache<String> nonceCache = (session == null) ? null
+                    : (LruCache<String>) session.getAttribute(
+                            Constants.CSRF_NONCE_SESSION_ATTR_NAME);
+
+            if (!skipNonceCheck) {
+                String previousNonce =
+                    req.getParameter(Constants.CSRF_NONCE_REQUEST_PARAM);
+
+                if (nonceCache == null || previousNonce == null ||
+                        !nonceCache.contains(previousNonce)) {
+                    res.sendError(getDenyStatus());
+                    return;
+                }
+            }
+
+            if (nonceCache == null) {
+                nonceCache = new LruCache<>(nonceCacheSize);
+                if (session == null) {
+                    session = req.getSession(true);
+                }
+                session.setAttribute(
+                        Constants.CSRF_NONCE_SESSION_ATTR_NAME, nonceCache);
+            }
+
+            String newNonce = generateNonce();
+
+            nonceCache.add(newNonce);
+
+            wResponse = new CsrfResponseWrapper(res, newNonce);
+        } else {
+            wResponse = response;
+        }
+
+        chain.doFilter(request, wResponse);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

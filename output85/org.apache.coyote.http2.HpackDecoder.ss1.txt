@@ -1,0 +1,137 @@
+7
+-----CSCI578-----
+
+
+    private String handleIndexedHeaderName(int index) throws HpackException {
+        if (index <= Hpack.STATIC_TABLE_LENGTH) {
+            return Hpack.STATIC_TABLE[index].name;
+        } else {
+            if (index >= Hpack.STATIC_TABLE_LENGTH + filledTableSlots) {
+                throw new HpackException();
+            }
+            int adjustedIndex = getRealIndex(index - Hpack.STATIC_TABLE_LENGTH);
+            Hpack.HeaderField res = headerTable[adjustedIndex];
+            if (res == null) {
+                throw new HpackException();
+            }
+            return res.name;
+        }
+    }
+-----CSCI578-----
+
+
+    private String readHeaderName(ByteBuffer buffer, int prefixLength) throws HpackException {
+        buffer.position(buffer.position() - 1); //unget the byte
+        int index = Hpack.decodeInteger(buffer, prefixLength);
+        if (index == -1) {
+            return null;
+        } else if (index != 0) {
+            return handleIndexedHeaderName(index);
+        } else {
+            return readHpackString(buffer);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Handle an indexed header representation
+     *
+     * @param index The index
+     * @throws HpackException
+     */
+    private void handleIndex(int index) throws HpackException {
+        if (index <= Hpack.STATIC_TABLE_LENGTH) {
+            addStaticTableEntry(index);
+        } else {
+            int adjustedIndex = getRealIndex(index - Hpack.STATIC_TABLE_LENGTH);
+            Hpack.HeaderField headerField = headerTable[adjustedIndex];
+            headerEmitter.emitHeader(headerField.name, headerField.value, false);
+        }
+    }
+-----CSCI578-----
+
+
+    private void addStaticTableEntry(int index) throws HpackException {
+        //adds an entry from the static table.
+        //this must be an entry with a value as far as I can determine
+        Hpack.HeaderField entry = Hpack.STATIC_TABLE[index];
+        if (entry.value == null) {
+            throw new HpackException();
+        }
+        headerEmitter.emitHeader(entry.name, entry.value, false);
+    }
+-----CSCI578-----
+
+
+    private String readHpackString(ByteBuffer buffer) throws HpackException {
+        if (!buffer.hasRemaining()) {
+            return null;
+        }
+        byte data = buffer.get(buffer.position());
+
+        int length = Hpack.decodeInteger(buffer, 7);
+        if (buffer.remaining() < length) {
+            return null;
+        }
+        boolean huffman = (data & 0b10000000) != 0;
+        if (huffman) {
+            return readHuffmanString(length, buffer);
+        }
+        for (int i = 0; i < length; ++i) {
+            stringBuilder.append((char) buffer.get());
+        }
+        String ret = stringBuilder.toString();
+        stringBuilder.setLength(0);
+        return ret;
+    }
+-----CSCI578-----
+
+
+    private void resizeIfRequired() {
+        if(filledTableSlots == headerTable.length) {
+            Hpack.HeaderField[] newArray = new Hpack.HeaderField[headerTable.length + 10]; //we only grow slowly
+            for(int i = 0; i < headerTable.length; ++i) {
+                newArray[i] = headerTable[(firstSlotPosition + i) % headerTable.length];
+            }
+            firstSlotPosition = 0;
+            headerTable = newArray;
+        }
+    }
+-----CSCI578-----
+
+
+    private void addEntryToHeaderTable(Hpack.HeaderField entry) {
+        if (entry.size > maxMemorySize) {
+            //it is to big to fit, so we just completely clear the table.
+            while (filledTableSlots > 0) {
+                headerTable[firstSlotPosition] = null;
+                firstSlotPosition++;
+                if (firstSlotPosition == headerTable.length) {
+                    firstSlotPosition = 0;
+                }
+                filledTableSlots--;
+            }
+            currentMemorySize = 0;
+            return;
+        }
+        resizeIfRequired();
+        int newTableSlots = filledTableSlots + 1;
+        int tableLength = headerTable.length;
+        int index = (firstSlotPosition + filledTableSlots) % tableLength;
+        headerTable[index] = entry;
+        int newSize = currentMemorySize + entry.size;
+        while (newSize > maxMemorySize) {
+            int clearIndex = firstSlotPosition;
+            firstSlotPosition++;
+            if (firstSlotPosition == tableLength) {
+                firstSlotPosition = 0;
+            }
+            Hpack.HeaderField oldData = headerTable[clearIndex];
+            headerTable[clearIndex] = null;
+            newSize -= oldData.size;
+            newTableSlots--;
+        }
+        this.filledTableSlots = newTableSlots;
+        currentMemorySize = newSize;
+    }

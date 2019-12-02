@@ -1,0 +1,51 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Obtain the Set of the web applications pathnames of all of the files and
+     * directories located in the specified directory. Paths representing
+     * directories will end with a "/" character.
+     *
+     * @param path  The path for the resource of interest relative to the root
+     *              of the web application. It must start with '/'.
+     *
+     * @return  The Set of resources. If path does not refer to a directory
+     *          then an empty set will be returned.
+     */
+    Set<String> listWebAppPaths(String path);
+-----CSCI578-----
+
+
+
+    @Override
+    public Set<String> listWebAppPaths(String path) {
+        path = validate(path);
+
+        // Set because we don't want duplicates
+        HashSet<String> result = new HashSet<>();
+        for (List<WebResourceSet> list : allResources) {
+            for (WebResourceSet webResourceSet : list) {
+                if (!webResourceSet.getClassLoaderOnly()) {
+                    result.addAll(webResourceSet.listWebAppPaths(path));
+                }
+            }
+        }
+        if (result.size() == 0) {
+            return null;
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Should resources returned by this resource set only be included in any
+     * results when the lookup is explicitly looking for class loader resources.
+     * i.e. should these resources be excluded from look ups that are explicitly
+     * looking for static (non-class loader) resources.
+     *
+     * @return <code>true</code> if these resources should only be used for
+     *         class loader resource lookups, otherwise <code>false</code>
+     */
+    boolean getClassLoaderOnly();

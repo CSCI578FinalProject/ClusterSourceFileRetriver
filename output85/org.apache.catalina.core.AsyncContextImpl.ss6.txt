@@ -1,0 +1,127 @@
+7
+-----CSCI578-----
+
+
+    /* When a request uses a sequence of multiple start(); dispatch() with
+     * non-container threads it is possible for a previous dispatch() to
+     * interfere with a following start(). This lock prevents that from
+     * happening. It is a dedicated object as user code may lock on the
+     * AsyncContext so if container code also locks on that object deadlocks may
+     * occur.
+     */
+    private final Object asyncContextLock = new Object();
+
+
+    @Override
+    public void dispatch() {
+        check();
+        String path;
+        String pathInfo;
+        ServletRequest servletRequest = getRequest();
+        if (servletRequest instanceof HttpServletRequest) {
+            HttpServletRequest sr = (HttpServletRequest) servletRequest;
+            path = sr.getServletPath();
+            pathInfo = sr.getPathInfo();
+        } else {
+            path = request.getServletPath();
+            pathInfo = request.getPathInfo();
+        }
+        if (pathInfo != null) {
+            path += pathInfo;
+        }
+        dispatch(path);
+    }
+
+
+    @Override
+    public void dispatch(String path) {
+        check();
+        dispatch(request.getServletContext(),path);
+    }
+
+
+    @Override
+    public void dispatch(ServletContext context, String path) {
+        synchronized (asyncContextLock) {
+            if (log.isDebugEnabled()) {
+                logDebug("dispatch   ");
+            }
+            check();
+            if (dispatch != null) {
+                throw new IllegalStateException(
+                        sm.getString("asyncContextImpl.dispatchingStarted"));
+            }
+            if (request.getAttribute(ASYNC_REQUEST_URI)==null) {
+                request.setAttribute(ASYNC_REQUEST_URI, request.getRequestURI());
+                request.setAttribute(ASYNC_CONTEXT_PATH, request.getContextPath());
+                request.setAttribute(ASYNC_SERVLET_PATH, request.getServletPath());
+                request.setAttribute(ASYNC_PATH_INFO, request.getPathInfo());
+                request.setAttribute(ASYNC_QUERY_STRING, request.getQueryString());
+            }
+            final RequestDispatcher requestDispatcher = context.getRequestDispatcher(path);
+            if (!(requestDispatcher instanceof AsyncDispatcher)) {
+                throw new UnsupportedOperationException(
+                        sm.getString("asyncContextImpl.noAsyncDispatcher"));
+            }
+            final AsyncDispatcher applicationDispatcher =
+                    (AsyncDispatcher) requestDispatcher;
+            final ServletRequest servletRequest = getRequest();
+            final ServletResponse servletResponse = getResponse();
+            this.dispatch = new AsyncRunnable(
+                    request, applicationDispatcher, servletRequest, servletResponse);
+            this.request.getCoyoteRequest().action(ActionCode.ASYNC_DISPATCH, null);
+            clearServletRequestResponse();
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public ServletRequest getRequest() {
+        check();
+        if (servletRequest == null) {
+            throw new IllegalStateException(
+                    sm.getString("asyncContextImpl.request.ise"));
+        }
+        return servletRequest;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public ServletResponse getResponse() {
+        check();
+        if (servletResponse == null) {
+            throw new IllegalStateException(
+                    sm.getString("asyncContextImpl.response.ise"));
+        }
+        return servletResponse;
+    }
+-----CSCI578-----
+
+
+    private void check() {
+        if (request == null) {
+            // AsyncContext has been recycled and should not be being used
+            throw new IllegalStateException(sm.getString(
+                    "asyncContextImpl.requestEnded"));
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean hasOriginalRequestAndResponse() {
+        check();
+        return hasOriginalRequestAndResponse;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public long getTimeout() {
+        check();
+        return timeout;
+    }

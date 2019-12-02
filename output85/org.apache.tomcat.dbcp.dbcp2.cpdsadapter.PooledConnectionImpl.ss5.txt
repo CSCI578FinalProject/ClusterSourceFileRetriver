@@ -1,0 +1,37 @@
+9
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public synchronized PooledObject<PooledConnectionAndInfo> makeObject() {
+        PooledConnectionAndInfo pci;
+        try {
+            PooledConnection pc = null;
+            if (_username == null) {
+                pc = _cpds.getPooledConnection();
+            } else {
+                pc = _cpds.getPooledConnection(_username, _password);
+            }
+
+            if (pc == null) {
+                throw new IllegalStateException("Connection pool data source returned null from getPooledConnection");
+            }
+
+            // should we add this object as a listener or the pool.
+            // consider the validateObject method in decision
+            pc.addConnectionEventListener(this);
+            pci = new PooledConnectionAndInfo(pc, _username, _password);
+            pcMap.put(pc, pci);
+        } catch (SQLException e) {
+            throw new RuntimeException(e.getMessage());
+        }
+        return new DefaultPooledObject<>(pci);
+    }
+-----CSCI578-----

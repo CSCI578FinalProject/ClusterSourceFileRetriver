@@ -1,0 +1,44 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Extracts buffered data into the provided byte[] array, starting at position bPos, up to a maximum of bAvail
+     * bytes. Returns how many bytes were actually extracted.
+     * <p>
+     * Package protected for access from I/O streams.
+     *
+     * @param b
+     *            byte[] array to extract the buffered data into.
+     * @param bPos
+     *            position in byte[] array to start extraction at.
+     * @param bAvail
+     *            amount of bytes we're allowed to extract. We may extract fewer (if fewer are available).
+     * @param context
+     *            the context to be used
+     * @return The number of bytes successfully extracted into the provided byte[] array.
+     */
+    int readResults(final byte[] b, final int bPos, final int bAvail, final Context context) {
+        if (context.buffer != null) {
+            final int len = Math.min(available(context), bAvail);
+            System.arraycopy(context.buffer, context.readPos, b, bPos, len);
+            context.readPos += len;
+            if (context.readPos >= context.pos) {
+                context.buffer = null; // so hasData() will return false, and this method can return -1
+            }
+            return len;
+        }
+        return context.eof ? EOF : 0;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the amount of buffered data available for reading.
+     *
+     * @param context the context to be used
+     * @return The amount of buffered data available for reading.
+     */
+    int available(final Context context) {  // package protected for access from I/O streams
+        return context.buffer != null ? context.pos - context.readPos : 0;
+    }

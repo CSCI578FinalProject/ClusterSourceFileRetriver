@@ -1,0 +1,108 @@
+3
+
+    /**
+     * Filter the specified message string for characters that are sensitive
+     * in HTML.  This avoids potential attacks caused by including JavaScript
+     * codes in the request URL that is often reported in error messages.
+     *
+     * @param message The message string to be filtered
+     */
+    public static String filter(String message) {
+
+	if (message == null)
+	    return (null);
+
+	char content[] = new char[message.length()];
+	message.getChars(0, message.length(), content, 0);
+	StringBuffer result = new StringBuffer(content.length + 50);
+	for (int i = 0; i < content.length; i++) {
+	    switch (content[i]) {
+	    case '<':
+		result.append("&lt;");
+		break;
+	    case '>':
+		result.append("&gt;");
+		break;
+	    case '&':
+		result.append("&amp;");
+		break;
+	    case '"':
+		result.append("&quot;");
+		break;
+	    default:
+		result.append(content[i]);
+	    }
+	}
+	return (result.toString());
+    }
+        return retVal;
+    }
+
+
+    protected String encode(String value, String encoding) {
+
+
+    /**
+     * URL encodes the provided path using UTF-8.
+     *
+     * @param path The path to encode
+     *
+     * @return The encoded path
+     *
+     * @deprecated Use {@link #encode(String, String)}
+     */
+    @Deprecated
+    public String encode(String path) {
+        return encode(path, "UTF-8");
+    }
+
+
+    /**
+     * URL encodes the provided path using the given encoding.
+     *
+     * @param path      The path to encode
+     * @param encoding  The encoding to use to convert the path to bytes
+     *
+     * @return The encoded path
+     */
+    public String encode(String path, String encoding) {
+        int maxBytesPerChar = 10;
+        int caseDiff = ('a' - 'A');
+        StringBuffer rewrittenPath = new StringBuffer(path.length());
+        ByteArrayOutputStream buf = new ByteArrayOutputStream(maxBytesPerChar);
+        OutputStreamWriter writer = null;
+        try {
+            writer = new OutputStreamWriter(buf, encoding);
+        } catch (Exception e) {
+            e.printStackTrace();
+            writer = new OutputStreamWriter(buf);
+        }
+
+        for (int i = 0; i < path.length(); i++) {
+            int c = (int) path.charAt(i);
+            if (safeCharacters.get(c)) {
+                rewrittenPath.append((char)c);
+            } else {
+                // convert to external encoding before hex conversion
+                try {
+                    writer.write((char)c);
+                    writer.flush();
+                } catch(IOException e) {
+                    buf.reset();
+                    continue;
+                }
+                byte[] ba = buf.toByteArray();
+                for (int j = 0; j < ba.length; j++) {
+                    // Converting each byte in the buffer
+                    byte toEncode = ba[j];
+                    rewrittenPath.append('%');
+                    int low = (int) (toEncode & 0x0f);
+                    int high = (int) ((toEncode & 0xf0) >> 4);
+                    rewrittenPath.append(hexadecimal[high]);
+                    rewrittenPath.append(hexadecimal[low]);
+                }
+                buf.reset();
+            }
+        }
+        return rewrittenPath.toString();
+    }

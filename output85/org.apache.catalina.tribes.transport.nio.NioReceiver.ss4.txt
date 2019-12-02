@@ -1,0 +1,38 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Start cluster receiver.
+     *
+     * @throws IOException If the receiver fails to start
+     *
+     * @see org.apache.catalina.tribes.ChannelReceiver#start()
+     */
+    @Override
+    public void start() throws IOException {
+        super.start();
+        try {
+            setPool(new RxTaskPool(getMaxThreads(),getMinThreads(),this));
+        } catch (Exception x) {
+            log.fatal(sm.getString("nioReceiver.threadpool.fail"), x);
+            if ( x instanceof IOException ) throw (IOException)x;
+            else throw new IOException(x.getMessage());
+        }
+        try {
+            getBind();
+            bind();
+            Thread t = new Thread(this, "NioReceiver");
+            t.setDaemon(true);
+            t.start();
+        } catch (Exception x) {
+            log.fatal(sm.getString("nioReceiver.start.fail"), x);
+            if ( x instanceof IOException ) throw (IOException)x;
+            else throw new IOException(x.getMessage());
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,86 @@
+8
+-----CSCI578-----
+
+
+
+    public void sessionDestroyed(HttpSessionEvent se) {
+        // Close all Comet connections associated with this session
+        Request[] reqs = (Request[])
+            se.getSession().getAttribute(cometRequestsAttribute);
+        if (reqs != null) {
+            for (int i = 0; i < reqs.length; i++) {
+                Request req = reqs[i];
+                try {
+                    CometEventImpl event = req.getEvent();
+                    event.setEventType(CometEvent.EventType.END);
+                    event.setEventSubType(CometEvent.EventSubType.SESSION_END);
+                    ((CometProcessor)
+                            req.getWrapper().getServlet()).event(event);
+                    event.close();
+                } catch (Exception e) {
+                    req.getWrapper().getParent().getLogger().warn(sm.getString(
+                            "cometConnectionManagerValve.listenerEvent"), e);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the associated servlet instance.
+     */
+    public Servlet getServlet();
+-----CSCI578-----
+
+
+    /**
+     * Return the Wrapper within which this Request is being processed.
+     */
+    public Wrapper getWrapper() {
+        return (this.wrapper);
+    }
+-----CSCI578-----
+
+
+    public void setEventType(EventType eventType) {
+        this.eventType = eventType;
+    }
+-----CSCI578-----
+
+    
+    public void setEventSubType(EventSubType eventSubType) {
+        this.eventSubType = eventSubType;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Process the given Comet event.
+     * 
+     * @param event The Comet event that will be processed
+     * @throws IOException
+     * @throws ServletException
+     */
+    public void event(CometEvent event)
+        throws IOException, ServletException;
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Wrapper with which we are associated.
+     *
+     * @param wrapper The new wrapper
+     */
+    public void setWrapper(Wrapper wrapper) {
+
+        this.wrapper = wrapper;
+        if (wrapper == null)
+            context = null;
+        else
+            context = (Context) wrapper.getParent();
+
+    }

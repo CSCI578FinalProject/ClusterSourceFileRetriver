@@ -1,0 +1,86 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Invalidates the given connection.
+     *
+     * @param conn connection to invalidate
+     * @throws SQLException if the connection is not a
+     * <code>PoolGuardConnectionWrapper</code> or an error occurs invalidating
+     * the connection
+     */
+    public void invalidateConnection(Connection conn) throws SQLException {
+        if (conn instanceof PoolGuardConnectionWrapper) { // normal case
+            PoolGuardConnectionWrapper pgconn = (PoolGuardConnectionWrapper) conn;
+            @SuppressWarnings("unchecked")
+            ObjectPool<Connection> pool = (ObjectPool<Connection>) pgconn.pool;
+            try {
+                pool.invalidateObject(pgconn.getDelegateInternal());
+            }
+            catch (Exception e) {
+            }
+        }
+        else {
+            throw new SQLException("Invalid connection class");
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * If a fatal error occurs, close the underlying physical connection so as
+     * not to be returned in the future
+     */
+    @Override
+    public void connectionErrorOccurred(ConnectionEvent event) {
+        PooledConnection pc = (PooledConnection)event.getSource();
+        if (null != event.getSQLException()) {
+            System.err.println(
+                    "CLOSING DOWN CONNECTION DUE TO INTERNAL ERROR ("
+                    + event.getSQLException() + ")");
+        }
+        pc.removeConnectionEventListener(this);
+
+        PooledConnectionAndInfo pci = pcMap.get(pc);
+        if (pci == null) {
+            throw new IllegalStateException(NO_KEY_MESSAGE);
+        }
+        try {
+            _pool.invalidateObject(pci);
+        } catch (Exception e) {
+            System.err.println("EXCEPTION WHILE DESTROYING OBJECT " + pci);
+            e.printStackTrace();
+        }
+    }
+-----CSCI578-----
+
+
+    // ***********************************************************************
+    // PooledConnectionManager implementation
+    // ***********************************************************************
+
+    /**
+     * Invalidates the PooledConnection in the pool.  The CPDSConnectionFactory
+     * closes the connection and pool counters are updated appropriately.
+     * Also closes the pool.  This ensures that all idle connections are closed
+     * and connections that are checked out are closed on return.
+     */
+    @Override
+    public void invalidate(PooledConnection pc) throws SQLException {
+        PooledConnectionAndInfo pci = pcMap.get(pc);
+        if (pci == null) {
+            throw new IllegalStateException(NO_KEY_MESSAGE);
+        }
+        try {
+            _pool.invalidateObject(pci);  // Destroy instance and update pool counters
+            _pool.close();  // Clear any other instances in this pool and kill others as they come back
+        } catch (Exception ex) {
+            throw new SQLException("Error invalidating connection", ex);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----

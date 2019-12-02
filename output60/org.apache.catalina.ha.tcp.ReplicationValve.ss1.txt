@@ -1,0 +1,133 @@
+9
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Log the interesting request parameters, invoke the next Valve in the
+     * sequence, and log the interesting response parameters.
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be created
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException
+    {
+        long totalstart = 0;
+
+        //this happens before the request
+        if(doStatistics()) {
+            totalstart = System.currentTimeMillis();
+        }
+        if (primaryIndicator) {
+            createPrimaryIndicator(request) ;
+        }
+        Context context = request.getContext();
+        boolean isCrossContext = context != null
+                && context instanceof StandardContext
+                && ((StandardContext) context).getCrossContext();
+        try {
+            if(isCrossContext) {
+                if(log.isDebugEnabled())
+                    log.debug(sm.getString("ReplicationValve.crossContext.add"));
+                //FIXME add Pool of Arraylists
+                crossContextSessions.set(new ArrayList());
+            }
+            getNext().invoke(request, response);
+            if(context != null) {
+                Manager manager = context.getManager();            
+                if (manager != null && manager instanceof ClusterManager) {
+                    ClusterManager clusterManager = (ClusterManager) manager;
+                    CatalinaCluster containerCluster = (CatalinaCluster) getContainer().getCluster();
+                    if (containerCluster == null) {
+                        if (log.isWarnEnabled())
+                            log.warn(sm.getString("ReplicationValve.nocluster"));
+                        return;
+                    }
+                    // valve cluster can access manager - other cluster handle replication 
+                    // at host level - hopefully!
+                    if(containerCluster.getManager(clusterManager.getName()) == null)
+                        return ;
+                    if(containerCluster.hasMembers()) {
+                        sendReplicationMessage(request, totalstart, isCrossContext, clusterManager, containerCluster);
+                    } else {
+                        resetReplicationRequest(request,isCrossContext);
+                    }        
+                }
+            }
+        } finally {
+            // Array must be remove: Current master request send endAccess at recycle. 
+            // Don't register this request session again!
+            if(isCrossContext) {
+                if(log.isDebugEnabled())
+                    log.debug(sm.getString("ReplicationValve.crossContext.remove"));
+                // crossContextSessions.remove() only exist at Java 5
+                // register ArrayList at a pool
+                crossContextSessions.set(null);
+            }
+        }
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Calc processing stats
+     */
+    public boolean doStatistics() {
+        return doProcessingStats;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns that cluster has members.
+     */
+    public boolean hasMembers();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Cluster with which this Container is associated.  If there is
+     * no associated Cluster, return the Cluster associated with our parent
+     * Container (if any); otherwise return <code>null</code>.
+     */
+    public Cluster getCluster();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the "allow crossing servlet contexts" flag.
+     */
+    public boolean getCrossContext() {
+
+        return (this.crossContext);
+
+    }
+-----CSCI578-----
+
+
+    public Manager getManager(String name);
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Cluster with which this Container is associated.  If there is
+     * no associated Cluster, return the Cluster associated with our parent
+     * Container (if any); otherwise return <code>null</code>.
+     */
+    public Cluster getCluster() {
+        if (cluster != null)
+            return (cluster);
+
+        if (parent != null)
+            return (parent.getCluster());
+
+        return (null);
+    }

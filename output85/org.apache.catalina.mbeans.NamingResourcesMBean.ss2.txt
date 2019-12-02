@@ -1,0 +1,284 @@
+13
+-----CSCI578-----
+
+
+
+    /**
+     * Add a resource link for this web application.
+     *
+     * @param resourceLink New resource link
+     */
+    @Override
+    public void addResourceLink(ContextResourceLink resourceLink) {
+
+        if (entries.contains(resourceLink.getName())) {
+            return;
+        } else {
+            entries.add(resourceLink.getName());
+        }
+
+        synchronized (resourceLinks) {
+            resourceLink.setNamingResources(this);
+            resourceLinks.put(resourceLink.getName(), resourceLink);
+        }
+        support.firePropertyChange("resourceLink", null, resourceLink);
+
+        // Register with JMX
+        if (resourceRequireExplicitRegistration) {
+            try {
+                MBeanUtils.createMBean(resourceLink);
+            } catch (Exception e) {
+                log.warn(sm.getString("namingResources.mbeanCreateFail",
+                        resourceLink.getName()), e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a resource link reference for this web application.
+     *
+     * @param resourceLinkName New resource link reference name
+     * @param type New resource link reference type
+     * @return the object name of the new resource link
+     * @throws MalformedObjectNameException if the object name was invalid
+     */
+    public String addResourceLink(String resourceLinkName, String type)
+        throws MalformedObjectNameException {
+
+        NamingResourcesImpl nresources = (NamingResourcesImpl) this.resource;
+        if (nresources == null) {
+            return null;
+        }
+        ContextResourceLink resourceLink =
+                            nresources.findResourceLink(resourceLinkName);
+        if (resourceLink != null) {
+            throw new IllegalArgumentException
+                ("Invalid resource link name - already exists'" +
+                resourceLinkName + "'");
+        }
+        resourceLink = new ContextResourceLink();
+        resourceLink.setName(resourceLinkName);
+        resourceLink.setType(type);
+        nresources.addResourceLink(resourceLink);
+
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextResourceLink");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), resourceLink);
+        return (oname.toString());
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the resource link with the specified name, if any;
+     * otherwise return <code>null</code>.
+     *
+     * @param name Name of the desired resource link
+     */
+    public ContextResourceLink findResourceLink(String name) {
+
+        synchronized (resourceLinks) {
+            return resourceLinks.get(name);
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the (optional) <code>ObjectName</code> domain in which
+     *  this MBean should be registered in the MBeanServer.
+     */
+    public String getDomain() {
+        return this.domain;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+    /**
+     * @return the MBean Names of all authorized roles for this group.
+     */
+    public String[] getRoles() {
+
+        Group group = (Group) this.resource;
+        ArrayList<String> results = new ArrayList<>();
+        Iterator<Role> roles = group.getRoles();
+        while (roles.hasNext()) {
+            Role role = null;
+            try {
+                role = roles.next();
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), role);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for role " + role);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return results.toArray(new String[results.size()]);
+
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+    /**
+     * Return the MBean Names of the set of defined environment entries for
+     * this web application
+     * @return an array of object names as strings
+     */
+    public String[] getEnvironments() {
+        ContextEnvironment[] envs =
+                            ((NamingResourcesImpl)this.resource).findEnvironments();
+        ArrayList<String> results = new ArrayList<>();
+        for (int i = 0; i < envs.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), envs[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for environment " + envs[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return results.toArray(new String[results.size()]);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the MBean Names of all the defined resource references for this
+     * application.
+     * @return an array of object names as strings
+     */
+    public String[] getResources() {
+
+        ContextResource[] resources =
+                            ((NamingResourcesImpl)this.resource).findResources();
+        ArrayList<String> results = new ArrayList<>();
+        for (int i = 0; i < resources.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), resources[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for resource " + resources[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return results.toArray(new String[results.size()]);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the MBean Names of all the defined resource link references for
+     * this application.
+     * @return an array of object names as strings
+     */
+    public String[] getResourceLinks() {
+
+        ContextResourceLink[] resourceLinks =
+                            ((NamingResourcesImpl)this.resource).findResourceLinks();
+        ArrayList<String> results = new ArrayList<>();
+        for (int i = 0; i < resourceLinks.length; i++) {
+            try {
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), resourceLinks[i]);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for resource " + resourceLinks[i]);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return results.toArray(new String[results.size()]);
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+    /**
+     * @return the MBean Names of all groups this user is a member of.
+     */
+    public String[] getGroups() {
+
+        User user = (User) this.resource;
+        ArrayList<String> results = new ArrayList<>();
+        Iterator<Group> groups = user.getGroups();
+        while (groups.hasNext()) {
+            Group group = null;
+            try {
+                group = groups.next();
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), group);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for group " + group);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return results.toArray(new String[results.size()]);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the MBean Names of all roles assigned to this user.
+     */
+    public String[] getRoles() {
+
+        User user = (User) this.resource;
+        ArrayList<String> results = new ArrayList<>();
+        Iterator<Role> roles = user.getRoles();
+        while (roles.hasNext()) {
+            Role role = null;
+            try {
+                role = roles.next();
+                ObjectName oname =
+                    MBeanUtils.createObjectName(managed.getDomain(), role);
+                results.add(oname.toString());
+            } catch (MalformedObjectNameException e) {
+                IllegalArgumentException iae = new IllegalArgumentException
+                    ("Cannot create object name for role " + role);
+                iae.initCause(e);
+                throw iae;
+            }
+        }
+        return results.toArray(new String[results.size()]);
+
+    }

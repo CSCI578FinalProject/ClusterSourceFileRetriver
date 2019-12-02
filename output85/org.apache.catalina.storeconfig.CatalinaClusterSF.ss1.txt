@@ -1,0 +1,99 @@
+9
+-----CSCI578-----
+
+
+    /**
+     * Store the specified Cluster children.
+     *
+     * @param aWriter
+     *            PrintWriter to which we are storing
+     * @param indent
+     *            Number of spaces to indent this element
+     * @param aCluster
+     *            Cluster whose properties are being stored
+     *
+     * @exception Exception
+     *                if an exception occurs while storing
+     */
+    @Override
+    public void storeChildren(PrintWriter aWriter, int indent, Object aCluster,
+            StoreDescription parentDesc) throws Exception {
+        if (aCluster instanceof CatalinaCluster) {
+            CatalinaCluster cluster = (CatalinaCluster) aCluster;
+            if (cluster instanceof SimpleTcpCluster) {
+                SimpleTcpCluster tcpCluster = (SimpleTcpCluster) cluster;
+                // Store nested <Manager> element
+                ClusterManager manager = tcpCluster.getManagerTemplate();
+                if (manager != null) {
+                    storeElement(aWriter, indent, manager);
+                }
+            }
+            // Store nested <Channel> element
+            Channel channel = cluster.getChannel();
+            if (channel != null) {
+                storeElement(aWriter, indent, channel);
+            }
+            // Store nested <Deployer> element
+            ClusterDeployer deployer = cluster.getClusterDeployer();
+            if (deployer != null) {
+                storeElement(aWriter, indent, deployer);
+            }
+            // Store nested <Valve> element
+            // ClusterValve are not store at Hosts element, see
+            Valve valves[] = cluster.getValves();
+            storeElementArray(aWriter, indent, valves);
+
+            if (aCluster instanceof SimpleTcpCluster) {
+                // Store nested <Listener> elements
+                LifecycleListener listeners[] = ((SimpleTcpCluster)cluster).findLifecycleListeners();
+                storeElementArray(aWriter, indent, listeners);
+                // Store nested <ClusterListener> elements
+                ClusterListener mlisteners[] = ((SimpleTcpCluster)cluster).findClusterListeners();
+                List<ClusterListener> clusterListeners = new ArrayList<>();
+                for (ClusterListener clusterListener : mlisteners) {
+                    if (clusterListener != deployer) {
+                        clusterListeners.add(clusterListener);
+                    }
+                }
+                storeElementArray(aWriter, indent, clusterListeners.toArray());
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public ClusterDeployer getClusterDeployer();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Get the cluster listeners associated with this cluster. If this Array has
+     * no listeners registered, a zero-length array is returned.
+     * @return the listener array
+     */
+    public ClusterListener[] findClusterListeners() {
+        if (clusterListeners.size() > 0) {
+            ClusterListener[] listener = new ClusterListener[clusterListeners.size()];
+            clusterListeners.toArray(listener);
+            return listener;
+        } else
+            return new ClusterListener[0];
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Channel getChannel();
+-----CSCI578-----
+
+
+    public Valve[] getValves();
+-----CSCI578-----
+
+
+    public ClusterManager getManagerTemplate() {
+        return managerTemplate;
+    }

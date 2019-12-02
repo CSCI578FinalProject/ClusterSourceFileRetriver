@@ -1,0 +1,291 @@
+15
+-----CSCI578-----
+
+
+
+    /**
+     * Get the mapper associated with the context.
+     */
+    public org.apache.tomcat.util.http.mapper.Mapper getMapper() {
+        return (mapper);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return a <code>RequestDispatcher</code> instance that acts as a
+     * wrapper for the resource at the given path.  The path must begin
+     * with a "/" and is interpreted as relative to the current context root.
+     *
+     * @param path The path to the desired resource.
+     */
+    public RequestDispatcher getRequestDispatcher(String path) {
+
+        // Validate the path argument
+        if (path == null)
+            return (null);
+        if (!path.startsWith("/"))
+            throw new IllegalArgumentException
+                (sm.getString
+                 ("applicationContext.requestDispatcher.iae", path));
+
+        // Get query string
+        String queryString = null;
+        String normalizedPath = path;
+        int pos = normalizedPath.indexOf('?');
+        if (pos >= 0) {
+            queryString = normalizedPath.substring(pos + 1);
+            normalizedPath = normalizedPath.substring(0, pos);
+        }
+
+        normalizedPath = RequestUtil.normalize(normalizedPath);
+        if (normalizedPath == null)
+            return (null);
+
+        if (getContext().getDispatchersUseEncodedPaths()) {
+            // Decode
+            String decodedPath;
+            try {
+                decodedPath = URLDecoder.decode(normalizedPath, "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+                // Impossible
+                return null;
+            }
+
+            // Security check to catch attempts to encode /../ sequences
+            normalizedPath = RequestUtil.normalize(decodedPath);
+            if (!decodedPath.equals(normalizedPath)) {
+                getContext().getLogger().warn(
+                        sm.getString("applicationContext.illegalDispatchPath", path),
+                        new IllegalArgumentException());
+                return null;
+            }
+        }
+
+        pos = normalizedPath.length();
+
+        // Use the thread local URI and mapping data
+        DispatchData dd = dispatchData.get();
+        if (dd == null) {
+            dd = new DispatchData();
+            dispatchData.set(dd);
+        }
+
+        MessageBytes uriMB = dd.uriMB;
+        uriMB.recycle();
+
+        // Use the thread local mapping data
+        MappingData mappingData = dd.mappingData;
+
+        // Map the URI
+        CharChunk uriCC = uriMB.getCharChunk();
+        try {
+            uriCC.append(context.getPath(), 0, context.getPath().length());
+            /*
+             * Ignore any trailing path params (separated by ';') for mapping
+             * purposes
+             */
+            int semicolon = normalizedPath.indexOf(';');
+            if (pos >= 0 && semicolon > pos) {
+                semicolon = -1;
+            }
+            uriCC.append(normalizedPath, 0, semicolon > 0 ? semicolon : pos);
+            context.getMapper().map(uriMB, mappingData);
+            if (mappingData.wrapper == null) {
+                return (null);
+            }
+            /*
+             * Append any trailing path params (separated by ';') that were
+             * ignored for mapping purposes, so that they're reflected in the
+             * RequestDispatcher's requestURI
+             */
+            if (semicolon > 0) {
+                uriCC.append(normalizedPath, semicolon, pos - semicolon);
+            }
+        } catch (Exception e) {
+            // Should never happen
+            log(sm.getString("applicationContext.mapping.error"), e);
+            return (null);
+        }
+
+        Wrapper wrapper = (Wrapper) mappingData.wrapper;
+        String wrapperPath = mappingData.wrapperPath.toString();
+        String pathInfo = mappingData.pathInfo.toString();
+
+        mappingData.recycle();
+
+        String encodedUri = URLEncoder.DEFAULT.encode(uriCC.toString(), "UTF-8");
+
+        // Construct a RequestDispatcher to process this request
+        return new ApplicationDispatcher(wrapper, encodedUri, wrapperPath, pathInfo,
+             queryString, null);
+    }
+-----CSCI578-----
+
+
+
+    public RequestDispatcher getRequestDispatcher(final String path) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (RequestDispatcher) doPrivileged("getRequestDispatcher", 
+                                                    new Object[]{path});
+        } else {
+            return context.getRequestDispatcher(path);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the char chunk, representing the char[] and offset/length.
+     * Valid only if T_CHARS or after a conversion was made.
+     */
+    public CharChunk getCharChunk() {
+	return charC;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void recycle() {
+        host = null;
+        context = null;
+        wrapper = null;
+        pathInfo.recycle();
+        requestPath.recycle();
+        wrapperPath.recycle();
+        contextPath.recycle();
+        redirectPath.recycle();
+        jspWildCard = false;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a <code>ServletContext</code> object that corresponds to a
+     * specified URI on the server.  This method allows servlets to gain
+     * access to the context for various parts of the server, and as needed
+     * obtain <code>RequestDispatcher</code> objects or resources from the
+     * context.  The given path must be absolute (beginning with a "/"),
+     * and is interpreted based on our virtual host's document root.
+     *
+     * @param uri Absolute URI of a resource on the server
+     */
+    public ServletContext getContext(String uri) {
+
+        // Validate the format of the specified argument
+        if ((uri == null) || (!uri.startsWith("/")))
+            return (null);
+
+        Context child = null;
+        try {
+            Host host = (Host) context.getParent();
+            String mapuri = uri;
+            while (true) {
+                child = (Context) host.findChild(mapuri);
+                if (child != null)
+                    break;
+                int slash = mapuri.lastIndexOf('/');
+                if (slash < 0)
+                    break;
+                mapuri = mapuri.substring(0, slash);
+            }
+        } catch (Throwable t) {
+            return (null);
+        }
+
+        if (child == null)
+            return (null);
+
+        if (context.getCrossContext()) {
+            // If crossContext is enabled, can always return the context
+            return child.getServletContext();
+        } else if (child == context) {
+            // Can still return the current context
+            return context.getServletContext();
+        } else {
+            // Nothing to return
+            return (null);
+        }
+    }
+
+
+
+    // -------------------------------------------------------- Package Methods
+    protected StandardContext getContext() {
+        return this.context;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Resets the message bytes to an uninitialized (NULL) state.
+     */
+    public void recycle() {
+	type=T_NULL;
+	byteC.recycle();
+	charC.recycle();
+
+	strValue=null;
+	caseSensitive=true;
+
+	hasStrValue=false;
+	hasHashCode=false;
+	hasIntValue=false;
+    hasLongValue=false;
+	hasDateValue=false;
+    }
+-----CSCI578-----
+
+
+    // -------------------- Maintainance --------------------
+
+    public void recycle() {
+	creationTime = 0L;
+	lastAccessedTime = 0L;
+	maxInactiveInterval = -1;
+	isNew = true;
+	isValid = false;
+	id=-1;
+	if( name!=null) name.recycle();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Clears all header fields.
+     */
+    public void recycle() {
+	for (int i = 0; i < count; i++) {
+	    fields[i].recycle();
+	}
+	count = 0;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Removes the field at the specified position.  
+     *
+     * MultiMap will preserve the order of field add unless remove()
+     * is called. This is not thread-safe, and will invalidate all
+     * iterators. 
+     *
+     * This is not a frequent operation for Headers and Parameters -
+     * there are better ways ( like adding a "isValid" field )
+     */
+    public void remove( int i ) {
+	// reset and swap with last header
+	Field mh = fields[i];
+	// reset the field
+	mh.recycle();
+	
+	fields[i] = fields[count - 1];
+	fields[count - 1] = mh;
+	count--;
+    }

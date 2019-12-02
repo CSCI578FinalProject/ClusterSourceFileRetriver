@@ -1,0 +1,287 @@
+31
+-----CSCI578-----
+
+
+    public void dumpScoreboard(String fname) throws IOException {
+        if( apr==null ) return;
+        MsgContext mCtx=createMsgContext();
+        Msg msg=(Msg)mCtx.getMsg(0);
+        C2BConverter c2b=mCtx.getConverter();
+        msg.reset();
+
+        msg.appendByte( SHM_DUMP );
+
+        appendString( msg, fname, c2b);
+        
+        this.invoke( msg, mCtx );
+    }
+-----CSCI578-----
+
+    
+    public static void main( String args[] ) {
+        try {
+            Shm shm=new Shm();
+
+            if( args.length == 0 ||
+                ( "-?".equals(args[0]) ) ) {
+                shm.setHelp( true );
+                return;
+            }
+
+            IntrospectionUtils.processArgs( shm, args);
+            shm.execute();
+        } catch( Exception ex ) {
+            ex.printStackTrace();
+        }
+    }
+-----CSCI578-----
+
+
+    /** Register a tomcat instance
+     *  XXX make it more flexible
+     */
+    public void registerTomcat(String host, int port, String unixDomain)
+        throws IOException
+    {
+        String instanceId=host+":" + port;
+
+        String slotName="TOMCAT:" + instanceId;
+        MsgContext mCtx=createMsgContext();
+        Msg msg=(Msg)mCtx.getMsg(0);
+        msg.reset();
+        C2BConverter c2b=mCtx.getConverter();
+        
+        msg.appendByte( SHM_WRITE_SLOT );
+        appendString( msg, slotName, c2b );
+
+        int channelCnt=1;
+        if( unixDomain != null ) channelCnt++;
+
+        // number of groups. 0 means the default lb.
+        msg.appendInt( groups.size() );
+        for( int i=0; i<groups.size(); i++ ) {
+            appendString( msg, (String)groups.elementAt( i ), c2b);
+            appendString( msg, instanceId, c2b);
+        }
+        
+        // number of channels for this instance
+        msg.appendInt( channelCnt );
+        
+        // The body:
+        appendString(msg, "channel.socket:" + host + ":" + port, c2b );
+        msg.appendInt( 1 );
+        appendString(msg, "tomcatId", c2b);
+        appendString(msg, instanceId, c2b);
+
+        if( unixDomain != null ) {
+            appendString(msg, "channel.apr:" + unixDomain, c2b );
+            msg.appendInt(1);
+            appendString(msg, "tomcatId", c2b);
+            appendString(msg, instanceId, c2b);
+        }
+
+        if (log.isDebugEnabled())
+            log.debug("Register " + instanceId );
+        this.invoke( msg, mCtx );
+    }
+-----CSCI578-----
+
+
+    
+    public  int invoke(Msg msg, MsgContext ep )
+        throws IOException
+    {
+        if( apr==null ) return 0;
+        log.debug("ChannelShm.invoke: "  + ep );
+        super.nativeDispatch( msg, ep, JK_HANDLE_SHM_DISPATCH, 0 );
+        return 0;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setHelp( boolean b ) {
+        if (log.isDebugEnabled()) {
+            log.debug("Usage: ");
+            log.debug("  Shm [OPTIONS]");
+            log.debug("");
+            log.debug("  -file SHM_FILE");
+            log.debug("  -group GROUP ( can be specified multiple times )");
+            log.debug("  -host HOST");
+            log.debug("  -port PORT");
+            log.debug("  -unixSocket UNIX_FILE");
+            //        log.debug("  -priority XXX");
+            //        log.debug("  -lbFactor XXX");
+        }
+        help=true;
+        return;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    
+    //-------------------- Main - use the shm functions from ant or CLI ------
+
+    /** Local initialization - for standalone use
+     */
+    public void initCli() throws IOException {
+        WorkerEnv wEnv=new WorkerEnv();
+        AprImpl apr=new AprImpl();
+        wEnv.addHandler( "apr", apr );
+        wEnv.addHandler( "shm", this );
+        apr.init();
+        if( ! apr.isLoaded() ) {
+            log.error( "No native support. " +
+                       "Make sure libapr.so and libjkjni.so are available in LD_LIBRARY_PATH");
+            return;
+        }
+    }
+-----CSCI578-----
+
+
+    public void resetScoreboard() throws IOException {
+        if( apr==null ) return;
+        MsgContext mCtx=createMsgContext();
+        Msg msg=(Msg)mCtx.getMsg(0);
+        msg.reset();
+
+        msg.appendByte( SHM_RESET );
+        
+        this.invoke( msg, mCtx );
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    public void execute() {
+        try {
+            if( help ) return;
+            initCli();
+            init();
+
+            if( reset ) {
+                resetScoreboard();
+            } else if( dumpFile!=null ) {
+                dumpScoreboard(dumpFile);
+            } else if( unregister ) {
+                unRegisterTomcat( host, port );
+            } else {
+                registerTomcat( host, port, unixSocket );
+            }
+        } catch (Exception ex ) {
+            log.error( "Error executing Shm", ex);
+        }
+    }
+-----CSCI578-----
+
+
+    public void unRegisterTomcat(String host, int port)
+        throws IOException
+    {
+        String slotName="TOMCAT:" + host + ":" + port;
+        MsgContext mCtx=createMsgContext();
+        Msg msg=(Msg)mCtx.getMsg(0);
+        msg.reset();
+        C2BConverter c2b=mCtx.getConverter();
+        
+        msg.appendByte( SHM_WRITE_SLOT );
+        appendString( msg, slotName, c2b );
+
+        // number of channels for this instance
+        msg.appendInt( 0 );
+        msg.appendInt( 0 );
+        
+        if (log.isDebugEnabled())
+            log.debug("UnRegister " + slotName );
+        this.invoke( msg, mCtx );
+    }
+-----CSCI578-----
+
+    
+    public void init() throws IOException {
+        super.initNative( "shm" );
+        if( apr==null ) return;
+        if( file==null ) {
+            log.error("No shm file, disabling shared memory");
+            apr=null;
+            return;
+        }
+
+        // Set properties and call init.
+        setNativeAttribute( "file", file );
+        if( size > 0 )
+            setNativeAttribute( "size", Integer.toString( size ) );
+        
+        initJkComponent();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean isLoaded() {
+        if( ! initialized ) {
+            try {
+                init();
+            } catch( Throwable t ) {
+                log.info("Apr not loaded: " + t);
+            }
+        }
+        return ok;
+    }
+-----CSCI578-----
+
+
+    
+    
+    /**
+     * Prepare this packet for accumulating a message from the container to
+     * the web server.  Set the write position to just after the header
+     * (but leave the length unwritten, because it is as yet unknown).
+     */
+    public abstract void reset();
+-----CSCI578-----
+
+
+    /** The context may store a number of messages ( buffers + marshalling )
+     */
+    public final Msg getMsg(int i) {
+        return msgs[i];
+    }
+-----CSCI578-----
+
+
+    public abstract void appendByte( int val );
+-----CSCI578-----
+
+
+    public abstract  void appendInt( int val );
+-----CSCI578-----
+
+
+    public final C2BConverter getConverter() {
+        return c2b;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /** Create a ThreadPool instance.
+     *
+     * @param jmx UNUSED 
+     * @return ThreadPool instance. If JMX support is requested, you need to
+     *   call register() in order to set a name.
+     */
+    public static ThreadPool createThreadPool(boolean jmx) {
+        return new ThreadPool();
+    }
+-----CSCI578-----

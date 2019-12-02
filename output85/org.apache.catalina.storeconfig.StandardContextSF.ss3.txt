@@ -1,0 +1,98 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Store the Context with a Backup.
+     *
+     * @param aContext The context which will be stored
+     * @throws Exception Configuration storing error
+     */
+    protected void storeWithBackup(StandardContext aContext) throws Exception {
+        StoreFileMover mover = getConfigFileWriter(aContext);
+        if (mover != null) {
+            // Bugzilla 37781 Check to make sure we can write this output file
+            if ((mover.getConfigOld() == null)
+                    || (mover.getConfigOld().isDirectory())
+                    || (mover.getConfigOld().exists() &&
+                            !mover.getConfigOld().canWrite())) {
+                log.error("Cannot move orignal context output file at "
+                        + mover.getConfigOld());
+                throw new IOException("Context orginal file at "
+                        + mover.getConfigOld()
+                        + " is null, not a file or not writable.");
+            }
+            File dir = mover.getConfigSave().getParentFile();
+            if (dir != null && dir.isDirectory() && (!dir.canWrite())) {
+                log.error("Cannot save context output file at "
+                        + mover.getConfigSave());
+                throw new IOException("Context save file at "
+                        + mover.getConfigSave() + " is not writable.");
+            }
+            if (log.isInfoEnabled())
+                log.info("Store Context " + aContext.getPath()
+                        + " separate with backup (at file "
+                        + mover.getConfigSave() + " )");
+
+            try (PrintWriter writer = mover.getWriter()) {
+                storeXMLHead(writer);
+                super.store(writer, -2, aContext);
+            }
+            mover.move();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the configSave.
+     */
+    public File getConfigSave() {
+        return configSave;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get explicit writer for context (context.getConfigFile()).
+     *
+     * @param context The context which will be stored
+     * @return The file mover
+     * @throws Exception Error getting a writer for the configuration file
+     */
+    protected StoreFileMover getConfigFileWriter(Context context)
+            throws Exception {
+        URL configFile = context.getConfigFile();
+        StoreFileMover mover = null;
+        if (configFile != null) {
+            File config = new File(configFile.toURI());
+            if (!config.isAbsolute()) {
+                config = new File(System.getProperty("catalina.base"),
+                        config.getPath());
+            }
+            // Open an output writer for the new configuration file
+            mover = new StoreFileMover("", config.getCanonicalPath(),
+                    getRegistry().getEncoding());
+        }
+        return mover;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the configOld.
+     */
+    public File getConfigOld() {
+        return configOld;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the context path for this Context.
+     */
+    @Override
+    public String getPath() {
+        return (path);
+    }

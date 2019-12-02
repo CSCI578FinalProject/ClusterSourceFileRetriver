@@ -1,0 +1,1203 @@
+43
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Locale to character set mapper for this Context.
+     *
+     * @param mapper The new mapper
+     */
+    public void setCharsetMapper(CharsetMapper mapper) {
+
+        CharsetMapper oldCharsetMapper = this.charsetMapper;
+        this.charsetMapper = mapper;
+        if( mapper != null )
+            this.charsetMapperClass= mapper.getClass().getName();
+        support.firePropertyChange("charsetMapper", oldCharsetMapper,
+                                   this.charsetMapper);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Should Tomcat attempt to terminate threads that have been started by the
+     * web application? Stopping threads is performed via the deprecated (for
+     * good reason) <code>Thread.stop()</code> method and is likely to result in
+     * instability. As such, enabling this should be viewed as an option of last
+     * resort in a development environment and is not recommended in a
+     * production environment. If not specified, the default value of
+     * <code>false</code> will be used.
+     */
+    private boolean clearReferencesStopThreads = false;
+
+
+
+    /**
+     * Stop this Context component.
+     *
+     * @exception LifecycleException if a shutdown error occurs
+     */
+    public synchronized void stop() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (!started) {
+            if(log.isInfoEnabled())
+                log.info(sm.getString("containerBase.notStarted", logName()));
+            return;
+        }
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(BEFORE_STOP_EVENT, null);
+
+        // Send j2ee.state.stopping notification
+        if (this.getObjectName() != null) {
+            Notification notification =
+                new Notification("j2ee.state.stopping", this.getObjectName(),
+                                sequenceNumber++);
+            broadcaster.sendNotification(notification);
+        }
+
+        // Mark this application as unavailable while we shut down
+        setAvailable(false);
+
+        // Binding thread
+        ClassLoader oldCCL = bindThread();
+
+        try {
+
+            // Stop our child containers, if any
+            Container[] children = findChildren();
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] instanceof Lifecycle)
+                    ((Lifecycle) children[i]).stop();
+            }
+
+            // Stop our filters
+            filterStop();
+
+            // Stop ContainerBackgroundProcessor thread
+            super.threadStop();
+
+            if ((manager != null) && (manager instanceof Lifecycle)) {
+                ((Lifecycle) manager).stop();
+            }
+
+            // Stop our application listeners
+            listenerStop();
+
+            // Finalize our character set mapper
+            setCharsetMapper(null);
+
+            // Normal container shutdown processing
+            if (log.isDebugEnabled())
+                log.debug("Processing standard container shutdown");
+            // Notify our interested LifecycleListeners
+            lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+            started = false;
+
+            // Stop the Valves in our pipeline (including the basic), if any
+            if (pipeline instanceof Lifecycle) {
+                ((Lifecycle) pipeline).stop();
+            }
+
+            // Clear all application-originated servlet context attributes
+            if (context != null)
+                context.clearAttributes();
+
+            // Stop resources
+            resourcesStop();
+
+            if ((realm != null) && (realm instanceof Lifecycle)) {
+                ((Lifecycle) realm).stop();
+            }
+            if ((cluster != null) && (cluster instanceof Lifecycle)) {
+                ((Lifecycle) cluster).stop();
+            }
+            if ((logger != null) && (logger instanceof Lifecycle)) {
+                ((Lifecycle) logger).stop();
+            }
+            if ((loader != null) && (loader instanceof Lifecycle)) {
+                ((Lifecycle) loader).stop();
+            }
+
+        } finally {
+
+            // Unbinding thread
+            unbindThread(oldCCL);
+
+        }
+
+        // Send j2ee.state.stopped notification
+        if (this.getObjectName() != null) {
+            Notification notification =
+                new Notification("j2ee.state.stopped", this.getObjectName(),
+                                sequenceNumber++);
+            broadcaster.sendNotification(notification);
+        }
+
+        // Reset application context
+        context = null;
+
+        // This object will no longer be visible or used.
+        try {
+            resetContext();
+        } catch( Exception ex ) {
+            log.error( "Error reseting context " + this + " " + ex, ex );
+        }
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(AFTER_STOP_EVENT, null);
+
+        if (log.isDebugEnabled())
+            log.debug("Stopping complete");
+
+    }
+
+
+    /** Destroy needs to clean up the context completely.
+     *
+     * The problem is that undoing all the config in start() and restoring
+     * a 'fresh' state is impossible. After stop()/destroy()/init()/start()
+     * we should have the same state as if a fresh start was done - i.e
+     * read modified web.xml, etc. This can only be done by completely
+     * removing the context object and remapping a new one, or by cleaning
+     * up everything.
+     *
+     * XXX Should this be done in stop() ?
+     *
+     */
+    public void destroy() throws Exception {
+        if( oname != null ) {
+            // Send j2ee.object.deleted notification
+            Notification notification =
+                new Notification("j2ee.object.deleted", this.getObjectName(),
+                                sequenceNumber++);
+            broadcaster.sendNotification(notification);
+        }
+        super.destroy();
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(DESTROY_EVENT, null);
+
+        synchronized (instanceListenersLock) {
+            instanceListeners = new String[0];
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Deallocate resources and destroy proxy.
+     */
+    public boolean resourcesStop() {
+
+        boolean ok = true;
+
+        try {
+            if (resources != null) {
+                if (resources instanceof Lifecycle) {
+                    ((Lifecycle) resources).stop();
+                }
+                if (webappResources instanceof BaseDirContext) {
+                    ((BaseDirContext) webappResources).release();
+                }
+                // Unregister the cache in JMX
+                if (isCachingAllowed()) {
+                    ObjectName resourcesName =
+                        new ObjectName(this.getDomain()
+                                       + ":type=Cache,host="
+                                       + getHostname() + ",path="
+                                       + (("".equals(getPath()))?"/"
+                                          :getPath()));
+                    Registry.getRegistry(null, null)
+                        .unregisterComponent(resourcesName);
+                }
+            }
+        } catch (Throwable t) {
+            log.error(sm.getString("standardContext.resourcesStop"), t);
+            ok = false;
+        }
+
+        this.resources = null;
+
+        return (ok);
+
+    }
+-----CSCI578-----
+
+    /**
+     * Clear all application-created attributes.
+     */
+    protected void clearAttributes() {
+
+        // Create list of attributes to be removed
+        ArrayList list = new ArrayList();
+        Iterator iter = attributes.keySet().iterator();
+        while (iter.hasNext()) {
+            list.add(iter.next());
+        }
+
+        // Remove application originated attributes
+        // (read only attributes will be left in place)
+        Iterator keys = list.iterator();
+        while (keys.hasNext()) {
+            String key = (String) keys.next();
+            removeAttribute(key);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Send an application stop event to all interested listeners.
+     * Return <code>true</code> if all events were sent successfully,
+     * or <code>false</code> otherwise.
+     */
+    public boolean listenerStop() {
+
+        if (log.isDebugEnabled())
+            log.debug("Sending application stop events");
+
+        boolean ok = true;
+        Object listeners[] = getApplicationLifecycleListeners();
+        if (listeners != null) {
+            ServletContextEvent event =
+                new ServletContextEvent(getServletContext());
+            for (int i = 0; i < listeners.length; i++) {
+                int j = (listeners.length - 1) - i;
+                if (listeners[j] == null)
+                    continue;
+                if (listeners[j] instanceof ServletContextListener) {
+                    ServletContextListener listener =
+                        (ServletContextListener) listeners[j];
+                    try {
+                        fireContainerEvent("beforeContextDestroyed", listener);
+                        listener.contextDestroyed(event);
+                        fireContainerEvent("afterContextDestroyed", listener);
+                    } catch (Throwable t) {
+                        fireContainerEvent("afterContextDestroyed", listener);
+                        getLogger().error
+                            (sm.getString("standardContext.listenerStop",
+                                listeners[j].getClass().getName()), t);
+                        ok = false;
+                    }
+                }
+                // Annotation processing
+                if (!getIgnoreAnnotations()) {
+                    try {
+                        getAnnotationProcessor().preDestroy(listeners[j]);
+                    } catch (Throwable t) {
+                        getLogger().error
+                            (sm.getString("standardContext.listenerStop",
+                                listeners[j].getClass().getName()), t);
+                        ok = false;
+                    }
+                }
+            }
+        }
+
+        // Annotation processing
+        listeners = getApplicationEventListeners();
+        if (!getIgnoreAnnotations() && listeners != null) {
+            for (int i = 0; i < listeners.length; i++) {
+                int j = (listeners.length - 1) - i;
+                if (listeners[j] == null)
+                    continue;
+                try {
+                    getAnnotationProcessor().preDestroy(listeners[j]);
+                } catch (Throwable t) {
+                    getLogger().error
+                        (sm.getString("standardContext.listenerStop",
+                            listeners[j].getClass().getName()), t);
+                    ok = false;
+                }
+            }
+        }
+
+        setApplicationEventListeners(null);
+        setApplicationLifecycleListeners(null);
+
+        return (ok);
+
+    }
+-----CSCI578-----
+
+
+    private void resetContext() throws Exception, MBeanRegistrationException {
+        // Restore the original state ( pre reading web.xml in start )
+        // If you extend this - override this method and make sure to clean up
+        children=new HashMap();
+        startupTime = 0;
+        startTime = 0;
+        tldScanTime = 0;
+
+        // Bugzilla 32867
+        distributable = false;
+
+        applicationListeners = new String[0];
+        applicationEventListenersObjects = new Object[0];
+        applicationLifecycleListenersObjects = new Object[0];
+        taglibs = new HashMap<String, String>();
+
+        annotationProcessor = null;
+
+        if(log.isDebugEnabled())
+            log.debug("resetContext " + oname);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the context attribute with the specified name, if any.
+     *
+     * @param name Name of the context attribute to be removed
+     */
+    public void removeAttribute(String name) {
+
+        Object value = null;
+        boolean found = false;
+
+        // Remove the specified attribute
+        // Check for read only attribute
+        if (readOnlyAttributes.containsKey(name))
+            return;
+        found = attributes.containsKey(name);
+        if (found) {
+            value = attributes.get(name);
+            attributes.remove(name);
+        } else {
+            return;
+        }
+
+        // Notify interested application event listeners
+        Object listeners[] = context.getApplicationEventListeners();
+        if ((listeners == null) || (listeners.length == 0))
+            return;
+        ServletContextAttributeEvent event =
+          new ServletContextAttributeEvent(context.getServletContext(),
+                                            name, value);
+        for (int i = 0; i < listeners.length; i++) {
+            if (!(listeners[i] instanceof ServletContextAttributeListener))
+                continue;
+            ServletContextAttributeListener listener =
+                (ServletContextAttributeListener) listeners[i];
+            try {
+                context.fireContainerEvent("beforeContextAttributeRemoved",
+                                           listener);
+                listener.attributeRemoved(event);
+                context.fireContainerEvent("afterContextAttributeRemoved",
+                                           listener);
+            } catch (Throwable t) {
+                context.fireContainerEvent("afterContextAttributeRemoved",
+                                           listener);
+                // FIXME - should we do anything besides log these?
+                log(sm.getString("applicationContext.attributeEvent"), t);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Gracefully terminate the active use of the public methods of this
+     * component.  This method should be the last one called on a given
+     * instance of this component.  It should also send a LifecycleEvent
+     * of type STOP_EVENT to any registered listeners.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that needs to be reported
+     */
+    public void stop() throws LifecycleException;
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the servlet context for which this Context is a facade.
+     */
+    public ServletContext getServletContext() {
+
+        if (context == null) {
+            context = new ApplicationContext(getBasePath(), this);
+            if (altDDName != null)
+                context.setAttribute(Globals.ALT_DD_ATTR,altDDName);
+        }
+        return (context.getFacade());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of initialized application event listener objects,
+     * in the order they were specified in the web application deployment
+     * descriptor, for this application.
+     *
+     * @exception IllegalStateException if this method is called before
+     *  this application has started, or after it has been stopped
+     */
+    public Object[] getApplicationEventListeners() {
+        return (applicationEventListenersObjects);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Stop the background thread that is periodically checking for
+     * session timeouts.
+     */
+    protected void threadStop() {
+
+        if (thread == null)
+            return;
+
+        threadDone = true;
+        thread.interrupt();
+        try {
+            thread.join();
+        } catch (InterruptedException e) {
+            ;
+        }
+
+        thread = null;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Store the set of initialized application event listener objects,
+     * in the order they were specified in the web application deployment
+     * descriptor, for this application.
+     *
+     * @param listeners The set of instantiated listener objects.
+     */
+    public void setApplicationEventListeners(Object listeners[]) {
+        applicationEventListenersObjects = listeners;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Store the set of initialized application lifecycle listener objects,
+     * in the order they were specified in the web application deployment
+     * descriptor, for this application.
+     *
+     * @param listeners The set of instantiated listener objects.
+     */
+    public void setApplicationLifecycleListeners(Object listeners[]) {
+        applicationLifecycleListenersObjects = listeners;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of initialized application lifecycle listener objects,
+     * in the order they were specified in the web application deployment
+     * descriptor, for this application.
+     *
+     * @exception IllegalStateException if this method is called before
+     *  this application has started, or after it has been stopped
+     */
+    public Object[] getApplicationLifecycleListeners() {
+        return (applicationLifecycleListenersObjects);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the application available flag for this Context.
+     *
+     * @param available The new application available flag
+     */
+    public void setAvailable(boolean available) {
+
+        boolean oldAvailable = this.available;
+        this.available = available;
+        support.firePropertyChange("available",
+                                   oldAvailable,
+                                   this.available);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Add the classname of an InstanceListener to be added to each
+     * Wrapper appended to this Context.
+     *
+     * @param listener Java class name of an InstanceListener class
+     */
+    public void addInstanceListener(String listener) {
+
+        synchronized (instanceListenersLock) {
+            String results[] =new String[instanceListeners.length + 1];
+            for (int i = 0; i < instanceListeners.length; i++)
+                results[i] = instanceListeners[i];
+            results[instanceListeners.length] = listener;
+            instanceListeners = results;
+        }
+        fireContainerEvent("addInstanceListener", listener);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new MIME mapping, replacing any existing mapping for
+     * the specified extension.
+     *
+     * @param extension Filename extension being mapped
+     * @param mimeType Corresponding MIME type
+     */
+    public void addMimeMapping(String extension, String mimeType) {
+
+        synchronized (mimeMappings) {
+            mimeMappings.put(extension, mimeType);
+        }
+        fireContainerEvent("addMimeMapping", extension);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a security role reference for this web application.
+     *
+     * @param role Security role used in the application
+     * @param link Actual security role to check for
+     */
+    public void addRoleMapping(String role, String link) {
+
+        synchronized (roleMappings) {
+            roleMappings.put(role, link);
+        }
+        fireContainerEvent("addRoleMapping", role);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new security role for this web application.
+     *
+     * @param role New security role
+     */
+    public void addSecurityRole(String role) {
+
+        synchronized (securityRolesLock) {
+            String results[] =new String[securityRoles.length + 1];
+            for (int i = 0; i < securityRoles.length; i++)
+                results[i] = securityRoles[i];
+            results[securityRoles.length] = role;
+            securityRoles = results;
+        }
+        fireContainerEvent("addSecurityRole", role);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a JSP tag library for the specified URI.
+     *
+     * @param uri URI, relative to the web.xml file, of this tag library
+     * @param location Location of the tag library descriptor
+     */
+    public void addTaglib(String uri, String location) {
+
+        synchronized (taglibs) {
+            taglibs.put(uri, location);
+        }
+        fireContainerEvent("addTaglib", uri);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new watched resource to the set recognized by this Context.
+     *
+     * @param name New watched resource file name
+     */
+    public void addWatchedResource(String name) {
+
+        synchronized (watchedResourcesLock) {
+            String results[] = new String[watchedResources.length + 1];
+            for (int i = 0; i < watchedResources.length; i++)
+                results[i] = watchedResources[i];
+            results[watchedResources.length] = name;
+            watchedResources = results;
+        }
+        fireContainerEvent("addWatchedResource", name);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add the classname of a LifecycleListener to be added to each
+     * Wrapper appended to this Context.
+     *
+     * @param listener Java class name of a LifecycleListener class
+     */
+    public void addWrapperLifecycle(String listener) {
+
+        synchronized (wrapperLifecyclesLock) {
+            String results[] =new String[wrapperLifecycles.length + 1];
+            for (int i = 0; i < wrapperLifecycles.length; i++)
+                results[i] = wrapperLifecycles[i];
+            results[wrapperLifecycles.length] = listener;
+            wrapperLifecycles = results;
+        }
+        fireContainerEvent("addWrapperLifecycle", listener);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add the classname of a ContainerListener to be added to each
+     * Wrapper appended to this Context.
+     *
+     * @param listener Java class name of a ContainerListener class
+     */
+    public void addWrapperListener(String listener) {
+
+        synchronized (wrapperListenersLock) {
+            String results[] =new String[wrapperListeners.length + 1];
+            for (int i = 0; i < wrapperListeners.length; i++)
+                results[i] = wrapperListeners[i];
+            results[wrapperListeners.length] = listener;
+            wrapperListeners = results;
+        }
+        fireContainerEvent("addWrapperListener", listener);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified application listener class from the set of
+     * listeners for this application.
+     *
+     * @param listener Java class name of the listener to be removed
+     */
+    public void removeApplicationListener(String listener) {
+
+        synchronized (applicationListenersLock) {
+
+            // Make sure this welcome file is currently present
+            int n = -1;
+            for (int i = 0; i < applicationListeners.length; i++) {
+                if (applicationListeners[i].equals(listener)) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified constraint
+            int j = 0;
+            String results[] = new String[applicationListeners.length - 1];
+            for (int i = 0; i < applicationListeners.length; i++) {
+                if (i != n)
+                    results[j++] = applicationListeners[i];
+            }
+            applicationListeners = results;
+
+        }
+
+        // Inform interested listeners
+        fireContainerEvent("removeApplicationListener", listener);
+
+        // FIXME - behavior if already started?
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified security constraint from this web application.
+     *
+     * @param constraint Constraint to be removed
+     */
+    public void removeConstraint(SecurityConstraint constraint) {
+
+        synchronized (constraintsLock) {
+
+            // Make sure this constraint is currently present
+            int n = -1;
+            for (int i = 0; i < constraints.length; i++) {
+                if (constraints[i].equals(constraint)) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified constraint
+            int j = 0;
+            SecurityConstraint results[] =
+                new SecurityConstraint[constraints.length - 1];
+            for (int i = 0; i < constraints.length; i++) {
+                if (i != n)
+                    results[j++] = constraints[i];
+            }
+            constraints = results;
+
+        }
+
+        // Inform interested listeners
+        fireContainerEvent("removeConstraint", constraint);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a filter mapping from this Context.
+     *
+     * @param filterMap The filter mapping to be removed
+     */
+    public void removeFilterMap(FilterMap filterMap) {
+
+        synchronized (filterMapsLock) {
+
+            // Make sure this filter mapping is currently present
+            int n = -1;
+            for (int i = 0; i < filterMaps.length; i++) {
+                if (filterMaps[i] == filterMap) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified filter mapping
+            FilterMap results[] = new FilterMap[filterMaps.length - 1];
+            System.arraycopy(filterMaps, 0, results, 0, n);
+            System.arraycopy(filterMaps, n + 1, results, n,
+                             (filterMaps.length - 1) - n);
+            filterMaps = results;
+
+        }
+
+        // Inform interested listeners
+        fireContainerEvent("removeFilterMap", filterMap);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a class name from the set of InstanceListener classes that
+     * will be added to newly created Wrappers.
+     *
+     * @param listener Class name of an InstanceListener class to be removed
+     */
+    public void removeInstanceListener(String listener) {
+
+        synchronized (instanceListenersLock) {
+
+            // Make sure this welcome file is currently present
+            int n = -1;
+            for (int i = 0; i < instanceListeners.length; i++) {
+                if (instanceListeners[i].equals(listener)) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified constraint
+            int j = 0;
+            String results[] = new String[instanceListeners.length - 1];
+            for (int i = 0; i < instanceListeners.length; i++) {
+                if (i != n)
+                    results[j++] = instanceListeners[i];
+            }
+            instanceListeners = results;
+
+        }
+
+        // Inform interested listeners
+        fireContainerEvent("removeInstanceListener", listener);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any message destination with the specified name.
+     *
+     * @param name Name of the message destination to remove
+     */
+    public void removeMessageDestination(String name) {
+
+        synchronized (messageDestinations) {
+            messageDestinations.remove(name);
+        }
+        fireContainerEvent("removeMessageDestination", name);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the MIME mapping for the specified extension, if it exists;
+     * otherwise, no action is taken.
+     *
+     * @param extension Extension to remove the mapping for
+     */
+    public void removeMimeMapping(String extension) {
+
+        synchronized (mimeMappings) {
+            mimeMappings.remove(extension);
+        }
+        fireContainerEvent("removeMimeMapping", extension);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the context initialization parameter with the specified
+     * name, if it exists; otherwise, no action is taken.
+     *
+     * @param name Name of the parameter to remove
+     */
+    public void removeParameter(String name) {
+
+        synchronized (parameters) {
+            parameters.remove(name);
+        }
+        fireContainerEvent("removeParameter", name);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any security role reference for the specified name
+     *
+     * @param role Security role (as used in the application) to remove
+     */
+    public void removeRoleMapping(String role) {
+
+        synchronized (roleMappings) {
+            roleMappings.remove(role);
+        }
+        fireContainerEvent("removeRoleMapping", role);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any security role with the specified name.
+     *
+     * @param role Security role to remove
+     */
+    public void removeSecurityRole(String role) {
+
+        synchronized (securityRolesLock) {
+
+            // Make sure this security role is currently present
+            int n = -1;
+            for (int i = 0; i < securityRoles.length; i++) {
+                if (role.equals(securityRoles[i])) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified security role
+            int j = 0;
+            String results[] = new String[securityRoles.length - 1];
+            for (int i = 0; i < securityRoles.length; i++) {
+                if (i != n)
+                    results[j++] = securityRoles[i];
+            }
+            securityRoles = results;
+
+        }
+
+        // Inform interested listeners
+        fireContainerEvent("removeSecurityRole", role);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the tag library location forthe specified tag library URI.
+     *
+     * @param uri URI, relative to the web.xml file
+     */
+    public void removeTaglib(String uri) {
+
+        synchronized (taglibs) {
+            taglibs.remove(uri);
+        }
+        fireContainerEvent("removeTaglib", uri);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified watched resource name from the list associated
+     * with this Context.
+     *
+     * @param name Name of the watched resource to be removed
+     */
+    public void removeWatchedResource(String name) {
+
+        synchronized (watchedResourcesLock) {
+
+            // Make sure this watched resource is currently present
+            int n = -1;
+            for (int i = 0; i < watchedResources.length; i++) {
+                if (watchedResources[i].equals(name)) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified watched resource
+            int j = 0;
+            String results[] = new String[watchedResources.length - 1];
+            for (int i = 0; i < watchedResources.length; i++) {
+                if (i != n)
+                    results[j++] = watchedResources[i];
+            }
+            watchedResources = results;
+
+        }
+
+        fireContainerEvent("removeWatchedResource", name);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a class name from the set of LifecycleListener classes that
+     * will be added to newly created Wrappers.
+     *
+     * @param listener Class name of a LifecycleListener class to be removed
+     */
+    public void removeWrapperLifecycle(String listener) {
+
+
+        synchronized (wrapperLifecyclesLock) {
+
+            // Make sure this welcome file is currently present
+            int n = -1;
+            for (int i = 0; i < wrapperLifecycles.length; i++) {
+                if (wrapperLifecycles[i].equals(listener)) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified constraint
+            int j = 0;
+            String results[] = new String[wrapperLifecycles.length - 1];
+            for (int i = 0; i < wrapperLifecycles.length; i++) {
+                if (i != n)
+                    results[j++] = wrapperLifecycles[i];
+            }
+            wrapperLifecycles = results;
+
+        }
+
+        // Inform interested listeners
+        fireContainerEvent("removeWrapperLifecycle", listener);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a class name from the set of ContainerListener classes that
+     * will be added to newly created Wrappers.
+     *
+     * @param listener Class name of a ContainerListener class to be removed
+     */
+    public void removeWrapperListener(String listener) {
+
+
+        synchronized (wrapperListenersLock) {
+
+            // Make sure this welcome file is currently present
+            int n = -1;
+            for (int i = 0; i < wrapperListeners.length; i++) {
+                if (wrapperListeners[i].equals(listener)) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified constraint
+            int j = 0;
+            String results[] = new String[wrapperListeners.length - 1];
+            for (int i = 0; i < wrapperListeners.length; i++) {
+                if (i != n)
+                    results[j++] = wrapperListeners[i];
+            }
+            wrapperListeners = results;
+
+        }
+
+        // Inform interested listeners
+        fireContainerEvent("removeWrapperListener", listener);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Post a copy of our web application resources as a servlet context
+     * attribute.
+     */
+    private void postResources() {
+
+        getServletContext().setAttribute
+            (Globals.RESOURCES_ATTR, getResources());
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Operations
+
+
+    /**
+     * JSR77 deploymentDescriptor attribute
+     *
+     * @return string deployment descriptor
+     */
+    public String getDeploymentDescriptor() {
+
+        InputStream stream = null;
+        ServletContext servletContext = getServletContext();
+        if (servletContext != null) {
+            stream = servletContext.getResourceAsStream(
+                org.apache.catalina.startup.Constants.ApplicationWebXml);
+        }
+        if (stream == null) {
+            return "";
+        }
+        BufferedReader br = new BufferedReader(
+                                new InputStreamReader(stream));
+        StringBuffer sb = new StringBuffer();
+        String strRead = "";
+        try {
+            while (strRead != null) {
+                sb.append(strRead);
+                strRead = br.readLine();
+            }
+        } catch (IOException e) {
+            return "";
+        }
+
+        return sb.toString();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified Service from the set associated from this
+     * Server.
+     *
+     * @param service The Service to be removed
+     */
+    public void removeService(Service service) {
+
+        synchronized (services) {
+            int j = -1;
+            for (int i = 0; i < services.length; i++) {
+                if (service == services[i]) {
+                    j = i;
+                    break;
+                }
+            }
+            if (j < 0)
+                return;
+            if (services[j] instanceof Lifecycle) {
+                try {
+                    ((Lifecycle) services[j]).stop();
+                } catch (LifecycleException e) {
+                    ;
+                }
+            }
+            int k = 0;
+            Service results[] = new Service[services.length - 1];
+            for (int i = 0; i < services.length; i++) {
+                if (i != j)
+                    results[k++] = services[i];
+            }
+            services = results;
+
+            // Report this property change to interested listeners
+            support.firePropertyChange("service", service, null);
+        }
+
+    }

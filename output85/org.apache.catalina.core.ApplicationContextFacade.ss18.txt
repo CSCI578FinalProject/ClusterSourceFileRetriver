@@ -1,0 +1,44 @@
+3
+-----CSCI578-----
+
+
+
+    @Override
+    public FilterRegistration getFilterRegistration(String filterName) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (FilterRegistration) doPrivileged(
+                    "getFilterRegistration", new Object[]{filterName});
+        } else {
+            return context.getFilterRegistration(filterName);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public FilterRegistration getFilterRegistration(String filterName) {
+        FilterDef filterDef = context.findFilterDef(filterName);
+        if (filterDef == null) {
+            return null;
+        }
+        return new ApplicationFilterRegistration(filterDef, context);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the filter definition for the specified filter name, if any;
+     * otherwise return <code>null</code>.
+     *
+     * @param filterName Filter name to look up
+     */
+    @Override
+    public FilterDef findFilterDef(String filterName) {
+
+        synchronized (filterDefs) {
+            return (filterDefs.get(filterName));
+        }
+
+    }

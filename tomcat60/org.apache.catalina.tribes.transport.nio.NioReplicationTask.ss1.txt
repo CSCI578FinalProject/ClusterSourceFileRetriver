@@ -1,0 +1,275 @@
+20
+
+    private void remoteEof(SelectionKey key) {
+        // close channel on EOF, invalidates the key
+        if ( log.isDebugEnabled() ) log.debug("Channel closed on the remote end, disconnecting");
+        cancelKey(key);
+    }
+    
+    
+
+
+
+    /**
+     * send a reply-acknowledgement (6,2,3)
+     * @param key
+     * @param channel
+     */
+    protected void sendAck(SelectionKey key, SocketChannel channel, byte[] command) {
+        
+        try {
+            ByteBuffer buf = ByteBuffer.wrap(command);
+            int total = 0;
+            while ( total < command.length ) {
+                total += channel.write(buf);
+            }
+            if (log.isTraceEnabled()) {
+                log.trace("ACK sent to " + channel.socket().getPort());
+            }
+        } catch ( java.io.IOException x ) {
+            log.warn("Unable to send ACK back through channel, channel disconnected?: "+x.getMessage());
+        }
+    }
+    
+
+    public boolean hasPackage() {
+        return buffer.countPackages(true)>0;
+    }
+    
+    protected boolean accessed = false;
+    
+    public synchronized void access() {
+        this.accessed = true;
+        this.lastAccess = System.currentTimeMillis();
+    }
+    
+    public void addEvent(Runnable event) {
+        if ( selector != null ) {
+            synchronized (events) {
+                events.add(event);
+            }
+            if ( log.isTraceEnabled() ) log.trace("Adding event to selector:"+event);
+            if ( isListening() && selector!=null ) selector.wakeup();
+        }
+    }
+
+    // loop forever waiting for work to do
+    public synchronized void run() { 
+        if ( buffer == null ) {
+            if ( (getOptions() & OPTION_DIRECT_BUFFER) == OPTION_DIRECT_BUFFER) {
+                buffer = ByteBuffer.allocateDirect(getRxBufSize());
+            } else {
+                buffer = ByteBuffer.allocate(getRxBufSize());
+            }
+        } else {
+            buffer.clear();
+        }
+        if (key == null) {
+            return;	// just in case
+        }
+        if ( log.isTraceEnabled() ) 
+            log.trace("Servicing key:"+key);
+
+        try {
+            ObjectReader reader = (ObjectReader)key.attachment();
+            if ( reader == null ) {
+                if ( log.isTraceEnabled() ) 
+                    log.trace("No object reader, cancelling:"+key);
+                cancelKey(key);
+            } else {
+                if ( log.isTraceEnabled() ) 
+                    log.trace("Draining channel:"+key);
+
+                drainChannel(key, reader);
+            }
+        } catch (Exception e) {
+            //this is common, since the sockets on the other
+            //end expire after a certain time.
+            if ( e instanceof CancelledKeyException ) {
+                //do nothing
+            } else if ( e instanceof IOException ) {
+                //dont spew out stack traces for IO exceptions unless debug is enabled.
+                if (log.isDebugEnabled()) log.debug ("IOException in replication worker, unable to drain channel. Probable cause: Keep alive socket closed["+e.getMessage()+"].", e);
+                else log.warn ("IOException in replication worker, unable to drain channel. Probable cause: Keep alive socket closed["+e.getMessage()+"].");
+            } else if ( log.isErrorEnabled() ) {
+                //this is a real error, log it.
+                log.error("Exception caught in TcpReplicationThread.drainChannel.",e);
+            } 
+            cancelKey(key);
+        } finally {
+
+        }
+        key = null;
+        // done, ready for more, return to pool
+        getTaskPool().returnWorker (this);
+    }
+
+    public int getRxBufSize() {
+        return rxBufSize;
+    }
+
+    /**
+     * The actual code which drains the channel associated with
+     * the given key.  This method assumes the key has been
+     * modified prior to invocation to turn off selection
+     * interest in OP_READ.  When this method completes it
+     * re-enables OP_READ and calls wakeup() on the selector
+     * so the selector will resume watching this channel.
+     */
+    protected void drainChannel (final SelectionKey key, ObjectReader reader) throws Exception {
+        reader.setLastAccess(System.currentTimeMillis());
+        reader.access();
+        SocketChannel channel = (SocketChannel) key.channel();
+        int count;
+        buffer.clear();			// make buffer empty
+
+        // loop while data available, channel is non-blocking
+        while ((count = channel.read (buffer)) > 0) {
+            buffer.flip();		// make buffer readable
+            if ( buffer.hasArray() ) 
+                reader.append(buffer.array(),0,count,false);
+            else 
+                reader.append(buffer,count,false);
+            buffer.clear();		// make buffer empty
+            //do we have at least one package?
+            if ( reader.hasPackage() ) break;
+        }
+
+        int pkgcnt = reader.count();
+        
+        if (count < 0 && pkgcnt == 0 ) {
+            //end of stream, and no more packages to process
+            remoteEof(key);
+            return;
+        }
+        
+        ChannelMessage[] msgs = pkgcnt == 0? ChannelData.EMPTY_DATA_ARRAY : reader.execute();
+        
+        registerForRead(key,reader);//register to read new data, before we send it off to avoid dead locks
+        
+        for ( int i=0; i<msgs.length; i++ ) {
+            /**
+             * Use send ack here if you want to ack the request to the remote 
+             * server before completing the request
+             * This is considered an asynchronized request
+             */
+            if (ChannelData.sendAckAsync(msgs[i].getOptions())) sendAck(key,channel,Constants.ACK_COMMAND);
+            try {
+                if ( Logs.MESSAGES.isTraceEnabled() ) {
+                    try {
+                        Logs.MESSAGES.trace("NioReplicationThread - Received msg:" + new UniqueId(msgs[i].getUniqueId()) + " at " + new java.sql.Timestamp(System.currentTimeMillis()));
+                    }catch ( Throwable t ) {}
+                }
+                //process the message
+                getCallback().messageDataReceived(msgs[i]);
+                /**
+                 * Use send ack here if you want the request to complete on this 
+                 * server before sending the ack to the remote server
+                 * This is considered a synchronized request
+                 */
+                if (ChannelData.sendAckSync(msgs[i].getOptions())) sendAck(key,channel,Constants.ACK_COMMAND);
+            }catch ( RemoteProcessException e ) {
+                if ( log.isDebugEnabled() ) log.error("Processing of cluster message failed.",e);
+                if (ChannelData.sendAckSync(msgs[i].getOptions())) sendAck(key,channel,Constants.FAIL_ACK_COMMAND);
+            }catch ( Exception e ) {
+                log.error("Processing of cluster message failed.",e);
+                if (ChannelData.sendAckSync(msgs[i].getOptions())) sendAck(key,channel,Constants.FAIL_ACK_COMMAND);
+            }
+            if ( getUseBufferPool() ) {
+                BufferPool.getBufferPool().returnBuffer(msgs[i].getMessage());
+                msgs[i].setMessage(null);
+            }
+        }                        
+        
+        if (count < 0) {
+            remoteEof(key);
+            return;
+        }
+    }
+
+    /**
+     * Append new bytes to buffer. 
+     * @see XByteBuffer#countPackages()
+     * @param data new transfer buffer
+     * @param len length in buffer
+     * @return number of messages that sent to callback
+     * @throws java.io.IOException
+     */
+    public int append(ByteBuffer data, int len, boolean count) throws java.io.IOException {
+        buffer.append(data,len);
+        int pkgCnt = -1;
+        if ( count ) pkgCnt = buffer.countPackages();
+        return pkgCnt;
+    }
+
+     public int append(byte[] data,int off,int len, boolean count) throws java.io.IOException {
+        buffer.append(data,off,len);
+        int pkgCnt = -1;
+        if ( count ) pkgCnt = buffer.countPackages();
+        return pkgCnt;
+    }
+
+    /**
+     * Append new bytes to buffer. 
+     * @see XByteBuffer#countPackages()
+     * @param data new transfer buffer
+     * @param len length in buffer
+     * @return number of messages that sent to callback
+     * @throws java.io.IOException
+     */
+    public int append(ByteBuffer data, int len, boolean count) throws java.io.IOException {
+        buffer.append(data,len);
+        int pkgCnt = -1;
+        if ( count ) pkgCnt = buffer.countPackages();
+        return pkgCnt;
+    }
+
+     public int append(byte[] data,int off,int len, boolean count) throws java.io.IOException {
+        buffer.append(data,off,len);
+        int pkgCnt = -1;
+        if ( count ) pkgCnt = buffer.countPackages();
+        return pkgCnt;
+    }
+    /**
+     * Returns the number of packages that the reader has read
+     * @return int
+     */
+    public int count() {
+        return buffer.countPackages();
+    }
+
+
+    /**
+     * Utility method, returns true if the options flag indicates that an ack
+     * is to be sent after the message has been received but not yet processed
+     * @param options int - the options for the message
+     * @return boolean 
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_USE_ACK
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_SYNCHRONIZED_ACK
+     */
+    public static boolean sendAckAsync(int options) {
+        return ( (Channel.SEND_OPTIONS_USE_ACK & options) == Channel.SEND_OPTIONS_USE_ACK) &&
+            ( (Channel.SEND_OPTIONS_SYNCHRONIZED_ACK & options) != Channel.SEND_OPTIONS_SYNCHRONIZED_ACK);
+    }
+{
+    /**
+     * This method is invoked on the callback object to notify it that new data has
+     * been received from one of the cluster nodes.
+     * @param data - the message bytes received from the cluster/replication system
+     */
+     public void messageDataReceived(ChannelMessage data);
+     
+}
+    
+    /**
+     * Utility method, returns true if the options flag indicates that an ack
+     * is to be sent after the message has been received and processed
+     * @param options int - the options for the message
+     * @return boolean 
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_USE_ACK
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_SYNCHRONIZED_ACK
+     */
+    public static boolean sendAckSync(int options) {
+        return ( (Channel.SEND_OPTIONS_USE_ACK & options) == Channel.SEND_OPTIONS_USE_ACK) &&
+            ( (Channel.SEND_OPTIONS_SYNCHRONIZED_ACK & options) == Channel.SEND_OPTIONS_SYNCHRONIZED_ACK);
+    }

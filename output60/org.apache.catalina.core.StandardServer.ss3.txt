@@ -1,0 +1,62 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Gracefully terminate the active use of the public methods of this
+     * component.  This method should be the last one called on a given
+     * instance of this component.  It should also send a LifecycleEvent
+     * of type STOP_EVENT to any registered listeners.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that needs to be reported
+     */
+    public void stop() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (!started)
+            return;
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(BEFORE_STOP_EVENT, null);
+
+        lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+        started = false;
+
+        // Stop our defined Services
+        for (int i = 0; i < services.length; i++) {
+            if (services[i] instanceof Lifecycle)
+                ((Lifecycle) services[i]).stop();
+        }
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(AFTER_STOP_EVENT, null);
+
+        stopAwait();
+
+    }
+-----CSCI578-----
+
+
+    public void stopAwait() {
+        stopAwait=true;
+        Thread t = awaitThread;
+        if (t != null) {
+            ServerSocket s = awaitSocket;
+            if (s != null) {
+                awaitSocket = null;
+                try {
+                    s.close();
+                } catch (IOException e) {
+                    // Ignored
+                }
+            }
+            t.interrupt();
+            try {
+                t.join(1000);
+            } catch (InterruptedException e) {
+                // Ignored
+            }
+        }
+    }

@@ -1,0 +1,112 @@
+5
+-----CSCI578-----
+
+
+    public void setStatementPool(
+            KeyedObjectPool<PStmtKeyCPDS, PoolablePreparedStatement<PStmtKeyCPDS>> statementPool) {
+        pstmtPool = statementPool;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the value of the accessToUnderlyingConnectionAllowed property.
+     *
+     * @return <code>true</code> if access to the underlying is allowed,
+     *  <code>false</code> otherwise.
+     */
+    public synchronized boolean isAccessToUnderlyingConnectionAllowed() {
+        return this.accessToUnderlyingConnectionAllowed;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the value of the accessToUnderlyingConnectionAllowed property.
+     * It controls if the PoolGuard allows access to the underlying connection.
+     * (Default: false)
+     *
+     * @param allow Access to the underlying connection is granted when true.
+     */
+    public synchronized void setAccessToUnderlyingConnectionAllowed(boolean allow) {
+        this.accessToUnderlyingConnectionAllowed = allow;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Attempt to establish a database connection using the default
+     * user and password.
+     */
+    @Override
+    public PooledConnection getPooledConnection() throws SQLException {
+        return getPooledConnection(getUser(), getPassword());
+    }
+
+
+    /**
+     * Attempt to establish a database connection.
+     * @param username name to be used for the connection
+     * @param pass password to be used fur the connection
+     */
+    @Override
+    public PooledConnection getPooledConnection(String username, String pass)
+            throws SQLException {
+        getConnectionCalled = true;
+        PooledConnectionImpl pci = null;
+        // Workaround for buggy WebLogic 5.1 classloader - ignore the
+        // exception upon first invocation.
+        try {
+            if (connectionProperties != null) {
+                connectionProperties.put("user", username);
+                connectionProperties.put("password", pass);
+                pci = new PooledConnectionImpl(DriverManager.getConnection(
+                        getUrl(), connectionProperties));
+            } else {
+                pci = new PooledConnectionImpl(DriverManager.getConnection(
+                        getUrl(), username, pass));
+            }
+            pci.setAccessToUnderlyingConnectionAllowed(isAccessToUnderlyingConnectionAllowed());
+        }
+        catch (ClassCircularityError e)
+        {
+            if (connectionProperties != null) {
+                pci = new PooledConnectionImpl(DriverManager.getConnection(
+                        getUrl(), connectionProperties));
+            } else {
+                pci = new PooledConnectionImpl(DriverManager.getConnection(
+                        getUrl(), username, pass));
+            }
+            pci.setAccessToUnderlyingConnectionAllowed(isAccessToUnderlyingConnectionAllowed());
+        }
+        KeyedObjectPool<PStmtKeyCPDS, PoolablePreparedStatement<PStmtKeyCPDS>> stmtPool = null;
+        if (isPoolPreparedStatements()) {
+            GenericKeyedObjectPoolConfig config = new GenericKeyedObjectPoolConfig();
+            config.setMaxTotalPerKey(Integer.MAX_VALUE);
+            config.setBlockWhenExhausted(false);
+            config.setMaxWaitMillis(0);
+            config.setMaxIdlePerKey(getMaxIdle());
+            if (getMaxPreparedStatements() <= 0)
+            {
+                // since there is no limit, create a prepared statement pool with an eviction thread
+                //  evictor settings are the same as the connection pool settings.
+                config.setTimeBetweenEvictionRunsMillis(getTimeBetweenEvictionRunsMillis());
+                config.setNumTestsPerEvictionRun(getNumTestsPerEvictionRun());
+                config.setMinEvictableIdleTimeMillis(getMinEvictableIdleTimeMillis());
+            }
+            else
+            {
+                // since there is limit, create a prepared statement pool without an eviction thread
+                //  pool has LRU functionality so when the limit is reached, 15% of the pool is cleared.
+                // see org.apache.tomcat.dbcp.pool2.impl.GenericKeyedObjectPool.clearOldest method
+                config.setMaxTotal(getMaxPreparedStatements());
+                config.setTimeBetweenEvictionRunsMillis(-1);
+                config.setNumTestsPerEvictionRun(0);
+                config.setMinEvictableIdleTimeMillis(0);
+            }
+            stmtPool = new GenericKeyedObjectPool<>(pci, config);
+            pci.setStatementPool(stmtPool);
+        }
+        return pci;
+    }
+-----CSCI578-----

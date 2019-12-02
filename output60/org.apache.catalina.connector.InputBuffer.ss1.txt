@@ -1,0 +1,54 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Read data from the input buffer and put it into a byte chunk.
+     *
+     * The buffer is owned by the protocol implementation - it will be reused on the next read.
+     * The Adapter must either process the data in place or copy it to a separate buffer if it needs
+     * to hold it. In most cases this is done during byte->char conversions or via InputStream. Unlike
+     * InputStream, this interface allows the app to process data in place, without copy.
+     *
+     */
+    public int doRead(ByteChunk chunk) 
+        throws IOException {
+        int n = inputBuffer.doRead(chunk, this);
+        if (n > 0) {
+            bytesRead+=n;
+        }
+        return n;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------- Bytes Handling Methods
+
+
+    /** 
+     * Reads new bytes in the byte chunk.
+     * 
+     * @param cbuf Byte buffer to be written to the response
+     * @param off Offset
+     * @param len Length
+     * 
+     * @throws IOException An underlying IOException occurred
+     */
+    public int realReadBytes(byte cbuf[], int off, int len)
+	throws IOException {
+
+        if (closed)
+            return -1;
+        if (coyoteRequest == null)
+            return -1;
+
+        if(state == INITIAL_STATE)
+            state = BYTE_STATE;
+
+        int result = coyoteRequest.doRead(bb);
+
+        return result;
+
+    }

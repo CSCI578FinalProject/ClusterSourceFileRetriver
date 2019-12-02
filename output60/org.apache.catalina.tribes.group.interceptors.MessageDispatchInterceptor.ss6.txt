@@ -1,0 +1,155 @@
+7
+-----CSCI578-----
+
+
+    /**
+     * Set the next element.
+     * @param next The next element.
+     */
+    public void append(LinkObject next) {
+        this.next = next;
+    }
+-----CSCI578-----
+
+    
+    public boolean addToQueue(ChannelMessage msg, Member[] destination, InterceptorPayload payload) {
+        return queue.add(msg,destination,payload);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Add new data to the queue
+     * FIXME extract some method
+     */
+    public boolean add(ChannelMessage msg, Member[] destination, InterceptorPayload payload) {
+        boolean ok = true;
+        long time = 0;
+
+        if (!enabled) {
+            if (log.isInfoEnabled())
+                log.info("FastQueue.add: queue disabled, add aborted");
+            return false;
+        }
+
+        if (timeWait) {
+            time = System.currentTimeMillis();
+        }
+        lock.lockAdd();
+        try {
+            if (log.isTraceEnabled()) {
+                log.trace("FastQueue.add: starting with size " + size);
+            }
+            if (checkLock) {
+                if (inAdd)
+                    log.warn("FastQueue.add: Detected other add");
+                inAdd = true;
+                if (inMutex)
+                    log.warn("FastQueue.add: Detected other mutex in add");
+                inMutex = true;
+            }
+
+            if ((maxQueueLength > 0) && (size >= maxQueueLength)) {
+                ok = false;
+                if (log.isTraceEnabled()) {
+                    log.trace("FastQueue.add: Could not add, since queue is full (" + size + ">=" + maxQueueLength + ")");
+                }
+            } else {
+                LinkObject element = new LinkObject(msg,destination, payload);
+                if (size == 0) {
+                    first = last = element;
+                    size = 1;
+                } else {
+                    if (last == null) {
+                        ok = false;
+                        log.error("FastQueue.add: Could not add, since last is null although size is "+ size + " (>0)");
+                    } else {
+                        last.append(element);
+                        last = element;
+                        size++;
+                    }
+                }
+            }
+
+            if (first == null) {
+                log.error("FastQueue.add: first is null, size is " + size + " at end of add");
+            }
+            if (last == null) {
+                log.error("FastQueue.add: last is null, size is " + size+ " at end of add");
+            }
+
+            if (checkLock) {
+                if (!inMutex) log.warn("FastQueue.add: Cancelled by other mutex in add");
+                inMutex = false;
+                if (!inAdd) log.warn("FastQueue.add: Cancelled by other add");
+                inAdd = false;
+            }
+            if (log.isTraceEnabled()) log.trace("FastQueue.add: add ending with size " + size);
+
+        } finally {
+            lock.unlockAdd(true);
+        }
+        return ok;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Acquires the lock by an add thread and sets the add flag.
+     * If any add thread or the remove thread already acquired the lock
+     * this add thread will block until the lock is released.
+     */
+    public synchronized void lockAdd() {
+        if ( addLocked || removeLocked ) {
+            do {
+                try {
+                    wait(addWaitTimeout);
+                } catch ( InterruptedException e ) {
+                    Thread.currentThread().interrupted();
+                }
+            } while ( addLocked || removeLocked );
+        }
+        addLocked=true;
+    }
+
+
+    /**
+     * Releases the lock by an add thread and reset the remove flag.
+     * If the reader thread is polling, notify it.
+     */
+    public synchronized void unlockAdd(boolean dataAvailable) {
+        addLocked=false;
+        this.dataAvailable=dataAvailable;
+        if ( ( remover != null ) && ( dataAvailable || ! removeEnabled ) ) {
+            remover.interrupt();
+        } else {
+            notifyAll();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Releases the lock by an add thread and reset the remove flag.
+     * If the reader thread is polling, notify it.
+     */
+    public synchronized void unlockAdd(boolean dataAvailable) {
+        addLocked=false;
+        this.dataAvailable=dataAvailable;
+        if ( ( remover != null ) && ( dataAvailable || ! removeEnabled ) ) {
+            remover.interrupt();
+        } else {
+            notifyAll();
+        }
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * unlock queue for next add 
+     */
+    public void unlockAdd() {
+        lock.unlockAdd(size > 0 ? true : false);
+    }

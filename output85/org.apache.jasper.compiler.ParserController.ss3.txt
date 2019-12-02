@@ -1,0 +1,112 @@
+3
+-----CSCI578-----
+
+
+    /*
+     * Scans the given attributes for the attribute with the given name,
+     * which is either 'pageEncoding' or 'contentType', and returns the
+     * specified page encoding.
+     *
+     * In the case of 'contentType', the page encoding is taken from the
+     * content type's 'charset' component.
+     *
+     * @param attrs The page directive attributes
+     * @param attrName The name of the attribute to search for (either
+     * 'pageEncoding' or 'contentType')
+     *
+     * @return The page encoding, or null
+     */
+    private String getPageEncodingFromDirective(Attributes attrs,
+            String attrName) {
+        String value = attrs.getValue(attrName);
+        if (attrName.equals("pageEncoding")) {
+            return value;
+        }
+
+        // attrName = contentType
+        String contentType = value;
+        String encoding = null;
+        if (contentType != null) {
+            int loc = contentType.indexOf(CHARSET);
+            if (loc != -1) {
+                encoding = contentType.substring(loc + CHARSET.length());
+            }
+        }
+
+        return encoding;
+    }
+-----CSCI578-----
+
+
+    /*
+     * Determines page source encoding for page or tag file in JSP syntax,
+     * by reading (in this order) the value of the 'pageEncoding' page
+     * directive attribute, or the charset value of the 'contentType' page
+     * directive attribute.
+     *
+     * @return The page encoding, or null if not found
+     */
+    private String getPageEncodingForJspSyntax(JspReader jspReader,
+            Mark startMark)
+    throws JasperException {
+
+        String encoding = null;
+        String saveEncoding = null;
+
+        jspReader.reset(startMark);
+
+        /*
+         * Determine page encoding from directive of the form <%@ page %>,
+         * <%@ tag %>, <jsp:directive.page > or <jsp:directive.tag >.
+         */
+        while (true) {
+            if (jspReader.skipUntil("<") == null) {
+                break;
+            }
+            // If this is a comment, skip until its end
+            if (jspReader.matches("%--")) {
+                if (jspReader.skipUntil("--%>") == null) {
+                    // error will be caught in Parser
+                    break;
+                }
+                continue;
+            }
+            boolean isDirective = jspReader.matches("%@");
+            if (isDirective) {
+                jspReader.skipSpaces();
+            }
+            else {
+                isDirective = jspReader.matches("jsp:directive.");
+            }
+            if (!isDirective) {
+                continue;
+            }
+
+            // compare for "tag ", so we don't match "taglib"
+            if (jspReader.matches("tag ") || jspReader.matches("page")) {
+
+                jspReader.skipSpaces();
+                Attributes attrs = Parser.parseAttributes(this, jspReader);
+                encoding = getPageEncodingFromDirective(attrs, "pageEncoding");
+                if (encoding != null) {
+                    break;
+                }
+                encoding = getPageEncodingFromDirective(attrs, "contentType");
+                if (encoding != null) {
+                    saveEncoding = encoding;
+                }
+            }
+        }
+
+        if (encoding == null) {
+            encoding = saveEncoding;
+        }
+
+        return encoding;
+    }
+-----CSCI578-----
+
+
+    void reset(Mark mark) {
+        current = new Mark(mark);
+    }

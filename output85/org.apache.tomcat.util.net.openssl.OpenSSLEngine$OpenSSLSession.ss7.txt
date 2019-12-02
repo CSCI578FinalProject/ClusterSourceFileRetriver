@@ -1,0 +1,66 @@
+8
+-----CSCI578-----
+
+
+    /**
+     * SSL_get_cipher.
+     * @param ssl the SSL instance (SSL *)
+     * @return the cipher name
+     */
+    public static native String getCipherForSSL(long ssl);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Converts an OpenSSL cipher name to a JSSE cipher name.
+     *
+     * @param opensslCipherName The OpenSSL name for a cipher
+     *
+     * @return The JSSE name for the specified OpenSSL cipher. If none is known,
+     *         the IANA standard name will be returned instead
+     */
+    public static String openSSLToJsse(String opensslCipherName) {
+        if (!initialized) {
+            init();
+        }
+        List<Cipher> ciphers = aliases.get(opensslCipherName);
+        if (ciphers == null || ciphers.size() != 1) {
+            // Not an OpenSSL cipher name
+            return null;
+        }
+        Cipher cipher = ciphers.get(0);
+        // Each Cipher always has at least one JSSE name
+        return cipher.getJsseNames().iterator().next();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String[] getEnabledCipherSuites() {
+        String[] enabled = SSL.getCiphers(ssl);
+        if (enabled == null) {
+            return new String[0];
+        } else {
+            for (int i = 0; i < enabled.length; i++) {
+                String mapped = OpenSSLCipherConfigurationParser.openSSLToJsse(enabled[i]);
+                if (mapped != null) {
+                    enabled[i] = mapped;
+                }
+            }
+            return enabled;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns all Returns the cipher suites that are available for negotiation in an SSL handshake.
+     * @param ssl the SSL instance (SSL *)
+     * @return ciphers
+     */
+    public static native String[] getCiphers(long ssl);

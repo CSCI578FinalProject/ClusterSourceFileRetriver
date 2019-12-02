@@ -1,0 +1,307 @@
+16
+-----CSCI578-----
+
+
+    @Override
+    public String getName() {
+        return fileItem.getFieldName();
+    }
+-----CSCI578-----
+
+
+    // ----------------------------------------------------------- Constructors
+
+    /**
+     * Constructs an uninitialised instance of this class. A factory must be
+     * configured, using <code>setFileItemFactory()</code>, before attempting
+     * to parse requests.
+     *
+     * @see FileUpload#FileUpload(FileItemFactory)
+     */
+    public ServletFileUpload() {
+        super();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+    /**
+     * Returns <code>true</code> if requests mapped to servlets without
+     * "multipart config" to parse multipart/form-data requests anyway.
+     *
+     * @return <code>true</code> if requests mapped to servlets without
+     *    "multipart config" to parse multipart/form-data requests,
+     *    <code>false</code> otherwise.
+     */
+    public boolean getAllowCasualMultipartParsing();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Properties
+
+    /**
+     * Returns the directory used to temporarily store files that are larger
+     * than the configured size threshold.
+     *
+     * @return The directory in which temporary files will be located.
+     *
+     * @see #setRepository(java.io.File)
+     *
+     */
+    public File getRepository() {
+        return repository;
+    }
+
+
+    /**
+     * Sets the directory used to temporarily store files that are larger
+     * than the configured size threshold.
+     *
+     * @param repository The directory in which temporary files will be located.
+     *
+     * @see #getRepository()
+     *
+     */
+    public void setRepository(File repository) {
+        this.repository = repository;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the size threshold beyond which files are written directly to
+     * disk. The default value is 10240 bytes.
+     *
+     * @return The size threshold, in bytes.
+     *
+     * @see #setSizeThreshold(int)
+     */
+    public int getSizeThreshold() {
+        return sizeThreshold;
+    }
+
+
+    /**
+     * Sets the size threshold beyond which files are written directly to disk.
+     *
+     * @param sizeThreshold The size threshold, in bytes.
+     *
+     * @see #getSizeThreshold()
+     *
+     */
+    public void setSizeThreshold(int sizeThreshold) {
+        this.sizeThreshold = sizeThreshold;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the multi-part configuration for the associated Servlet. If no
+     * multi-part configuration has been defined, then <code>null</code> will be
+     * returned.
+     */
+    public MultipartConfigElement getMultipartConfigElement();
+-----CSCI578-----
+
+
+    private void parseParts(boolean explicit) {
+
+        // Return immediately if the parts have already been parsed
+        if (parts != null || partsParseException != null) {
+            return;
+        }
+
+        Context context = getContext();
+        MultipartConfigElement mce = getWrapper().getMultipartConfigElement();
+
+        if (mce == null) {
+            if(context.getAllowCasualMultipartParsing()) {
+                mce = new MultipartConfigElement(null,
+                                                 connector.getMaxPostSize(),
+                                                 connector.getMaxPostSize(),
+                                                 connector.getMaxPostSize());
+            } else {
+                if (explicit) {
+                    partsParseException = new IllegalStateException(
+                            sm.getString("coyoteRequest.noMultipartConfig"));
+                    return;
+                } else {
+                    parts = Collections.emptyList();
+                    return;
+                }
+            }
+        }
+
+        Parameters parameters = coyoteRequest.getParameters();
+        parameters.setLimit(getConnector().getMaxParameterCount());
+
+        boolean success = false;
+        try {
+            File location;
+            String locationStr = mce.getLocation();
+            if (locationStr == null || locationStr.length() == 0) {
+                location = ((File) context.getServletContext().getAttribute(
+                        ServletContext.TEMPDIR));
+            } else {
+                // If relative, it is relative to TEMPDIR
+                location = new File(locationStr);
+                if (!location.isAbsolute()) {
+                    location = new File(
+                            (File) context.getServletContext().getAttribute(
+                                        ServletContext.TEMPDIR),
+                                        locationStr).getAbsoluteFile();
+                }
+            }
+
+            if (!location.isDirectory()) {
+                parameters.setParseFailedReason(FailReason.MULTIPART_CONFIG_INVALID);
+                partsParseException = new IOException(
+                        sm.getString("coyoteRequest.uploadLocationInvalid",
+                                location));
+                return;
+            }
+
+
+            // Create a new file upload handler
+            DiskFileItemFactory factory = new DiskFileItemFactory();
+            try {
+                factory.setRepository(location.getCanonicalFile());
+            } catch (IOException ioe) {
+                parameters.setParseFailedReason(FailReason.IO_ERROR);
+                partsParseException = ioe;
+                return;
+            }
+            factory.setSizeThreshold(mce.getFileSizeThreshold());
+
+            ServletFileUpload upload = new ServletFileUpload();
+            upload.setFileItemFactory(factory);
+            upload.setFileSizeMax(mce.getMaxFileSize());
+            upload.setSizeMax(mce.getMaxRequestSize());
+
+            parts = new ArrayList<>();
+            try {
+                List<FileItem> items =
+                        upload.parseRequest(new ServletRequestContext(this));
+                int maxPostSize = getConnector().getMaxPostSize();
+                int postSize = 0;
+                String enc = getCharacterEncoding();
+                Charset charset = null;
+                if (enc != null) {
+                    try {
+                        charset = B2CConverter.getCharset(enc);
+                    } catch (UnsupportedEncodingException e) {
+                        // Ignore
+                    }
+                }
+                for (FileItem item : items) {
+                    ApplicationPart part = new ApplicationPart(item, location);
+                    parts.add(part);
+                    if (part.getSubmittedFileName() == null) {
+                        String name = part.getName();
+                        String value = null;
+                        try {
+                            String encoding = parameters.getEncoding();
+                            if (encoding == null) {
+                                if (enc == null) {
+                                    encoding = Parameters.DEFAULT_ENCODING;
+                                } else {
+                                    encoding = enc;
+                                }
+                            }
+                            value = part.getString(encoding);
+                        } catch (UnsupportedEncodingException uee) {
+                            try {
+                                value = part.getString(Parameters.DEFAULT_ENCODING);
+                            } catch (UnsupportedEncodingException e) {
+                                // Should not be possible
+                            }
+                        }
+                        if (maxPostSize >= 0) {
+                            // Have to calculate equivalent size. Not completely
+                            // accurate but close enough.
+                            if (charset == null) {
+                                // Name length
+                                postSize += name.getBytes().length;
+                            } else {
+                                postSize += name.getBytes(charset).length;
+                            }
+                            if (value != null) {
+                                // Equals sign
+                                postSize++;
+                                // Value length
+                                postSize += part.getSize();
+                            }
+                            // Value separator
+                            postSize++;
+                            if (postSize > maxPostSize) {
+                                parameters.setParseFailedReason(FailReason.POST_TOO_LARGE);
+                                throw new IllegalStateException(sm.getString(
+                                        "coyoteRequest.maxPostSizeExceeded"));
+                            }
+                        }
+                        parameters.addParameter(name, value);
+                    }
+                }
+
+                success = true;
+            } catch (InvalidContentTypeException e) {
+                parameters.setParseFailedReason(FailReason.INVALID_CONTENT_TYPE);
+                partsParseException = new ServletException(e);
+            } catch (FileUploadBase.SizeException e) {
+                parameters.setParseFailedReason(FailReason.POST_TOO_LARGE);
+                checkSwallowInput();
+                partsParseException = new IllegalStateException(e);
+            } catch (FileUploadException e) {
+                parameters.setParseFailedReason(FailReason.IO_ERROR);
+                partsParseException = new IOException(e);
+            } catch (IllegalStateException e) {
+                // addParameters() will set parseFailedReason
+                checkSwallowInput();
+                partsParseException = e;
+            }
+        } finally {
+            if (partsParseException != null || !success) {
+                parameters.setParseFailedReason(FailReason.UNKNOWN);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public String getEncoding() {
+        return encoding;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // -------------------- Parameters --------------------
+
+    public Parameters getParameters() {
+        return parameters;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the maximum number of parameters (GET plus POST) that will be
+     * automatically parsed by the container. A value of less than 0 means no
+     * limit.
+     */
+    public int getMaxParameterCount() {
+        return maxParameterCount;
+    }
+-----CSCI578-----
+
+
+    public void setLimit(int limit) {
+        this.limit = limit;
+    }

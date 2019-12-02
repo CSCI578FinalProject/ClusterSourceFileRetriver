@@ -1,0 +1,77 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Add a new host to the mapper.
+     *
+     * @param name Virtual host name
+     * @param aliases Alias names for the virtual host
+     * @param host Host object
+     */
+    public synchronized void addHost(String name, String[] aliases,
+                                     Host host) {
+        MappedHost[] newHosts = new MappedHost[hosts.length + 1];
+        MappedHost newHost = new MappedHost(name, host);
+        if (insertMap(hosts, newHosts, newHost)) {
+            hosts = newHosts;
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("mapper.addHost.success", name));
+            }
+        } else {
+            MappedHost duplicate = hosts[find(hosts, name)];
+            if (duplicate.object == host) {
+                // The host is already registered in the mapper.
+                // E.g. it might have been added by addContextVersion()
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("mapper.addHost.sameHost", name));
+                }
+                newHost = duplicate;
+            } else {
+                log.error(sm.getString("mapper.duplicateHost", name,
+                        duplicate.getRealHostName()));
+                // Do not add aliases, as removeHost(hostName) won't be able to
+                // remove them
+                return;
+            }
+        }
+        List<MappedHost> newAliases = new ArrayList<>(aliases.length);
+        for (String alias : aliases) {
+            MappedHost newAlias = new MappedHost(alias, newHost);
+            if (addHostAliasImpl(newAlias)) {
+                newAliases.add(newAlias);
+            }
+        }
+        newHost.addAliases(newAliases);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private synchronized boolean addHostAliasImpl(MappedHost newAlias) {
+        MappedHost[] newHosts = new MappedHost[hosts.length + 1];
+        if (insertMap(hosts, newHosts, newAlias)) {
+            hosts = newHosts;
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("mapper.addHostAlias.success",
+                        newAlias.name, newAlias.getRealHostName()));
+            }
+            return true;
+        } else {
+            MappedHost duplicate = hosts[find(hosts, newAlias.name)];
+            if (duplicate.getRealHost() == newAlias.getRealHost()) {
+                // A duplicate Alias for the same Host.
+                // A harmless redundancy. E.g.
+                // <Host name="localhost"><Alias>localhost</Alias></Host>
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("mapper.addHostAlias.sameHost",
+                            newAlias.name, newAlias.getRealHostName()));
+                }
+                return false;
+            }
+            log.error(sm.getString("mapper.duplicateHostAlias", newAlias.name,
+                    newAlias.getRealHostName(), duplicate.getRealHostName()));
+            return false;
+        }
+    }

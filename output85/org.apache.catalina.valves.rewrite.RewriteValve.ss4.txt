@@ -1,0 +1,1080 @@
+62
+-----CSCI578-----
+
+    public boolean isForbidden() {
+        return forbidden;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getCookieDomain() {
+        return cookieDomain;
+    }
+-----CSCI578-----
+
+
+    public boolean isHost() {
+        return host;
+    }
+-----CSCI578-----
+
+    public boolean isRedirect() {
+        return redirect;
+    }
+-----CSCI578-----
+
+
+    public boolean isCookieSecure() {
+        return cookieSecure;
+    }
+-----CSCI578-----
+
+    public boolean isType() {
+        return type;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get the decoded request URI.
+     *
+     * @return the URL decoded request URI
+     */
+    public MessageBytes getDecodedRequestURIMB() {
+        return coyoteRequest.decodedURI();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        if (!getEnabled() || rules == null || rules.length == 0) {
+            getNext().invoke(request, response);
+            return;
+        }
+
+        if (Boolean.TRUE.equals(invoked.get())) {
+            try {
+                getNext().invoke(request, response);
+            } finally {
+                invoked.set(null);
+            }
+            return;
+        }
+
+        try {
+
+            Resolver resolver = new ResolverImpl(request);
+
+            invoked.set(Boolean.TRUE);
+
+            // As long as MB isn't a char sequence or affiliated, this has to be
+            // converted to a string
+            MessageBytes urlMB = context ? request.getRequestPathMB() : request.getDecodedRequestURIMB();
+            urlMB.toChars();
+            CharSequence url = urlMB.getCharChunk();
+            CharSequence host = request.getServerName();
+            boolean rewritten = false;
+            boolean done = false;
+            for (int i = 0; i < rules.length; i++) {
+                RewriteRule rule = rules[i];
+                CharSequence test = (rule.isHost()) ? host : url;
+                CharSequence newtest = rule.evaluate(test, resolver);
+                if (newtest != null && !test.equals(newtest.toString())) {
+                    if (container.getLogger().isDebugEnabled()) {
+                        container.getLogger().debug("Rewrote " + test + " as " + newtest
+                                + " with rule pattern " + rule.getPatternString());
+                    }
+                    if (rule.isHost()) {
+                        host = newtest;
+                    } else {
+                        url = newtest;
+                    }
+                    rewritten = true;
+                }
+
+                // Final reply
+
+                // - forbidden
+                if (rule.isForbidden() && newtest != null) {
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN);
+                    done = true;
+                    break;
+                }
+                // - gone
+                if (rule.isGone() && newtest != null) {
+                    response.sendError(HttpServletResponse.SC_GONE);
+                    done = true;
+                    break;
+                }
+                // - redirect (code)
+                if (rule.isRedirect() && newtest != null) {
+                    // append the query string to the url if there is one and it hasn't been rewritten
+                    String queryString = request.getQueryString();
+                    StringBuffer urlString = new StringBuffer(url);
+                    if (queryString != null && queryString.length() > 0) {
+                        int index = urlString.indexOf("?");
+                        if (index != -1) {
+                            // if qsa is specified append the query
+                            if (rule.isQsappend()) {
+                                urlString.append('&');
+                                urlString.append(queryString);
+                            }
+                            // if the ? is the last character delete it, its only purpose was to
+                            // prevent the rewrite module from appending the query string
+                            else if (index == urlString.length() - 1) {
+                                urlString.deleteCharAt(index);
+                            }
+                        } else {
+                            urlString.append('?');
+                            urlString.append(queryString);
+                        }
+                    }
+                    // Insert the context if
+                    // 1. this valve is associated with a context
+                    // 2. the url starts with a leading slash
+                    // 3. the url isn't absolute
+                    if (context && urlString.charAt(0) == '/' && !UriUtil.hasScheme(urlString)) {
+                        urlString.insert(0, request.getContext().getEncodedPath());
+                    }
+                    response.sendRedirect(urlString.toString());
+                    response.setStatus(rule.getRedirectCode());
+                    done = true;
+                    break;
+                }
+
+                // Reply modification
+
+                // - cookie
+                if (rule.isCookie() && newtest != null) {
+                    Cookie cookie = new Cookie(rule.getCookieName(),
+                            rule.getCookieResult());
+                    cookie.setDomain(rule.getCookieDomain());
+                    cookie.setMaxAge(rule.getCookieLifetime());
+                    cookie.setPath(rule.getCookiePath());
+                    cookie.setSecure(rule.isCookieSecure());
+                    cookie.setHttpOnly(rule.isCookieHttpOnly());
+                    response.addCookie(cookie);
+                }
+                // - env (note: this sets a request attribute)
+                if (rule.isEnv() && newtest != null) {
+                    for (int j = 0; j < rule.getEnvSize(); j++) {
+                        request.setAttribute(rule.getEnvName(j), rule.getEnvResult(j));
+                    }
+                }
+                // - content type (note: this will not force the content type, use a filter
+                //   to do that)
+                if (rule.isType() && newtest != null) {
+                    request.setContentType(rule.getTypeValue());
+                }
+                // - qsappend
+                if (rule.isQsappend() && newtest != null) {
+                    String queryString = request.getQueryString();
+                    String urlString = url.toString();
+                    if (urlString.indexOf('?') != -1 && queryString != null) {
+                        url = urlString + "&" + queryString;
+                    }
+                }
+
+                // Control flow processing
+
+                // - chain (skip remaining chained rules if this one does not match)
+                if (rule.isChain() && newtest == null) {
+                    for (int j = i; j < rules.length; j++) {
+                        if (!rules[j].isChain()) {
+                            i = j;
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                // - last (stop rewriting here)
+                if (rule.isLast() && newtest != null) {
+                    break;
+                }
+                // - next (redo again)
+                if (rule.isNext() && newtest != null) {
+                    i = 0;
+                    continue;
+                }
+                // - skip (n rules)
+                if (newtest != null) {
+                    i += rule.getSkip();
+                }
+
+            }
+
+            if (rewritten) {
+                if (!done) {
+                    // See if we need to replace the query string
+                    String urlString = url.toString();
+                    String queryString = null;
+                    int queryIndex = urlString.indexOf('?');
+                    if (queryIndex != -1) {
+                        queryString = urlString.substring(queryIndex+1);
+                        urlString = urlString.substring(0, queryIndex);
+                    }
+                    // Set the new 'original' URI
+                    String contextPath = null;
+                    if (context) {
+                        contextPath = request.getContextPath();
+                    }
+                    request.getCoyoteRequest().requestURI().setString(null);
+                    CharChunk chunk = request.getCoyoteRequest().requestURI().getCharChunk();
+                    chunk.recycle();
+                    if (context) {
+                        chunk.append(contextPath);
+                    }
+                    chunk.append(URLEncoder.DEFAULT.encode(urlString));
+                    request.getCoyoteRequest().requestURI().toChars();
+                    // Decoded and normalized URI
+                    request.getCoyoteRequest().decodedURI().setString(null);
+                    chunk = request.getCoyoteRequest().decodedURI().getCharChunk();
+                    chunk.recycle();
+                    if (context) {
+                        chunk.append(contextPath);
+                    }
+                    chunk.append(RequestUtil.normalize(urlString));
+                    request.getCoyoteRequest().decodedURI().toChars();
+                    // Set the new Query if there is one
+                    if (queryString != null) {
+                        request.getCoyoteRequest().queryString().setString(null);
+                        chunk = request.getCoyoteRequest().queryString().getCharChunk();
+                        chunk.recycle();
+                        chunk.append(queryString);
+                        request.getCoyoteRequest().queryString().toChars();
+                    }
+                    // Set the new host if it changed
+                    if (!host.equals(request.getServerName())) {
+                        request.getCoyoteRequest().serverName().setString(null);
+                        chunk = request.getCoyoteRequest().serverName().getCharChunk();
+                        chunk.recycle();
+                        chunk.append(host.toString());
+                        request.getCoyoteRequest().serverName().toChars();
+                    }
+                    request.getMappingData().recycle();
+                    // Reinvoke the whole request recursively
+                    try {
+                        Connector connector = request.getConnector();
+                        if (!connector.getProtocolHandler().getAdapter().prepare(
+                                request.getCoyoteRequest(), response.getCoyoteResponse())) {
+                            return;
+                        }
+                        Pipeline pipeline = connector.getService().getContainer().getPipeline();
+                        request.setAsyncSupported(pipeline.isAsyncSupported());
+                        pipeline.getFirst().invoke(request, response);
+                    } catch (Exception e) {
+                        // This doesn't actually happen in the Catalina adapter implementation
+                    }
+                }
+            } else {
+                getNext().invoke(request, response);
+            }
+
+        } finally {
+            invoked.set(null);
+        }
+
+    }
+-----CSCI578-----
+
+    public int getSkip() {
+        return skip;
+    }
+-----CSCI578-----
+
+    public boolean isLast() {
+        return last;
+    }
+-----CSCI578-----
+
+    public boolean isGone() {
+        return gone;
+    }
+-----CSCI578-----
+
+    public String getEnvName(int i) {
+        return envName.get(i);
+    }
+-----CSCI578-----
+
+
+    public String getCookiePath() {
+        return cookiePath;
+    }
+-----CSCI578-----
+
+    public int getEnvSize() {
+        return envName.size();
+    }
+-----CSCI578-----
+
+
+    public boolean isCookieHttpOnly() {
+        return cookieHttpOnly;
+    }
+-----CSCI578-----
+
+    public String getTypeValue() {
+        return typeValue;
+    }
+-----CSCI578-----
+
+    public String getCookieResult() {
+        return cookieResult.get();
+    }
+-----CSCI578-----
+
+    public String getCookieName() {
+        return cookieName;
+    }
+-----CSCI578-----
+
+
+    public int getCookieLifetime() {
+        return cookieLifetime;
+    }
+-----CSCI578-----
+
+    public int getRedirectCode() {
+        return redirectCode;
+    }
+-----CSCI578-----
+
+    public String getEnvResult(int i) {
+        return envResult.get(i).get();
+    }
+-----CSCI578-----
+
+    public boolean isChain() {
+        return chain;
+    }
+-----CSCI578-----
+
+
+
+    public boolean getEnabled() {
+        return enabled;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the content type for this Request.
+     *
+     * @param contentType The content type
+     */
+    public void setContentType(String contentType) {
+        coyoteRequest.setContentType(contentType);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Prepare the given request/response for processing. This method requires
+     * that the request object has been populated with the information available
+     * from the HTTP headers.
+     *
+     * @param req The request object
+     * @param res The response object
+     *
+     * @return <code>true</code> if processing can continue, otherwise
+     *         <code>false</code> in which case an appropriate error will have
+     *         been set on the response
+     *
+     * @throws Exception If the processing fails unexpectedly
+     */
+    public boolean prepare(Request req, Response res) throws Exception;
+-----CSCI578-----
+
+    public boolean isNext() {
+        return next;
+    }
+-----CSCI578-----
+
+    public Adapter getAdapter();
+-----CSCI578-----
+
+    public boolean isQsappend() {
+        return qsappend;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Context within which this Request is being processed.
+     * <p>
+     * This is available as soon as the appropriate Context is identified.
+     * Note that availability of a Context allows <code>getContextPath()</code>
+     * to return a value, and thus enables parsing of the request URI.
+     *
+     * @return the Context mapped with the request
+     */
+    public Context getContext() {
+        return mappingData.context;
+    }
+-----CSCI578-----
+
+
+    /**
+     * With the introduction of async processing and the possibility of
+     * non-container threads calling sendError() tracking the current error
+     * state and ensuring that the correct error page is called becomes more
+     * complicated. This state attribute helps by tracking the current error
+     * state and informing callers that attempt to change state if the change
+     * was successful or if another thread got there first.
+     *
+     * <pre>
+     * The state machine is very simple:
+     *
+     * 0 - NONE
+     * 1 - NOT_REPORTED
+     * 2 - REPORTED
+     *
+     *
+     *   -->---->-- >NONE
+     *   |   |        |
+     *   |   |        | setError()
+     *   ^   ^        |
+     *   |   |       \|/
+     *   |   |-<-NOT_REPORTED
+     *   |            |
+     *   ^            | report()
+     *   |            |
+     *   |           \|/
+     *   |----<----REPORTED
+     * </pre>
+     */
+    private final AtomicInteger errorState = new AtomicInteger(0);
+
+
+
+    /**
+     * @return the error message that was set with <code>sendError()</code>
+     * for this Response.
+     */
+    public String getMessage() {
+        return getCoyoteResponse().getMessage();
+    }
+
+
+
+    /**
+     * Send an error response with the specified status and a
+     * default message.
+     *
+     * @param status HTTP status code to send
+     *
+     * @exception IllegalStateException if this response has
+     *  already been committed
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public void sendError(int status) throws IOException {
+        sendError(status, null);
+    }
+
+
+
+    /**
+     * Send an error response with the specified status and message.
+     *
+     * @param status HTTP status code to send
+     * @param message Corresponding message to send
+     *
+     * @exception IllegalStateException if this response has
+     *  already been committed
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public void sendError(int status, String message) throws IOException {
+
+        if (isCommitted()) {
+            throw new IllegalStateException
+                (sm.getString("coyoteResponse.sendError.ise"));
+        }
+
+        // Ignore any call from an included servlet
+        if (included) {
+            return;
+        }
+
+        setError();
+
+        getCoyoteResponse().setStatus(status);
+        getCoyoteResponse().setMessage(message);
+
+        // Clear any data content that has been buffered
+        resetBuffer();
+
+        // Cause the response to be finished (from the application perspective)
+        setSuspended(true);
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return mapping data.
+     */
+    public MappingData getMappingData() {
+        return mappingData;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the Connector through which this Request was received.
+     */
+    public Connector getConnector() {
+        return this.connector;
+    }
+-----CSCI578-----
+
+
+
+    public void setContentType(String type) {
+        contentTypeMB.setString(type);
+    }
+
+
+
+    public void setContentType(MessageBytes mb) {
+        contentTypeMB=mb;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------- HttpServletResponse Methods
+
+    /**
+     * Add the specified Cookie to those that will be included with
+     * this Response.
+     *
+     * @param cookie Cookie to be added
+     */
+    @Override
+    public void addCookie(final Cookie cookie) {
+
+        // Ignore any call from an included servlet
+        if (included || isCommitted()) {
+            return;
+        }
+
+        cookies.add(cookie);
+
+        String header = generateCookieString(cookie);
+        //if we reached here, no exception, cookie is valid
+        // the header name is Set-Cookie for both "old" and v.1 ( RFC2109 )
+        // RFC2965 is not supported by browsers and the Servlet spec
+        // asks for 2109.
+        addHeader("Set-Cookie", header, getContext().getCookieProcessor().getCharset());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the <code>Service</code> with which we are associated (if any).
+     */
+    public Service getService() {
+
+        return (this.service);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the Valve instance that has been distinguished as the basic
+     * Valve for this Pipeline (if any).
+     */
+    public Valve getFirst();
+-----CSCI578-----
+
+
+    /**
+     * Returns true if all the valves in this pipeline support async, false otherwise
+     * @return true if all the valves in this pipeline support async, false otherwise
+     */
+    public boolean isAsyncSupported();
+-----CSCI578-----
+
+
+    public void setAsyncSupported(boolean asyncSupported) {
+        this.asyncSupported = Boolean.valueOf(asyncSupported);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the status message.
+     *
+     * @param message The status message to set
+     */
+    public void setMessage(String message) {
+        this.message = message;
+    }
+-----CSCI578-----
+
+
+    public MessageBytes decodedURI() {
+        return decodedUriMB;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Convert to char[] and fill the CharChunk.
+     * XXX Not optimized - it converts to String first.
+     */
+    public void toChars() {
+        if( ! charC.isNull() ) {
+            type=T_CHARS;
+            return;
+        }
+        // inefficient
+        toString();
+        type=T_CHARS;
+        char cc[]=strValue.toCharArray();
+        charC.setChars(cc, 0, cc.length);
+    }
+-----CSCI578-----
+
+
+    public void recycle() {
+        host = null;
+        context = null;
+        contextSlashCount = 0;
+        contexts = null;
+        wrapper = null;
+        jspWildCard = false;
+        contextPath.recycle();
+        requestPath.recycle();
+        wrapperPath.recycle();
+        pathInfo.recycle();
+        redirectPath.recycle();
+    }
+-----CSCI578-----
+
+
+    public String encode( String path ) {
+        int maxBytesPerChar = 10;
+        StringBuilder rewrittenPath = new StringBuilder(path.length());
+        ByteArrayOutputStream buf = new ByteArrayOutputStream(maxBytesPerChar);
+        OutputStreamWriter writer = null;
+        try {
+            writer = new OutputStreamWriter(buf, "UTF8");
+        } catch (Exception e) {
+            e.printStackTrace();
+            writer = new OutputStreamWriter(buf);
+        }
+
+        for (int i = 0; i < path.length(); i++) {
+            int c = path.charAt(i);
+            if (safeCharacters.get(c)) {
+                rewrittenPath.append((char)c);
+            } else {
+                // convert to external encoding before hex conversion
+                try {
+                    writer.write((char)c);
+                    writer.flush();
+                } catch(IOException e) {
+                    buf.reset();
+                    continue;
+                }
+                byte[] ba = buf.toByteArray();
+                for (int j = 0; j < ba.length; j++) {
+                    // Converting each byte in the buffer
+                    byte toEncode = ba[j];
+                    rewrittenPath.append('%');
+                    int low = toEncode & 0x0f;
+                    int high = (toEncode & 0xf0) >> 4;
+                    rewrittenPath.append(hexadecimal[high]);
+                    rewrittenPath.append(hexadecimal[low]);
+                }
+                buf.reset();
+            }
+        }
+        return rewrittenPath.toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get the request path.
+     *
+     * @return the request path
+     */
+    public MessageBytes getRequestPathMB() {
+        return mappingData.requestPath;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the server name responding to this Request.
+     */
+    @Override
+    public String getServerName() {
+        return coyoteRequest.serverName().toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the HTTP status to be returned with this response.
+     *
+     * @param status The new HTTP status
+     */
+    @Override
+    public void setStatus(int status) {
+        setStatus(status, null);
+    }
+
+
+
+    /**
+     * Set the HTTP status and message to be returned with this response.
+     *
+     * @param status The new HTTP status
+     * @param message The associated text message
+     *
+     * @deprecated As of Version 2.1 of the Java Servlet API, this method
+     *  has been deprecated due to the ambiguous meaning of the message
+     *  parameter.
+     */
+    @Override
+    @Deprecated
+    public void setStatus(int status, String message) {
+
+        if (isCommitted()) {
+            return;
+        }
+
+        // Ignore any call from an included servlet
+        if (included) {
+            return;
+        }
+
+        getCoyoteResponse().setStatus(status);
+        getCoyoteResponse().setMessage(message);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Obtain the character set that will be used when converting between bytes
+     * and characters when parsing and/or generating HTTP headers for cookies.
+     *
+     * @return The character set used for byte&lt;-&gt;character conversions
+     */
+    Charset getCharset();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the Context within which this Request is being processed.
+     */
+    public Context getContext() {
+        return (request.getContext());
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the Coyote response.
+     */
+    public org.apache.coyote.Response getCoyoteResponse() {
+        return this.coyoteResponse;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Has the output of this response already been committed?
+     *
+     * @return <code>true</code> if the response has been committed
+     */
+    @Override
+    public boolean isCommitted() {
+        return getCoyoteResponse().isCommitted();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Reset the data buffer but not any status or header information.
+     *
+     * @exception IllegalStateException if the response has already
+     *  been committed
+     */
+    @Override
+    public void resetBuffer() {
+        resetBuffer(false);
+    }
+
+
+
+    /**
+     * Reset the data buffer and the using Writer/Stream flags but not any
+     * status or header information.
+     *
+     * @param resetWriterStreamFlags <code>true</code> if the internal
+     *        <code>usingWriter</code>, <code>usingOutputStream</code>,
+     *        <code>isCharacterEncodingSet</code> flags should also be reset
+     *
+     * @exception IllegalStateException if the response has already
+     *  been committed
+     */
+    public void resetBuffer(boolean resetWriterStreamFlags) {
+
+        if (isCommitted()) {
+            throw new IllegalStateException
+                (sm.getString("coyoteResponse.resetBuffer.ise"));
+        }
+
+        outputBuffer.reset(resetWriterStreamFlags);
+
+        if(resetWriterStreamFlags) {
+            usingOutputStream = false;
+            usingWriter = false;
+            isCharacterEncodingSet = false;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the URL encoded context path
+     *
+     * @return The URL encoded (with UTF-8) context path
+     */
+    public String getEncodedPath();
+-----CSCI578-----
+
+    public boolean isEnv() {
+        return env;
+    }
+-----CSCI578-----
+
+    public boolean isCookie() {
+        return cookie;
+    }
+-----CSCI578-----
+
+
+    // --------------------
+
+    public boolean isNull() {
+        if( end > 0 ) {
+            return false;
+        }
+        return !isSet; //XXX
+    }
+-----CSCI578-----
+
+
+
+    public void reset() {
+        reset(false);
+    }
+
+
+    public void reset(boolean resetWriterStreamFlags) {
+        bb.recycle();
+        cb.recycle();
+        bytesWritten = 0;
+        charsWritten = 0;
+        if (resetWriterStreamFlags) {
+            if (conv != null) {
+                conv.recycle();
+            }
+            conv = null;
+            enc = null;
+        }
+        initial = true;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- JMX registration  --------------------
+
+    @Override
+    protected String getDomainInternal() {
+        Service s = getService();
+        if (s == null) {
+            return null;
+        } else {
+            return service.getDomain();
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Select the appropriate child Host to process this request,
+     * based on the requested server name.  If no matching Host can
+     * be found, return an appropriate HTTP error.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     *
+     * @exception IOException if an input/output error occurred
+     * @exception ServletException if a servlet error occurred
+     */
+    @Override
+    public final void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        // Select the Host to be used for this Request
+        Host host = request.getHost();
+        if (host == null) {
+            response.sendError
+                (HttpServletResponse.SC_BAD_REQUEST,
+                 sm.getString("standardEngine.noHost",
+                              request.getServerName()));
+            return;
+        }
+        if (request.isAsyncSupported()) {
+            request.setAsyncSupported(host.getPipeline().isAsyncSupported());
+        }
+
+        // Ask this Host to process this request
+        host.getPipeline().getFirst().invoke(request, response);
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Select the appropriate child Context to process this request,
+     * based on the specified request URI.  If no matching Context can
+     * be found, return an appropriate HTTP error.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     *
+     * @exception IOException if an input/output error occurred
+     * @exception ServletException if a servlet error occurred
+     */
+    @Override
+    public final void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        // Select the Context to be used for this Request
+        Context context = request.getContext();
+        if (context == null) {
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                 sm.getString("standardHost.noContext"));
+            return;
+        }
+
+        if (request.isAsyncSupported()) {
+            request.setAsyncSupported(context.getPipeline().isAsyncSupported());
+        }
+
+        boolean asyncAtStart = request.isAsync();
+        boolean asyncDispatching = request.isAsyncDispatching();
+
+        try {
+            context.bind(Globals.IS_SECURITY_ENABLED, MY_CLASSLOADER);
+
+            if (!asyncAtStart && !context.fireRequestInitEvent(request)) {
+                // Don't fire listeners during async processing (the listener
+                // fired for the request that called startAsync()).
+                // If a request init listener throws an exception, the request
+                // is aborted.
+                return;
+            }
+
+            // Ask this Context to process this request. Requests that are in
+            // async mode and are not being dispatched to this resource must be
+            // in error and have been routed here to check for application
+            // defined error pages.
+            try {
+                if (!asyncAtStart || asyncDispatching) {
+                    context.getPipeline().getFirst().invoke(request, response);
+                } else {
+                    // Make sure this request/response is here because an error
+                    // report is required.
+                    if (!response.isErrorReportRequired()) {
+                        throw new IllegalStateException(sm.getString("standardHost.asyncStateError"));
+                    }
+                }
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                // If a new error occurred while trying to report a previous
+                // error simply log the new error and allow the original error
+                // to be reported.
+                if (response.isErrorReportRequired()) {
+                    container.getLogger().error("Exception Processing " +
+                            request.getRequestURI(), t);
+                } else {
+                    request.setAttribute(RequestDispatcher.ERROR_EXCEPTION, t);
+                    throwable(request, response, t);
+                }
+            }
+
+            // Now that the request/response pair is back under container
+            // control lift the suspension so that the error handling can
+            // complete and/or the container can flush any remaining data
+            response.setSuspended(false);
+
+            Throwable t = (Throwable) request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
+
+            // Protect against NPEs if the context was destroyed during a
+            // long running request.
+            if (!context.getState().isAvailable()) {
+                return;
+            }
+
+            // Look for (and render if found) an application level error page
+            if (response.isErrorReportRequired()) {
+                if (t != null) {
+                    throwable(request, response, t);
+                } else {
+                    status(request, response);
+                }
+            }
+
+            if (!request.isAsync() && (!asyncAtStart || !response.isErrorReportRequired())) {
+                context.fireRequestDestroyEvent(request);
+            }
+        } finally {
+            // Access a session (if present) to update last accessed time, based
+            // on a strict interpretation of the specification
+            if (ACCESS_SESSION) {
+                request.getSession(false);
+            }
+
+            context.unbind(Globals.IS_SECURITY_ENABLED, MY_CLASSLOADER);
+        }
+    }
+-----CSCI578-----

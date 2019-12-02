@@ -1,0 +1,64 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Filter getFilter() {
+        return filter;
+    }
+-----CSCI578-----
+
+
+    // -------------------------------------------------------- Package Methods
+
+
+    /**
+     * Return the application Filter we are configured for.
+     *
+     * @exception ClassCastException if the specified class does not implement
+     *  the <code>javax.servlet.Filter</code> interface
+     * @exception ClassNotFoundException if the filter class cannot be found
+     * @exception IllegalAccessException if the filter class cannot be
+     *  publicly instantiated
+     * @exception InstantiationException if an exception occurs while
+     *  instantiating the filter object
+     * @exception ServletException if thrown by the filter's init() method
+     * @throws NamingException
+     * @throws InvocationTargetException
+     */
+    Filter getFilter() throws ClassCastException, ClassNotFoundException,
+        IllegalAccessException, InstantiationException, ServletException,
+        InvocationTargetException, NamingException {
+
+        // Return the existing filter instance, if any
+        if (this.filter != null)
+            return (this.filter);
+
+        // Identify the class loader we will be using
+        String filterClass = filterDef.getFilterClass();
+        this.filter = (Filter) getInstanceManager().newInstance(filterClass);
+
+        initFilter();
+
+        return (this.filter);
+
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+    private InstanceManager getInstanceManager() {
+        if (instanceManager == null) {
+            if (context instanceof StandardContext) {
+                instanceManager = ((StandardContext)context).getInstanceManager();
+            } else {
+                instanceManager = new DefaultInstanceManager(null,
+                        new HashMap<String, Map<String, String>>(),
+                        context,
+                        getClass().getClassLoader());
+            }
+        }
+        return instanceManager;
+    }

@@ -1,0 +1,169 @@
+10
+-----CSCI578-----
+
+
+
+    /**
+     * Set the copy XML config file flag for this component.
+     *
+     * @param copyXML The new copy XML flag
+     */
+    public void setCopyXML(boolean copyXML) {
+
+        this.copyXML= copyXML;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the deploy XML config file flag for this component.
+     *
+     * @param deployXML The new deploy XML flag
+     */
+    public void setDeployXML(boolean deployXML) {
+
+        this.deployXML= deployXML;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the unpack WARs flag.
+     *
+     * @param unpackWARs The new unpack WARs flag
+     */
+    public void setUnpackWARs(boolean unpackWARs) {
+
+        this.unpackWARs = unpackWARs;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if XML context descriptors should be deployed.
+     */
+    public boolean isDeployXML() {
+
+        return deployXML;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the START event for an associated Host.
+     *
+     * @param event The lifecycle event that has occurred
+     */
+    @Override
+    public void lifecycleEvent(LifecycleEvent event) {
+
+        // Identify the host we are associated with
+        try {
+            host = (Host) event.getLifecycle();
+            if (host instanceof StandardHost) {
+                setCopyXML(((StandardHost) host).isCopyXML());
+                setDeployXML(((StandardHost) host).isDeployXML());
+                setUnpackWARs(((StandardHost) host).isUnpackWARs());
+                setContextClass(((StandardHost) host).getContextClass());
+            }
+        } catch (ClassCastException e) {
+            log.error(sm.getString("hostConfig.cce", event.getLifecycle()), e);
+            return;
+        }
+
+        // Process the event that has occurred
+        if (event.getType().equals(Lifecycle.PERIODIC_EVENT)) {
+            check();
+        } else if (event.getType().equals(Lifecycle.BEFORE_START_EVENT)) {
+            beforeStart();
+        } else if (event.getType().equals(Lifecycle.START_EVENT)) {
+            start();
+        } else if (event.getType().equals(Lifecycle.STOP_EVENT)) {
+            stop();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Unregister a component. We'll first check if it is registered,
+     * and mask all errors. This is mostly a helper.
+     *
+     * @param oname Name used for unregistration
+     *
+     * @since 1.1
+     */
+    @Override
+    public void unregisterComponent( String oname ) {
+        try {
+            unregisterComponent(new ObjectName(oname));
+        } catch (MalformedObjectNameException e) {
+            log.info("Error creating object name " + e );
+        }
+    }
+
+
+    /**
+     * Unregister a component. This is just a helper that
+     * avoids exceptions by checking if the mbean is already registered
+     *
+     * @param oname The bean name
+     */
+    public void unregisterComponent( ObjectName oname ) {
+        try {
+            if (oname != null && getMBeanServer().isRegistered(oname)) {
+                getMBeanServer().unregisterMBean(oname);
+            }
+        } catch (Throwable t) {
+            log.error("Error unregistering mbean", t);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if WARs should be unpacked on deployment.
+     */
+    public boolean isUnpackWARs() {
+
+        return (unpackWARs);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the copy XML config file flag for this component.
+     */
+    public boolean isCopyXML() {
+
+        return this.copyXML;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the Java class name of the Context implementation class
+     * for new web applications.
+     */
+    public String getContextClass() {
+
+        return (this.contextClass);
+
+    }

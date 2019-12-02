@@ -1,0 +1,852 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Process a property change event on a Server.
+     *
+     * @param server The server on which this event occurred
+     * @param propertyName The name of the property that changed
+     * @param oldValue The previous value (may be <code>null</code>)
+     * @param newValue The new value (may be <code>null</code>)
+     *
+     * @exception Exception if an exception is thrown
+     */
+    protected void processServerPropertyChange(Server server,
+                                               String propertyName,
+                                               Object oldValue,
+                                               Object newValue)
+        throws Exception {
+
+        if (log.isTraceEnabled()) {
+            log.trace("propertyChange[server=" + server +
+                ",propertyName=" + propertyName +
+                ",oldValue=" + oldValue +
+                ",newValue=" + newValue + "]");
+        }
+        if ("globalNamingResources".equals(propertyName)) {
+            if (oldValue != null) {
+                destroyMBeans((NamingResources) oldValue);
+            }
+            if (newValue != null) {
+                createMBeans((NamingResources) newValue);
+            }
+        } else if ("service".equals(propertyName)) {
+            if (oldValue != null) {
+                destroyMBeans((Service) oldValue);
+            }
+            if (newValue != null) {
+                createMBeans((Service) newValue);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+
+
+    /**
+     * Process a property change event on a Container.
+     *
+     * @param container The container on which this event occurred
+     * @param propertyName The name of the property that changed
+     * @param oldValue The previous value (may be <code>null</code>)
+     * @param newValue The new value (may be <code>null</code>)
+     *
+     * @exception Exception if an exception is thrown
+     */
+    protected void processContainerPropertyChange(Container container,
+                                                  String propertyName,
+                                                  Object oldValue,
+                                                  Object newValue)
+        throws Exception {
+
+        if (log.isTraceEnabled()) {
+            log.trace("propertyChange[container=" + container +
+                ",propertyName=" + propertyName +
+                ",oldValue=" + oldValue +
+                ",newValue=" + newValue + "]");
+        }
+        if ("loader".equals(propertyName)) {
+            if (oldValue != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Removing MBean for Loader " + oldValue);
+                }
+                MBeanUtils.destroyMBean((Loader) oldValue);
+            }
+            if (newValue != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Creating MBean for Loader " + newValue);
+                }
+                MBeanUtils.createMBean((Loader) newValue);
+            }
+        } else if ("logger".equals(propertyName)) {
+            if (oldValue != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Removing MBean for Logger " + oldValue);
+                }
+               // MBeanUtils.destroyMBean((Logger) oldValue);
+            }
+            if (newValue != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Creating MBean for Logger " + newValue);
+                }
+                //MBeanUtils.createMBean((Logger) newValue);
+            }
+        } else if ("manager".equals(propertyName)) {
+            if (oldValue != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Removing MBean for Manager " + oldValue);
+                }
+                //MBeanUtils.destroyMBean((Manager) oldValue);
+            }
+            if (newValue != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Creating MBean for Manager " + newValue);
+                }
+                //MBeanUtils.createMBean((Manager) newValue);
+            }
+        } else if ("realm".equals(propertyName)) {
+            if (oldValue != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Removing MBean for Realm " + oldValue);
+                }
+                MBeanUtils.destroyMBean((Realm) oldValue);
+            }
+            if (newValue != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Creating MBean for Realm " + newValue);
+                }
+                //MBeanUtils.createMBean((Realm) newValue);
+            }
+        } else if ("service".equals(propertyName)) {
+            if (oldValue != null) {
+                destroyMBeans((Service) oldValue);
+            }
+            if (newValue != null) {
+                createMBeans((Service) newValue);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------- PropertyChangeListener Methods
+
+
+    /**
+     * Handle a <code>PropertyChangeEvent</code> from one of the Containers
+     * we are interested in.
+     *
+     * @param event The event that has occurred
+     */
+    public void propertyChange(PropertyChangeEvent event) {
+
+        if (event.getSource() instanceof Container) {
+            try {
+                processContainerPropertyChange((Container) event.getSource(),
+                                               event.getPropertyName(),
+                                               event.getOldValue(),
+                                               event.getNewValue());
+            } catch (Exception e) {
+                log.error("Exception handling Container property change", e);
+            }
+        }/* else if (event.getSource() instanceof DefaultContext) {
+            try {
+                processDefaultContextPropertyChange
+                    ((DefaultContext) event.getSource(),
+                     event.getPropertyName(),
+                     event.getOldValue(),
+                     event.getNewValue());
+            } catch (Exception e) {
+                log.error("Exception handling DefaultContext property change", e);
+            }
+        }*/ else if (event.getSource() instanceof NamingResources) {
+            try {
+                processNamingResourcesPropertyChange
+                    ((NamingResources) event.getSource(),
+                     event.getPropertyName(),
+                     event.getOldValue(),
+                     event.getNewValue());
+            } catch (Exception e) {
+                log.error("Exception handling NamingResources property change", e);
+            }
+        } else if (event.getSource() instanceof Server) {
+            try {
+                processServerPropertyChange((Server) event.getSource(),
+                                            event.getPropertyName(),
+                                            event.getOldValue(),
+                                            event.getNewValue());
+            } catch (Exception e) {
+                log.error("Exception handing Server property change", e);
+            }
+        } else if (event.getSource() instanceof Service) {
+            try {
+                processServicePropertyChange((Service) event.getSource(),
+                                             event.getPropertyName(),
+                                             event.getOldValue(),
+                                             event.getNewValue());
+            } catch (Exception e) {
+                log.error("Exception handing Service property change", e);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process a property change event on a Service.
+     *
+     * @param service The service on which this event occurred
+     * @param propertyName The name of the property that changed
+     * @param oldValue The previous value (may be <code>null</code>)
+     * @param newValue The new value (may be <code>null</code>)
+     *
+     * @exception Exception if an exception is thrown
+     */
+    protected void processServicePropertyChange(Service service,
+                                                String propertyName,
+                                                Object oldValue,
+                                                Object newValue)
+        throws Exception {
+
+        if (log.isTraceEnabled()) {
+            log.trace("propertyChange[service=" + service +
+                ",propertyName=" + propertyName +
+                ",oldValue=" + oldValue +
+                ",newValue=" + newValue + "]");
+        }
+        if ("connector".equals(propertyName)) {
+            if (oldValue != null) {
+                destroyMBeans((Connector) oldValue, service);
+            }
+            if (newValue != null) {
+                createMBeans((Connector) newValue);
+            }
+        } else if ("container".equals(propertyName)) {
+            if (oldValue != null) {
+                destroyMBeans((Engine) oldValue);
+            }
+            if (newValue != null) {
+                createMBeans((Engine) newValue);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Connector</code> object.
+     *
+     * @param connector The Connector to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Connector connector)
+        throws Exception {
+
+        String mname = createManagedName(connector);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(connector);
+        ObjectName oname = createObjectName(domain, connector);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Context</code> object.
+     *
+     * @param context The Context to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Context context)
+        throws Exception {
+
+        String mname = createManagedName(context);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(context);
+        ObjectName oname = createObjectName(domain, context);
+        if( mserver.isRegistered(oname)) {
+            log.debug("Already registered " + oname);
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+    
+    /**
+     * Create, register, and return an MBean for this
+     * <code>ContextEnvironment</code> object.
+     *
+     * @param environment The ContextEnvironment to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(ContextEnvironment environment)
+        throws Exception {
+
+        String mname = createManagedName(environment);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(environment);
+        ObjectName oname = createObjectName(domain, environment);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>ContextResource</code> object.
+     *
+     * @param resource The ContextResource to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(ContextResource resource)
+        throws Exception {
+
+        String mname = createManagedName(resource);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(resource);
+        ObjectName oname = createObjectName(domain, resource);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>ContextResourceLink</code> object.
+     *
+     * @param resourceLink The ContextResourceLink to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(ContextResourceLink resourceLink)
+        throws Exception {
+
+        String mname = createManagedName(resourceLink);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(resourceLink);
+        ObjectName oname = createObjectName(domain, resourceLink);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+    
+ 
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Engine</code> object.
+     *
+     * @param engine The Engine to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Engine engine)
+        throws Exception {
+
+        String mname = createManagedName(engine);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(engine);
+        ObjectName oname = createObjectName(domain, engine);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Group</code> object.
+     *
+     * @param group The Group to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Group group)
+        throws Exception {
+
+        String mname = createManagedName(group);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(group);
+        ObjectName oname = createObjectName(domain, group);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Host</code> object.
+     *
+     * @param host The Host to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Host host)
+        throws Exception {
+
+        String mname = createManagedName(host);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(host);
+        ObjectName oname = createObjectName(domain, host);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Loader</code> object.
+     *
+     * @param loader The Loader to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Loader loader)
+        throws Exception {
+
+        String mname = createManagedName(loader);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(loader);
+        ObjectName oname = createObjectName(domain, loader);
+        if( mserver.isRegistered( oname ))  {
+            // side effect: stop it
+            mserver.unregisterMBean( oname );
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Manager</code> object.
+     *
+     * @param manager The Manager to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Manager manager)
+        throws Exception {
+
+        String mname = createManagedName(manager);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(manager);
+        ObjectName oname = createObjectName(domain, manager);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>MBeanFactory</code> object.
+     *
+     * @param factory The MBeanFactory to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(MBeanFactory factory)
+        throws Exception {
+
+        String mname = createManagedName(factory);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(factory);
+        ObjectName oname = createObjectName(domain, factory);
+        if( mserver.isRegistered(oname )) {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>NamingResources</code> object.
+     *
+     * @param resource The NamingResources to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(NamingResources resource)
+        throws Exception {
+
+        String mname = createManagedName(resource);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(resource);
+        ObjectName oname = createObjectName(domain, resource);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+    
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Realm</code> object.
+     *
+     * @param realm The Realm to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Realm realm)
+        throws Exception {
+
+        String mname = createManagedName(realm);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(realm);
+        ObjectName oname = createObjectName(domain, realm);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Role</code> object.
+     *
+     * @param role The Role to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Role role)
+        throws Exception {
+
+        String mname = createManagedName(role);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(role);
+        ObjectName oname = createObjectName(domain, role);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Server</code> object.
+     *
+     * @param server The Server to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Server server)
+        throws Exception {
+
+        String mname = createManagedName(server);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(server);
+        ObjectName oname = createObjectName(domain, server);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Service</code> object.
+     *
+     * @param service The Service to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Service service)
+        throws Exception {
+
+        String mname = createManagedName(service);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(service);
+        ObjectName oname = createObjectName(domain, service);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>User</code> object.
+     *
+     * @param user The User to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(User user)
+        throws Exception {
+
+        String mname = createManagedName(user);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(user);
+        ObjectName oname = createObjectName(domain, user);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>UserDatabase</code> object.
+     *
+     * @param userDatabase The UserDatabase to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(UserDatabase userDatabase)
+        throws Exception {
+
+        String mname = createManagedName(userDatabase);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(userDatabase);
+        ObjectName oname = createObjectName(domain, userDatabase);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }
+
+
+
+    /**
+     * Create, register, and return an MBean for this
+     * <code>Valve</code> object.
+     *
+     * @param valve The Valve to be managed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    static DynamicMBean createMBean(Valve valve)
+        throws Exception {
+
+        String mname = createManagedName(valve);
+        ManagedBean managed = registry.findManagedBean(mname);
+        if (managed == null) {
+            Exception e = new Exception("ManagedBean is not found with "+mname);
+            throw new MBeanException(e);
+        }
+        String domain = managed.getDomain();
+        if (domain == null)
+            domain = mserver.getDefaultDomain();
+        DynamicMBean mbean = managed.createMBean(valve);
+        ObjectName oname = createObjectName(domain, valve);
+        if( mserver.isRegistered( oname ))  {
+            mserver.unregisterMBean(oname);
+        }
+        mserver.registerMBean(mbean, oname);
+        return (mbean);
+
+    }

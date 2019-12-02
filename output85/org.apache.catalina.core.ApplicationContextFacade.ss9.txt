@@ -1,0 +1,61 @@
+5
+-----CSCI578-----
+
+
+
+    @Override
+    public int getEffectiveMajorVersion() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return ((Integer) doPrivileged("getEffectiveMajorVersion",
+                    null)).intValue();
+        } else  {
+            return context.getEffectiveMajorVersion();
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Map<String, ? extends FilterRegistration> getFilterRegistrations() {
+        Map<String, ApplicationFilterRegistration> result = new HashMap<>();
+
+        FilterDef[] filterDefs = context.findFilterDefs();
+        for (FilterDef filterDef : filterDefs) {
+            result.put(filterDef.getFilterName(),
+                    new ApplicationFilterRegistration(filterDef, context));
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public Map<String, ? extends FilterRegistration> getFilterRegistrations() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Map<String, ? extends FilterRegistration>) doPrivileged(
+                    "getFilterRegistrations", null);
+        } else {
+            return context.getFilterRegistrations();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the set of defined filters for this Context.
+     */
+    @Override
+    public FilterDef[] findFilterDefs() {
+
+        synchronized (filterDefs) {
+            FilterDef results[] = new FilterDef[filterDefs.size()];
+            return (filterDefs.values().toArray(results));
+        }
+
+    }
+-----CSCI578-----

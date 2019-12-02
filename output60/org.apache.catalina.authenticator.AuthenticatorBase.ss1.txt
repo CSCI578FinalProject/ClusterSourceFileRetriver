@@ -1,0 +1,75 @@
+3
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+
+
+    /**
+     * Associate the specified single sign on identifier with the
+     * specified Session.
+     *
+     * @param ssoId Single sign on identifier
+     * @param session Session to be associated
+     */
+    protected void associate(String ssoId, Session session) {
+
+        if (sso == null)
+            return;
+        sso.associate(ssoId, session);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Container to which this Valve is attached.
+     */
+    public Container getContainer() {
+
+        return (this.context);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Attempts reauthentication to the <code>Realm</code> using
+     * the credentials included in argument <code>entry</code>.
+     *
+     * @param ssoId identifier of SingleSignOn session with which the
+     *              caller is associated
+     * @param request   the request that needs to be authenticated
+     */
+    protected boolean reauthenticateFromSSO(String ssoId, Request request) {
+
+        if (sso == null || ssoId == null)
+            return false;
+
+        boolean reauthenticated = false;
+
+        Container parent = getContainer();
+        if (parent != null) {
+            Realm realm = parent.getRealm();
+            if (realm != null) {
+                reauthenticated = sso.reauthenticate(ssoId, realm, request);
+            }
+        }
+
+        if (reauthenticated) {
+            associate(ssoId, request.getSessionInternal(true));
+
+            if (log.isDebugEnabled()) {
+                log.debug(" Reauthenticated cached principal '" +
+                          request.getUserPrincipal().getName() +
+                          "' with auth type '" +  request.getAuthType() + "'");
+            }
+        }
+
+        return reauthenticated;
+    }

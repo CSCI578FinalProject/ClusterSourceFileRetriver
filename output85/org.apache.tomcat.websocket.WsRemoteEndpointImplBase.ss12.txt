@@ -1,0 +1,32 @@
+3
+-----CSCI578-----
+
+
+
+    protected void setEncoders(EndpointConfig endpointConfig)
+            throws DeploymentException {
+        encoderEntries.clear();
+        for (Class<? extends Encoder> encoderClazz :
+                endpointConfig.getEncoders()) {
+            Encoder instance;
+            try {
+                instance = encoderClazz.newInstance();
+                instance.init(endpointConfig);
+            } catch (InstantiationException | IllegalAccessException e) {
+                throw new DeploymentException(
+                        sm.getString("wsRemoteEndpoint.invalidEncoder",
+                                encoderClazz.getName()), e);
+            }
+            EncoderEntry entry = new EncoderEntry(
+                    Util.getEncoderType(encoderClazz), instance);
+            encoderEntries.add(entry);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    static Class<?> getEncoderType(Class<? extends Encoder> encoder) {
+        return Util.getGenericType(Encoder.class, encoder).getClazz();
+    }

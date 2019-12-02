@@ -1,0 +1,60 @@
+1
+-----CSCI578-----
+
+
+    /**
+     * Search the provided pattern and get the C standard
+     * Date/Time formatting rules and convert them to the
+     * Java equivalent.
+     *
+     * @param pattern The pattern to search
+     * @return The modified pattern
+     */
+    protected String convertDateFormat( String pattern ) {
+        boolean inside = false;
+        boolean mark = false;
+        boolean modifiedCommand = false;
+
+        StringBuilder buf = new StringBuilder();
+
+        for(int i = 0; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+
+            if ( c=='%' && !mark ) {
+                mark=true;
+            } else {
+                if ( mark ) {
+                    if ( modifiedCommand ) {
+                        //don't do anything--we just wanted to skip a char
+                        modifiedCommand = false;
+                        mark = false;
+                    } else {
+                        inside = translateCommand( buf, pattern, i, inside );
+                        //It's a modifier code
+                        if ( c=='O' || c=='E' ) {
+                            modifiedCommand = true;
+                        } else {
+                            mark=false;
+                        }
+                    }
+                } else {
+                    if ( !inside && c != ' ' ) {
+                        //We start a literal, which we need to quote
+                        buf.append("'");
+                        inside = true;
+                    }
+
+                    buf.append(c);
+                }
+            }
+        }
+
+        if ( buf.length() > 0 ) {
+            char lastChar = buf.charAt( buf.length() - 1 );
+
+            if( lastChar!='\'' && inside ) {
+                buf.append('\'');
+            }
+        }
+        return buf.toString();
+    }

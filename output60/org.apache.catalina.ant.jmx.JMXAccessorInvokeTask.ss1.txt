@@ -1,0 +1,76 @@
+8
+-----CSCI578-----
+
+
+    /**
+     * @param jmxServerConnection
+     * @throws Exception
+     */
+    protected String jmxInvoke(MBeanServerConnection jmxServerConnection, String name) throws Exception {
+        Object result ;
+        if (args == null) {
+             result = jmxServerConnection.invoke(new ObjectName(name),
+                    operation, null, null);
+        } else {
+            Object argsA[]=new Object[ args.size()];
+            String sigA[]=new String[args.size()];
+            for( int i=0; i<args.size(); i++ ) {
+                Arg arg=(Arg)args.get(i);
+                if( arg.type==null) {
+                    arg.type="java.lang.String";
+                    sigA[i]=arg.getType();
+                    argsA[i]=arg.getValue();
+                } else {
+                    sigA[i]=arg.getType();
+                    argsA[i]=convertStringToType(arg.getValue(),arg.getType());
+                }                
+            }
+            result = jmxServerConnection.invoke(new ObjectName(name), operation, argsA, sigA);
+        }
+        if(result != null) {
+            echoResult(operation,result);
+            createProperty(result);
+        }
+        return null;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    // ------------------------------------------------------ protected Methods
+    
+    /**
+     * Execute the specified command, based on the configured properties. The
+     * input stream will be closed upon completion of this task, whether it was
+     * executed successfully or not.
+     * 
+     * @exception BuildException
+     *                if an error occurs
+     */
+    public String jmxExecute(MBeanServerConnection jmxServerConnection)
+        throws Exception {
+
+        if (getName() == null) {
+            throw new BuildException("Must specify a 'name'");
+        }
+        if ((operation == null)) {
+            throw new BuildException(
+                    "Must specify a 'operation' for call");
+        }
+        return  jmxInvoke(jmxServerConnection, getName());
+     }
+-----CSCI578-----
+
+
+    public String getType() {
+        return type;
+    }
+-----CSCI578-----
+
+
+    public String getValue() {
+        return value;
+    }

@@ -1,0 +1,133 @@
+7
+-----CSCI578-----
+
+
+
+    /**
+     * Returns the size of the file.
+     *
+     * @return The size of the file, in bytes.
+     */
+    public long getSize()
+    {
+        if (cachedContent != null)
+        {
+            return cachedContent.length;
+        }
+        else if (dfos.isInMemory())
+        {
+            return dfos.getData().length;
+        }
+        else
+        {
+            return dfos.getFile().length();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Returns the contents of the file as an array of bytes.  If the
+     * contents of the file were not yet cached in memory, they will be
+     * loaded from the disk storage and cached.
+     *
+     * @return The contents of the file as an array of bytes.
+     */
+    public byte[] get()
+    {
+        if (dfos.isInMemory())
+        {
+            if (cachedContent == null)
+            {
+                cachedContent = dfos.getData();
+            }
+            return cachedContent;
+        }
+
+        byte[] fileData = new byte[(int) getSize()];
+        FileInputStream fis = null;
+
+        try
+        {
+            fis = new FileInputStream(dfos.getFile());
+            fis.read(fileData);
+        }
+        catch (IOException e)
+        {
+            fileData = null;
+        }
+        finally
+        {
+            if (fis != null)
+            {
+                try
+                {
+                    fis.close();
+                }
+                catch (IOException e)
+                {
+                    // ignore
+                }
+            }
+        }
+
+        return fileData;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Returns the data for this output stream as a <code>File</code>, assuming
+     * that the data was written to disk. If the data was retained in memory,
+     * this method returns <code>null</code>.
+     *
+     * @return The file for this output stream, or <code>null</code> if no such
+     *         file exists.
+     */
+    public File getFile()
+    {
+        return outputFile;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Returns the data for this output stream as an array of bytes, assuming
+     * that the data has been retained in memory. If the data was written to
+     * disk, this method returns <code>null</code>.
+     *
+     * @return The data for this output stream, or <code>null</code> if no such
+     *         data is available.
+     */
+    public byte[] getData()
+    {
+        if (memoryOutputStream != null)
+        {
+            return memoryOutputStream.toByteArray();
+        }
+        return null;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected methods
+
+
+    /**
+     * Removes the file contents from the temporary storage.
+     */
+    protected void finalize()
+    {
+        File outputFile = dfos.getFile();
+
+        if (outputFile != null && outputFile.exists())
+        {
+            outputFile.delete();
+        }
+    }

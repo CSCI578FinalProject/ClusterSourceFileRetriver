@@ -1,0 +1,139 @@
+6
+-----CSCI578-----
+
+
+
+    @Override
+    public void invoke(Request request, Response response) throws IOException,
+            ServletException {
+
+        boolean isBot = false;
+        String sessionId = null;
+        String clientIp = null;
+
+        if (log.isDebugEnabled()) {
+            log.debug(request.hashCode() + ": ClientIp=" +
+                    request.getRemoteAddr() + ", RequestedSessionId=" +
+                    request.getRequestedSessionId());
+        }
+
+        // If the incoming request has a valid session ID, no action is required
+        if (request.getSession(false) == null) {
+
+            // Is this a crawler - check the UA headers
+            Enumeration<String> uaHeaders = request.getHeaders("user-agent");
+            String uaHeader = null;
+            if (uaHeaders.hasMoreElements()) {
+                uaHeader = uaHeaders.nextElement();
+            }
+
+            // If more than one UA header - assume not a bot
+            if (uaHeader != null && !uaHeaders.hasMoreElements()) {
+
+                if (log.isDebugEnabled()) {
+                    log.debug(request.hashCode() + ": UserAgent=" + uaHeader);
+                }
+
+                if (uaPattern.matcher(uaHeader).matches()) {
+                    isBot = true;
+
+                    if (log.isDebugEnabled()) {
+                        log.debug(request.hashCode() +
+                                ": Bot found. UserAgent=" + uaHeader);
+                    }
+                }
+            }
+
+            // If this is a bot, is the session ID known?
+            if (isBot) {
+                clientIp = request.getRemoteAddr();
+                sessionId = clientIpSessionId.get(clientIp);
+                if (sessionId != null) {
+                    request.setRequestedSessionId(sessionId);
+                    if (log.isDebugEnabled()) {
+                        log.debug(request.hashCode() + ": SessionID=" +
+                                sessionId);
+                    }
+                }
+            }
+        }
+
+        getNext().invoke(request, response);
+
+        if (isBot) {
+            if (sessionId == null) {
+                // Has bot just created a session, if so make a note of it
+                HttpSession s = request.getSession(false);
+                if (s != null) {
+                    clientIpSessionId.put(clientIp, s.getId());
+                    sessionIdClientIp.put(s.getId(), clientIp);
+                    // #valueUnbound() will be called on session expiration
+                    s.setAttribute(this.getClass().getName(), this);
+                    s.setMaxInactiveInterval(sessionInactiveInterval);
+
+                    if (log.isDebugEnabled()) {
+                        log.debug(request.hashCode() +
+                                ": New bot session. SessionID=" + s.getId());
+                    }
+                }
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug(request.hashCode() +
+                            ": Bot session accessed. SessionID=" + sessionId);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the requested session ID for this request.  This is normally called
+     * by the HTTP Connector, when it parses the request headers.
+     *
+     * @param id The new session id
+     */
+    public void setRequestedSessionId(String id) {
+
+        this.requestedSessionId = id;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the session associated with this Request, creating one
+     * if necessary.
+     */
+    @Override
+    public HttpSession getSession() {
+        Session session = doGetSession(true);
+        if (session == null) {
+            return null;
+        }
+
+        return session.getSession();
+    }
+
+
+
+    /**
+     * @return the session associated with this Request, creating one
+     * if necessary and requested.
+     *
+     * @param create Create a new session if one does not exist
+     */
+    @Override
+    public HttpSession getSession(boolean create) {
+        Session session = doGetSession(create);
+        if (session == null) {
+            return null;
+        }
+
+        return session.getSession();
+    }
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,55 @@
+3
+
+
+    /**
+     * Binds a naming context to a thread.
+     * 
+     * @param name Name of the context
+     */
+    public static void bindThread(Object name) 
+        throws NamingException {
+        bindThread(name, null);
+    }
+
+
+    /**
+     * Binds a naming context to a thread.
+     * 
+     * @param name Name of the context
+     * @param token Security token
+     */
+    public static void bindThread(Object name, Object token) 
+        throws NamingException {
+        if (ContextAccessController.checkSecurityToken(name, token)) {
+            Context context = (Context) contextNameBindings.get(name);
+            if (context == null)
+                throw new NamingException
+                    (sm.getString("contextBindings.unknownContext", name));
+            threadBindings.put(Thread.currentThread(), context);
+            threadNameBindings.put(Thread.currentThread(), name);
+        }
+    }
+
+
+    /**
+     * Unbinds a naming context to a thread.
+     * 
+     * @param name Name of the context
+     */
+    public static void unbindThread(Object name) {
+        unbindThread(name, null);
+    }
+
+
+    /**
+     * Unbinds a naming context to a thread.
+     * 
+     * @param name Name of the context
+     * @param token Security token
+     */
+    public static void unbindThread(Object name, Object token) {
+        if (ContextAccessController.checkSecurityToken(name, token)) {
+            threadBindings.remove(Thread.currentThread());
+            threadNameBindings.remove(Thread.currentThread());
+        }
+    }

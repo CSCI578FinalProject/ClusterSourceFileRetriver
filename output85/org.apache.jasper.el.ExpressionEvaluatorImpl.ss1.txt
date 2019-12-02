@@ -1,0 +1,50 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public Expression parseExpression(String expression,
+            @SuppressWarnings("rawtypes") Class expectedType,
+            FunctionMapper fMapper) throws ELException {
+        try {
+            ELContextImpl ctx =
+                new ELContextImpl(ELContextImpl.getDefaultResolver(factory));
+            if (fMapper != null) {
+                ctx.setFunctionMapper(new FunctionMapperImpl(fMapper));
+            }
+            ValueExpression ve = this.factory.createValueExpression(ctx, expression, expectedType);
+            return new ExpressionImpl(ve, factory);
+        } catch (javax.el.ELException e) {
+            throw new ELParseException(e.getMessage());
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object evaluate(String expression,
+            @SuppressWarnings("rawtypes") Class expectedType,
+            VariableResolver vResolver, FunctionMapper fMapper)
+            throws ELException {
+        return this.parseExpression(expression, expectedType, fMapper).evaluate(vResolver);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public static ELResolver getDefaultResolver(ExpressionFactory factory) {
+        if (Constants.IS_SECURITY_ENABLED) {
+            CompositeELResolver defaultResolver = new CompositeELResolver();
+            defaultResolver.add(factory.getStreamELResolver());
+            defaultResolver.add(new StaticFieldELResolver());
+            defaultResolver.add(new MapELResolver());
+            defaultResolver.add(new ResourceBundleELResolver());
+            defaultResolver.add(new ListELResolver());
+            defaultResolver.add(new ArrayELResolver());
+            defaultResolver.add(new BeanELResolver());
+            return defaultResolver;
+        } else {
+            return DefaultResolver;
+        }
+    }

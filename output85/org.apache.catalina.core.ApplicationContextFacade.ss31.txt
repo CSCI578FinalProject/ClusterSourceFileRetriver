@@ -1,0 +1,107 @@
+4
+-----CSCI578-----
+
+
+
+    @Override
+    public ServletContext getContext(String uri) {
+
+        // Validate the format of the specified argument
+        if (uri == null || !uri.startsWith("/")) {
+            return null;
+        }
+
+        Context child = null;
+        try {
+            // Look for an exact match
+            Container host = context.getParent();
+            child = (Context) host.findChild(uri);
+
+            // Non-running contexts should be ignored.
+            if (child != null && !child.getState().isAvailable()) {
+                child = null;
+            }
+
+            // Remove any version information and use the mapper
+            if (child == null) {
+                int i = uri.indexOf("##");
+                if (i > -1) {
+                    uri = uri.substring(0, i);
+                }
+                // Note: This could be more efficient with a dedicated Mapper
+                //       method but such an implementation would require some
+                //       refactoring of the Mapper to avoid copy/paste of
+                //       existing code.
+                MessageBytes hostMB = MessageBytes.newInstance();
+                hostMB.setString(host.getName());
+
+                MessageBytes pathMB = MessageBytes.newInstance();
+                pathMB.setString(uri);
+
+                MappingData mappingData = new MappingData();
+                ((Engine) host.getParent()).getService().getMapper().map(hostMB, pathMB, null, mappingData);
+                child = mappingData.context;
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            return null;
+        }
+
+        if (child == null) {
+            return null;
+        }
+
+        if (context.getCrossContext()) {
+            // If crossContext is enabled, can always return the context
+            return child.getServletContext();
+        } else if (child == context) {
+            // Can still return the current context
+            return context.getServletContext();
+        } else {
+            // Nothing to return
+            return null;
+        }
+    }
+
+
+
+    // -------------------------------------------------------- Package Methods
+    protected StandardContext getContext() {
+        return this.context;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------- ServletContext Methods
+
+
+    @Override
+    public ServletContext getContext(String uripath) {
+        ServletContext theContext = null;
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            theContext = (ServletContext)
+                doPrivileged("getContext", new Object[]{uripath});
+        } else {
+            theContext = context.getContext(uripath);
+        }
+        if ((theContext != null) &&
+            (theContext instanceof ApplicationContext)){
+            theContext = ((ApplicationContext)theContext).getFacade();
+        }
+        return (theContext);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain a child Container by name.
+     *
+     * @param name Name of the child Container to be retrieved
+     *
+     * @return The child Container with the given name or <code>null</code> if
+     *         no such child exists.
+     */
+    public Container findChild(String name);
+-----CSCI578-----

@@ -1,0 +1,84 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set parent child relationship between the two specified loggers.
+     *
+     * @param logger The logger
+     * @param parent The parent logger
+     */
+    protected static void doSetParentLogger(final Logger logger,
+            final Logger parent) {
+        AccessController.doPrivileged(new PrivilegedAction<Void>() {
+            @Override
+            public Void run() {
+                logger.setParent(parent);
+                return null;
+            }
+        });
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get the value of the specified property in the classloader local
+     * configuration.
+     *
+     * @param name The property name
+     */
+    @Override
+    public String getProperty(String name) {
+        String prefix = this.prefix.get();
+        String result = null;
+
+        // If a prefix is defined look for a prefixed property first
+        if (prefix != null) {
+            result = findProperty(prefix + name);
+        }
+
+        // If there is no prefix or no property match with the prefix try just
+        // the name
+        if (result == null) {
+            result = findProperty(name);
+        }
+
+        // Simple property replacement (mostly for folder names)
+        if (result != null) {
+            result = replace(result);
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    private synchronized String findProperty(String name) {
+        ClassLoader classLoader = Thread.currentThread()
+                .getContextClassLoader();
+        ClassLoaderLogInfo info = getClassLoaderInfo(classLoader);
+        String result = info.props.getProperty(name);
+        // If the property was not found, and the current classloader had no
+        // configuration (property list is empty), look for the parent classloader
+        // properties.
+        if ((result == null) && (info.props.isEmpty())) {
+            ClassLoader current = classLoader.getParent();
+            while (current != null) {
+                info = classLoaderLoggers.get(current);
+                if (info != null) {
+                    result = info.props.getProperty(name);
+                    if ((result != null) || (!info.props.isEmpty())) {
+                        break;
+                    }
+                }
+                current = current.getParent();
+            }
+            if (result == null) {
+                result = super.getProperty(name);
+            }
+        }
+        return result;
+    }

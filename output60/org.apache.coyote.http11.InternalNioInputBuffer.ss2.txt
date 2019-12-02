@@ -1,0 +1,81 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Perform blocking read with a timeout if desired
+     * @param timeout boolean - if we want to use the timeout data
+     * @param block - true if the system should perform a blocking read, false otherwise
+     * @return boolean - true if data was read, false is no data read, EOFException if EOF is reached
+     * @throws IOException if a socket exception occurs
+     * @throws EOFException if end of stream is reached
+     */
+    private int readSocket(boolean timeout, boolean block) throws IOException {
+        int nRead = 0;
+        socket.getBufHandler().getReadBuffer().clear();
+        if ( block ) {
+            Selector selector = null;
+            try { selector = getSelectorPool().get(); }catch ( IOException x ) {}
+            try {
+                NioEndpoint.KeyAttachment att = (NioEndpoint.KeyAttachment)socket.getAttachment(false);
+                if ( att == null ) throw new IOException("Key must be cancelled.");
+                nRead = getSelectorPool().read(socket.getBufHandler().getReadBuffer(),socket,selector,att.getTimeout());
+            } catch ( EOFException eof ) {
+                nRead = -1;
+            } finally {
+                if ( selector != null ) getSelectorPool().put(selector);
+            }
+        } else {
+            nRead = socket.read(socket.getBufHandler().getReadBuffer());
+        }
+        if (nRead > 0) {
+            socket.getBufHandler().getReadBuffer().flip();
+            socket.getBufHandler().getReadBuffer().limit(nRead);
+            expand(nRead + pos);
+            socket.getBufHandler().getReadBuffer().get(buf, pos, nRead);
+            lastValid = pos + nRead;
+            return nRead;
+        } else if (nRead == -1) {
+            //return false;
+            throw new EOFException(sm.getString("iib.eof.error"));
+        } else {
+            return 0;
+        }
+    }
+-----CSCI578-----
+
+
+    public NioSelectorPool getSelectorPool() {
+        return pool;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Reads a sequence of bytes from this channel into the given buffer.
+     *
+     * @param dst The buffer into which bytes are to be transferred
+     * @return The number of bytes read, possibly zero, or <tt>-1</tt> if the channel has reached end-of-stream
+     * @throws IOException If some other I/O error occurs
+     */
+    public int read(ByteBuffer dst) throws IOException {
+        return sc.read(dst);
+    }
+-----CSCI578-----
+
+
+    private void expand(int newsize) {
+        if ( newsize > buf.length ) {
+            if (parsingHeader) {
+                throw new IllegalArgumentException(
+                        sm.getString("iib.requestheadertoolarge.error"));
+            }
+            // Should not happen
+            log.warn("Expanding buffer size. Old size: " + buf.length
+                    + ", new size: " + newsize, new Exception());
+            byte[] tmp = new byte[newsize];
+            System.arraycopy(buf,0,tmp,0,buf.length);
+            buf = tmp;
+            tmp = null;
+        }
+    }

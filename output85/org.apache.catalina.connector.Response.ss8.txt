@@ -1,0 +1,50 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * @return the number of bytes the actually written to the socket. This
+     * includes chunking, compression, etc. but excludes headers.
+     * @param flush if <code>true</code> will perform a buffer flush first
+     */
+    public long getBytesWritten(boolean flush) {
+        if (flush) {
+            try {
+                outputBuffer.flush();
+            } catch (IOException ioe) {
+                // Ignore - the client has probably closed the connection
+            }
+        }
+        return getCoyoteResponse().getBytesWritten(flush);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Flush bytes or chars contained in the buffer.
+     *
+     * @throws IOException An underlying IOException occurred
+     */
+    @Override
+    public void flush() throws IOException {
+        doFlush(true);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Will send the buffer to the client.
+     */
+    @Override
+    public void flush() throws IOException {
+        boolean nonBlocking = checkNonBlockingWrite();
+        ob.flush();
+        if (nonBlocking) {
+            checkRegisterForWrite();
+        }
+    }
+-----CSCI578-----

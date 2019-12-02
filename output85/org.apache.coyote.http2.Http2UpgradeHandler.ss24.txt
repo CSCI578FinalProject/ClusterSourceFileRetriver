@@ -1,0 +1,146 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public long getWriteTimeout() {
+        return writeTimeout;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void init(WebConnection webConnection) {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("upgradeHandler.init", connectionId, connectionState.get()));
+        }
+
+        if (!connectionState.compareAndSet(ConnectionState.NEW, ConnectionState.CONNECTED)) {
+            return;
+        }
+
+        parser = new Http2Parser(connectionId, this, this);
+
+        Stream stream = null;
+
+        socketWrapper.setReadTimeout(getReadTimeout());
+        socketWrapper.setWriteTimeout(getWriteTimeout());
+
+        if (webConnection != null) {
+            // HTTP/2 started via HTTP upgrade.
+            // The initial HTTP/1.1 request is available as Stream 1.
+
+            try {
+                // Process the initial settings frame
+                stream = getStream(1, true);
+                String base64Settings = stream.getCoyoteRequest().getHeader(HTTP2_SETTINGS_HEADER);
+                byte[] settings = Base64.decodeBase64(base64Settings);
+
+                // Settings are only valid on stream 0
+                FrameType.SETTINGS.check(0, settings.length);
+
+                for (int i = 0; i < settings.length % 6; i++) {
+                    int id = ByteUtil.getTwoBytes(settings, i * 6);
+                    long value = ByteUtil.getFourBytes(settings, (i * 6) + 2);
+                    remoteSettings.set(Setting.valueOf(id), value);
+                }
+            } catch (Http2Exception e) {
+                throw new ProtocolException(
+                        sm.getString("upgradeHandler.upgrade.fail", connectionId));
+            }
+        }
+
+        // Send the initial settings frame
+        try {
+            byte[] settings = localSettings.getSettingsFrameForPending();
+            socketWrapper.write(true, settings, 0, settings.length);
+            socketWrapper.flush(true);
+        } catch (IOException ioe) {
+            String msg = sm.getString("upgradeHandler.sendPrefaceFail", connectionId);
+            if (log.isDebugEnabled()) {
+                log.debug(msg);
+            }
+            throw new ProtocolException(msg, ioe);
+        }
+
+        // Make sure the client has sent a valid connection preface before we
+        // send the response to the original request over HTTP/2.
+        try {
+            parser.readConnectionPreface();
+        } catch (Http2Exception e) {
+            String msg = sm.getString("upgradeHandler.invalidPreface", connectionId);
+            if (log.isDebugEnabled()) {
+                log.debug(msg);
+            }
+            throw new ProtocolException(msg);
+        }
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("upgradeHandler.prefaceReceived", connectionId));
+        }
+
+        // Send a ping to get an idea of round trip time as early as possible
+        try {
+            pingManager.sendPing(true);
+        } catch (IOException ioe) {
+            throw new ProtocolException(sm.getString("upgradeHandler.pingFailed"), ioe);
+        }
+
+        if (webConnection != null) {
+            // Process the initial request on a container thread
+            StreamProcessor streamProcessor = new StreamProcessor(stream, adapter, socketWrapper);
+            streamProcessor.setSslSupport(sslSupport);
+            socketWrapper.getEndpoint().getExecutor().execute(streamProcessor);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read and validate the connection preface from input using blocking IO.
+     */
+    void readConnectionPreface() throws Http2Exception {
+        byte[] data = new byte[CLIENT_PREFACE_START.length];
+        try {
+            input.fill(true, data);
+
+            for (int i = 0; i < CLIENT_PREFACE_START.length; i++) {
+                if (CLIENT_PREFACE_START[i] != data[i]) {
+                    throw new ProtocolException(sm.getString("http2Parser.preface.invalid"));
+                }
+            }
+
+            // Must always be followed by a settings frame
+            readFrame(true, FrameType.SETTINGS);
+        } catch (IOException ioe) {
+            throw new ProtocolException(sm.getString("http2Parser.preface.io"), ioe);
+        }
+    }
+-----CSCI578-----
+
+
+
+    public String getHeader(String name) {
+        return headers.getHeader(name);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the timeout for writing. Values of zero or less will be changed to
+     * -1.
+     *
+     * @param writeTimeout The timeout in milliseconds. A value of zero or less
+     *                    indicates an infinite timeout.
+     */
+    public void setWriteTimeout(long writeTimeout) {
+        if (writeTimeout > 0) {
+            this.writeTimeout = writeTimeout;
+        } else {
+            this.writeTimeout = -1;
+        }
+    }
+-----CSCI578-----

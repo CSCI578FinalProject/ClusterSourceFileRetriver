@@ -1,0 +1,157 @@
+7
+-----CSCI578-----
+
+
+
+    /**
+     * Return a List of all registered Rule instances, or a zero-length List
+     * if there are no registered Rule instances.  If more than one Rule
+     * instance has been registered, they <strong>must</strong> be returned
+     * in the order originally registered through the <code>add()</code>
+     * method.
+     * @return a rules list
+     */
+    public List<Rule> rules();
+-----CSCI578-----
+
+
+
+    /**
+     * This method is called after all parsing methods have been
+     * called, to allow Rules to remove temporary data.
+     *
+     * @throws Exception if an error occurs while processing the event
+     */
+    public void finish() throws Exception {
+        // NO-OP by default.
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification of the end of the document being reached.
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    @Override
+    public void endDocument() throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            if (getCount() > 1) {
+                saxLog.debug("endDocument():  " + getCount() +
+                             " elements left");
+            } else {
+                saxLog.debug("endDocument()");
+            }
+        }
+
+        while (getCount() > 1) {
+            pop();
+        }
+
+        // Fire "finish" events for all defined rules
+        Iterator<Rule> rules = getRules().rules().iterator();
+        while (rules.hasNext()) {
+            Rule rule = rules.next();
+            try {
+                rule.finish();
+            } catch (Exception e) {
+                log.error("Finish event threw exception", e);
+                throw createSAXException(e);
+            } catch (Error e) {
+                log.error("Finish event threw error", e);
+                throw e;
+            }
+        }
+
+        // Perform final cleanup
+        clear();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the current depth of the element stack.
+     */
+    public int getCount() {
+
+        return (stack.size());
+
+    }
+
+
+
+    /**
+     * Return the n'th object down the stack, where 0 is the top element
+     * and [getCount()-1] is the bottom element.  If the specified index
+     * is out of range, return <code>null</code>.
+     *
+     * @param n Index of the desired element, where 0 is the top of the stack,
+     *  1 is the next element down, and so on.
+     * @return the specified object
+     */
+    public Object peek(int n) {
+
+        try {
+            return (stack.peek(n));
+        } catch (EmptyStackException e) {
+            log.warn("Empty stack (returning null)");
+            return (null);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Pop the top object off of the stack, and return it.  If there are
+     * no objects on the stack, return <code>null</code>.
+     * @return the top object
+     */
+    public Object pop() {
+
+        try {
+            return (stack.pop());
+        } catch (EmptyStackException e) {
+            log.warn("Empty stack (returning null)");
+            return (null);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process the end of this element.
+     *
+     * @param namespace the namespace URI of the matching element, or an
+     *   empty string if the parser is not namespace aware or the element has
+     *   no namespace
+     * @param name the local name if the parser is namespace aware, or just
+     *   the element name otherwise
+     */
+    @Override
+    public void end(String namespace, String name) throws Exception {
+        digester.pop();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Process the end of this element.
+     *
+     * @param namespace the namespace URI of the matching element, or an
+     *   empty string if the parser is not namespace aware or the element has
+     *   no namespace
+     * @param name the local name if the parser is namespace aware, or just
+     *   the element name otherwise
+     */
+    @Override
+    public void end(String namespace, String name) throws Exception {
+        digester.pop();
+    }

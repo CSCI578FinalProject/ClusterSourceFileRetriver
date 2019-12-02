@@ -1,0 +1,41 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Add the JARs specified to the extension list.
+     */
+    private static void addFolderList(String property) {
+
+        // get the files in the extensions directory
+        String extensionsDir = System.getProperty(property);
+        if (extensionsDir != null) {
+            StringTokenizer extensionsTok
+                = new StringTokenizer(extensionsDir, File.pathSeparator);
+            while (extensionsTok.hasMoreTokens()) {
+                File targetDir = new File(extensionsTok.nextToken());
+                if (!targetDir.isDirectory()) {
+                    continue;
+                }
+                File[] files = targetDir.listFiles();
+                if (files == null) {
+                    continue;
+                }
+                for (int i = 0; i < files.length; i++) {
+                    if (files[i].getName().toLowerCase(Locale.ENGLISH).endsWith(".jar") &&
+                            files[i].isFile()) {
+                        try {
+                            addSystemResource(files[i]);
+                        } catch (IOException e) {
+                            log.error
+                                (sm.getString
+                                 ("extensionValidator.failload", files[i]), e);
+                        }
+                    }
+                }
+            }
+        }
+
+    }

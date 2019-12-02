@@ -1,0 +1,279 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Find the specified resource in our local repository, and return a
+     * <code>URL</code> referring to it, or <code>null</code> if this resource
+     * cannot be found.
+     *
+     * @param name Name of the resource to be found
+     */
+    @Override
+    public URL findResource(final String name) {
+
+        if (log.isDebugEnabled())
+            log.debug("    findResource(" + name + ")");
+
+        checkStateForResourceLoading(name);
+
+        URL url = null;
+
+        String path = nameToPath(name);
+
+        WebResource resource = resources.getClassLoaderResource(path);
+        if (resource.exists()) {
+            url = resource.getURL();
+            trackLastModified(path, resource);
+        }
+
+        if ((url == null) && hasExternalRepositories) {
+            url = super.findResource(name);
+        }
+
+        if (log.isDebugEnabled()) {
+            if (url != null)
+                log.debug("    --> Returning '" + url.toString() + "'");
+            else
+                log.debug("    --> Resource not found, returning null");
+        }
+        return url;
+    }
+
+
+
+    /**
+     * Find the resource with the given name.  A resource is some data
+     * (images, audio, text, etc.) that can be accessed by class code in a
+     * way that is independent of the location of the code.  The name of a
+     * resource is a "/"-separated path name that identifies the resource.
+     * If the resource cannot be found, return <code>null</code>.
+     * <p>
+     * This method searches according to the following algorithm, returning
+     * as soon as it finds the appropriate URL.  If the resource cannot be
+     * found, returns <code>null</code>.
+     * <ul>
+     * <li>If the <code>delegate</code> property is set to <code>true</code>,
+     *     call the <code>getResource()</code> method of the parent class
+     *     loader, if any.</li>
+     * <li>Call <code>findResource()</code> to find this resource in our
+     *     locally defined repositories.</li>
+     * <li>Call the <code>getResource()</code> method of the parent class
+     *     loader, if any.</li>
+     * </ul>
+     *
+     * @param name Name of the resource to return a URL for
+     */
+    @Override
+    public URL getResource(String name) {
+
+        if (log.isDebugEnabled())
+            log.debug("getResource(" + name + ")");
+
+        checkStateForResourceLoading(name);
+
+        URL url = null;
+
+        boolean delegateFirst = delegate || filter(name, false);
+
+        // (1) Delegate to parent if requested
+        if (delegateFirst) {
+            if (log.isDebugEnabled())
+                log.debug("  Delegating to parent classloader " + parent);
+            url = parent.getResource(name);
+            if (url != null) {
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning '" + url.toString() + "'");
+                return (url);
+            }
+        }
+
+        // (2) Search local repositories
+        url = findResource(name);
+        if (url != null) {
+            if (log.isDebugEnabled())
+                log.debug("  --> Returning '" + url.toString() + "'");
+            return (url);
+        }
+
+        // (3) Delegate to parent unconditionally if not already attempted
+        if (!delegateFirst) {
+            url = parent.getResource(name);
+            if (url != null) {
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning '" + url.toString() + "'");
+                return (url);
+            }
+        }
+
+        // (4) Resource was not found
+        if (log.isDebugEnabled())
+            log.debug("  --> Resource not found, returning null");
+        return (null);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Find the resource with the given name.  A resource is some data
+     * (images, audio, text, etc.) that can be accessed by class code in a
+     * way that is independent of the location of the code.  The name of a
+     * resource is a "/"-separated path name that identifies the resource.
+     * If the resource cannot be found, return <code>null</code>.
+     * <p>
+     * This method searches according to the following algorithm, returning
+     * as soon as it finds the appropriate URL.  If the resource cannot be
+     * found, returns <code>null</code>.
+     * <ul>
+     * <li>If the <code>delegate</code> property is set to <code>true</code>,
+     *     call the <code>getResource()</code> method of the parent class
+     *     loader, if any.</li>
+     * <li>Call <code>findResource()</code> to find this resource in our
+     *     locally defined repositories.</li>
+     * <li>Call the <code>getResource()</code> method of the parent class
+     *     loader, if any.</li>
+     * </ul>
+     *
+     * @param name Name of the resource to return a URL for
+     */
+    @Override
+    public URL getResource(String name) {
+
+        if (log.isDebugEnabled())
+            log.debug("getResource(" + name + ")");
+
+        checkStateForResourceLoading(name);
+
+        URL url = null;
+
+        boolean delegateFirst = delegate || filter(name, false);
+
+        // (1) Delegate to parent if requested
+        if (delegateFirst) {
+            if (log.isDebugEnabled())
+                log.debug("  Delegating to parent classloader " + parent);
+            url = parent.getResource(name);
+            if (url != null) {
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning '" + url.toString() + "'");
+                return (url);
+            }
+        }
+
+        // (2) Search local repositories
+        url = findResource(name);
+        if (url != null) {
+            if (log.isDebugEnabled())
+                log.debug("  --> Returning '" + url.toString() + "'");
+            return (url);
+        }
+
+        // (3) Delegate to parent unconditionally if not already attempted
+        if (!delegateFirst) {
+            url = parent.getResource(name);
+            if (url != null) {
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning '" + url.toString() + "'");
+                return (url);
+            }
+        }
+
+        // (4) Resource was not found
+        if (log.isDebugEnabled())
+            log.debug("  --> Resource not found, returning null");
+        return (null);
+
+    }
+
+
+
+    /**
+     * Find the resource with the given name, and return an input stream
+     * that can be used for reading it.  The search order is as described
+     * for <code>getResource()</code>, after checking to see if the resource
+     * data has been previously cached.  If the resource cannot be found,
+     * return <code>null</code>.
+     *
+     * @param name Name of the resource to return an input stream for
+     */
+    @Override
+    public InputStream getResourceAsStream(String name) {
+
+        if (log.isDebugEnabled())
+            log.debug("getResourceAsStream(" + name + ")");
+
+        checkStateForResourceLoading(name);
+
+        InputStream stream = null;
+
+        boolean delegateFirst = delegate || filter(name, false);
+
+        // (1) Delegate to parent if requested
+        if (delegateFirst) {
+            if (log.isDebugEnabled())
+                log.debug("  Delegating to parent classloader " + parent);
+            stream = parent.getResourceAsStream(name);
+            if (stream != null) {
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning stream from parent");
+                return stream;
+            }
+        }
+
+        // (2) Search local repositories
+        if (log.isDebugEnabled())
+            log.debug("  Searching local repositories");
+        String path = nameToPath(name);
+        WebResource resource = resources.getClassLoaderResource(path);
+        if (resource.exists()) {
+            stream = resource.getInputStream();
+            trackLastModified(path, resource);
+        }
+        try {
+            if (hasExternalRepositories && stream == null) {
+                URL url = super.findResource(name);
+                stream = url.openStream();
+            }
+        } catch (IOException e) {
+            // Ignore
+        }
+        if (stream != null) {
+            if (log.isDebugEnabled())
+                log.debug("  --> Returning stream from local");
+            return stream;
+        }
+
+        // (3) Delegate to parent unconditionally
+        if (!delegateFirst) {
+            if (log.isDebugEnabled())
+                log.debug("  Delegating to parent classloader unconditionally " + parent);
+            stream = parent.getResourceAsStream(name);
+            if (stream != null) {
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning stream from parent");
+                return stream;
+            }
+        }
+
+        // (4) Resource was not found
+        if (log.isDebugEnabled())
+            log.debug("  --> Resource not found, returning null");
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    protected void checkStateForResourceLoading(String resource) throws IllegalStateException {
+        // It is not permitted to load resources once the web application has
+        // been stopped.
+        if (!state.isAvailable()) {
+            String msg = sm.getString("webappClassLoader.stopped", resource);
+            IllegalStateException ise = new IllegalStateException(msg);
+            log.info(msg, ise);
+            throw ise;
+        }
+    }

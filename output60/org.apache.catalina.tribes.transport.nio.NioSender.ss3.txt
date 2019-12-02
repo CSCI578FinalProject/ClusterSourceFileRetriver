@@ -1,0 +1,96 @@
+14
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void completeConnect() throws SocketException {
+        //we connected, register ourselves for writing
+        setConnected(true);
+        connecting = false;
+        setRequestCount(0);
+        setConnectTime(System.currentTimeMillis());
+        socketChannel.socket().setSendBufferSize(getTxBufSize());
+        socketChannel.socket().setReceiveBufferSize(getRxBufSize());
+        socketChannel.socket().setSoTimeout((int)getTimeout());
+        socketChannel.socket().setSoLinger(getSoLingerOn(),getSoLingerOn()?getSoLingerTime():0);
+        socketChannel.socket().setTcpNoDelay(getTcpNoDelay());
+        socketChannel.socket().setKeepAlive(getSoKeepAlive());
+        socketChannel.socket().setReuseAddress(getSoReuseAddress());
+        socketChannel.socket().setOOBInline(getOoBInline());
+        socketChannel.socket().setSoLinger(getSoLingerOn(),getSoLingerTime());
+        socketChannel.socket().setTrafficClass(getSoTrafficClass());
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * connect - blocking in this operation
+     */
+    public synchronized void connect() throws IOException {
+        if ( connecting ) return;
+        connecting = true;
+        if ( isConnected() ) throw new IOException("NioSender is already in connected state.");
+        if ( readbuf == null ) {
+            readbuf = getReadBuffer();
+        } else {
+            readbuf.clear();
+        }
+        if ( writebuf == null ) {
+            writebuf = getWriteBuffer();
+        } else {
+            writebuf.clear();
+        }
+        
+        InetSocketAddress addr = new InetSocketAddress(getAddress(),getPort());
+        if ( socketChannel != null ) throw new IOException("Socket channel has already been established. Connection might be in progress.");
+        socketChannel = SocketChannel.open();
+        socketChannel.configureBlocking(false);
+        if ( socketChannel.connect(addr) ) {
+            completeConnect();
+            socketChannel.register(getSelector(), SelectionKey.OP_WRITE, this);
+        } else {
+            socketChannel.register(getSelector(), SelectionKey.OP_CONNECT, this);
+        }
+    }
+
+    
+
+    public void disconnect() {
+        try {
+            connecting = false;
+            setConnected(false);
+            if ( socketChannel != null ) {
+                try {
+                    try {socketChannel.socket().close();}catch ( Exception x){}
+                    //error free close, all the way
+                    //try {socket.shutdownOutput();}catch ( Exception x){}
+                    //try {socket.shutdownInput();}catch ( Exception x){}
+                    //try {socket.close();}catch ( Exception x){}
+                    try {socketChannel.close();}catch ( Exception x){}
+                }finally {
+                    socketChannel = null;
+                }
+            }
+        } catch ( Exception x ) {
+            log.error("Unable to disconnect NioSender. msg="+x.getMessage());
+            if ( log.isDebugEnabled() ) log.debug("Unable to disconnect NioSender. msg="+x.getMessage(),x);
+        } finally {
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    private ByteBuffer getWriteBuffer() {
+        return getBuffer(getTxBufSize());
+    }
+-----CSCI578-----

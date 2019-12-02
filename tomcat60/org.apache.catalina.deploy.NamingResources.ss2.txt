@@ -1,0 +1,118 @@
+6
+
+    public boolean getOverride() {
+        return (this.override);
+    }
+
+
+    /**
+     * Add an environment entry for this web application.
+     *
+     * @param environment New environment entry
+     */
+    public void addEnvironment(ContextEnvironment environment) {
+
+        if (entries.containsKey(environment.getName())) {
+            ContextEnvironment ce = findEnvironment(environment.getName());
+            ContextResourceLink rl = findResourceLink(environment.getName());
+            if (ce != null) {
+                if (ce.getOverride()) {
+                    removeEnvironment(environment.getName());
+                } else {
+                    return;
+                }
+            } else if (rl != null) {
+                // Link. Need to look at the global resources
+                NamingResources global =
+                    ServerFactory.getServer().getGlobalNamingResources();
+                if (global.findEnvironment(rl.getGlobal()) != null) {
+                    if (global.findEnvironment(rl.getGlobal()).getOverride()) {
+                        removeResourceLink(environment.getName());
+                    } else {
+                        return;
+                    }
+                }
+            } else {
+                // It exists but it isn't an env or a res link...
+                return;
+            }
+        }
+        
+        entries.put(environment.getName(), environment.getType());
+
+        synchronized (envs) {
+            environment.setNamingResources(this);
+            envs.put(environment.getName(), environment);
+        }
+        support.firePropertyChange("environment", null, environment);
+
+    }
+
+
+    /**
+     * Return the environment entry with the specified name, if any;
+     * otherwise, return <code>null</code>.
+     *
+     * @param name Name of the desired environment entry
+     */
+    public ContextEnvironment findEnvironment(String name) {
+
+        synchronized (envs) {
+            return ((ContextEnvironment) envs.get(name));
+        }
+
+    }
+
+
+    /**
+     * Return the set of defined environment entries for this web
+     * application.  If none have been defined, a zero-length array
+     * is returned.
+     */
+    public ContextEnvironment[] findEnvironments() {
+
+        synchronized (envs) {
+            ContextEnvironment results[] = new ContextEnvironment[envs.size()];
+            return ((ContextEnvironment[]) envs.values().toArray(results));
+        }
+
+    }
+
+
+    /**
+     * Return the resource link with the specified name, if any;
+     * otherwise return <code>null</code>.
+     *
+     * @param name Name of the desired resource link
+     */
+    public ContextResourceLink findResourceLink(String name) {
+
+        synchronized (resourceLinks) {
+            return ((ContextResourceLink) resourceLinks.get(name));
+        }
+
+    }
+
+
+    /**
+     * Return the defined resource links for this application.  If
+     * none have been defined, a zero-length array is returned.
+     */
+    public ContextResourceLink[] findResourceLinks() {
+
+        synchronized (resourceLinks) {
+            ContextResourceLink results[] = 
+                new ContextResourceLink[resourceLinks.size()];
+            return ((ContextResourceLink[]) resourceLinks.values()
+                    .toArray(results));
+        }
+
+    }
+
+    public String getType() {
+        return (this.type);
+    }
+
+    public String getGlobal() {
+        return (this.global);
+    }

@@ -1,0 +1,51 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Create a File object based on the current log file name.
+     * Directories are created as needed but the underlying file
+     * is not created or opened.
+     *
+     * @param useDateStamp include the timestamp in the file name.
+     * @return the log file object
+     */
+    private File getLogFile(boolean useDateStamp) {
+
+        // Create the directory if necessary
+        File dir = new File(directory);
+        if (!dir.isAbsolute()) {
+            dir = new File(getContainer().getCatalinaBase(), directory);
+        }
+        if (!dir.mkdirs() && !dir.isDirectory()) {
+            log.error(sm.getString("accessLogValve.openDirFail", dir));
+        }
+
+        // Calculate the current log file name
+        File pathname;
+        if (useDateStamp) {
+            pathname = new File(dir.getAbsoluteFile(), prefix + dateStamp
+                    + suffix);
+        } else {
+            pathname = new File(dir.getAbsoluteFile(), prefix + suffix);
+        }
+        File parent = pathname.getParentFile();
+        if (!parent.mkdirs() && !parent.isDirectory()) {
+            log.error(sm.getString("accessLogValve.openDirFail", parent));
+        }
+        return pathname;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Obtain the location of CATALINA_BASE.
+     *
+     * @return  The location of CATALINA_BASE.
+     */
+    public File getCatalinaBase();

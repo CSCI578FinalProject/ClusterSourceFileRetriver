@@ -1,0 +1,311 @@
+18
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------------- Rule Methods
+
+
+    /**
+     * Implemented to replace the content handler currently in use by a 
+     * NodeBuilder.
+     * 
+     * @param namespaceURI the namespace URI of the matching element, or an 
+     *   empty string if the parser is not namespace aware or the element has
+     *   no namespace
+     * @param name the local name if the parser is namespace aware, or just 
+     *   the element name otherwise
+     * @param attributes The attribute list of this element
+     * @throws Exception indicates a JAXP configuration problem
+     */
+    public void begin(String namespaceURI, String name, Attributes attributes)
+        throws Exception {
+
+        XMLReader xmlReader = getDigester().getXMLReader();
+        Document doc = documentBuilder.newDocument();
+        NodeBuilder builder = null;
+        if (nodeType == Node.ELEMENT_NODE) {
+            Element element = null;
+            if (getDigester().getNamespaceAware()) {
+                element =
+                    doc.createElementNS(namespaceURI, name);
+                for (int i = 0; i < attributes.getLength(); i++) {
+                    element.setAttributeNS(attributes.getURI(i),
+                                           attributes.getLocalName(i),
+                                           attributes.getValue(i));
+                }
+            } else {
+                element = doc.createElement(name);
+                for (int i = 0; i < attributes.getLength(); i++) {
+                    element.setAttribute(attributes.getQName(i),
+                                         attributes.getValue(i));
+                }
+            }
+            builder = new NodeBuilder(doc, element);
+        } else {
+            builder = new NodeBuilder(doc, doc.createDocumentFragment());
+        }
+        xmlReader.setContentHandler(builder);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the "namespace aware" flag for parsers we create.
+     */
+    public boolean getNamespaceAware() {
+
+        return (this.namespaceAware);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Handle the beginning of an XML element.
+     *
+     * @param attributes The attributes of this element
+     *
+     * @exception Exception if a processing error occurs
+     */
+    public void begin(String namespace, String nameX, Attributes attributes)
+        throws Exception {
+
+        for (int i = 0; i < attributes.getLength(); i++) {
+            String name = attributes.getLocalName(i);
+            if ("".equals(name)) {
+                name = attributes.getQName(i);
+            }
+            String value = attributes.getValue(i);
+            if ( !excludes.containsKey(name)) {
+                if (!digester.isFakeAttribute(digester.peek(), name) 
+                        && !IntrospectionUtils.setProperty(digester.peek(), name, value) 
+                        && digester.getRulesValidation()) {
+                    digester.getLogger().warn("[SetAllPropertiesRule]{" + digester.getMatch() +
+                            "} Setting property '" + name + "' to '" +
+                            value + "' did not find a matching property.");
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------------- Constructors
+
+
+    // ----------------------------------------------------- Instance Variables
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Handle the beginning of an XML element.
+     *
+     * @param attributes The attributes of this element
+     *
+     * @exception Exception if a processing error occurs
+     */
+    public void begin(String namespace, String nameX, Attributes attributes)
+        throws Exception {
+
+        for (int i = 0; i < attributes.getLength(); i++) {
+            String name = attributes.getLocalName(i);
+            if ("".equals(name)) {
+                name = attributes.getQName(i);
+            }
+            if ("path".equals(name) || "docBase".equals(name)) {
+                continue;
+            }
+            String value = attributes.getValue(i);
+            if (!digester.isFakeAttribute(digester.peek(), name) 
+                    && !IntrospectionUtils.setProperty(digester.peek(), name, value) 
+                    && digester.getRulesValidation()) {
+                digester.getLogger().warn("[SetContextPropertiesRule]{" + digester.getMatch() +
+                        "} Setting property '" + name + "' to '" +
+                        value + "' did not find a matching property.");
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the beginning of this element.
+     *
+     * @param attributes The attribute list of this element
+     */
+    public void begin(Attributes attributes) throws Exception {
+        
+        // Populate the corresponding properties of the top object
+        Object top = digester.peek();
+        if (digester.log.isDebugEnabled()) {
+            if (top != null) {
+                digester.log.debug("[SetPropertiesRule]{" + digester.match +
+                                   "} Set " + top.getClass().getName() +
+                                   " properties");
+            } else {
+                digester.log.debug("[SetPropertiesRule]{" + digester.match +
+                                   "} Set NULL properties");
+            }
+        }
+        
+        // set up variables for custom names mappings
+        int attNamesLength = 0;
+        if (attributeNames != null) {
+            attNamesLength = attributeNames.length;
+        }
+        int propNamesLength = 0;
+        if (propertyNames != null) {
+            propNamesLength = propertyNames.length;
+        }
+        
+        for (int i = 0; i < attributes.getLength(); i++) {
+            String name = attributes.getLocalName(i);
+            if ("".equals(name)) {
+                name = attributes.getQName(i);
+            }
+            String value = attributes.getValue(i);
+            
+            // we'll now check for custom mappings
+            for (int n = 0; n<attNamesLength; n++) {
+                if (name.equals(attributeNames[n])) {
+                    if (n < propNamesLength) {
+                        // set this to value from list
+                        name = propertyNames[n];
+                    
+                    } else {
+                        // set name to null
+                        // we'll check for this later
+                        name = null;
+                    }
+                    break;
+                }
+            } 
+            
+            if (digester.log.isDebugEnabled()) {
+                digester.log.debug("[SetPropertiesRule]{" + digester.match +
+                        "} Setting property '" + name + "' to '" +
+                        value + "'");
+            }
+            if (!digester.isFakeAttribute(top, name) 
+                    && !IntrospectionUtils.setProperty(top, name, value) 
+                    && digester.getRulesValidation()) {
+                digester.log.warn("[SetPropertiesRule]{" + digester.match +
+                        "} Setting property '" + name + "' to '" +
+                        value + "' did not find a matching property.");
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the beginning of this element.
+     *
+     * @param attributes The attribute list of this element
+     *
+     * @exception NoSuchMethodException if the bean does not
+     *  have a writeable property of the specified name
+     */
+    public void begin(Attributes attributes) throws Exception {
+
+        // Identify the actual property name and value to be used
+        String actualName = null;
+        String actualValue = null;
+        for (int i = 0; i < attributes.getLength(); i++) {
+            String name = attributes.getLocalName(i);
+            if ("".equals(name)) {
+                name = attributes.getQName(i);
+            }
+            String value = attributes.getValue(i);
+            if (name.equals(this.name)) {
+                actualName = value;
+            } else if (name.equals(this.value)) {
+                actualValue = value;
+            }
+        }
+
+        // Get a reference to the top object
+        Object top = digester.peek();
+
+        // Log some debugging information
+        if (digester.log.isDebugEnabled()) {
+            digester.log.debug("[SetPropertyRule]{" + digester.match +
+                    "} Set " + top.getClass().getName() + " property " +
+                    actualName + " to " + actualValue);
+        }
+
+        // Set the property (with conversion as necessary)
+        if (!digester.isFakeAttribute(top, actualName) 
+                && !IntrospectionUtils.setProperty(top, actualName, actualValue) 
+                && digester.getRulesValidation()) {
+            digester.log.warn("[SetPropertyRule]{" + digester.match +
+                    "} Setting property '" + name + "' to '" +
+                    value + "' did not find a matching property.");
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Determine if an attribute is a fake attribute.
+     */
+    public boolean isFakeAttribute(Object object, String name) {
+
+        if (fakeAttributes == null) {
+            return false;
+        }
+        List<String> result = fakeAttributes.get(object.getClass());
+        if (result == null) {
+            result = fakeAttributes.get(Object.class);
+        }
+        if (result == null) {
+            return false;
+        } else {
+            return result.contains(name);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the rules validation flag.
+     */
+    public boolean getRulesValidation() {
+
+        return (this.rulesValidation);
+
+    }

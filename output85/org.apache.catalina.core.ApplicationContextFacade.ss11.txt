@@ -1,0 +1,97 @@
+5
+-----CSCI578-----
+
+
+
+    @Override
+    public String getInitParameter(final String name) {
+        // Special handling for XML settings as the context setting must
+        // always override anything that might have been set by an application.
+        if (Globals.JASPER_XML_VALIDATION_TLD_INIT_PARAM.equals(name) &&
+                context.getTldValidation()) {
+            return "true";
+        }
+        if (Globals.JASPER_XML_BLOCK_EXTERNAL_INIT_PARAM.equals(name)) {
+            if (!context.getXmlBlockExternal()) {
+                // System admin has explicitly changed the default
+                return "false";
+            }
+        }
+        return parameters.get(name);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getInitParameter(String name) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (String) doPrivileged("getInitParameter",
+                                         new Object[]{name});
+        } else {
+            return context.getInitParameter(name);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void declareRoles(String... roleNames) {
+
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            //TODO Spec breaking enhancement to ignore this restriction
+            throw new IllegalStateException(
+                    sm.getString("applicationContext.addRole.ise",
+                            getContextPath()));
+        }
+
+        if (roleNames == null) {
+            throw new IllegalArgumentException(
+                    sm.getString("applicationContext.roles.iae",
+                            getContextPath()));
+        }
+
+        for (String role : roleNames) {
+            if (role == null || "".equals(role)) {
+                throw new IllegalArgumentException(
+                        sm.getString("applicationContext.role.iae",
+                                getContextPath()));
+            }
+            context.addSecurityRole(role);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new security role for this web application.
+     *
+     * @param role New security role
+     */
+    @Override
+    public void addSecurityRole(String role) {
+
+        synchronized (securityRolesLock) {
+            String results[] =new String[securityRoles.length + 1];
+            for (int i = 0; i < securityRoles.length; i++)
+                results[i] = securityRoles[i];
+            results[securityRoles.length] = role;
+            securityRoles = results;
+        }
+        fireContainerEvent("addSecurityRole", role);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void declareRoles(String... roleNames) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            doPrivileged("declareRoles", new Object[]{roleNames});
+        } else {
+            context.declareRoles(roleNames);
+        }
+    }

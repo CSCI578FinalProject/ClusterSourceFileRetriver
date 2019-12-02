@@ -1,0 +1,436 @@
+7
+-----CSCI578-----
+
+
+
+    /**
+     * Configure the repositories for our class loader, based on the
+     * associated Context.
+     * @throws IOException 
+     */
+    private void setRepositories() throws IOException {
+
+        if (!(container instanceof Context))
+            return;
+        ServletContext servletContext =
+            ((Context) container).getServletContext();
+        if (servletContext == null)
+            return;
+
+        loaderRepositories=new ArrayList();
+        // Loading the work directory
+        File workDir =
+            (File) servletContext.getAttribute(Globals.WORK_DIR_ATTR);
+        if (workDir == null) {
+            log.info("No work dir for " + servletContext);
+        }
+
+        if( log.isDebugEnabled()) 
+            log.debug(sm.getString("webappLoader.deploy", workDir.getAbsolutePath()));
+
+        classLoader.setWorkDir(workDir);
+
+        DirContext resources = container.getResources();
+
+        // Setting up the class repository (/WEB-INF/classes), if it exists
+
+        String classesPath = "/WEB-INF/classes";
+        DirContext classes = null;
+
+        try {
+            Object object = resources.lookup(classesPath);
+            if (object instanceof DirContext) {
+                classes = (DirContext) object;
+            }
+        } catch(NamingException e) {
+            // Silent catch: it's valid that no /WEB-INF/classes collection
+            // exists
+        }
+
+        if (classes != null) {
+
+            File classRepository = null;
+
+            String absoluteClassesPath =
+                servletContext.getRealPath(classesPath);
+
+            if (absoluteClassesPath != null) {
+
+                classRepository = new File(absoluteClassesPath);
+
+            } else {
+
+                classRepository = new File(workDir, classesPath);
+                classRepository.mkdirs();
+                if (!copyDir(classes, classRepository)) {
+                    throw new IOException(
+                            sm.getString("webappLoader.copyFailure"));
+                }
+
+            }
+
+            if(log.isDebugEnabled())
+                log.debug(sm.getString("webappLoader.classDeploy", classesPath,
+                             classRepository.getAbsolutePath()));
+
+
+            // Adding the repository to the class loader
+            classLoader.addRepository(classesPath + "/", classRepository);
+            loaderRepositories.add(classesPath + "/" );
+
+        }
+
+        // Setting up the JAR repository (/WEB-INF/lib), if it exists
+
+        String libPath = "/WEB-INF/lib";
+
+        classLoader.setJarPath(libPath);
+
+        DirContext libDir = null;
+        // Looking up directory /WEB-INF/lib in the context
+        try {
+            Object object = resources.lookup(libPath);
+            if (object instanceof DirContext)
+                libDir = (DirContext) object;
+        } catch(NamingException e) {
+            // Silent catch: it's valid that no /WEB-INF/lib collection
+            // exists
+        }
+
+        if (libDir != null) {
+
+            boolean copyJars = false;
+            String absoluteLibPath = servletContext.getRealPath(libPath);
+
+            File destDir = null;
+
+            if (absoluteLibPath != null) {
+                destDir = new File(absoluteLibPath);
+            } else {
+                copyJars = true;
+                destDir = new File(workDir, libPath);
+                destDir.mkdirs();
+            }
+
+            // Looking up directory /WEB-INF/lib in the context
+            NamingEnumeration<NameClassPair> enumeration = null;
+            try {
+                enumeration = libDir.list("");
+            } catch (NamingException e) {
+                IOException ioe = new IOException(sm.getString(
+                        "webappLoader.namingFailure", libPath));
+                ioe.initCause(e);
+                throw ioe;
+            }
+                while (enumeration.hasMoreElements()) {
+                NameClassPair ncPair = enumeration.nextElement();
+                String filename = libPath + "/" + ncPair.getName();
+                    if (!filename.endsWith(".jar"))
+                        continue;
+
+                    // Copy JAR in the work directory, always (the JAR file
+                    // would get locked otherwise, which would make it
+                    // impossible to update it or remove it at runtime)
+                File destFile = new File(destDir, ncPair.getName());
+
+                    if( log.isDebugEnabled())
+                    log.debug(sm.getString("webappLoader.jarDeploy", filename,
+                                     destFile.getAbsolutePath()));
+
+                // Bug 45403 - Explicitly call lookup() on the name to check
+                // that the resource is readable. We cannot use resources
+                // returned by listBindings(), because that lists all of them,
+                // but does not perform the necessary checks on each.
+                Object obj = null;
+                try {
+                    obj = libDir.lookup(ncPair.getName());
+                } catch (NamingException e) {
+                    IOException ioe = new IOException(sm.getString(
+                            "webappLoader.namingFailure", filename));
+                    ioe.initCause(e);
+                    throw ioe;
+                }
+                    
+                    if (!(obj instanceof Resource))
+                        continue;
+                    
+                    Resource jarResource = (Resource) obj;
+                    
+                    if (copyJars) {
+                        if (!copy(jarResource.streamContent(),
+                              new FileOutputStream(destFile))) {
+                        throw new IOException(
+                                sm.getString("webappLoader.copyFailure"));
+                    }
+                }
+
+                    try {
+                        JarFile jarFile = new JarFile(destFile);
+                        classLoader.addJar(filename, jarFile, destFile);
+                    } catch (Exception ex) {
+                        // Catch the exception if there is an empty jar file
+                    // Should ignore and continue loading other jar files 
+                        // in the dir
+                    }
+                    
+                    loaderRepositories.add( filename );
+                }
+            }
+        }
+-----CSCI578-----
+
+
+
+    /**
+     * Change the Jar path.
+     */
+    public void setJarPath(String jarPath) {
+
+        this.jarPath = jarPath;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Change the work directory.
+     */
+    public void setWorkDir(File workDir) {
+        this.loaderDir = new File(workDir, "loader");
+        if (loaderDir == null) {
+            canonicalLoaderDir = null;
+        } else {
+            try {
+                canonicalLoaderDir = loaderDir.getCanonicalPath();
+                if (!canonicalLoaderDir.endsWith(File.separator)) {
+                    canonicalLoaderDir += File.separator;
+                }
+            } catch (IOException ioe) {
+                canonicalLoaderDir = null;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Copy a file to the specified temp directory. This is required only
+     * because Jasper depends on it.
+     */
+    private boolean copy(InputStream is, OutputStream os) {
+
+        try {
+            byte[] buf = new byte[4096];
+            while (true) {
+                int len = is.read(buf);
+                if (len < 0)
+                    break;
+                os.write(buf, 0, len);
+            }
+            is.close();
+            os.close();
+        } catch (IOException e) {
+            return false;
+        }
+
+        return true;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Copy directory.
+     */
+    private boolean copyDir(DirContext srcDir, File destDir) {
+
+        try {
+
+            NamingEnumeration enumeration = srcDir.list("");
+            while (enumeration.hasMoreElements()) {
+                NameClassPair ncPair =
+                    (NameClassPair) enumeration.nextElement();
+                String name = ncPair.getName();
+                Object object = srcDir.lookup(name);
+                File currentFile = new File(destDir, name);
+                if (object instanceof Resource) {
+                    InputStream is = ((Resource) object).streamContent();
+                    OutputStream os = new FileOutputStream(currentFile);
+                    if (!copy(is, os))
+                        return false;
+                } else if (object instanceof InputStream) {
+                    OutputStream os = new FileOutputStream(currentFile);
+                    if (!copy((InputStream) object, os))
+                        return false;
+                } else if (object instanceof DirContext) {
+                    currentFile.mkdir();
+                    if (!copyDir((DirContext) object, currentFile))
+                        return false;
+                }
+            }
+
+        } catch (NamingException e) {
+            return false;
+        } catch (IOException e) {
+            return false;
+        }
+
+        return true;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * If there is a Java SecurityManager create a read FilePermission
+     * or JndiPermission for the file directory path.
+     *
+     * @param path file directory path
+     */
+    public void addPermission(String path) {
+        if (path == null) {
+            return;
+        }
+
+        if (securityManager != null) {
+            Permission permission = null;
+            if( path.startsWith("jndi:") || path.startsWith("jar:jndi:") ) {
+                if (!path.endsWith("/")) {
+                    path = path + "/";
+                }
+                permission = new JndiPermission(path + "*");
+                addPermission(permission);
+            } else {
+                if (!path.endsWith(File.separator)) {
+                    permission = new FilePermission(path, "read");
+                    addPermission(permission);
+                    path = path + File.separator;
+                }
+                permission = new FilePermission(path + "-", "read");
+                addPermission(permission);
+            }
+        }
+    }
+
+
+
+    /**
+     * If there is a Java SecurityManager create a read FilePermission
+     * or JndiPermission for URL.
+     *
+     * @param url URL for a file or directory on local system
+     */
+    public void addPermission(URL url) {
+        if (url != null) {
+            addPermission(url.toString());
+        }
+    }
+
+
+
+    /**
+     * If there is a Java SecurityManager create a Permission.
+     *
+     * @param permission The permission
+     */
+    public void addPermission(Permission permission) {
+        if ((securityManager != null) && (permission != null)) {
+            permissionList.add(permission);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Configure associated class loader permissions.
+     */
+    private void setPermissions() {
+
+        if (!Globals.IS_SECURITY_ENABLED)
+            return;
+        if (!(container instanceof Context))
+            return;
+
+        // Tell the class loader the root of the context
+        ServletContext servletContext =
+            ((Context) container).getServletContext();
+
+        // Assigning permissions for the work directory
+        File workDir =
+            (File) servletContext.getAttribute(Globals.WORK_DIR_ATTR);
+        if (workDir != null) {
+            try {
+                String workDirPath = workDir.getCanonicalPath();
+                classLoader.addPermission
+                    (new FilePermission(workDirPath, "read,write"));
+                classLoader.addPermission
+                    (new FilePermission(workDirPath + File.separator + "-", 
+                                        "read,write,delete"));
+            } catch (IOException e) {
+                // Ignore
+            }
+        }
+
+        try {
+
+            URL rootURL = servletContext.getResource("/");
+            classLoader.addPermission(rootURL);
+
+            String contextRoot = servletContext.getRealPath("/");
+            if (contextRoot != null) {
+                try {
+                    contextRoot = (new File(contextRoot)).getCanonicalPath();
+                    classLoader.addPermission(contextRoot);
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+
+            URL classesURL = servletContext.getResource("/WEB-INF/classes/");
+            classLoader.addPermission(classesURL);
+            URL libURL = servletContext.getResource("/WEB-INF/lib/");
+            classLoader.addPermission(libURL);
+
+            if (contextRoot != null) {
+
+                if (libURL != null) {
+                    File rootDir = new File(contextRoot);
+                    File libDir = new File(rootDir, "WEB-INF/lib/");
+                    try {
+                        String path = libDir.getCanonicalPath();
+                        classLoader.addPermission(path);
+                    } catch (IOException e) {
+                    }
+                }
+
+            } else {
+
+                if (workDir != null) {
+                    if (libURL != null) {
+                        File libDir = new File(workDir, "WEB-INF/lib/");
+                        try {
+                            String path = libDir.getCanonicalPath();
+                            classLoader.addPermission(path);
+                        } catch (IOException e) {
+                        }
+                    }
+                    if (classesURL != null) {
+                        File classesDir = new File(workDir, "WEB-INF/classes/");
+                        try {
+                            String path = classesDir.getCanonicalPath();
+                            classLoader.addPermission(path);
+                        } catch (IOException e) {
+                        }
+                    }
+                }
+
+            }
+
+        } catch (MalformedURLException e) {
+        }
+
+    }

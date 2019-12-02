@@ -1,0 +1,82 @@
+10
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Process the specified connection.
+     * @param socket The socket channel
+     * @return <code>true</code> if the socket was correctly configured
+     *  and processing may continue, <code>false</code> if the socket needs to be
+     *  close immediately
+     */
+    protected boolean setSocketOptions(AsynchronousSocketChannel socket) {
+        try {
+            socketProperties.setProperties(socket);
+            Nio2Channel channel = nioChannels.pop();
+            if (channel == null) {
+                SocketBufferHandler bufhandler = new SocketBufferHandler(
+                        socketProperties.getAppReadBufSize(),
+                        socketProperties.getAppWriteBufSize(),
+                        socketProperties.getDirectBuffer());
+                if (isSSLEnabled()) {
+                    channel = new SecureNio2Channel(bufhandler, this);
+                } else {
+                    channel = new Nio2Channel(bufhandler);
+                }
+            }
+            Nio2SocketWrapper socketWrapper = new Nio2SocketWrapper(channel, this);
+            channel.reset(socket, socketWrapper);
+            socketWrapper.setReadTimeout(getSocketProperties().getSoTimeout());
+            socketWrapper.setWriteTimeout(getSocketProperties().getSoTimeout());
+            socketWrapper.setKeepAliveLeft(Nio2Endpoint.this.getMaxKeepAliveRequests());
+            socketWrapper.setSecure(isSSLEnabled());
+            socketWrapper.setReadTimeout(getSoTimeout());
+            socketWrapper.setWriteTimeout(getSoTimeout());
+            // Continue processing on another thread
+            return processSocket0(socketWrapper, SocketEvent.OPEN_READ, true);
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            log.error("",t);
+        }
+        // Tell to close the socket
+        return false;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Reset the channel.
+     *
+     * @param channel The new async channel to associate with this NIO2 channel
+     * @param socket  The new socket to associate with this NIO2 channel
+     *
+     * @throws IOException If a problem was encountered resetting the channel
+     */
+    public void reset(AsynchronousSocketChannel channel, SocketWrapperBase<Nio2Channel> socket)
+            throws IOException {
+        this.sc = channel;
+        this.socket = socket;
+        bufHandler.reset();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void reset(AsynchronousSocketChannel channel, SocketWrapperBase<Nio2Channel> socket)
+            throws IOException {
+        super.reset(channel, socket);
+        sslEngine = null;
+        sniComplete = false;
+        handshakeComplete = false;
+        closed = false;
+        closing = false;
+        netInBuffer.clear();
+    }

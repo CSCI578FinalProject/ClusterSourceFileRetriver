@@ -1,0 +1,2896 @@
+120
+-----CSCI578-----
+
+
+    /**
+     * @param host The host to set.
+     */
+    public void setHost(String host) {
+        this.host = host;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Change Request Session id
+     * @param request current request
+     * @param response current response
+     * @param sessionId
+     *            original session id
+     * @param newSessionID
+     *            new session id for node migration
+     */
+    protected void changeRequestSessionID(Request request, Response response, String sessionId, String newSessionID) {
+        request.changeSessionId(newSessionID);
+
+        // set orginal sessionid at request, to allow application detect the
+        // change
+        if (sessionIdAttribute != null && !"".equals(sessionIdAttribute)) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("jvmRoute.set.orignalsessionid",sessionIdAttribute,sessionId));
+            }
+            request.setAttribute(sessionIdAttribute, sessionId);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * handle possible session turn over.
+     * 
+     * @see JvmRouteBinderValve#handleJvmRoute(Request, Response, String, String)
+     * @param request current request
+     * @param response current response
+     */
+    protected void handlePossibleTurnover(Request request, Response response) {
+        String sessionID = request.getRequestedSessionId() ;
+        if (sessionID != null) {
+            long t1 = System.currentTimeMillis();
+            String jvmRoute = getLocalJvmRoute(request);
+            if (jvmRoute == null) {
+                if (log.isDebugEnabled())
+                    log.debug(sm.getString("jvmRoute.missingJvmRouteAttribute"));
+                return;
+            }
+            handleJvmRoute( request, response, sessionID, jvmRoute);
+            if (log.isDebugEnabled()) {
+                long t2 = System.currentTimeMillis();
+                long time = t2 - t1;
+                log.debug(sm.getString("jvmRoute.turnoverInfo", new Long(time)));
+            }
+        }
+    }
+-----CSCI578-----
+
+	/**
+	 * @param contextPath The contextPath to set.
+	 */
+	public void setContextPath(String contextPath) {
+		this.contextPath = contextPath;
+	}
+-----CSCI578-----
+
+
+    /**
+     * change session id and send to all cluster nodes
+     * 
+     * @param request current request
+     * @param response current response
+     * @param sessionId
+     *            original session id
+     * @param newSessionID
+     *            new session id for node migration
+     * @param catalinaSession
+     *            current session with original session id
+     */
+    protected void changeSessionID(Request request,
+            Response response, String sessionId, String newSessionID, Session catalinaSession) {
+        lifecycle.fireLifecycleEvent("Before session migration",
+                catalinaSession);
+        catalinaSession.setId(newSessionID, false);
+        // FIXME: Why we remove change data from other running request?
+        // setId also trigger resetDeltaRequest!!
+        if (catalinaSession instanceof DeltaSession)
+            ((DeltaSession) catalinaSession).resetDeltaRequest();
+        changeRequestSessionID(request, response, sessionId, newSessionID);
+
+        if (getCluster() != null) {
+            // now sending the change to all other clusternode!
+            ClusterManager manager = (ClusterManager)catalinaSession.getManager();
+            sendSessionIDClusterBackup(manager,request,sessionId, newSessionID);
+        }
+
+        lifecycle.fireLifecycleEvent("After session migration", catalinaSession);
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("jvmRoute.changeSession", sessionId,
+                    newSessionID));
+        }   
+    }
+-----CSCI578-----
+
+
+	/**
+	 * @param backupSessionID
+	 *            The backupSessionID to set.
+	 */
+	public void setBackupSessionID(String backupSessionID) {
+		this.backupSessionID = backupSessionID;
+	}
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * The string manager for this package.
+     */
+    protected StringManager sm = StringManager.getManager(Constants.Package);
+
+
+    /**
+     * get Cluster DeltaManager
+     * 
+     * @param request current request
+     * @return manager or null
+     */
+    protected Manager getManager(Request request) {
+        Manager manager = request.getContext().getManager();
+        if (log.isDebugEnabled()) {
+            if(manager != null)
+                log.debug(sm.getString("jvmRoute.foundManager", manager,  request.getContext().getName()));
+            else 
+                log.debug(sm.getString("jvmRoute.notFoundManager", manager,  request.getContext().getName()));
+        }
+        return manager;
+    }
+-----CSCI578-----
+
+
+    /**
+     * get jvmroute from engine
+     * 
+     * @param request current request
+     * @return return jvmRoute from ManagerBase or null
+     */
+    protected String getLocalJvmRoute(Request request) {
+        Manager manager = getManager(request);
+        if(manager instanceof ManagerBase)
+            return ((ManagerBase) manager).getJvmRoute();
+        return null ;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Send the changed Sessionid to all clusternodes.
+     * 
+     * @see JvmRouteSessionIDBinderListener#messageReceived(ClusterMessage)
+     * @param manager
+     *            ClusterManager
+     * @param sessionId
+     *            current failed sessionid
+     * @param newSessionID
+     *            new session id, bind to the new cluster node
+     */
+    protected void sendSessionIDClusterBackup(ClusterManager manager,Request request,String sessionId,
+            String newSessionID) {
+        if (!(getManager(request) instanceof BackupManager)) {
+            SessionIDMessage msg = new SessionIDMessage();
+            msg.setOrignalSessionID(sessionId);
+            msg.setBackupSessionID(newSessionID);
+            Context context = request.getContext();
+            msg.setContextPath(context.getPath());
+            msg.setHost(context.getParent().getName());
+            if(manager.doDomainReplication()) {
+                cluster.sendClusterDomain(msg);
+            } else {
+                cluster.send(msg);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+	/**
+	 * @param orignalSessionID
+	 *            The orignalSessionID to set.
+	 */
+	public void setOrignalSessionID(String orignalSessionID) {
+		this.orignalSessionID = orignalSessionID;
+	}
+-----CSCI578-----
+
+
+    /**
+     * handle possible session turn over.
+     * 
+     * @see JvmRouteBinderValve#handleJvmRoute(Request, Response, String, String)
+     * @param request current request
+     * @param response current response
+     */
+    protected void handlePossibleTurnover(Request request, Response response) {
+        String sessionID = request.getRequestedSessionId() ;
+        if (sessionID != null) {
+            long t1 = System.currentTimeMillis();
+            String jvmRoute = getLocalJvmRoute(request);
+            if (jvmRoute == null) {
+                if (log.isDebugEnabled())
+                    log.debug(sm.getString("jvmRoute.missingJvmRouteAttribute"));
+                return;
+            }
+            handleJvmRoute( request, response, sessionID, jvmRoute);
+            if (log.isDebugEnabled()) {
+                long t2 = System.currentTimeMillis();
+                long time = t2 - t1;
+                log.debug(sm.getString("jvmRoute.turnoverInfo", new Long(time)));
+            }
+        }
+    }
+
+    
+    /**
+     * Handle jvmRoute stickyness after tomcat instance failed. After this
+     * correction a new Cookie send to client with new jvmRoute and the
+     * SessionID change propage to the other cluster nodes.
+     * 
+     * @param request current request
+     * @param response
+     *            Tomcat Response
+     * @param sessionId
+     *            request SessionID from Cookie
+     * @param localJvmRoute
+     *            local jvmRoute
+     */
+    protected void handleJvmRoute(
+            Request request, Response response,String sessionId, String localJvmRoute) {
+        // get requested jvmRoute.
+        String requestJvmRoute = null;
+        int index = sessionId.indexOf(".");
+        if (index > 0) {
+            requestJvmRoute = sessionId
+                    .substring(index + 1, sessionId.length());
+        }
+        if (requestJvmRoute != null && !requestJvmRoute.equals(localJvmRoute)) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("jvmRoute.failover", requestJvmRoute,
+                        localJvmRoute, sessionId));
+            }
+            Session catalinaSession = null;
+            try {
+                catalinaSession = getManager(request).findSession(sessionId);
+            } catch (IOException e) {
+                // Hups!
+            }
+            String id = sessionId.substring(0, index);
+            String newSessionID = id + "." + localJvmRoute;
+            // OK - turnover the session and inform other cluster nodes
+            if (catalinaSession != null) {
+                changeSessionID(request, response, sessionId, newSessionID,
+                        catalinaSession);
+                numberOfSessions++;
+            } else {
+                try {
+                    catalinaSession = getManager(request).findSession(newSessionID);
+                } catch (IOException e) {
+                    // Hups!
+                }
+                if (catalinaSession != null) {
+                    // session is rewrite at other request, rewrite this also
+                    changeRequestSessionID(request, response, sessionId, newSessionID);
+                } else {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("jvmRoute.cannotFindSession",sessionId));
+                    }
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- Logging Properties
+
+
+    /**
+     * <p> Is debug logging currently enabled? </p>
+     *
+     * <p> Call this method to prevent having to perform expensive operations
+     * (for example, <code>String</code> concatenation)
+     * when the log level is more than debug. </p>
+     */
+    public boolean isDebugEnabled();
+-----CSCI578-----
+
+
+
+    /**
+     * <p> Log a message with debug log level. </p>
+     *
+     * @param message log this message
+     */
+    public void debug(Object message);
+
+
+
+    /**
+     * <p> Log an error with debug log level. </p>
+     *
+     * @param message log this message
+     * @param t log this cause
+     */
+    public void debug(Object message, Throwable t);
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Return the Context within which this Request is being processed.
+     */
+    public Context getContext() {
+        return (this.context);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Change the ID of the session that this request is associated with. There
+     * are several things that may trigger an ID change. These include moving
+     * between nodes in a cluster and session fixation prevention during the
+     * authentication process.
+     *
+     * @param newSessionId   The new session ID to use
+     */
+    public void changeSessionId(String newSessionId) {
+        // This should only ever be called if there was an old session ID but
+        // double check to be sure
+        if (requestedSessionId != null && requestedSessionId.length() > 0) {
+            requestedSessionId = newSessionId;
+        }
+
+        if (context != null && !context.getCookies())
+            return;
+
+        if (response != null) {
+            String scName = null;
+            if (context != null) {
+                scName = context.getSessionCookieName();
+            }
+            if (scName == null) {
+                scName = Globals.SESSION_COOKIE_NAME;
+            }
+
+            Cookie newCookie = new Cookie(scName, newSessionId);
+
+            configureSessionCookie(newCookie);
+
+            if (context == null) {
+            	response.addSessionCookieInternal(newCookie, false);
+            } else {
+            	response.addSessionCookieInternal(newCookie,
+            	        context.getUseHttpOnly());
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Configures the given JSESSIONID cookie.
+     *
+     * @param cookie The JSESSIONID cookie to be configured
+     */
+    protected void configureSessionCookie(Cookie cookie) {
+        cookie.setMaxAge(-1);
+
+        Context ctxt = getContext();
+
+        String contextPath = null;
+        if (ctxt != null && !getConnector().getEmptySessionPath()) {
+            if (ctxt.getSessionCookiePath() != null) {
+                contextPath = ctxt.getSessionCookiePath();
+            } else {
+                contextPath = ctxt.getEncodedPath();
+            }
+        }
+        if ((contextPath != null) && (contextPath.length() > 0)) {
+            cookie.setPath(contextPath);
+        } else {
+            cookie.setPath("/");
+        }
+
+        if (ctxt != null && ctxt.getSessionCookieDomain() != null) {
+            cookie.setDomain(ctxt.getSessionCookieDomain());
+        }
+
+        if (isSecure()) {
+            cookie.setSecure(true);
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Notify the cluster of the addition of a Session to
+     * an SSO session and associate the specified single
+     * sign on identifier with the specified Session on the
+     * local node.
+     *
+     * @param ssoId Single sign on identifier
+     * @param session Session to be associated
+     */
+    protected void associate(String ssoId, Session session) {
+
+	if (cluster != null) {
+	    messageNumber++;
+	    SingleSignOnMessage msg =
+		new SingleSignOnMessage(cluster.getLocalMember(),
+					ssoId, session.getId());
+	    Manager mgr = session.getManager();
+	    if ((mgr != null) && (mgr instanceof ClusterManager))
+		msg.setContextName(((ClusterManager) mgr).getName());
+
+	    msg.setAction(SingleSignOnMessage.ADD_SESSION);
+
+	    cluster.sendClusterDomain(msg);
+
+	    if (containerLog.isDebugEnabled())
+		containerLog.debug("SingleSignOnMessage Send with action "
+				   + msg.getAction());
+	}
+
+	associateLocal(ssoId, session);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Notify the cluster of the removal of a Session from an
+     * SSO session and deregister the specified session. If it is the last
+     * session, then also get rid of the single sign on identifier on the
+     * local node.
+     *
+     * @param ssoId Single sign on identifier
+     * @param session Session to be deregistered
+     */
+    protected void deregister(String ssoId, Session session) {
+
+	if (cluster != null) {
+	    messageNumber++;
+	    SingleSignOnMessage msg =
+		new SingleSignOnMessage(cluster.getLocalMember(),
+					ssoId, session.getId());
+	    Manager mgr = session.getManager();
+	    if ((mgr != null) && (mgr instanceof ClusterManager))
+		msg.setContextName(((ClusterManager) mgr).getName());
+
+	    msg.setAction(SingleSignOnMessage.DEREGISTER_SESSION);
+
+	    cluster.sendClusterDomain(msg);
+	    if (containerLog.isDebugEnabled())
+		containerLog.debug("SingleSignOnMessage Send with action "
+				   + msg.getAction());
+	}
+
+	deregisterLocal(ssoId, session);
+
+    }
+
+
+    /**
+     * Notifies the cluster that a single sign on session
+     * has been terminated due to a user logout, deregister
+     * the specified single sign on identifier, and invalidate
+     * any associated sessions on the local node.
+     *
+     * @param ssoId Single sign on identifier to deregister
+     */
+    protected void deregister(String ssoId) {
+
+	if (cluster != null) {
+	    messageNumber++;
+	    SingleSignOnMessage msg =
+		new SingleSignOnMessage(cluster.getLocalMember(),
+					ssoId, null);
+	    msg.setAction(SingleSignOnMessage.LOGOUT_SESSION);
+
+	    cluster.sendClusterDomain(msg);
+	    if (containerLog.isDebugEnabled())
+		containerLog.debug("SingleSignOnMessage Send with action "
+				   + msg.getAction());
+	}
+
+	deregisterLocal(ssoId);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Notify the cluster of the removal of a Session from an
+     * SSO session and deregister the specified session. If it is the last
+     * session, then also get rid of the single sign on identifier on the
+     * local node.
+     *
+     * @param ssoId Single sign on identifier
+     * @param session Session to be deregistered
+     */
+    protected void deregister(String ssoId, Session session) {
+
+	if (cluster != null) {
+	    messageNumber++;
+	    SingleSignOnMessage msg =
+		new SingleSignOnMessage(cluster.getLocalMember(),
+					ssoId, session.getId());
+	    Manager mgr = session.getManager();
+	    if ((mgr != null) && (mgr instanceof ClusterManager))
+		msg.setContextName(((ClusterManager) mgr).getName());
+
+	    msg.setAction(SingleSignOnMessage.DEREGISTER_SESSION);
+
+	    cluster.sendClusterDomain(msg);
+	    if (containerLog.isDebugEnabled())
+		containerLog.debug("SingleSignOnMessage Send with action "
+				   + msg.getAction());
+	}
+
+	deregisterLocal(ssoId, session);
+
+    }
+
+
+    /**
+     * Notifies the cluster that a single sign on session
+     * has been terminated due to a user logout, deregister
+     * the specified single sign on identifier, and invalidate
+     * any associated sessions on the local node.
+     *
+     * @param ssoId Single sign on identifier to deregister
+     */
+    protected void deregister(String ssoId) {
+
+	if (cluster != null) {
+	    messageNumber++;
+	    SingleSignOnMessage msg =
+		new SingleSignOnMessage(cluster.getLocalMember(),
+					ssoId, null);
+	    msg.setAction(SingleSignOnMessage.LOGOUT_SESSION);
+
+	    cluster.sendClusterDomain(msg);
+	    if (containerLog.isDebugEnabled())
+		containerLog.debug("SingleSignOnMessage Send with action "
+				   + msg.getAction());
+	}
+
+	deregisterLocal(ssoId);
+
+    }
+
+
+    /**
+     * Notifies the cluster of the creation of a new SSO entry
+     * and register the specified Principal as being associated
+     * with the specified value for the single sign on identifier.
+     *
+     * @param ssoId Single sign on identifier to register
+     * @param principal Associated user principal that is identified
+     * @param authType Authentication type used to authenticate this
+     *  user principal
+     * @param username Username used to authenticate this user
+     * @param password Password used to authenticate this user
+     */
+    protected void register(String ssoId, Principal principal, String authType,
+                  String username, String password) {
+
+	if (cluster != null) {
+	    messageNumber++;
+	    SingleSignOnMessage msg =
+		new SingleSignOnMessage(cluster.getLocalMember(),
+					ssoId, null);
+	    msg.setAction(SingleSignOnMessage.REGISTER_SESSION);
+	    msg.setAuthType(authType);
+	    msg.setUsername(username);
+	    msg.setPassword(password);
+
+        SerializablePrincipal sp = null;
+        if (principal instanceof GenericPrincipal) {
+            sp = SerializablePrincipal.createPrincipal((GenericPrincipal) principal);
+            msg.setPrincipal(sp);
+        }
+
+	    cluster.sendClusterDomain(msg);
+	    if (containerLog.isDebugEnabled())
+		containerLog.debug("SingleSignOnMessage Send with action "
+				   + msg.getAction());
+	}
+
+	registerLocal(ssoId, principal, authType, username, password);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Notifies the cluster of an update of the security credentials
+     * associated with an SSO session. Updates any <code>SingleSignOnEntry</code>
+     * found under key <code>ssoId</code> with the given authentication data.
+     * <p>
+     * The purpose of this method is to allow an SSO entry that was
+     * established without a username/password combination (i.e. established
+     * following DIGEST or CLIENT-CERT authentication) to be updated with
+     * a username and password if one becomes available through a subsequent
+     * BASIC or FORM authentication.  The SSO entry will then be usable for
+     * reauthentication.
+     * <p>
+     * <b>NOTE:</b> Only updates the SSO entry if a call to
+     * <code>SingleSignOnEntry.getCanReauthenticate()</code> returns
+     * <code>false</code>; otherwise, it is assumed that the SSO entry already
+     * has sufficient information to allow reauthentication and that no update
+     * is needed.
+     *
+     * @param ssoId     identifier of Single sign to be updated
+     * @param principal the <code>Principal</code> returned by the latest
+     *                  call to <code>Realm.authenticate</code>.
+     * @param authType  the type of authenticator used (BASIC, CLIENT-CERT,
+     *                  DIGEST or FORM)
+     * @param username  the username (if any) used for the authentication
+     * @param password  the password (if any) used for the authentication
+     */
+    protected void update(String ssoId, Principal principal, String authType,
+                          String username, String password) {
+
+	if (cluster != null) {
+	    messageNumber++;
+	    SingleSignOnMessage msg =
+		new SingleSignOnMessage(cluster.getLocalMember(),
+					ssoId, null);
+	    msg.setAction(SingleSignOnMessage.UPDATE_SESSION);
+	    msg.setAuthType(authType);
+	    msg.setUsername(username);
+	    msg.setPassword(password);
+
+        SerializablePrincipal sp = null;
+        if (principal instanceof GenericPrincipal) {
+            sp = SerializablePrincipal.createPrincipal((GenericPrincipal) principal);
+            msg.setPrincipal(sp);
+        }
+
+	    cluster.sendClusterDomain(msg);
+	    if (containerLog.isDebugEnabled())
+		containerLog.debug("SingleSignOnMessage Send with action "
+				   + msg.getAction());
+	}
+
+	updateLocal(ssoId, principal, authType, username, password);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a single Session from a SingleSignOn and notify the cluster
+     * of the removal. Called when a session is timed out and no longer active.
+     *
+     * @param ssoId Single sign on identifier from which to remove the session.
+     * @param session the session to be removed.
+     */
+    protected void removeSession(String ssoId, Session session) {
+
+	if (cluster != null) {
+	    messageNumber++;
+	    SingleSignOnMessage msg =
+		new SingleSignOnMessage(cluster.getLocalMember(),
+					ssoId, session.getId());
+
+	    Manager mgr = session.getManager();
+	    if ((mgr != null) && (mgr instanceof ClusterManager))
+		msg.setContextName(((ClusterManager) mgr).getName());
+
+	    msg.setAction(SingleSignOnMessage.REMOVE_SESSION);
+
+	    cluster.sendClusterDomain(msg);
+	    if (containerLog.isDebugEnabled())
+		containerLog.debug("SingleSignOnMessage Send with action "
+				   + msg.getAction());
+	}
+
+	removeSessionLocal(ssoId, session);
+    }
+-----CSCI578-----
+
+
+    public void setCluster(CatalinaCluster cluster) {
+        if(log.isDebugEnabled())
+            log.debug("Cluster associated with SimpleTcpReplicationManager");
+        this.cluster = cluster;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Expire all find sessions.
+     */
+    public void expireAllLocalSessions()
+    {
+        long timeNow = System.currentTimeMillis();
+        Session sessions[] = findSessions();
+        int expireDirect  = 0 ;
+        int expireIndirect = 0 ;
+        
+        if(log.isDebugEnabled()) log.debug("Start expire all sessions " + getName() + " at " + timeNow + " sessioncount " + sessions.length);
+        for (int i = 0; i < sessions.length; i++) {
+            if (sessions[i] instanceof DeltaSession) {
+                DeltaSession session = (DeltaSession) sessions[i];
+                if (session.isPrimarySession()) {
+                    if (session.isValid()) {
+                        session.expire();
+                        expireDirect++;
+                    } else {
+                        expireIndirect++;
+                    }//end if
+                }//end if
+            }//end if
+        }//for
+        long timeEnd = System.currentTimeMillis();
+        if(log.isDebugEnabled()) log.debug("End expire sessions " + getName() + " expire processingTime " + (timeEnd - timeNow) + " expired direct sessions: " + expireDirect + " expired direct sessions: " + expireIndirect);
+      
+    }
+-----CSCI578-----
+
+
+    public void setCluster(CatalinaCluster cluster) {
+        if(log.isDebugEnabled())
+            log.debug("Cluster associated with SimpleTcpReplicationManager");
+        this.cluster = cluster;
+    }
+-----CSCI578-----
+
+
+    public void setPrintToScreen(boolean printtoscreen)
+    {
+        if(log.isDebugEnabled())
+            log.debug("Setting screen debug to:"+printtoscreen);
+        mPrintToScreen = printtoscreen;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the bind.
+     */
+    public InetAddress getBind() {
+        if (bind == null) {
+            try {
+                if ("auto".equals(host)) {
+                    host = java.net.InetAddress.getLocalHost().getHostAddress();
+                }
+                if (log.isDebugEnabled())
+                    log.debug("Starting replication listener on address:"+ host);
+                bind = java.net.InetAddress.getByName(host);
+            } catch (IOException ioe) {
+                log.error("Failed bind replication listener on address:"+ host, ioe);
+            }
+        }
+        return bind;
+    }
+-----CSCI578-----
+
+
+
+    public String getAddress() {
+        getBind();
+        return this.host;
+    }
+-----CSCI578-----
+
+    
+    public String getHost() {
+        return getAddress();
+    }
+-----CSCI578-----
+
+    
+    /**
+     * @deprecated use getAddress
+     * @return String
+     */
+    public String getTcpListenAddress() {
+        return getAddress();
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Authenticate the user making this request, based on the specified
+     * login configuration.  Return <code>true</code> if any specified
+     * constraint has been satisfied, or <code>false</code> if we have
+     * created a response challenge already.
+     *
+     * @param request Request we are processing
+     * @param response Response we are creating
+     * @param config    Login configuration describing how authentication
+     *              should be performed
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public boolean authenticate(Request request,
+                                Response response,
+                                LoginConfig config)
+        throws IOException {
+
+        /*  Associating this request's session with an SSO would allow
+            coordinated session invalidation, but should the session for
+            a webapp that the user didn't log into be invalidated when
+            another session is logged out?
+        String ssoId = (String) request.getNote(Constants.REQ_SSOID_NOTE);
+        if (ssoId != null)
+            associate(ssoId, getSession(request, true));
+        */
+        
+        if (containerLog.isDebugEnabled())
+            containerLog.debug("User authentication is not required");
+        return (true);
+
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------ SessionListener Methods
+
+
+    /**
+     * Acknowledge the occurrence of the specified event.
+     *
+     * @param event SessionEvent that has occurred
+     */
+    public void sessionEvent(SessionEvent event) {
+
+        // We only care about session destroyed events
+        if (!Session.SESSION_DESTROYED_EVENT.equals(event.getType())
+                && (!Session.SESSION_PASSIVATED_EVENT.equals(event.getType())))
+            return;
+
+        // Look up the single session id associated with this session (if any)
+        Session session = event.getSession();
+        if (containerLog.isDebugEnabled())
+            containerLog.debug("Process session destroyed on " + session);
+
+        String ssoId = null;
+        synchronized (reverse) {
+            ssoId = (String) reverse.get(session);
+        }
+        if (ssoId == null)
+            return;
+
+        // Was the session destroyed as the result of a timeout?
+        // If so, we'll just remove the expired session from the
+        // SSO.  If the session was logged out, we'll log out
+        // of all session associated with the SSO.
+        if (((session.getMaxInactiveInterval() > 0)
+            && (System.currentTimeMillis() - session.getLastAccessedTimeInternal() >=
+                session.getMaxInactiveInterval() * 1000)) 
+            || (Session.SESSION_PASSIVATED_EVENT.equals(event.getType()))) {
+            removeSession(ssoId, session);
+        } else {
+            // The session was logged out.
+            // Deregister this single session id, invalidating 
+            // associated sessions
+            deregister(ssoId);
+        }
+
+    }
+-----CSCI578-----
+
+
+    public void init() throws Exception {
+
+        if( this.getService() != null ) {
+            if(log.isDebugEnabled())
+                 log.debug( "Already configured" );
+            return;
+        }
+        if( container==null ) {
+            findContainer();
+        }
+    }
+-----CSCI578-----
+
+
+    public ObjectName createObjectName(String domain, ObjectName parent)
+        throws Exception
+    {
+        if( log.isDebugEnabled())
+            log.debug("Create ObjectName " + domain + " " + parent );
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the login configuration descriptor for this web application.
+     *
+     * @param config The new login configuration
+     */
+    public void setLoginConfig(LoginConfig config) {
+
+        // Validate the incoming property value
+        if (config == null)
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.loginConfig.required"));
+        String loginPage = config.getLoginPage();
+        if ((loginPage != null) && !loginPage.startsWith("/")) {
+            if (isServlet22()) {
+                if(log.isDebugEnabled())
+                    log.debug(sm.getString("standardContext.loginConfig.loginWarning",
+                                 loginPage));
+                config.setLoginPage("/" + loginPage);
+            } else {
+                throw new IllegalArgumentException
+                    (sm.getString("standardContext.loginConfig.loginPage",
+                                  loginPage));
+            }
+        }
+        String errorPage = config.getErrorPage();
+        if ((errorPage != null) && !errorPage.startsWith("/")) {
+            if (isServlet22()) {
+                if(log.isDebugEnabled())
+                    log.debug(sm.getString("standardContext.loginConfig.errorWarning",
+                                 errorPage));
+                config.setErrorPage("/" + errorPage);
+            } else {
+                throw new IllegalArgumentException
+                    (sm.getString("standardContext.loginConfig.errorPage",
+                                  errorPage));
+            }
+        }
+
+        // Process the property setting change
+        LoginConfig oldLoginConfig = this.loginConfig;
+        this.loginConfig = config;
+        support.firePropertyChange("loginConfig",
+                                   oldLoginConfig, this.loginConfig);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the public identifier of the deployment descriptor DTD that is
+     * currently being parsed.
+     *
+     * @param publicId The public identifier
+     */
+    public void setPublicId(String publicId) {
+
+        if (log.isDebugEnabled())
+            log.debug("Setting deployment descriptor public ID to '" +
+                publicId + "'");
+
+        String oldPublicId = this.publicId;
+        this.publicId = publicId;
+        support.firePropertyChange("publicId", oldPublicId, publicId);
+
+    }
+-----CSCI578-----
+
+    
+    public ObjectName createObjectName(String domain, ObjectName parent)
+        throws Exception
+    {
+        if( log.isDebugEnabled())
+            log.debug("Create ObjectName " + domain + " " + parent );
+        return new ObjectName( domain + ":type=Engine");
+    }
+-----CSCI578-----
+
+    
+    public ObjectName createObjectName(String domain, ObjectName parent)
+        throws Exception
+    {
+        if( log.isDebugEnabled())
+            log.debug("Create ObjectName " + domain + " " + parent );
+        return new ObjectName( domain + ":type=Host,host=" + getName());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called before any of the public
+     * methods of this component are utilized.  It should also send a
+     * LifecycleEvent of type START_EVENT to any registered listeners.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (started) {
+            log.debug(sm.getString("standardServer.start.started"));
+            return;
+        }
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(BEFORE_START_EVENT, null);
+
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+        started = true;
+
+        // Start our defined Services
+        synchronized (services) {
+            for (int i = 0; i < services.length; i++) {
+                if (services[i] instanceof Lifecycle)
+                    ((Lifecycle) services[i]).start();
+            }
+        }
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(AFTER_START_EVENT, null);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return an enumeration of <code>URLs</code> representing all of the
+     * resources with the given name.  If no resources with this name are
+     * found, return an empty enumeration.
+     *
+     * @param name Name of the resources to be found
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public Enumeration findResources(String name) throws IOException {
+
+        if (log.isDebugEnabled())
+            log.debug("    findResources(" + name + ")");
+
+        Vector result = new Vector();
+
+        int jarFilesLength = jarFiles.length;
+        int repositoriesLength = repositories.length;
+
+        int i;
+
+        // Adding the results of a call to the superclass
+        if (hasExternalRepositories && searchExternalFirst) {
+
+            Enumeration<URL> otherResourcePaths = super.findResources(name);
+
+            while (otherResourcePaths.hasMoreElements()) {
+                result.addElement(otherResourcePaths.nextElement());
+            }
+
+        }
+        // Looking at the repositories
+        for (i = 0; i < repositoriesLength; i++) {
+            try {
+                String fullPath = repositories[i] + name;
+                resources.lookup(fullPath);
+                // Note : Not getting an exception here means the resource was
+                // found
+                try {
+                    result.addElement(getURI(new File(files[i], name)));
+                } catch (MalformedURLException e) {
+                    // Ignore
+                }
+            } catch (NamingException e) {
+            }
+        }
+
+        // Looking at the JAR files
+        synchronized (jarFiles) {
+            if (openJARs()) {
+                for (i = 0; i < jarFilesLength; i++) {
+                    JarEntry jarEntry = jarFiles[i].getJarEntry(name);
+                    if (jarEntry != null) {
+                        try {
+                            String jarFakeUrl = getURI(jarRealFiles[i]).toString();
+                            jarFakeUrl = "jar:" + jarFakeUrl + "!/" + name;
+                            result.addElement(new URL(jarFakeUrl));
+                        } catch (MalformedURLException e) {
+                            // Ignore
+                        }
+                    }
+                }
+            }
+        }
+
+        // Adding the results of a call to the superclass
+        if (hasExternalRepositories && !searchExternalFirst) {
+
+            Enumeration otherResourcePaths = super.findResources(name);
+
+            while (otherResourcePaths.hasMoreElements()) {
+                result.addElement(otherResourcePaths.nextElement());
+            }
+
+        }
+
+        return result.elements();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Find the resource with the given name.  A resource is some data
+     * (images, audio, text, etc.) that can be accessed by class code in a
+     * way that is independent of the location of the code.  The name of a
+     * resource is a "/"-separated path name that identifies the resource.
+     * If the resource cannot be found, return <code>null</code>.
+     * <p>
+     * This method searches according to the following algorithm, returning
+     * as soon as it finds the appropriate URL.  If the resource cannot be
+     * found, returns <code>null</code>.
+     * <ul>
+     * <li>If the <code>delegate</code> property is set to <code>true</code>,
+     *     call the <code>getResource()</code> method of the parent class
+     *     loader, if any.</li>
+     * <li>Call <code>findResource()</code> to find this resource in our
+     *     locally defined repositories.</li>
+     * <li>Call the <code>getResource()</code> method of the parent class
+     *     loader, if any.</li>
+     * </ul>
+     *
+     * @param name Name of the resource to return a URL for
+     */
+    public URL getResource(String name) {
+
+        if (log.isDebugEnabled())
+            log.debug("getResource(" + name + ")");
+        URL url = null;
+
+        // (1) Delegate to parent if requested
+        if (delegate) {
+            if (log.isDebugEnabled())
+                log.debug("  Delegating to parent classloader " + parent);
+            ClassLoader loader = parent;
+            if (loader == null)
+                loader = system;
+            url = loader.getResource(name);
+            if (url != null) {
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning '" + url.toString() + "'");
+                return (url);
+            }
+        }
+
+        // (2) Search local repositories
+        url = findResource(name);
+        if (url != null) {
+            // Locating the repository for special handling in the case
+            // of a JAR
+            if (antiJARLocking) {
+                ResourceEntry entry = (ResourceEntry) resourceEntries.get(name);
+                try {
+                    String repository = entry.codeBase.toString();
+                    if ((repository.endsWith(".jar"))
+                            && (!(name.endsWith(".class")))) {
+                        // Copy binary content to the work directory if not present
+                        File resourceFile = new File(loaderDir, name);
+                        url = getURI(resourceFile);
+                    }
+                } catch (Exception e) {
+                    // Ignore
+                }
+            }
+            if (log.isDebugEnabled())
+                log.debug("  --> Returning '" + url.toString() + "'");
+            return (url);
+        }
+
+        // (3) Delegate to parent unconditionally if not already attempted
+        if( !delegate ) {
+            ClassLoader loader = parent;
+            if (loader == null)
+                loader = system;
+            url = loader.getResource(name);
+            if (url != null) {
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning '" + url.toString() + "'");
+                return (url);
+            }
+        }
+
+        // (4) Resource was not found
+        if (log.isDebugEnabled())
+            log.debug("  --> Resource not found, returning null");
+        return (null);
+
+    }
+
+
+
+    /**
+     * Find the resource with the given name, and return an input stream
+     * that can be used for reading it.  The search order is as described
+     * for <code>getResource()</code>, after checking to see if the resource
+     * data has been previously cached.  If the resource cannot be found,
+     * return <code>null</code>.
+     *
+     * @param name Name of the resource to return an input stream for
+     */
+    public InputStream getResourceAsStream(String name) {
+
+        if (log.isDebugEnabled())
+            log.debug("getResourceAsStream(" + name + ")");
+        InputStream stream = null;
+
+        // (0) Check for a cached copy of this resource
+        stream = findLoadedResource(name);
+        if (stream != null) {
+            if (log.isDebugEnabled())
+                log.debug("  --> Returning stream from cache");
+            return (stream);
+        }
+
+        // (1) Delegate to parent if requested
+        if (delegate) {
+            if (log.isDebugEnabled())
+                log.debug("  Delegating to parent classloader " + parent);
+            ClassLoader loader = parent;
+            if (loader == null)
+                loader = system;
+            stream = loader.getResourceAsStream(name);
+            if (stream != null) {
+                // FIXME - cache???
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning stream from parent");
+                return (stream);
+            }
+        }
+
+        // (2) Search local repositories
+        if (log.isDebugEnabled())
+            log.debug("  Searching local repositories");
+        URL url = findResource(name);
+        if (url != null) {
+            // FIXME - cache???
+            if (log.isDebugEnabled())
+                log.debug("  --> Returning stream from local");
+            stream = findLoadedResource(name);
+            try {
+                if (hasExternalRepositories && (stream == null))
+                    stream = url.openStream();
+            } catch (IOException e) {
+                ; // Ignore
+            }
+            if (stream != null)
+                return (stream);
+        }
+
+        // (3) Delegate to parent unconditionally
+        if (!delegate) {
+            if (log.isDebugEnabled())
+                log.debug("  Delegating to parent classloader unconditionally " + parent);
+            ClassLoader loader = parent;
+            if (loader == null)
+                loader = system;
+            stream = loader.getResourceAsStream(name);
+            if (stream != null) {
+                // FIXME - cache???
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning stream from parent");
+                return (stream);
+            }
+        }
+
+        // (4) Resource was not found
+        if (log.isDebugEnabled())
+            log.debug("  --> Resource not found, returning null");
+        return (null);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new repository to the set of repositories for this class loader.
+     *
+     * @param repository Repository to be added
+     */
+    public void addRepository(String repository) {
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("webappLoader.addRepository", repository));
+
+        for (int i = 0; i < repositories.length; i++) {
+            if (repository.equals(repositories[i]))
+                return;
+        }
+        String results[] = new String[repositories.length + 1];
+        for (int i = 0; i < repositories.length; i++)
+            results[i] = repositories[i];
+        results[repositories.length] = repository;
+        repositories = results;
+
+        if (started && (classLoader != null)) {
+            classLoader.addRepository(repository);
+            if( loaderRepositories != null ) loaderRepositories.add(repository);
+            setClassPath();
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a realm to the list of realms that will be used to authenticate
+     * users.
+     */
+    public void addRealm(Realm theRealm) {
+        realms.add(theRealm);
+        
+        if (log.isDebugEnabled()) {
+            sm.getString("combinedRealm.addRealm", theRealm.getInfo(), 
+                    Integer.toString(realms.size()));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Has our own <code>commit()</code> returned successfully?
+     */
+    protected boolean committed = false;
+
+
+
+    /**
+     * Phase 2 of authenticating a <code>Subject</code> when Phase 1
+     * was successful.  This method is called if the <code>LoginContext</code>
+     * succeeded in the overall authentication chain.
+     *
+     * @return <code>true</code> if the authentication succeeded, or
+     *  <code>false</code> if this <code>LoginModule</code> should be
+     *  ignored
+     *
+     * @exception LoginException if the commit fails
+     */
+    public boolean commit() throws LoginException {
+        log.debug("commit " + principal);
+
+        // If authentication was not successful, just return false
+        if (principal == null)
+            return (false);
+
+        // Add our Principal to the Subject if needed
+        if (!subject.getPrincipals().contains(principal)) {
+            subject.getPrincipals().add(principal);
+            // Add the roles as additional sudjucts as per the contract with the
+            // JAASRealm
+            if (principal instanceof GenericPrincipal) {
+                String roles[] = ((GenericPrincipal) principal).getRoles();
+                for (int i = 0; i < roles.length; i++) {
+                    subject.getPrincipals().add(
+                            new GenericPrincipal(null, roles[i], null));
+                }
+                
+            }
+        }
+
+        committed = true;
+        return (true);
+
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Return the SecurityConstraints configured to guard the request URI for
+     * this request, or <code>null</code> if there is no such constraint.
+     *
+     * @param request Request we are processing
+     * @param context Context the Request is mapped to
+     */
+    public SecurityConstraint [] findSecurityConstraints(Request request,
+                                                     Context context) {
+        ArrayList<SecurityConstraint> results = null;
+        // Are there any defined security constraints?
+        SecurityConstraint constraints[] = context.findConstraints();
+        if ((constraints == null) || (constraints.length == 0)) {
+            if (context.getLogger().isDebugEnabled())
+                context.getLogger().debug("  No applicable constraints defined");
+            return (null);
+        }
+
+        // Check each defined security constraint
+        String uri = request.getDecodedRequestURI();
+        String contextPath = request.getContextPath();
+        if (contextPath.length() > 0)
+            uri = uri.substring(contextPath.length());
+        uri = RequestUtil.URLDecode(uri); // Before checking constraints
+        String method = request.getMethod();
+        for (int i = 0; i < constraints.length; i++) {
+            if (context.getLogger().isDebugEnabled())
+                context.getLogger().debug("  Checking constraint '" + constraints[i] +
+                    "' against " + method + " " + uri + " --> " +
+                    constraints[i].included(uri, method));
+            if (constraints[i].included(uri, method)) {
+                if(results == null) {
+                    results = new ArrayList<SecurityConstraint>();
+                }
+                results.add(constraints[i]);
+            }
+        }
+
+        // No applicable security constraint was found
+        if (context.getLogger().isDebugEnabled())
+            context.getLogger().debug("  No applicable constraint located");
+        if(results == null)
+            return null;
+        SecurityConstraint [] array = new SecurityConstraint[results.size()];
+        System.arraycopy(results.toArray(), 0, array, 0, array.length);
+        return array;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Save the specified Session into this Store.  Any previously saved
+     * information for the associated session identifier is replaced.
+     *
+     * @param session Session to be saved
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public void save(Session session) throws IOException {
+        // Open an output stream to the specified pathname, if any
+        File file = file(session.getIdInternal());
+        if (file == null) {
+            return;
+        }
+        if (manager.getContainer().getLogger().isDebugEnabled()) {
+            manager.getContainer().getLogger().debug(sm.getString(getStoreName()+".saving",
+                             session.getIdInternal(), file.getAbsolutePath()));
+        }
+        FileOutputStream fos = null;
+        BufferedOutputStream bos = null;
+        ObjectOutputStream oos = null;
+        try {
+            fos = new FileOutputStream(file.getAbsolutePath());
+            bos = new BufferedOutputStream(fos);
+            oos = new ObjectOutputStream(bos);
+        } catch (IOException ioe) {
+            if (bos != null) {
+                try {
+                    bos.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            } else if (fos != null) {
+                try {
+                    fos.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+            throw ioe;
+        }
+
+        try {
+            ((StandardSession)session).writeObjectData(oos);
+        } finally {
+            oos.close();
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Handle the beginning of an XML element.
+     *
+     * @param attributes The attributes of this element
+     *
+     * @exception Exception if a processing error occurs
+     */
+    public void begin(String namespace, String name, Attributes attributes)
+        throws Exception {
+
+        if (digester.getLogger().isDebugEnabled())
+            digester.getLogger().debug("Copying parent class loader");
+        Container child = (Container) digester.peek(0);
+        Object parent = digester.peek(1);
+        Method method =
+            parent.getClass().getMethod("getParentClassLoader", new Class[0]);
+        ClassLoader classLoader =
+            (ClassLoader) method.invoke(parent, new Object[0]);
+        child.setParentClassLoader(classLoader);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new Engine to the set of defined Engines.
+     *
+     * @param engine The engine to be added
+     */
+    public synchronized void addEngine(Engine engine) {
+
+        if( log.isDebugEnabled() )
+            log.debug("Adding engine (" + engine.getInfo() + ")");
+
+        // Add this Engine to our set of defined Engines
+        Engine results[] = new Engine[engines.length + 1];
+        for (int i = 0; i < engines.length; i++)
+            results[i] = engines[i];
+        results[engines.length] = engine;
+        engines = results;
+
+        // Start this Engine if necessary
+        if (started && (engine instanceof Lifecycle)) {
+            try {
+                ((Lifecycle) engine).start();
+            } catch (LifecycleException e) {
+                log.error("Engine.start", e);
+            }
+        }
+
+        this.container = engine;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create, configure, and return an Engine that will process all
+     * HTTP requests received from one of the associated Connectors,
+     * based on the specified properties.
+     */
+    public Engine createEngine() {
+
+        if( log.isDebugEnabled() )
+            log.debug("Creating engine");
+
+        StandardEngine engine = new StandardEngine();
+
+        // Default host will be set to the first host added
+        engine.setRealm(realm);         // Inherited by all children
+
+        return (engine);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create, configure, and return a Host that will process all
+     * HTTP requests received from one of the associated Connectors,
+     * and directed to the specified virtual host.
+     * <p>
+     * After you have customized the properties, listeners, and Valves
+     * for this Host, you must attach it to the corresponding Engine
+     * by calling:
+     * <pre>
+     *   engine.addChild(host);
+     * </pre>
+     * which will also cause the Host to be started if the Engine has
+     * already been started.  If this is the default (or only) Host you
+     * will be defining, you may also tell the Engine to pass all requests
+     * not assigned to another virtual host to this one:
+     * <pre>
+     *   engine.setDefaultHost(host.getName());
+     * </pre>
+     *
+     * @param name Canonical name of this virtual host
+     * @param appBase Absolute pathname to the application base directory
+     *  for this virtual host
+     *
+     * @exception IllegalArgumentException if an invalid parameter
+     *  is specified
+     */
+    public Host createHost(String name, String appBase) {
+
+        if( log.isDebugEnabled() )
+            log.debug("Creating host '" + name + "' with appBase '" +
+                       appBase + "'");
+
+        StandardHost host = new StandardHost();
+
+        host.setAppBase(appBase);
+        host.setName(name);
+
+        return (host);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create and return a class loader manager that can be customized, and
+     * then attached to a Context, before it is started.
+     *
+     * @param parent ClassLoader that will be the parent of the one
+     *  created by this Loader
+     */
+    public Loader createLoader(ClassLoader parent) {
+
+        if( log.isDebugEnabled() )
+            log.debug("Creating Loader with parent class loader '" +
+                       parent + "'");
+
+        WebappLoader loader = new WebappLoader(parent);
+        return (loader);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified Context from the set of defined Contexts for its
+     * associated Host.  If this is the last Context for this Host, the Host
+     * will also be removed.
+     *
+     * @param context The Context to be removed
+     */
+    public synchronized void removeContext(Context context) {
+
+        if( log.isDebugEnabled() )
+            log.debug("Removing context[" + context.getPath() + "]");
+
+        // Is this Context actually among those that are defined?
+        boolean found = false;
+        for (int i = 0; i < engines.length; i++) {
+            Container hosts[] = engines[i].findChildren();
+            for (int j = 0; j < hosts.length; j++) {
+                Container contexts[] = hosts[j].findChildren();
+                for (int k = 0; k < contexts.length; k++) {
+                    if (context == (Context) contexts[k]) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (found)
+                    break;
+            }
+            if (found)
+                break;
+        }
+        if (!found)
+            return;
+
+        // Remove this Context from the associated Host
+        if( log.isDebugEnabled() )
+            log.debug(" Removing this Context");
+        context.getParent().removeChild(context);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified Host, along with all of its related Contexts,
+     * from the set of defined Hosts for its associated Engine.  If this is
+     * the last Host for this Engine, the Engine will also be removed.
+     *
+     * @param host The Host to be removed
+     */
+    public synchronized void removeHost(Host host) {
+
+        if( log.isDebugEnabled() )
+            log.debug("Removing host[" + host.getName() + "]");
+
+        // Is this Host actually among those that are defined?
+        boolean found = false;
+        for (int i = 0; i < engines.length; i++) {
+            Container hosts[] = engines[i].findChildren();
+            for (int j = 0; j < hosts.length; j++) {
+                if (host == (Host) hosts[j]) {
+                    found = true;
+                    break;
+
+                }
+            }
+            if (found)
+                break;
+        }
+        if (!found)
+            return;
+
+        // Remove this Host from the associated Engine
+        if( log.isDebugEnabled() )
+            log.debug(" Removing this Host");
+        host.getParent().removeChild(host);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Gracefully terminate the active use of the public methods of this
+     * component.  This method should be the last one called on a given
+     * instance of this component.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that needs to be reported
+     */
+    public void stop() throws LifecycleException {
+
+        if( log.isDebugEnabled() )
+            log.debug("Stopping embedded server");
+
+        // Validate and update our current component state
+        if (!started)
+            throw new LifecycleException
+                (sm.getString("embedded.notStarted"));
+        lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+        started = false;
+
+        // Stop our defined Connectors first
+        for (int i = 0; i < connectors.length; i++) {
+            if (connectors[i] instanceof Lifecycle)
+                ((Lifecycle) connectors[i]).stop();
+        }
+
+        // Stop our defined Engines second
+        for (int i = 0; i < engines.length; i++) {
+            if (engines[i] instanceof Lifecycle)
+                ((Lifecycle) engines[i]).stop();
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void addApplicationListener( String s ) {
+        //if(log.isDebugEnabled())
+            log.debug( "Add tld listener " + s);
+        listeners.add(s);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Load the local class equivalent of the specified stream class
+     * description, by using the class loader assigned to this Context.
+     *
+     * @param classDesc Class description from the input stream
+     *
+     * @exception ClassNotFoundException if this class cannot be found
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public Class<?> resolveClass(ObjectStreamClass classDesc)
+        throws ClassNotFoundException, IOException {
+
+        String name = classDesc.getName();
+        if (allowedClassNamePattern != null) {
+            boolean allowed = allowedClassNamePattern.matcher(name).matches();
+            if (!allowed) {
+                boolean doLog = warnOnFailure && reportedClasses.put(name, Boolean.FALSE) == null;
+                String msg = sm.getString("customObjectInputStream.nomatch", name, allowedClassNameFilter);
+                if (doLog) {
+                    log.warn(msg);
+                } else if (log.isDebugEnabled()) {
+                    log.debug(msg);
+                }
+                throw new InvalidClassException(msg);
+            }
+        }
+
+        try {
+            return Class.forName(name, false, classLoader);
+        } catch (ClassNotFoundException e) {
+            try {
+                // Try also the superclass because of primitive types
+                return super.resolveClass(classDesc);
+            } catch (ClassNotFoundException e2) {
+                // Rethrow original exception, as it can have more information
+                // about why the class was not found. BZ 48007
+                throw e;
+            }
+        }
+    }
+-----CSCI578-----
+ // <init>(InputStream,int,short)
+
+    //
+    // Reader methods
+    //
+
+    /**
+     * Read a single character.  This method will block until a character is
+     * available, an I/O error occurs, or the end of the stream is reached.
+     *
+     * <p> Subclasses that intend to support efficient single-character input
+     * should override this method.
+     *
+     * @return     The character read, as an integer in the range 0 to 127
+     *             (<tt>0x00-0x7f</tt>), or -1 if the end of the stream has
+     *             been reached
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    public int read() throws IOException { 
+        int b0 = fInputStream.read() & 0xff;
+        if (b0 == 0xff)
+            return -1;
+        int b1 = fInputStream.read() & 0xff;
+        if (b1 == 0xff)
+            return -1;
+        if(fEncoding >=4) {
+            int b2 = fInputStream.read() & 0xff;
+            if (b2 == 0xff)
+                return -1;
+            int b3 = fInputStream.read() & 0xff;
+            if (b3 == 0xff)
+                return -1;
+            if (log.isDebugEnabled())
+                log.debug("b0 is " + (b0 & 0xff) + " b1 " + (b1 & 0xff) + " b2 " + (b2 & 0xff) + " b3 " + (b3 & 0xff));
+            if (fEncoding == UCS4BE)
+                return (b0<<24)+(b1<<16)+(b2<<8)+b3;
+            else
+                return (b3<<24)+(b2<<16)+(b1<<8)+b0;
+        } else { // UCS-2
+            if (fEncoding == UCS2BE)
+                return (b0<<8)+b1;
+            else
+                return (b1<<8)+b0;
+        }
+    }
+ // read():int
+
+    /**
+     * Read characters into a portion of an array.  This method will block
+     * until some input is available, an I/O error occurs, or the end of the
+     * stream is reached.
+     *
+     * @param      ch     Destination buffer
+     * @param      offset Offset at which to start storing characters
+     * @param      length Maximum number of characters to read
+     *
+     * @return     The number of characters read, or -1 if the end of the
+     *             stream has been reached
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    public int read(char ch[], int offset, int length) throws IOException {
+        int byteLength = length << ((fEncoding >= 4)?2:1);
+        if (byteLength > fBuffer.length) {
+            byteLength = fBuffer.length;
+        }
+        int count = fInputStream.read(fBuffer, 0, byteLength);
+        if(count == -1) return -1;
+        // try and make count be a multiple of the number of bytes we're looking for
+        if(fEncoding >= 4) { // BigEndian
+            // this looks ugly, but it avoids an if at any rate...
+            int numToRead = (4 - (count & 3) & 3);
+            for(int i=0; i<numToRead; i++) {
+                int charRead = fInputStream.read();
+                if(charRead == -1) { // end of input; something likely went wrong!A  Pad buffer with nulls.
+                    for (int j = i;j<numToRead; j++)
+                        fBuffer[count+j] = 0;
+                    break;
+                } else {
+                    fBuffer[count+i] = (byte)charRead; 
+                }
+            }
+            count += numToRead;
+        } else {
+            int numToRead = count & 1;
+            if(numToRead != 0) {
+                count++;
+                int charRead = fInputStream.read();
+                if(charRead == -1) { // end of input; something likely went wrong!A  Pad buffer with nulls.
+                    fBuffer[count] = 0;
+                } else {
+                    fBuffer[count] = (byte)charRead;
+                }
+            }
+        }
+
+        // now count is a multiple of the right number of bytes
+        int numChars = count >> ((fEncoding >= 4)?2:1);
+        int curPos = 0;
+        for (int i = 0; i < numChars; i++) {
+            int b0 = fBuffer[curPos++] & 0xff;
+            int b1 = fBuffer[curPos++] & 0xff;
+            if(fEncoding >=4) {
+                int b2 = fBuffer[curPos++] & 0xff;
+                int b3 = fBuffer[curPos++] & 0xff;
+                if (fEncoding == UCS4BE)
+                    ch[offset+i] = (char)((b0<<24)+(b1<<16)+(b2<<8)+b3);
+                else
+                    ch[offset+i] = (char)((b3<<24)+(b2<<16)+(b1<<8)+b0);
+            } else { // UCS-2
+                if (fEncoding == UCS2BE)
+                    ch[offset+i] = (char)((b0<<8)+b1);
+                else
+                    ch[offset+i] = (char)((b1<<8)+b0);
+            }
+        }
+        return numChars;
+    }
+ // read(char[],int,int)
+
+    /**
+     * Skip characters.  This method will block until some characters are
+     * available, an I/O error occurs, or the end of the stream is reached.
+     *
+     * @param  n  The number of characters to skip
+     *
+     * @return    The number of characters actually skipped
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    public long skip(long n) throws IOException {
+        // charWidth will represent the number of bits to move
+        // n leftward to get num of bytes to skip, and then move the result rightward
+        // to get num of chars effectively skipped.
+        // The trick with &'ing, as with elsewhere in this dcode, is
+        // intended to avoid an expensive use of / that might not be optimized
+        // away.
+        int charWidth = (fEncoding >=4)?2:1;
+        long bytesSkipped = fInputStream.skip(n<<charWidth);
+        if((bytesSkipped & (charWidth | 1)) == 0) return bytesSkipped >> charWidth;
+        return (bytesSkipped >> charWidth) + 1;
+    }
+ // skip(long):long
+
+    /**
+     * Tell whether this stream is ready to be read.
+     *
+     * @return True if the next read() is guaranteed not to block for input,
+     * false otherwise.  Note that returning false does not guarantee that the
+     * next read will block.
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    public boolean ready() throws IOException {
+	return false;
+    }
+ // reset()
+
+    /**
+     * Close the stream.  Once a stream has been closed, further read(),
+     * ready(), mark(), or reset() invocations will throw an IOException.
+     * Closing a previously-closed stream, however, has no effect.
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+     public void close() throws IOException {
+         fInputStream.close();
+     }
+-----CSCI578-----
+
+
+
+    public void setMaxThreads( int i ) {
+        if( log.isDebugEnabled()) log.debug("Setting maxThreads " + i);
+        tp.setMaxThreads(i);
+    }
+-----CSCI578-----
+
+    
+    public void setMinSpareThreads( int i ) {
+        if( log.isDebugEnabled()) log.debug("Setting minSpareThreads " + i);
+        tp.setMinSpareThreads(i);
+    }
+-----CSCI578-----
+
+
+    public void setMaxSpareThreads( int i ) {
+        if( log.isDebugEnabled()) log.debug("Setting maxSpareThreads " + i);
+        tp.setMaxSpareThreads(i);
+    }
+-----CSCI578-----
+
+
+    public void destroy() throws IOException {
+        running = false;
+        try {
+            /* If we disabled the channel return */
+            if (port == 0)
+                return;
+            tp.shutdown();
+
+            selector.wakeup().close();
+            sSocket.close(); // XXX?
+            
+            if( tpOName != null )  {
+                Registry.getRegistry(null, null).unregisterComponent(tpOName);
+            }
+            if( rgOName != null ) {
+                Registry.getRegistry(null, null).unregisterComponent(rgOName);
+            }
+        } catch(Exception e) {
+            log.info("Error shutting down the channel " + port + " " +
+                    e.toString());
+            if( log.isDebugEnabled() ) log.debug("Trace", e);
+        }
+    }
+-----CSCI578-----
+
+
+    public void stop() throws IOException {
+        destroy();
+    }
+-----CSCI578-----
+
+
+
+    public void setMaxThreads( int i ) {
+        if( log.isDebugEnabled()) log.debug("Setting maxThreads " + i);
+        tp.setMaxThreads(i);
+    }
+-----CSCI578-----
+
+    
+    public void setMinSpareThreads( int i ) {
+        if( log.isDebugEnabled()) log.debug("Setting minSpareThreads " + i);
+        tp.setMinSpareThreads(i);
+    }
+-----CSCI578-----
+
+    
+    public void setMaxSpareThreads( int i ) {
+        if( log.isDebugEnabled()) log.debug("Setting maxSpareThreads " + i);
+        tp.setMaxSpareThreads(i);
+    }
+-----CSCI578-----
+
+
+    public void destroy() throws IOException {
+        running = false;
+        try {
+            /* If we disabled the channel return */
+            if (port == 0)
+                return;
+            tp.shutdown();
+
+	    if(!paused) {
+		unLockSocket();
+	    }
+
+            if (sSocket != null) {
+                sSocket.close(); // XXX?
+            }
+            
+            if( tpOName != null )  {
+                Registry.getRegistry(null, null).unregisterComponent(tpOName);
+            }
+            if( rgOName != null ) {
+                Registry.getRegistry(null, null).unregisterComponent(rgOName);
+            }
+        } catch(Exception e) {
+            log.info("Error shutting down the channel " + port + " " +
+                    e.toString());
+            if( log.isDebugEnabled() ) log.debug("Trace", e);
+        }
+    }
+-----CSCI578-----
+
+
+    public void stop() throws IOException {
+        destroy();
+    }
+-----CSCI578-----
+
+
+    public int processHeader() {
+        pos = 0;
+        int mark = getInt();
+        len      = getInt();
+	    
+        if( mark != 0x1234 && mark != 0x4142 ) {
+            // XXX Logging
+            log.error("BAD packet signature " + mark);
+            dump( "In: " );
+            return -1;
+        }
+
+        if( log.isDebugEnabled() ) 
+            log.debug( "Received " + len + " " + buf[0] );
+        return len;
+    }
+-----CSCI578-----
+
+
+
+    public  int invoke(Msg msg, MsgContext ep )
+        throws IOException
+    {
+        if (log.isDebugEnabled())
+            log.debug("ChannelShm14.invoke: "  + ep );
+
+        // 
+        
+        return 0;
+    }
+-----CSCI578-----
+
+
+    /** Add an Apache extension mapping.
+     */
+    protected boolean addExtensionMapping( String ctxPath, String ext,
+					 PrintWriter mod_jk )
+    {
+        if( log.isDebugEnabled() )
+            log.debug( "Adding extension map for " + ctxPath + "/*." + ext );
+	mod_jk.println(indent + "JkMount " + ctxPath + "/*." + ext
+		       + " " + jkWorker);
+	return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /* 
+     * Set a handler property
+     */
+    public void setPropertyString( String handlerN, String name, String val ) {
+        if( log.isDebugEnabled() )
+            log.debug( "setProperty " + handlerN + " " + name + "=" + val );
+        Object target=getWorkerEnv().getHandler( handlerN );
+
+        setBeanProperty( target, name, val );
+        if( started ) {
+            saveProperties();
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Call void getAttribute( String )
+     */
+    public static Object getAttribute(Object proxy, String n) throws Exception {
+        Method executeM = null;
+        Class c = proxy.getClass();
+        Class params[] = new Class[1];
+        params[0] = String.class;
+        executeM = findMethod(c, "getAttribute", params);
+        if (executeM == null) {
+            if (log.isDebugEnabled())
+                log.debug("No getAttribute in " + proxy.getClass());
+            return null;
+        }
+        return executeM.invoke(proxy, new Object[] { n });
+    }
+-----CSCI578-----
+
+
+    /**
+     * Debug method, display the classpath
+     */
+    public static void displayClassPath(String msg, URL[] cp) {
+        if (log.isDebugEnabled()) {
+            log.debug(msg);
+            for (int i = 0; i < cp.length; i++) {
+                log.debug(cp[i].getFile());
+            }
+        }
+    }
+-----CSCI578-----
+
+    void log( String s ) {
+        if (log.isDebugEnabled())
+            log.debug("B2CConverter: " + s );
+    }
+-----CSCI578-----
+
+
+    public static String base64Decode( String orig ) {
+	char chars[]=orig.toCharArray();
+	StringBuffer sb=new StringBuffer();
+	int i=0;
+
+	int shift = 0;   // # of excess bits stored in accum
+	int acc = 0;
+	
+	for (i=0; i<chars.length; i++) {
+	    int v = base64[ chars[i] & 0xFF ];
+	    
+	    if ( v >= 64 ) {
+		if( chars[i] != '=' )
+                    if (log.isDebugEnabled())
+                        log.debug("Wrong char in base64: " + chars[i]);
+	    } else {
+		acc= ( acc << 6 ) | v;
+		shift += 6;
+		if ( shift >= 8 ) {
+		    shift -= 8;
+		    sb.append( (char) ((acc >> shift) & 0xff));
+		}
+	    }
+	}
+	return sb.toString();
+    }
+-----CSCI578-----
+
+
+    private static void log( String s ) {
+        if (log.isDebugEnabled())
+            log.debug("Encoder: " + s );
+    }
+-----CSCI578-----
+
+    private void d(String s ) {
+	if (log.isDebugEnabled())
+            log.debug( "SimpleHashtable: " + s );
+    }
+-----CSCI578-----
+
+    
+    private void log( String s ) {
+        if (log.isDebugEnabled())
+            log.debug("SimplePool: " + s );
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the start of this element.
+     *
+     * @param attributes The attribute list for this element
+     */
+    public void begin(Attributes attributes) throws Exception {
+
+        Object param = null;
+        
+        if (attributeName != null) {
+        
+            param = attributes.getValue(attributeName);
+            
+        } else if(fromStack) {
+        
+            param = digester.peek(stackIndex);
+            
+            if (digester.log.isDebugEnabled()) {
+            
+                StringBuffer sb = new StringBuffer("[CallParamRule]{");
+                sb.append(digester.match);
+                sb.append("} Save from stack; from stack?").append(fromStack);
+                sb.append("; object=").append(param);
+                digester.log.debug(sb.toString());
+            }   
+        }
+        
+        // Have to save the param object to the param stack frame here.
+        // Can't wait until end(). Otherwise, the object will be lost.
+        // We can't save the object as instance variables, as 
+        // the instance variables will be overwritten
+        // if this CallParamRule is reused in subsequent nesting.
+        
+        if(param != null) {
+            Object parameters[] = (Object[]) digester.peekParams();
+            parameters[paramIndex] = param;
+        }
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------- ContentHandler Methods
+
+
+    /**
+     * Process notification of character data received from the body of
+     * an XML element.
+     *
+     * @param buffer The characters from the XML document
+     * @param start Starting offset into the buffer
+     * @param length Number of characters from the buffer
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    public void characters(char buffer[], int start, int length)
+            throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("characters(" + new String(buffer, start, length) + ")");
+        }
+
+        bodyText.append(buffer, start, length);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification that a namespace prefix is going out of scope.
+     *
+     * @param prefix Prefix that is going out of scope
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    public void endPrefixMapping(String prefix) throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("endPrefixMapping(" + prefix + ")");
+        }
+
+        // Deregister this prefix mapping
+        ArrayStack stack = (ArrayStack) namespaces.get(prefix);
+        if (stack == null) {
+            return;
+        }
+        try {
+            stack.pop();
+            if (stack.empty())
+                namespaces.remove(prefix);
+        } catch (EmptyStackException e) {
+            throw createSAXException("endPrefixMapping popped too many times");
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification of ignorable whitespace received from the body of
+     * an XML element.
+     *
+     * @param buffer The characters from the XML document
+     * @param start Starting offset into the buffer
+     * @param len Number of characters from the buffer
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    public void ignorableWhitespace(char buffer[], int start, int len)
+            throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("ignorableWhitespace(" +
+                    new String(buffer, start, len) + ")");
+        }
+
+        // No processing required
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification of a processing instruction that was encountered.
+     *
+     * @param target The processing instruction target
+     * @param data The processing instruction data (if any)
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    public void processingInstruction(String target, String data)
+            throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("processingInstruction('" + target + "','" + data + "')");
+        }
+
+        // No processing is required
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the document locator associated with our parser.
+     *
+     * @param locator The new locator
+     */
+    public void setDocumentLocator(Locator locator) {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("setDocumentLocator(" + locator + ")");
+        }
+
+        this.locator = locator;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification of a skipped entity.
+     *
+     * @param name Name of the skipped entity
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    public void skippedEntity(String name) throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("skippedEntity(" + name + ")");
+        }
+
+        // No processing required
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification of the beginning of the document being reached.
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    public void startDocument() throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("startDocument()");
+        }
+
+        // ensure that the digester is properly configured, as
+        // the digester could be used as a SAX ContentHandler
+        // rather than via the parse() methods.
+        configure();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification that a namespace prefix is coming in to scope.
+     *
+     * @param prefix Prefix that is being declared
+     * @param namespaceURI Corresponding namespace URI being mapped to
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    public void startPrefixMapping(String prefix, String namespaceURI)
+            throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("startPrefixMapping(" + prefix + "," + namespaceURI + ")");
+        }
+
+        // Register this prefix mapping
+        ArrayStack stack = (ArrayStack) namespaces.get(prefix);
+        if (stack == null) {
+            stack = new ArrayStack();
+            namespaces.put(prefix, stack);
+        }
+        stack.push(namespaceURI);
+
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- DTDHandler Methods
+
+
+    /**
+     * Receive notification of a notation declaration event.
+     *
+     * @param name The notation name
+     * @param publicId The public identifier (if any)
+     * @param systemId The system identifier (if any)
+     */
+    public void notationDecl(String name, String publicId, String systemId) {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("notationDecl(" + name + "," + publicId + "," +
+                    systemId + ")");
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Receive notification of an unparsed entity declaration event.
+     *
+     * @param name The unparsed entity name
+     * @param publicId The public identifier (if any)
+     * @param systemId The system identifier (if any)
+     * @param notation The name of the associated notation
+     */
+    public void unparsedEntityDecl(String name, String publicId,
+                                   String systemId, String notation) {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("unparsedEntityDecl(" + name + "," + publicId + "," +
+                    systemId + "," + notation + ")");
+        }
+
+    }
+-----CSCI578-----
+
+
+    @Override
+    public InputSource resolveEntity(String name, String publicId,
+            String baseURI, String systemId) throws SAXException, IOException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("resolveEntity('" + publicId + "', '" + systemId +
+                    "', '" + baseURI + "')");
+        }
+
+        // Has this system identifier been registered?
+        String entityURL = null;
+        if (publicId != null) {
+            entityURL = (String) entityValidator.get(publicId);
+        }
+
+        // Redirect the schema location to a local destination
+        if (schemaLocation != null && entityURL == null && systemId != null){
+            entityURL = (String)entityValidator.get(systemId);
+        }
+
+        if (entityURL == null) {
+            if (systemId == null) {
+                // cannot resolve
+                if (log.isDebugEnabled()) {
+                    log.debug(" Cannot resolve entity: '" + entityURL + "'");
+                }
+                return (null);
+
+            } else {
+                // try to resolve using system ID
+                if (log.isDebugEnabled()) {
+                    log.debug(" Trying to resolve using system ID '" +
+                            systemId + "'");
+                }
+                entityURL = systemId;
+                // resolve systemId against baseURI if it is not absolute
+                if (baseURI != null) {
+                    try {
+                        URI uri = new URI(systemId);
+                        if (!uri.isAbsolute()) {
+                            entityURL = new URI(baseURI).resolve(uri).toString();
+                        }
+                    } catch (URISyntaxException e) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Invalid URI '" + baseURI + "' or '" +
+                                    systemId + "'");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Return an input source to our alternative URL
+        if (log.isDebugEnabled()) {
+            log.debug(" Resolving to alternate DTD '" + entityURL + "'");
+        }
+
+        try {
+            return (new InputSource(entityURL));
+        } catch (Exception e) {
+            throw createSAXException(e);
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the beginning of this element.
+     *
+     * @param attributes The attribute list of this element
+     */
+    public void begin(Attributes attributes) throws Exception {
+
+        // Identify the name of the class to instantiate
+        String realClassName = className;
+        if (attributeName != null) {
+            String value = attributes.getValue(attributeName);
+            if (value != null) {
+                realClassName = value;
+            }
+        }
+        if (digester.log.isDebugEnabled()) {
+            digester.log.debug("[ObjectCreateRule]{" + digester.match +
+                    "}New " + realClassName);
+        }
+
+        // Instantiate the new object and push it on the context stack
+        Class clazz = digester.getClassLoader().loadClass(realClassName);
+        Object instance = clazz.newInstance();
+        digester.push(instance);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process the end of this element.
+     */
+    public void end() throws Exception {
+
+        Object top = digester.pop();
+        if (digester.log.isDebugEnabled()) {
+            digester.log.debug("[ObjectCreateRule]{" + digester.match +
+                    "} Pop " + top.getClass().getName());
+        }
+
+    }
+-----CSCI578-----
+
+
+
+
+
+    // ---------------------------------------- NotificationBroadcaster Methods
+
+
+    /**
+     * Add a notification event listener to this MBean.
+     *
+     * @param listener Listener that will receive event notifications
+     * @param filter Filter object used to filter event notifications
+     *  actually delivered, or <code>null</code> for no filtering
+     * @param handback Handback object to be sent along with event
+     *  notifications
+     *
+     * @exception IllegalArgumentException if the listener parameter is null
+     */
+    public void addNotificationListener(NotificationListener listener,
+                                        NotificationFilter filter,
+                                        Object handback)
+        throws IllegalArgumentException {
+
+        if (listener == null)
+            throw new IllegalArgumentException("Listener is null");
+
+        if( log.isDebugEnabled() ) log.debug("addNotificationListener " + listener);
+
+        if (generalBroadcaster == null)
+            generalBroadcaster = new BaseNotificationBroadcaster();
+        generalBroadcaster.addNotificationListener
+            (listener, filter, handback);
+
+        // We'll send the attribute change notifications to all listeners ( who care )
+        // The normal filtering can be used.
+        // The problem is that there is no other way to add attribute change listeners
+        // to a model mbean ( AFAIK ). I suppose the spec should be fixed.
+        if (attributeBroadcaster == null)
+            attributeBroadcaster = new BaseNotificationBroadcaster();
+
+        if( log.isDebugEnabled() )
+            log.debug("addAttributeNotificationListener " + listener);
+
+        attributeBroadcaster.addNotificationListener
+                (listener, filter, handback);
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- Registration  --------------------
+    // XXX We can add some method patterns here- like setName() and
+    // setDomain() for code that doesn't implement the Registration
+
+    public ObjectName preRegister(MBeanServer server,
+                                  ObjectName name)
+            throws Exception
+    {
+        if( log.isDebugEnabled())
+            log.debug("preRegister " + resource + " " + name );
+        oname=name;
+        if( resource instanceof MBeanRegistration ) {
+            oname = ((MBeanRegistration)resource).preRegister(server, name );
+        }
+        return oname;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setContextName(String ctxname) {
+	this.ctxname = ctxname;
+    }
+-----CSCI578-----
+
+
+    public void setAction(int action) {
+	this.action = action;
+    }
+-----CSCI578-----
+
+
+    public void setAuthType(String authType) {
+	this.authType = authType;
+    }
+-----CSCI578-----
+
+
+    public void setUsername(String username) {
+	this.username = username;
+    }
+-----CSCI578-----
+
+
+    public void setPassword(String password) {
+	this.password = password;
+    }
+-----CSCI578-----
+
+
+    public void setPrincipal(SerializablePrincipal principal) {
+        this.principal = principal;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Session on which this event occurred.
+     */
+    public Session getSession() {
+
+        return (this.session);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the event type of this event.
+     */
+    public String getType() {
+
+        return (this.type);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the parent class loader (if any) for web applications.
+     * This call is meaningful only <strong>before</strong> a Loader has
+     * been configured, and the specified value (if non-null) should be
+     * passed as an argument to the class loader constructor.
+     *
+     * @param parent The new parent class loader
+     */
+    public void setParentClassLoader(ClassLoader parent);
+-----CSCI578-----
+   
+     
+
+    public void setMaxThreads(int maxThreads) {
+        this.maxThreads = maxThreads;
+    }
+-----CSCI578-----
+
+
+    public void setMinSpareThreads(int minSpareThreads) {
+        this.minSpareThreads = minSpareThreads;
+    }
+-----CSCI578-----
+
+
+    public void setMaxSpareThreads(int maxSpareThreads) {
+        this.maxSpareThreads = maxSpareThreads;
+    }
+-----CSCI578-----
+
+
+    private void unLockSocket() throws IOException {
+        // Need to create a connection to unlock the accept();
+        Socket s;
+        InetAddress ladr = inet;
+
+        if(port == 0)
+            return;
+        if (ladr == null || "0.0.0.0".equals(ladr.getHostAddress())) {
+            ladr = InetAddress.getLocalHost();
+        }
+        s=new Socket(ladr, port );
+        // setting soLinger to a small value will help shutdown the
+        // connection quicker
+        s.setSoLinger(true, 0);
+
+	s.close();
+    }
+-----CSCI578-----
+
+    
+
+    
+    // ============ Data Reading Methods ===================
+
+    /**
+     * Read an integer from packet, and advance the read position past
+     * it.  Integers are encoded as two unsigned bytes with the
+     * high-order byte first, and, as far as I can tell, in
+     * little-endian order within each byte.  
+     */
+    public int getInt() {
+        int b1 = buf[pos++] & 0xFF;  // No swap, Java order
+        int b2 = buf[pos++] & 0xFF;
+
+        return  (b1<<8) + b2;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a string representation of this event.
+     */
+    public String toString() {
+
+        return ("SessionEvent['" + getSession() + "','" +
+                getType() + "']");
+
+    }
+-----CSCI578-----
+
+
+    public void pause() throws Exception {
+        synchronized(this) {
+            paused = true;
+            unLockSocket();
+        }
+    }
+-----CSCI578-----
+
+
+    // -------------------- Configuration --------------------
+
+    public void setMaxThreads(int maxThreads) {
+	if( maxThreads > 0)
+	    tp.setMaxThreads(maxThreads);
+    }
+-----CSCI578-----
+
+
+    public void setMaxSpareThreads(int maxThreads) {
+	if(maxThreads > 0) 
+	    tp.setMaxSpareThreads(maxThreads);
+    }
+-----CSCI578-----
+
+
+    public void setMinSpareThreads(int minThreads) {
+	if(minThreads > 0) 
+	    tp.setMinSpareThreads(minThreads);
+    }

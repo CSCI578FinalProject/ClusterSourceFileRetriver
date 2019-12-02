@@ -1,0 +1,92 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Have one or more classes or resources been modified so that a reload
+     * is appropriate?
+     * @return <code>true</code> if there's been a modification
+     */
+    public boolean modified() {
+
+        if (log.isDebugEnabled())
+            log.debug("modified()");
+
+        for (Entry<String,ResourceEntry> entry : resourceEntries.entrySet()) {
+            long cachedLastModified = entry.getValue().lastModified;
+            long lastModified = resources.getClassLoaderResource(
+                    entry.getKey()).getLastModified();
+            if (lastModified != cachedLastModified) {
+                if( log.isDebugEnabled() )
+                    log.debug(sm.getString("webappClassLoader.resourceModified",
+                            entry.getKey(),
+                            new Date(cachedLastModified),
+                            new Date(lastModified)));
+                return true;
+            }
+        }
+
+        // Check if JARs have been added or removed
+        WebResource[] jars = resources.listResources("/WEB-INF/lib");
+        // Filter out non-JAR resources
+
+        int jarCount = 0;
+        for (WebResource jar : jars) {
+            if (jar.getName().endsWith(".jar") && jar.isFile() && jar.canRead()) {
+                jarCount++;
+                Long recordedLastModified = jarModificationTimes.get(jar.getName());
+                if (recordedLastModified == null) {
+                    // Jar has been added
+                    log.info(sm.getString("webappClassLoader.jarsAdded",
+                            resources.getContext().getName()));
+                    return true;
+                }
+                if (recordedLastModified.longValue() != jar.getLastModified()) {
+                    // Jar has been changed
+                    log.info(sm.getString("webappClassLoader.jarsModified",
+                            resources.getContext().getName()));
+                    return true;
+                }
+            }
+        }
+
+        if (jarCount < jarModificationTimes.size()){
+            log.info(sm.getString("webappClassLoader.jarsRemoved",
+                    resources.getContext().getName()));
+            return true;
+        }
+
+
+        // No classes have been modified
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Has the internal repository associated with this Loader been modified,
+     * such that the loaded classes should be reloaded?
+     */
+    @Override
+    public boolean modified() {
+        return classLoader != null ? classLoader.modified() : false ;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Obtain the object that represents the class loader resource at the given
+     * path. WEB-INF/classes is always searched prior to searching JAR files in
+     * WEB-INF/lib. The search order for JAR files will be consistent across
+     * subsequent calls to this method until the web application is reloaded. No
+     * guarantee is made as to what the search order for JAR files may be.
+     *
+     * @param path  The path of the class loader resource of interest relative
+     *              to the the root of class loader resources for this web
+     *              application.
+     *
+     * @return  The object that represents the class loader resource at the
+     *          given path
+     */
+    WebResource getClassLoaderResource(String path);

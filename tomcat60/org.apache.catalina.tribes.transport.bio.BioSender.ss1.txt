@@ -1,0 +1,104 @@
+22
+
+    /**
+     * Send message
+     */
+    public  void sendMessage(byte[] data, boolean waitForAck) throws IOException {
+        IOException exception = null;
+        setAttempt(0);
+        try {
+             // first try with existing connection
+             pushMessage(data,false,waitForAck);
+        } catch (IOException x) {
+            SenderState.getSenderState(getDestination()).setSuspect();
+            exception = x;
+            if (log.isTraceEnabled()) log.trace(sm.getString("IDataSender.send.again", getAddress().getHostAddress(),new Integer(getPort())),x);
+            while ( getAttempt()<getMaxRetryAttempts() ) {
+                try {
+                    setAttempt(getAttempt()+1);
+                    // second try with fresh connection
+                    pushMessage(data, true,waitForAck);
+                    exception = null;
+                } catch (IOException xx) {
+                    exception = xx;
+                    closeSocket();
+                }
+            }
+        } finally {
+            setRequestCount(getRequestCount()+1);
+            keepalive();
+            if ( exception != null ) throw exception;
+        }
+    }
+
+    /**
+     * close socket
+     * 
+     * @see DataSender#disconnect()
+     */
+    protected void closeSocket() {
+        if(isConnected()) {
+             if (socket != null) {
+                try {
+                    socket.close();
+                } catch (IOException x) {
+                } finally {
+                    socket = null;
+                    soOut = null;
+                    soIn = null;
+                }
+            }
+            setRequestCount(0);
+            setConnected(false);
+            if (log.isDebugEnabled())
+                log.debug(sm.getString("IDataSender.closeSocket",getAddress().getHostAddress(), new Integer(getPort()),new Long(0)));
+       }
+    }
+
+    
+    /**
+     * Name of this SockerSender
+     */
+    public String toString() {
+        StringBuffer buf = new StringBuffer("DataSender[(");
+        buf.append(super.toString()).append(")");
+        buf.append(getAddress()).append(":").append(getPort()).append("]");
+        return buf.toString();
+    }
+
+    // --------------------------------------------------------- Protected Methods
+ 
+    /**
+     * open real socket and set time out when waitForAck is enabled
+     * is socket open return directly
+     */
+    protected void openSocket() throws IOException {
+       if(isConnected()) return ;
+       try {
+           socket = new Socket();
+           InetSocketAddress sockaddr = new InetSocketAddress(getAddress(), getPort());
+           socket.connect(sockaddr,(int)getTimeout());
+           socket.setSendBufferSize(getTxBufSize());
+           socket.setReceiveBufferSize(getRxBufSize());
+           socket.setSoTimeout( (int) getTimeout());
+           socket.setTcpNoDelay(getTcpNoDelay());
+           socket.setKeepAlive(getSoKeepAlive());
+           socket.setReuseAddress(getSoReuseAddress());
+           socket.setOOBInline(getOoBInline());
+           socket.setSoLinger(getSoLingerOn(),getSoLingerTime());
+           socket.setTrafficClass(getSoTrafficClass());
+           setConnected(true);
+           soOut = socket.getOutputStream();
+           soIn  = socket.getInputStream();
+           setRequestCount(0);
+           setConnectTime(System.currentTimeMillis());
+           if (log.isDebugEnabled())
+               log.debug(sm.getString("IDataSender.openSocket", getAddress().getHostAddress(), new Integer(getPort()), new Long(0)));
+      } catch (IOException ex1) {
+          SenderState.getSenderState(getDestination()).setSuspect();
+          if (log.isDebugEnabled())
+              log.debug(sm.getString("IDataSender.openSocket.failure",getAddress().getHostAddress(), new Integer(getPort()),new Long(0)), ex1);
+          throw (ex1);
+        }
+        
+     }

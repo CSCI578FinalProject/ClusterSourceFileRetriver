@@ -1,0 +1,193 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Return a List of all registered Rule instances that match the specified
+     * nesting pattern, or a zero-length List if there are no matches.  If more
+     * than one Rule instance matches, they <strong>must</strong> be returned
+     * in the order originally registered through the <code>add()</code>
+     * method.
+     *
+     * @param namespaceURI Namespace URI for which to select matching rules,
+     *  or <code>null</code> to match regardless of namespace URI
+     * @param pattern Nesting pattern to be matched
+     * @return a rules list
+     */
+    public List<Rule> match(String namespaceURI, String pattern);
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * This method is called when the beginning of a matching XML element
+     * is encountered. The default implementation is a NO-OP.
+     *
+     * @param namespace the namespace URI of the matching element, or an
+     *                  empty string if the parser is not namespace aware or the
+     *                  element has no namespace
+     * @param name the local name if the parser is namespace aware, or just
+     *             the element name otherwise
+     * @param attributes The attribute list of this element
+     *
+     * @throws Exception if an error occurs while processing the event
+     */
+    public void begin(String namespace, String name, Attributes attributes) throws Exception {
+        // NO-OP by default.
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification of the start of an XML element being reached.
+     *
+     * @param namespaceURI The Namespace URI, or the empty string if the element
+     *   has no Namespace URI or if Namespace processing is not being performed.
+     * @param localName The local name (without prefix), or the empty
+     *   string if Namespace processing is not being performed.
+     * @param qName The qualified name (with prefix), or the empty
+     *   string if qualified names are not available.\
+     * @param list The attributes attached to the element. If there are
+     *   no attributes, it shall be an empty Attributes object.
+     * @exception SAXException if a parsing error is to be reported
+     */
+    @Override
+    public void startElement(String namespaceURI, String localName,
+                             String qName, Attributes list)
+            throws SAXException {
+        boolean debug = log.isDebugEnabled();
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("startElement(" + namespaceURI + "," + localName + "," +
+                    qName + ")");
+        }
+
+        // Parse system properties
+        list = updateAttributes(list);
+
+        // Save the body text accumulated for our surrounding element
+        bodyTexts.push(bodyText);
+        bodyText = new StringBuilder();
+
+        // the actual element name is either in localName or qName, depending
+        // on whether the parser is namespace aware
+        String name = localName;
+        if ((name == null) || (name.length() < 1)) {
+            name = qName;
+        }
+
+        // Compute the current matching rule
+        StringBuilder sb = new StringBuilder(match);
+        if (match.length() > 0) {
+            sb.append('/');
+        }
+        sb.append(name);
+        match = sb.toString();
+        if (debug) {
+            log.debug("  New match='" + match + "'");
+        }
+
+        // Fire "begin" events for all relevant rules
+        List<Rule> rules = getRules().match(namespaceURI, match);
+        matches.push(rules);
+        if ((rules != null) && (rules.size() > 0)) {
+            for (int i = 0; i < rules.size(); i++) {
+                try {
+                    Rule rule = rules.get(i);
+                    if (debug) {
+                        log.debug("  Fire begin() for " + rule);
+                    }
+                    rule.begin(namespaceURI, name, list);
+                } catch (Exception e) {
+                    log.error("Begin event threw exception", e);
+                    throw createSAXException(e);
+                } catch (Error e) {
+                    log.error("Begin event threw error", e);
+                    throw e;
+                }
+            }
+        } else {
+            if (debug) {
+                log.debug("  No rules found matching '" + match + "'.");
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Create a SAX exception which also understands about the location in
+     * the digester file where the exception occurs
+     * @param message The error message
+     * @param e The root cause
+     * @return the new exception
+     */
+    public SAXException createSAXException(String message, Exception e) {
+        if ((e != null) &&
+            (e instanceof InvocationTargetException)) {
+            Throwable t = e.getCause();
+            if (t instanceof ThreadDeath) {
+                throw (ThreadDeath) t;
+            }
+            if (t instanceof VirtualMachineError) {
+                throw (VirtualMachineError) t;
+            }
+            if (t instanceof Exception) {
+                e = (Exception) t;
+            }
+        }
+        if (locator != null) {
+            String error = "Error at (" + locator.getLineNumber() + ", " +
+                    locator.getColumnNumber() + ") : " + message;
+            if (e != null) {
+                return new SAXParseException(error, locator, e);
+            } else {
+                return new SAXParseException(error, locator);
+            }
+        }
+        log.error("No Locator!");
+        if (e != null) {
+            return new SAXException(message, e);
+        } else {
+            return new SAXException(message);
+        }
+    }
+
+
+    /**
+     * Create a SAX exception which also understands about the location in
+     * the digester file where the exception occurs
+     * @param e The root cause
+     * @return the new exception
+     */
+    public SAXException createSAXException(Exception e) {
+        if (e instanceof InvocationTargetException) {
+            Throwable t = e.getCause();
+            if (t instanceof ThreadDeath) {
+                throw (ThreadDeath) t;
+            }
+            if (t instanceof VirtualMachineError) {
+                throw (VirtualMachineError) t;
+            }
+            if (t instanceof Exception) {
+                e = (Exception) t;
+            }
+        }
+        return createSAXException(e.getMessage(), e);
+    }
+
+
+    /**
+     * Create a SAX exception which also understands about the location in
+     * the digester file where the exception occurs
+     * @param message The error message
+     * @return the new exception
+     */
+    public SAXException createSAXException(String message) {
+        return createSAXException(message, null);
+    }

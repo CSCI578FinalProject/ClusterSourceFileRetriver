@@ -1,0 +1,79 @@
+4
+-----CSCI578-----
+
+    
+    
+    // ------------------------------------------------------------- Properties
+    
+    
+    // ----------------------------------------------- URLStreamHandler Methods
+    
+    
+    /**
+     * Opens a connection to the object referenced by the <code>URL</code> 
+     * argument.
+     */
+    protected URLConnection openConnection(URL u) 
+        throws IOException {
+        DirContext currentContext = this.context;
+        if (currentContext == null)
+            currentContext = get();
+        return new DirContextURLConnection(currentContext, u);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    /**
+     * Get the bound context.
+     */
+    public static DirContext get() {
+
+        DirContext result = null;
+
+        Thread currentThread = Thread.currentThread();
+        ClassLoader currentCL = currentThread.getContextClassLoader();
+
+        // Checking CL binding
+        result = (DirContext) clBindings.get(currentCL);
+        if (result != null)
+            return result;
+
+        // Checking thread biding
+        result = (DirContext) threadBindings.get(currentThread);
+
+        // Checking parent CL binding
+        currentCL = currentCL.getParent();
+        while (currentCL != null) {
+            result = (DirContext) clBindings.get(currentCL);
+            if (result != null)
+                return result;
+            currentCL = currentCL.getParent();
+        }
+
+        if (result == null)
+            throw new IllegalStateException("Illegal class loader binding");
+
+        return result;
+
+    }
+
+    
+    
+    /**
+     * Get the bound context.
+     */
+    public static DirContext get(ClassLoader cl) {
+        return (DirContext) clBindings.get(cl);
+    }
+
+    
+    
+    /**
+     * Get the bound context.
+     */
+    public static DirContext get(Thread thread) {
+        return (DirContext) threadBindings.get(thread);
+    }
+-----CSCI578-----

@@ -1,0 +1,237 @@
+13
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public int incTripCount() {
+	return tripCount++;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Compile and load a prototype for the Tag file.  This is needed
+     * when compiling tag files with circular dependencies.  A prototpe
+     * (skeleton) with no dependencies on other other tag files is
+     * generated and compiled.
+     */
+    public Class loadTagFilePrototype() throws JasperException {
+
+	ctxt.setPrototypeMode(true);
+	try {
+	    return loadTagFile();
+	} finally {
+	    ctxt.setPrototypeMode(false);
+	}
+    }
+-----CSCI578-----
+
+
+    /**
+     * Compiles and loads a tagfile.
+     */
+    private Class loadTagFile(Compiler compiler, String tagFilePath,
+            TagInfo tagInfo, PageInfo parentPageInfo) throws JasperException {
+
+        URL tagFileJarUrl = null;
+        if (tagFilePath.startsWith("/META-INF/")) {
+            try {
+                tagFileJarUrl = new URL("jar:" +
+                        compiler.getCompilationContext().getTldLocation(
+                        tagInfo.getTagLibrary().getURI())[0] + "!/");
+            } catch (MalformedURLException e) {
+                // Ignore - tagFileJarUrl will be null
+            }
+        }
+        String tagFileJarPath;
+        if (tagFileJarUrl == null) {
+            tagFileJarPath = "";
+        } else {
+            tagFileJarPath = tagFileJarUrl.toString();
+        }
+
+        JspCompilationContext ctxt = compiler.getCompilationContext();
+        JspRuntimeContext rctxt = ctxt.getRuntimeContext();
+        String wrapperUri = tagFileJarPath + tagFilePath;
+        JspServletWrapper wrapper = rctxt.getWrapper(wrapperUri);
+
+        synchronized (rctxt) {
+            if (wrapper == null) {
+                wrapper = new JspServletWrapper(ctxt.getServletContext(), ctxt
+                        .getOptions(), tagFilePath, tagInfo, ctxt
+                        .getRuntimeContext(), tagFileJarUrl);
+                rctxt.addWrapper(wrapperUri, wrapper);
+
+                // Use same classloader and classpath for compiling tag files
+                wrapper.getJspEngineContext().setClassLoader(
+                        (URLClassLoader) ctxt.getClassLoader());
+                wrapper.getJspEngineContext().setClassPath(ctxt.getClassPath());
+            } else {
+                // Make sure that JspCompilationContext gets the latest TagInfo
+                // for the tag file. TagInfo instance was created the last
+                // time the tag file was scanned for directives, and the tag
+                // file may have been modified since then.
+                wrapper.getJspEngineContext().setTagInfo(tagInfo);
+            }
+
+            Class tagClazz;
+            int tripCount = wrapper.incTripCount();
+            try {
+                if (tripCount > 0) {
+                    // When tripCount is greater than zero, a circular
+                    // dependency exists. The circularily dependant tag
+                    // file is compiled in prototype mode, to avoid infinite
+                    // recursion.
+
+                    JspServletWrapper tempWrapper = new JspServletWrapper(ctxt
+                            .getServletContext(), ctxt.getOptions(),
+                            tagFilePath, tagInfo, ctxt.getRuntimeContext(),
+                            tagFileJarUrl);
+                    // Use same classloader and classpath for compiling tag files
+                    tempWrapper.getJspEngineContext().setClassLoader(
+                            (URLClassLoader) ctxt.getClassLoader());
+                    tempWrapper.getJspEngineContext().setClassPath(ctxt.getClassPath());
+                    tagClazz = tempWrapper.loadTagFilePrototype();
+                    tempVector.add(tempWrapper.getJspEngineContext()
+                            .getCompiler());
+                } else {
+                    tagClazz = wrapper.loadTagFile();
+                }
+            } finally {
+                wrapper.decTripCount();
+            }
+
+            // Add the dependants for this tag file to its parent's
+            // dependant list. The only reliable dependency information
+            // can only be obtained from the tag instance.
+            try {
+                Object tagIns = tagClazz.newInstance();
+                if (tagIns instanceof JspSourceDependent) {
+                    Iterator iter = ((List) ((JspSourceDependent) tagIns)
+                            .getDependants()).iterator();
+                    while (iter.hasNext()) {
+                        parentPageInfo.addDependant((String) iter.next());
+                    }
+                }
+            } catch (Exception e) {
+                // ignore errors
+            }
+
+            return tagClazz;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Compile (if needed) and load a tag file
+     */
+    public Class loadTagFile() throws JasperException {
+
+        try {
+            if (ctxt.isRemoved()) {
+                throw new FileNotFoundException(jspUri);
+            }
+            if (options.getDevelopment() || firstTime ) {
+                synchronized (this) {
+                    firstTime = false;
+                    ctxt.compile();
+                }
+            } else {
+                if (compileException != null) {
+                    throw compileException;
+                }
+            }
+
+            if (reload) {
+                tagHandlerClass = ctxt.load();
+                reload = false;
+            }
+        } catch (FileNotFoundException ex) {
+            throw new JasperException(ex);
+	}
+
+	return tagHandlerClass;
+    }
+-----CSCI578-----
+
+
+    public int decTripCount() {
+	return tripCount--;
+    }
+-----CSCI578-----
+
+
+    public void setTagInfo(TagInfo tagi) {
+        tagInfo = tagi;
+    }
+-----CSCI578-----
+
+
+    public void setPrototypeMode(boolean pm) {
+        protoTypeMode = pm;
+    }
+-----CSCI578-----
+
+
+    public void setClassLoader(URLClassLoader loader) {
+        this.loader = loader;
+    }
+-----CSCI578-----
+
+
+    /**
+     * The classpath that is passed off to the Java compiler. 
+     */
+    public void setClassPath(String classPath) {
+        this.classPath = classPath;
+    }
+-----CSCI578-----
+
+
+    /* ==================== Methods to override ==================== */
+    
+    /** ---------- Class path and loader ---------- */
+
+    /**
+     * The classpath that is passed off to the Java compiler. 
+     */
+    public String getClassPath() {
+        if( classPath != null )
+            return classPath;
+        return rctxt.getClassPath();
+    }
+-----CSCI578-----
+
+
+    // ==================== Manipulating the class ====================
+
+    public Class load() 
+        throws JasperException, FileNotFoundException
+    {
+        try {
+            getJspLoader();
+            
+            String name;
+            if (isTagFile()) {
+                name = tagInfo.getTagClassName();
+            } else {
+                name = getServletPackageName() + "." + getServletClassName();
+            }
+            servletClass = jspLoader.loadClass(name);
+        } catch (ClassNotFoundException cex) {
+            throw new JasperException(Localizer.getMessage("jsp.error.unable.load"),
+                                      cex);
+        } catch (Exception ex) {
+            throw new JasperException(Localizer.getMessage("jsp.error.unable.compile"),
+                                      ex);
+        }
+        removed = 0;
+        return servletClass;
+    }
+-----CSCI578-----
+
+
+    public JspCompilationContext getJspEngineContext() {
+        return ctxt;
+    }

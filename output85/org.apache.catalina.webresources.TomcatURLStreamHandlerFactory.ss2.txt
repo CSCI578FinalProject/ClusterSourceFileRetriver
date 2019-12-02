@@ -1,0 +1,30 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public URLStreamHandler createURLStreamHandler(String protocol) {
+
+        // Tomcat's handler always takes priority so applications can't override
+        // it.
+        if (WAR_PROTOCOL.equals(protocol)) {
+            return new WarURLStreamHandler();
+        } else if (CLASSPTH_PROTOCOL.equals(protocol)) {
+            return new ClasspathURLStreamHandler();
+        }
+
+        // Application handlers
+        for (URLStreamHandlerFactory factory : userFactories) {
+            URLStreamHandler handler =
+                factory.createURLStreamHandler(protocol);
+            if (handler != null) {
+                return handler;
+            }
+        }
+
+        // Unknown protocol
+        return null;
+    }

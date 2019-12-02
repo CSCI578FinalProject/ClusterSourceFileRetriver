@@ -1,0 +1,176 @@
+7
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Remove all of the Sessions in this Store.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public void clear() throws IOException {
+        String[] keys = keys();
+        for (int i = 0; i < keys.length; i++) {
+            remove(keys[i]);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return an array containing the session identifiers of all Sessions
+     * currently saved in this Store.  If there are no such Sessions, a
+     * zero-length array is returned.
+     *
+     * @exception IOException if an input/output error occurred
+     */
+    @Override
+    public String[] keys() throws IOException {
+        // Acquire the list of files in our storage directory
+        File file = directory();
+        if (file == null) {
+            return (new String[0]);
+        }
+
+        String files[] = file.list();
+
+        // Bugzilla 32130
+        if((files == null) || (files.length < 1)) {
+            return (new String[0]);
+        }
+
+        // Build and return the list of session identifiers
+        ArrayList<String> list = new ArrayList<>();
+        int n = FILE_EXT.length();
+        for (int i = 0; i < files.length; i++) {
+            if (files[i].endsWith(FILE_EXT)) {
+                list.add(files[i].substring(0, files[i].length() - n));
+            }
+        }
+        return list.toArray(new String[list.size()]);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the Session with the specified session identifier from
+     * this Store, if present.  If no such Session is present, this method
+     * takes no action.
+     *
+     * @param id Session identifier of the Session to be removed
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public void remove(String id) throws IOException {
+        File file = file(id);
+        if (file == null) {
+            return;
+        }
+        if (manager.getContext().getLogger().isDebugEnabled()) {
+            manager.getContext().getLogger().debug(sm.getString(getStoreName() + ".removing",
+                             id, file.getAbsolutePath()));
+        }
+        file.delete();
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+    /**
+     * Return a File object representing the pathname to our
+     * session persistence directory, if any.  The directory will be
+     * created if it does not already exist.
+     */
+    private File directory() throws IOException {
+        if (this.directory == null) {
+            return null;
+        }
+        if (this.directoryFile != null) {
+            // NOTE:  Race condition is harmless, so do not synchronize
+            return this.directoryFile;
+        }
+        File file = new File(this.directory);
+        if (!file.isAbsolute()) {
+            Context context = manager.getContext();
+            ServletContext servletContext = context.getServletContext();
+            File work = (File) servletContext.getAttribute(ServletContext.TEMPDIR);
+            file = new File(work, this.directory);
+        }
+        if (!file.exists() || !file.isDirectory()) {
+            if (!file.delete() && file.exists()) {
+                throw new IOException(sm.getString("fileStore.deleteFailed", file));
+            }
+            if (!file.mkdirs() && !file.isDirectory()) {
+                throw new IOException(sm.getString("fileStore.createFailed", file));
+            }
+        }
+        this.directoryFile = file;
+        return file;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a File object representing the pathname to our
+     * session persistence file, if any.
+     *
+     * @param id The ID of the Session to be retrieved. This is
+     *    used in the file naming.
+     */
+    private File file(String id) throws IOException {
+        if (this.directory == null) {
+            return null;
+        }
+        String filename = id + FILE_EXT;
+        File file = new File(directory(), filename);
+        return file;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the name for this Store, used for logging.
+     */
+    @Override
+    public String getStoreName() {
+        return storeName;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the number of Sessions present in this Store.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public int getSize() throws IOException {
+        // Acquire the list of files in our storage directory
+        File file = directory();
+        if (file == null) {
+            return (0);
+        }
+        String files[] = file.list();
+
+        // Figure out which files are sessions
+        int keycount = 0;
+        if (files != null) {
+            for (int i = 0; i < files.length; i++) {
+                if (files[i].endsWith(FILE_EXT)) {
+                    keycount++;
+                }
+            }
+        }
+        return keycount;
+    }

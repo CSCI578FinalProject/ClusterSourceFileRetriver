@@ -1,0 +1,84 @@
+6
+-----CSCI578-----
+
+
+
+    @Override
+    public void unbind(boolean usePrivilegedAction, ClassLoader originalClassLoader) {
+        if (originalClassLoader == null) {
+            return;
+        }
+
+        if (threadBindingListener != null) {
+            try {
+                threadBindingListener.unbind();
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                log.error(sm.getString(
+                        "standardContext.threadBindingListenerError", getName()), t);
+            }
+        }
+
+        if (usePrivilegedAction) {
+            PrivilegedAction<Void> pa = new PrivilegedSetTccl(originalClassLoader);
+            AccessController.doPrivileged(pa);
+        } else {
+            Thread.currentThread().setContextClassLoader(originalClassLoader);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Unbinds a thread and a naming context.
+     *
+     * @param obj   Object bound to the required naming context
+     * @param token Security token
+     */
+    public static void unbindThread(Object obj, Object token) {
+        if (ContextAccessController.checkSecurityToken(obj, token)) {
+            threadBindings.remove(Thread.currentThread());
+            threadObjectBindings.remove(Thread.currentThread());
+        }
+    }
+-----CSCI578-----
+
+    public void unbind();
+-----CSCI578-----
+
+
+
+    /**
+     * Unbind thread and restore the specified context classloader.
+     *
+     * @param oldContextClassLoader the previous classloader
+     */
+    protected void unbindThread(ClassLoader oldContextClassLoader) {
+
+        if (isUseNaming()) {
+            ContextBindings.unbindThread(this, getNamingToken());
+        }
+
+        unbind(false, oldContextClassLoader);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return true if the internal naming support is used.
+     */
+    public boolean isUseNaming() {
+
+        return (useNaming);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Object getNamingToken() {
+        return namingToken;
+    }

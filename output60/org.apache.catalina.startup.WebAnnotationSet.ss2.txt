@@ -1,0 +1,1026 @@
+68
+-----CSCI578-----
+
+    
+    
+    // -------------------------------------------------------- protected Methods
+    
+    
+    /**
+     * Process the annotations for the listeners.
+     */
+    protected static void loadApplicationListenerAnnotations(Context context) {
+        String[] applicationListeners = context.findApplicationListeners();
+        for (int i = 0; i < applicationListeners.length; i++) {
+            loadClassAnnotation(context, applicationListeners[i]);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of application listener class names configured
+     * for this application.
+     */
+    public String[] findApplicationListeners();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setName(String name) {
+        this.name = name;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a web service reference for this web application.
+     *
+     * @param service New web service reference
+     */
+    public void addService(ContextService service) {
+
+        if (entries.containsKey(service.getName())) {
+            return;
+        } else {
+            Object value = service.getType();
+            if (value == null) {
+                value = "";
+            }
+            entries.put(service.getName(), value);
+        }
+        
+        synchronized (services) {
+            service.setNamingResources(this);
+            services.put(service.getName(), service);
+        }
+        support.firePropertyChange("service", null, service);
+        
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Add a resource environment reference for this web application.
+     *
+     * @param resource The resource
+     */
+    public void addResourceEnvRef(ContextResourceEnvRef resource) {
+
+        if (entries.containsKey(resource.getName())) {
+            return;
+        } else {
+            entries.put(resource.getName(), resource.getType());
+        }
+
+        synchronized (resourceEnvRefs) {
+            resource.setNamingResources(this);
+            resourceEnvRefs.put(resource.getName(), resource);
+        }
+        support.firePropertyChange("resourceEnvRef", null, resource);
+
+    }
+-----CSCI578-----
+
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+-----CSCI578-----
+
+
+    public void setType(String type) {
+        this.type = type;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    /**
+     * Process the annotations on a context for a given className.
+     */
+    protected static void loadClassAnnotation(Context context, String fileString) {
+        
+        ClassLoader classLoader = context.getLoader().getClassLoader();
+        Class classClass = null;
+        
+        try {
+            classClass = classLoader.loadClass(fileString);
+        } catch (ClassNotFoundException e) {
+            // We do nothing
+        } catch (NoClassDefFoundError e) {
+            // We do nothing
+        }
+        
+        if (classClass == null) {
+            return;
+        }
+        
+        // Initialize the annotations
+        
+        if (classClass.isAnnotationPresent(Resource.class)) {
+            Resource annotation = (Resource) 
+                classClass.getAnnotation(Resource.class);
+            addResource(context, annotation);
+        }
+        /* Process Resources annotation.
+         * Ref JSR 250
+         */
+        if (classClass.isAnnotationPresent(Resources.class)) {
+            Resources annotation = (Resources) 
+                classClass.getAnnotation(Resources.class);
+            for (int i = 0; annotation.value() != null && i < annotation.value().length; i++) {
+                addResource(context, annotation.value()[i]);
+            }
+        }
+        /* Process EJB annotation.
+         * Ref JSR 224, equivalent to the ejb-ref or ejb-local-ref
+         * element in the deployment descriptor.
+        if (classClass.isAnnotationPresent(EJB.class)) {
+            EJB annotation = (EJB) 
+            classClass.getAnnotation(EJB.class);
+            
+            if ((annotation.mappedName().length() == 0) ||
+                    annotation.mappedName().equals("Local")) {
+                
+                ContextLocalEjb ejb = new ContextLocalEjb();
+                
+                ejb.setName(annotation.name());
+                ejb.setType(annotation.beanInterface().getCanonicalName());
+                ejb.setDescription(annotation.description());
+                
+                ejb.setHome(annotation.beanName());
+                
+                context.getNamingResources().addLocalEjb(ejb);
+                
+            } else if (annotation.mappedName().equals("Remote")) {
+                
+                ContextEjb ejb = new ContextEjb();
+                
+                ejb.setName(annotation.name());
+                ejb.setType(annotation.beanInterface().getCanonicalName());
+                ejb.setDescription(annotation.description());
+                
+                ejb.setHome(annotation.beanName());
+                
+                context.getNamingResources().addEjb(ejb);
+                
+            }
+            
+        }
+         */
+        /* Process WebServiceRef annotation.
+         * Ref JSR 224, equivalent to the service-ref element in 
+         * the deployment descriptor.
+         * The service-ref registration is not implemented
+        if (classClass.isAnnotationPresent(WebServiceRef.class)) {
+            WebServiceRef annotation = (WebServiceRef) 
+            classClass.getAnnotation(WebServiceRef.class);
+            
+            ContextService service = new ContextService();
+            
+            service.setName(annotation.name());
+            service.setWsdlfile(annotation.wsdlLocation());
+            
+            service.setType(annotation.type().getCanonicalName());
+            
+            if (annotation.value() == null)
+                service.setServiceinterface(annotation.type().getCanonicalName());
+            
+            if (annotation.type().getCanonicalName().equals("Service"))
+                service.setServiceinterface(annotation.type().getCanonicalName());
+            
+            if (annotation.value().getCanonicalName().equals("Endpoint"))
+                service.setServiceendpoint(annotation.type().getCanonicalName());
+            
+            service.setPortlink(annotation.type().getCanonicalName());
+            
+            context.getNamingResources().addService(service);
+            
+            
+        }
+         */
+        /* Process DeclareRoles annotation.
+         * Ref JSR 250, equivalent to the security-role element in
+         * the deployment descriptor
+         */
+        if (classClass.isAnnotationPresent(DeclareRoles.class)) {
+            DeclareRoles annotation = (DeclareRoles) 
+                classClass.getAnnotation(DeclareRoles.class);
+            for (int i = 0; annotation.value() != null && i < annotation.value().length; i++) {
+                context.addSecurityRole(annotation.value()[i]);
+            }
+        }
+        
+        
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    /**
+     * Process a Resource annotation to set up a Resource.
+     * Ref JSR 250, equivalent to the resource-ref,
+     * message-destination-ref, env-ref, resource-env-ref
+     * or service-ref element in the deployment descriptor.
+     */
+    protected static void addResource(Context context, Resource annotation) {
+        
+        if (annotation.type().getCanonicalName().equals("java.lang.String") ||
+                annotation.type().getCanonicalName().equals("java.lang.Character") ||
+                annotation.type().getCanonicalName().equals("java.lang.Integer") ||
+                annotation.type().getCanonicalName().equals("java.lang.Boolean") ||
+                annotation.type().getCanonicalName().equals("java.lang.Double") ||
+                annotation.type().getCanonicalName().equals("java.lang.Byte") ||
+                annotation.type().getCanonicalName().equals("java.lang.Short") ||
+                annotation.type().getCanonicalName().equals("java.lang.Long") ||
+                annotation.type().getCanonicalName().equals("java.lang.Float")) {
+            
+            // env-ref element
+            ContextEnvironment resource = new ContextEnvironment();
+            
+            resource.setName(annotation.name());
+            resource.setType(annotation.type().getCanonicalName());
+            
+            resource.setDescription(annotation.description());
+            
+            resource.setValue(annotation.mappedName());
+            
+            context.getNamingResources().addEnvironment(resource);
+            
+        } else if (annotation.type().getCanonicalName().equals("javax.xml.rpc.Service")) {
+            
+            // service-ref element
+            ContextService service = new ContextService();
+            
+            service.setName(annotation.name());
+            service.setWsdlfile(annotation.mappedName());
+            
+            service.setType(annotation.type().getCanonicalName());
+            service.setDescription(annotation.description());
+            
+            context.getNamingResources().addService(service);
+            
+        } else if (annotation.type().getCanonicalName().equals("javax.sql.DataSource") ||
+                annotation.type().getCanonicalName().equals("javax.jms.ConnectionFactory") ||
+                annotation.type().getCanonicalName()
+                .equals("javax.jms.QueueConnectionFactory") ||
+                annotation.type().getCanonicalName()
+                .equals("javax.jms.TopicConnectionFactory") ||
+                annotation.type().getCanonicalName().equals("javax.mail.Session") ||
+                annotation.type().getCanonicalName().equals("java.net.URL") ||
+                annotation.type().getCanonicalName()
+                .equals("javax.resource.cci.ConnectionFactory") ||
+                annotation.type().getCanonicalName().equals("org.omg.CORBA_2_3.ORB") ||
+                annotation.type().getCanonicalName().endsWith("ConnectionFactory")) {
+            
+            // resource-ref element
+            ContextResource resource = new ContextResource();
+            
+            resource.setName(annotation.name());
+            resource.setType(annotation.type().getCanonicalName());
+            
+            if (annotation.authenticationType()
+                    == Resource.AuthenticationType.CONTAINER) {
+                resource.setAuth("Container");
+            }
+            else if (annotation.authenticationType()
+                    == Resource.AuthenticationType.APPLICATION) {
+                resource.setAuth("Application");
+            }
+            
+            resource.setScope(annotation.shareable() ? "Shareable" : "Unshareable");
+            resource.setProperty("mappedName", annotation.mappedName());
+            resource.setDescription(annotation.description());
+            
+            context.getNamingResources().addResource(resource);
+            
+        } else if (annotation.type().getCanonicalName().equals("javax.jms.Queue") ||
+                annotation.type().getCanonicalName().equals("javax.jms.Topic")) {
+            
+            // message-destination-ref
+            MessageDestinationRef resource = new MessageDestinationRef();
+            
+            resource.setName(annotation.name());
+            resource.setType(annotation.type().getCanonicalName());
+            
+            resource.setUsage(annotation.mappedName());
+            resource.setDescription(annotation.description());
+            
+            context.getNamingResources().addMessageDestinationRef(resource);
+            
+        } else if (annotation.type().getCanonicalName()
+                .equals("javax.resource.cci.InteractionSpec") ||
+                annotation.type().getCanonicalName()
+                .equals("javax.transaction.UserTransaction") ||
+                true) {
+            
+            // resource-env-ref
+            ContextResourceEnvRef resource = new ContextResourceEnvRef();
+            
+            resource.setName(annotation.name());
+            resource.setType(annotation.type().getCanonicalName());
+            
+            resource.setProperty("mappedName", annotation.mappedName());
+            resource.setDescription(annotation.description());
+            
+            context.getNamingResources().addResourceEnvRef(resource);
+            
+        }
+        
+        
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setUsage(String usage) {
+        this.usage = usage;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the naming resources associated with this web application.
+     */
+    public NamingResources getNamingResources();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setWsdlfile(String wsdlfile) {
+        this.wsdlfile = wsdlfile;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Add a resource reference for this web application.
+     *
+     * @param resource New resource reference
+     */
+    public void addResource(ContextResource resource) {
+
+        if (entries.containsKey(resource.getName())) {
+            return;
+        } else {
+            entries.put(resource.getName(), resource.getType());
+        }
+
+        synchronized (resources) {
+            resource.setNamingResources(this);
+            resources.put(resource.getName(), resource);
+        }
+        support.firePropertyChange("resource", null, resource);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setAuth(String auth) {
+        this.auth = auth;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setScope(String scope) {
+        this.scope = scope;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setName(String name) {
+        this.name = name;
+    }
+-----CSCI578-----
+
+
+    public void setType(String type) {
+        this.type = type;
+    }
+-----CSCI578-----
+
+
+    public void setValue(String value) {
+        this.value = value;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return a String representation of this object.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("ContextResourceEnvRef[");
+        sb.append("name=");
+        sb.append(getName());
+        if (getType() != null) {
+            sb.append(", type=");
+            sb.append(getType());
+        }
+        sb.append(", override=");
+        sb.append(override);
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any resource reference with the specified name.
+     *
+     * @param name Name of the resource reference to remove
+     */
+    public void removeResource(String name) {
+
+        entries.remove(name);
+
+        ContextResource resource = null;
+        synchronized (resources) {
+            resource = (ContextResource) resources.remove(name);
+        }
+        if (resource != null) {
+            support.firePropertyChange("resource", resource, null);
+            resource.setNamingResources(null);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any resource environment reference with the specified name.
+     *
+     * @param name Name of the resource environment reference to remove
+     */
+    public void removeResourceEnvRef(String name) {
+
+        entries.remove(name);
+
+        ContextResourceEnvRef resourceEnvRef = null;
+        synchronized (resourceEnvRefs) {
+            resourceEnvRef =
+                (ContextResourceEnvRef) resourceEnvRefs.remove(name);
+        }
+        if (resourceEnvRef != null) {
+            support.firePropertyChange("resourceEnvRef", resourceEnvRef, null);
+            resourceEnvRef.setNamingResources(null);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any web service reference with the specified name.
+     *
+     * @param name Name of the web service reference to remove
+     */
+    public void removeService(String name) {
+        
+        entries.remove(name);
+        
+        ContextService service = null;
+        synchronized (services) {
+            service = (ContextService) services.remove(name);
+        }
+        if (service != null) {
+            support.firePropertyChange("service", service, null);
+            service.setNamingResources(null);
+        }
+        
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Set the value of a specific attribute of this MBean.
+     *
+     * @param attribute The identification of the attribute to be set
+     *  and the new value
+     *
+     * @exception AttributeNotFoundException if this attribute is not
+     *  supported by this MBean
+     * @exception MBeanException if the initializer of an object
+     *  throws an exception
+     * @exception ReflectionException if a Java reflection exception
+     *  occurs when invoking the getter
+     */
+     public void setAttribute(Attribute attribute)
+        throws AttributeNotFoundException, MBeanException,
+        ReflectionException {
+
+        // Validate the input parameters
+        if (attribute == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Attribute is null"),
+                 "Attribute is null");
+        String name = attribute.getName();
+        Object value = attribute.getValue();
+        if (name == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Attribute name is null"),
+                 "Attribute name is null"); 
+        
+        ContextResource cr = null;
+        try {
+            cr = (ContextResource) getManagedResource();
+        } catch (InstanceNotFoundException e) {
+            throw new MBeanException(e);
+        } catch (InvalidTargetObjectTypeException e) {
+             throw new MBeanException(e);
+        }
+        
+        if ("auth".equals(name)) {
+            cr.setAuth((String)value);
+        } else if ("description".equals(name)) {
+            cr.setDescription((String)value);
+        } else if ("name".equals(name)) {
+            cr.setName((String)value);              
+        } else if ("scope".equals(name)) {
+            cr.setScope((String)value);  
+        } else if ("type".equals(name)) {
+            cr.setType((String)value);
+        } else {
+            cr.setProperty(name, ""+value);
+        }
+        
+        // cannot use side-efects.  It's removed and added back each time 
+        // there is a modification in a resource.
+        NamingResources nr = cr.getNamingResources();
+        nr.removeResource(cr.getName());
+        nr.addResource(cr);
+    }
+-----CSCI578-----
+
+
+    
+    // ------------------------------------------------------------- Attributes
+
+    
+    /**
+     * Return the naming resources associated with this web application.
+     */
+    private NamingResources getNamingResources() {
+        
+        return ((Context)this.resource).getNamingResources();
+    
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Operations
+
+
+    /**
+     * Add an environment entry for this web application.
+     *
+     * @param envName New environment entry name
+     */
+    public String addEnvironment(String envName, String type) 
+        throws MalformedObjectNameException {
+
+        NamingResources nresources = getNamingResources();
+        if (nresources == null) {
+            return null;
+        }
+        ContextEnvironment env = nresources.findEnvironment(envName);
+        if (env != null) {
+            throw new IllegalArgumentException
+                ("Invalid environment name - already exists '" + envName + "'");
+        }
+        env = new ContextEnvironment();
+        env.setName(envName);
+        env.setType(type);
+        nresources.addEnvironment(env);
+        
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextEnvironment");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), env);
+        return (oname.toString());
+        
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Add a resource reference for this web application.
+     *
+     * @param resourceName New resource reference name
+     */
+    public String addResource(String resourceName, String type) 
+        throws MalformedObjectNameException {
+        
+        NamingResources nresources = getNamingResources();
+        if (nresources == null) {
+            return null;
+        }
+        ContextResource resource = nresources.findResource(resourceName);
+        if (resource != null) {
+            throw new IllegalArgumentException
+                ("Invalid resource name - already exists'" + resourceName + "'");
+        }
+        resource = new ContextResource();
+        resource.setName(resourceName);
+        resource.setType(type);
+        nresources.addResource(resource);
+        
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextResource");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), resource);
+        
+        return (oname.toString());
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Add a resource link for this web application.
+     *
+     * @param resourceLinkName New resource link name
+     */
+    public String addResourceLink(String resourceLinkName, String global, 
+                String name, String type) throws MalformedObjectNameException {
+        
+        NamingResources nresources = getNamingResources();
+        if (nresources == null) {
+            return null;
+        }
+        ContextResourceLink resourceLink = 
+                                nresources.findResourceLink(resourceLinkName);
+        if (resourceLink != null) {
+            throw new IllegalArgumentException
+                ("Invalid resource link name - already exists'" + 
+                                                        resourceLinkName + "'");
+        }
+        resourceLink = new ContextResourceLink();
+        resourceLink.setGlobal(global);
+        resourceLink.setName(resourceLinkName);
+        resourceLink.setType(type);
+        nresources.addResourceLink(resourceLink);
+        
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextResourceLink");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), resourceLink);
+        return (oname.toString());
+    }
+-----CSCI578-----
+    
+    
+    
+    /**
+     * Remove any environment entry with the specified name.
+     *
+     * @param envName Name of the environment entry to remove
+     */
+    public void removeEnvironment(String envName) {
+
+        NamingResources nresources = getNamingResources();
+        if (nresources == null) {
+            return;
+        }
+        ContextEnvironment env = nresources.findEnvironment(envName);
+        if (env == null) {
+            throw new IllegalArgumentException
+                ("Invalid environment name '" + envName + "'");
+        }
+        nresources.removeEnvironment(envName);
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Remove any resource reference with the specified name.
+     *
+     * @param resourceName Name of the resource reference to remove
+     */
+    public void removeResource(String resourceName) {
+
+        resourceName = ObjectName.unquote(resourceName);
+        NamingResources nresources = getNamingResources();
+        if (nresources == null) {
+            return;
+        }
+        ContextResource resource = nresources.findResource(resourceName);
+        if (resource == null) {
+            throw new IllegalArgumentException
+                ("Invalid resource name '" + resourceName + "'");
+        }
+        nresources.removeResource(resourceName);
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Remove any resource link with the specified name.
+     *
+     * @param resourceLinkName Name of the resource reference to remove
+     */
+    public void removeResourceLink(String resourceLinkName) {
+
+        resourceLinkName = ObjectName.unquote(resourceLinkName);
+        NamingResources nresources = getNamingResources();
+        if (nresources == null) {
+            return;
+        }
+        ContextResourceLink resource = nresources.findResourceLink(resourceLinkName);
+        if (resource == null) {
+            throw new IllegalArgumentException
+                ("Invalid resource name '" + resourceLinkName + "'");
+        }
+        nresources.removeResourceLink(resourceLinkName);
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Operations
+
+
+    /**
+     * Add an environment entry for this web application.
+     *
+     * @param envName New environment entry name
+     * @param type The type of the new environment entry
+     * @param value The value of the new environment entry 
+     */
+    public String addEnvironment(String envName, String type, String value) 
+        throws MalformedObjectNameException {
+
+        NamingResources nresources = (NamingResources) this.resource;
+        if (nresources == null) {
+            return null;
+        }
+        ContextEnvironment env = nresources.findEnvironment(envName);
+        if (env != null) {
+            throw new IllegalArgumentException
+                ("Invalid environment name - already exists '" + envName + "'");
+        }
+        env = new ContextEnvironment();
+        env.setName(envName);
+        env.setType(type);
+        env.setValue(value);
+        nresources.addEnvironment(env);
+        
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextEnvironment");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), env);
+        return (oname.toString());
+        
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Add a resource reference for this web application.
+     *
+     * @param resourceName New resource reference name
+     * @param type New resource reference type
+     */
+    public String addResource(String resourceName, String type) 
+        throws MalformedObjectNameException {
+        
+        NamingResources nresources = (NamingResources) this.resource;
+        if (nresources == null) {
+            return null;
+        }
+        ContextResource resource = nresources.findResource(resourceName);
+        if (resource != null) {
+            throw new IllegalArgumentException
+                ("Invalid resource name - already exists'" + resourceName + "'");
+        }
+        resource = new ContextResource();
+        resource.setName(resourceName);
+        resource.setType(type);
+        nresources.addResource(resource);
+        
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextResource");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), resource);
+        return (oname.toString());
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Remove any resource reference with the specified name.
+     *
+     * @param resourceName Name of the resource reference to remove
+     */
+    public void removeResource(String resourceName) {
+
+        resourceName = ObjectName.unquote(resourceName);
+        NamingResources nresources = (NamingResources) this.resource;
+        if (nresources == null) {
+            return;
+        }
+        ContextResource resource = nresources.findResource(resourceName);
+        if (resource == null) {
+            throw new IllegalArgumentException
+                ("Invalid resource name '" + resourceName + "'");
+        }
+        nresources.removeResource(resourceName);
+    
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Operations
+
+
+    /**
+     * Add an environment entry for this web application.
+     *
+     * @param envName New environment entry name
+     */
+    public String addEnvironment(String envName, String type) 
+        throws MalformedObjectNameException {
+
+        NamingResources nresources = getNamingResources();
+        if (nresources == null) {
+            return null;
+        }
+        ContextEnvironment env = nresources.findEnvironment(envName);
+        if (env != null) {
+            throw new IllegalArgumentException
+                ("Invalid environment name - already exists '" + envName + "'");
+        }
+        env = new ContextEnvironment();
+        env.setName(envName);
+        env.setType(type);
+        nresources.addEnvironment(env);
+        
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextEnvironment");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), env);
+        return (oname.toString());
+        
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Add a resource reference for this web application.
+     *
+     * @param resourceName New resource reference name
+     */
+    public String addResource(String resourceName, String type) 
+        throws MalformedObjectNameException {
+        
+        NamingResources nresources = getNamingResources();
+        if (nresources == null) {
+            return null;
+        }
+        ContextResource resource = nresources.findResource(resourceName);
+        if (resource != null) {
+            throw new IllegalArgumentException
+                ("Invalid resource name - already exists'" + resourceName + "'");
+        }
+        resource = new ContextResource();
+        resource.setName(resourceName);
+        resource.setType(type);
+        nresources.addResource(resource);
+        
+        // Return the corresponding MBean name
+        ManagedBean managed = registry.findManagedBean("ContextResource");
+        ObjectName oname =
+            MBeanUtils.createObjectName(managed.getDomain(), resource);
+        return (oname.toString());
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    /**
+     * Process the annotations for the servlets.
+     */
+    protected static void loadApplicationServletAnnotations(Context context) {
+        
+        ClassLoader classLoader = context.getLoader().getClassLoader();
+        StandardWrapper wrapper = null;
+        Class classClass = null;
+        
+        Container[] children = context.findChildren();
+        for (int i = 0; i < children.length; i++) {
+            if (children[i] instanceof StandardWrapper) {
+                
+                wrapper = (StandardWrapper) children[i];
+                if (wrapper.getServletClass() == null) {
+                    continue;
+                }
+                
+                try {
+                    classClass = classLoader.loadClass(wrapper.getServletClass());
+                } catch (ClassNotFoundException e) {
+                    // We do nothing
+                } catch (NoClassDefFoundError e) {
+                    // We do nothing
+                }
+                
+                if (classClass == null) {
+                    continue;
+                }
+                
+                loadClassAnnotation(context, wrapper.getServletClass());
+                /* Process RunAs annotation which can be only on servlets.
+                 * Ref JSR 250, equivalent to the run-as element in
+                 * the deployment descriptor
+                 */
+                if (classClass.isAnnotationPresent(RunAs.class)) {
+                    RunAs annotation = (RunAs) 
+                        classClass.getAnnotation(RunAs.class);
+                    wrapper.setRunAs(annotation.value());
+                }
+            }
+        }
+        
+        
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the run-as identity for this servlet.
+     *
+     * @param runAs New run-as identity value
+     */
+    public void setRunAs(String runAs) {
+
+        String oldRunAs = this.runAs;
+        this.runAs = runAs;
+        support.firePropertyChange("runAs", oldRunAs, this.runAs);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the fully qualified servlet class name for this servlet.
+     */
+    public String getServletClass() {
+
+        return (this.servletClass);
+
+    }

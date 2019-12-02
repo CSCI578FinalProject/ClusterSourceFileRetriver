@@ -1,0 +1,36 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Persist the current configuration to server.xml.
+     *
+     * @param writer Writer to render to
+     * @param smClient i18n resources localized for the client
+     */
+    protected void persist(PrintWriter writer, StringManager smClient) {
+
+        if (debug >= 1) {
+            log(sm.getString("hostManagerServlet.persist"));
+        }
+
+        try {
+            MBeanServer platformMBeanServer = ManagementFactory.getPlatformMBeanServer();
+            ObjectName oname = new ObjectName(engine.getDomain() + ":type=StoreConfig");
+            platformMBeanServer.invoke(oname, "storeConfig", null, null);
+            writer.println(smClient.getString("hostManagerServlet.persisted"));
+        } catch (Exception e) {
+            getServletContext().log(sm.getString("hostManagerServlet.persistFailed"), e);
+            writer.println(smClient.getString("hostManagerServlet.persistFailed"));
+            // catch InstanceNotFoundException when StoreConfig is not enabled instead of printing
+            // the failure message
+            if (e instanceof InstanceNotFoundException) {
+                writer.println("Please enable StoreConfig to use this feature.");
+            } else {
+                writer.println(smClient.getString("hostManagerServlet.exception", e.toString()));
+            }
+            return;
+        }
+    }
+-----CSCI578-----

@@ -1,0 +1,62 @@
+3
+-----CSCI578-----
+
+    
+    
+    /**
+     * Return <code>true</code> if the specified Principal has the specified
+     * security role, within the context of this Realm; otherwise return
+     * <code>false</code>.
+     *
+     * @param principal Principal for whom the role is to be checked
+     * @param role Security role to be checked
+     */
+    public boolean hasRole(Principal principal, String role);
+-----CSCI578-----
+
+
+
+    /**
+     * Return <code>true</code> if the authenticated user principal
+     * possesses the specified role name.
+     *
+     * @param role Role name to be validated
+     */
+    public boolean isUserInRole(String role) {
+
+        // Have we got an authenticated principal at all?
+        if (userPrincipal == null)
+            return (false);
+
+        // Identify the Realm we will use for checking role assignmenets
+        if (context == null)
+            return (false);
+        Realm realm = context.getRealm();
+        if (realm == null)
+            return (false);
+
+        // Check for a role alias defined in a <security-role-ref> element
+        if (wrapper != null) {
+            String realRole = wrapper.findSecurityReference(role);
+            if ((realRole != null) &&
+                realm.hasRole(userPrincipal, realRole))
+                return (true);
+        }
+
+        // Check for a role defined directly as a <security-role>
+        return (realm.hasRole(userPrincipal, role));
+
+    }
+-----CSCI578-----
+
+
+
+    public boolean isUserInRole(String role) {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.isUserInRole(role);
+    }

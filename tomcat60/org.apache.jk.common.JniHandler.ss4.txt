@@ -1,0 +1,44 @@
+3
+
+    protected void initNative(String nativeComponentName) {
+        apr=(AprImpl)wEnv.getHandler("apr");
+        if( apr==null ) {
+            // In most cases we can just load it automatically.
+            // that requires all libs to be installed in standard places
+            // ( LD_LIBRARY_PATH, /usr/lib
+            try {
+                apr=new AprImpl();
+                wEnv.addHandler("apr", apr);
+                apr.init();
+                if( oname != null ) {
+                    ObjectName aprname=new ObjectName(oname.getDomain() +
+                            ":type=JkHandler, name=apr");
+                    Registry.getRegistry(null, null).registerComponent(apr, aprname, null);
+                }
+            } catch( Throwable t ) {
+                log.debug("Can't load apr", t);
+                apr=null;
+            }
+        }
+        if( apr==null || ! apr.isLoaded() ) {
+            if( log.isDebugEnabled() )
+                log.debug("No apr, disabling jni proxy ");
+            apr=null;
+            return;
+        }
+
+        try {
+            long xEnv=apr.getJkEnv();
+            nativeJkHandlerP=apr.getJkHandler(xEnv, nativeComponentName );
+            
+            if( nativeJkHandlerP==0 ) {
+                log.debug("Component not found, creating it " + nativeComponentName );
+                nativeJkHandlerP=apr.createJkHandler(xEnv, nativeComponentName);
+            }
+            log.debug("Native proxy " + nativeJkHandlerP );
+            apr.releaseJkEnv(xEnv);
+        } catch( Throwable t ) {
+            apr=null;
+            log.info("Error calling apr ", t);
+        }
+   }

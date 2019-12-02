@@ -1,0 +1,46 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void publish(LogRecord record) {
+        if (!isLoggable(record)) {
+            return;
+        }
+        // fill source entries, before we hand the record over to another
+        // thread with another class loader
+        record.getSourceMethodName();
+        LogEntry entry = new LogEntry(record,this);
+        boolean added = false;
+        try {
+            while (!added && !queue.offer(entry)) {
+                switch (OVERFLOW_DROP_TYPE) {
+                    case OVERFLOW_DROP_LAST: {
+                        //remove the last added element
+                        queue.pollLast();
+                        break;
+                    }
+                    case OVERFLOW_DROP_FIRST: {
+                        //remove the first element in the queue
+                        queue.pollFirst();
+                        break;
+                    }
+                    case OVERFLOW_DROP_FLUSH: {
+                        added = queue.offer(entry,1000,TimeUnit.MILLISECONDS);
+                        break;
+                    }
+                    case OVERFLOW_DROP_CURRENT: {
+                        added = true;
+                        break;
+                    }
+                }//switch
+            }//while
+        }catch (InterruptedException x) {
+            // Allow thread to be interrupted and back out of the publish
+            // operation. No further action required.
+        }
+
+    }
+-----CSCI578-----

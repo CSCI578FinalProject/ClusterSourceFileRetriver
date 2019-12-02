@@ -1,0 +1,53 @@
+3
+-----CSCI578-----
+
+
+    @Override
+    public Set<String> setInitParameters(Map<String, String> initParameters) {
+
+        Set<String> conflicts = new HashSet<>();
+
+        for (Map.Entry<String, String> entry : initParameters.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                throw new IllegalArgumentException(sm.getString(
+                        "applicationFilterRegistration.nullInitParams",
+                                entry.getKey(), entry.getValue()));
+            }
+            if (getInitParameter(entry.getKey()) != null) {
+                conflicts.add(entry.getKey());
+            }
+        }
+
+        // Have to add in a separate loop since spec requires no updates at all
+        // if there is an issue
+        for (Map.Entry<String, String> entry : initParameters.entrySet()) {
+            setInitParameter(entry.getKey(), entry.getValue());
+        }
+
+        return conflicts;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean setInitParameter(String name, String value) {
+        if (name == null || value == null) {
+            throw new IllegalArgumentException(
+                    sm.getString("applicationFilterRegistration.nullInitParam",
+                            name, value));
+        }
+        if (getInitParameter(name) != null) {
+            return false;
+        }
+
+        filterDef.addInitParameter(name, value);
+
+        return true;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String getInitParameter(String name) {
+        return filterDef.getParameterMap().get(name);
+    }

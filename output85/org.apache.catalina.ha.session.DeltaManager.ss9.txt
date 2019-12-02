@@ -1,0 +1,123 @@
+7
+-----CSCI578-----
+
+
+    @Override
+    public void changeSessionId(Session session) {
+        changeSessionId(session, true);
+    }
+
+
+    @Override
+    public void changeSessionId(Session session, String newId) {
+        changeSessionId(session, newId, true);
+    }
+
+
+    protected void changeSessionId(Session session, boolean notify) {
+        String orgSessionID = session.getId();
+        super.changeSessionId(session);
+        if (notify) sendChangeSessionId(session.getId(), orgSessionID);
+    }
+
+
+    protected void changeSessionId(Session session, String newId, boolean notify) {
+        String orgSessionID = session.getId();
+        super.changeSessionId(session, newId);
+        if (notify) sendChangeSessionId(session.getId(), orgSessionID);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    protected void sendChangeSessionId(String newSessionID, String orgSessionID) {
+        if (cluster.getMembers().length > 0) {
+            try {
+                // serialize sessionID
+                byte[] data = serializeSessionId(newSessionID);
+                // notify change sessionID
+                SessionMessage msg = new SessionMessageImpl(getName(),
+                        SessionMessage.EVT_CHANGE_SESSION_ID, data,
+                        orgSessionID, orgSessionID + "-"
+                                + System.currentTimeMillis());
+                msg.setTimestamp(System.currentTimeMillis());
+                counterSend_EVT_CHANGE_SESSION_ID++;
+                send(msg);
+            } catch (IOException e) {
+                log.error(sm.getString("deltaManager.unableSerializeSessionID",
+                        newSessionID), e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * serialize sessionID
+     * @param sessionId Session id to serialize
+     * @return byte array with serialized session id
+     * @throws IOException if an input/output error occurs
+     */
+    protected byte[] serializeSessionId(String sessionId) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(bos);
+        oos.writeUTF(sessionId);
+        oos.flush();
+        oos.close();
+        return bos.toByteArray();
+    }
+
+
+    /**
+     * Load sessionID
+     * @param data serialized session id
+     * @return session id
+     * @throws IOException if an input/output error occurs
+     */
+    protected String deserializeSessionId(byte[] data) throws IOException {
+        ReplicationStream ois = getReplicationStream(data);
+        String sessionId = ois.readUTF();
+        ois.close();
+        return sessionId;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Load sessionID
+     * @param data serialized session id
+     * @return session id
+     * @throws IOException if an input/output error occurs
+     */
+    protected String deserializeSessionId(byte[] data) throws IOException {
+        ReplicationStream ois = getReplicationStream(data);
+        String sessionId = ois.readUTF();
+        ois.close();
+        return sessionId;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * send a block of session to sender
+     * @param sender Sender member
+     * @param currentSessions Sessions to send
+     * @param sendTimestamp Timestamp
+     * @throws IOException IO error sending messages
+     */
+    protected void sendSessions(Member sender, Session[] currentSessions,long sendTimestamp)
+            throws IOException {
+        byte[] data = serializeSessions(currentSessions);
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("deltaManager.receiveMessage.unloadingAfter", getName()));
+        }
+        SessionMessage newmsg = new SessionMessageImpl(name, SessionMessage.EVT_ALL_SESSION_DATA,
+                data, "SESSION-STATE", "SESSION-STATE-" + getName());
+        newmsg.setTimestamp(sendTimestamp);
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("deltaManager.createMessage.allSessionData", getName()));
+        }
+        counterSend_EVT_ALL_SESSION_DATA++;
+        cluster.send(newmsg, sender);
+    }

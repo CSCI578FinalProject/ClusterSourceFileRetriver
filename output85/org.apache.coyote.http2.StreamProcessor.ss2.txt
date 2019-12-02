@@ -1,0 +1,53 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public SocketState service(SocketWrapperBase<?> socket) throws IOException {
+        try {
+            adapter.service(request, response);
+        } catch (Exception e) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("streamProcessor.service.error"), e);
+            }
+            setErrorState(ErrorState.CLOSE_NOW, e);
+        }
+
+        if (getErrorState().isError()) {
+            action(ActionCode.CLOSE, null);
+            request.updateCounters();
+            return SocketState.CLOSED;
+        } else if (isAsync()) {
+            return SocketState.LONG;
+        } else {
+            action(ActionCode.CLOSE, null);
+            request.updateCounters();
+            return SocketState.CLOSED;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Call the service method, and notify all listeners
+     *
+     * @param req The request object
+     * @param res The response object
+     *
+     * @exception Exception if an error happens during handling of
+     *   the request. Common errors are:
+     *   <ul><li>IOException if an input/output error occurs and we are
+     *   processing an included servlet (otherwise it is swallowed and
+     *   handled by the top level error handler mechanism)
+     *       <li>ServletException if a servlet throws an exception and
+     *  we are processing an included servlet (otherwise it is swallowed
+     *  and handled by the top level error handler mechanism)
+     *  </ul>
+     *  Tomcat should be able to handle and log any other exception ( including
+     *  runtime exceptions )
+     */
+    public void service(Request req, Response res) throws Exception;
+-----CSCI578-----

@@ -1,0 +1,87 @@
+4
+-----CSCI578-----
+
+
+    private static final Node createNodeInternal(String expr)
+            throws ELException {
+        if (expr == null) {
+            throw new ELException(MessageFactory.get("error.null"));
+        }
+
+        Node n = expressionCache.get(expr);
+        if (n == null) {
+            ELParser parser = parserCache.pop();
+            try {
+                if (parser == null) {
+                    parser = new ELParser(new StringReader(expr));
+                } else {
+                    parser.ReInit(new StringReader(expr));
+                }
+                n = parser.CompositeExpression();
+
+                // validate composite expression
+                int numChildren = n.jjtGetNumChildren();
+                if (numChildren == 1) {
+                    n = n.jjtGetChild(0);
+                } else {
+                    Class<?> type = null;
+                    Node child = null;
+                    for (int i = 0; i < numChildren; i++) {
+                        child = n.jjtGetChild(i);
+                        if (child instanceof AstLiteralExpression)
+                            continue;
+                        if (type == null)
+                            type = child.getClass();
+                        else {
+                            if (!type.equals(child.getClass())) {
+                                throw new ELException(MessageFactory.get(
+                                        "error.mixed", expr));
+                            }
+                        }
+                    }
+                }
+
+                if (n instanceof AstDeferredExpression
+                        || n instanceof AstDynamicExpression) {
+                    n = n.jjtGetChild(0);
+                }
+                expressionCache.put(expr, n);
+            } catch (Exception e) {
+                throw new ELException(
+                        MessageFactory.get("error.parseFail", expr), e);
+            } finally {
+                if (parser != null) {
+                    parserCache.push(parser);
+                }
+            }
+        }
+        return n;
+    }
+-----CSCI578-----
+
+
+    public V get(K k) {
+        V v = this.eden.get(k);
+        if (v == null) {
+            synchronized (longterm) {
+                v = this.longterm.get(k);
+            }
+            if (v != null) {
+                this.eden.put(k, v);
+            }
+        }
+        return v;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void put(K k, V v) {
+        if (this.eden.size() >= size) {
+            synchronized (longterm) {
+                this.longterm.putAll(this.eden);
+            }
+            this.eden.clear();
+        }
+        this.eden.put(k, v);
+    }

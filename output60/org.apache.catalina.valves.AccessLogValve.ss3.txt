@@ -1,0 +1,205 @@
+10
+-----CSCI578-----
+-----CSCI578-----
+
+ 
+    /**
+     * This method returns a Date object that is accurate to within one second.
+     * If a thread calls this method to get a Date and it's been less than 1
+     * second since a new Date was created, this method simply gives out the
+     * same Date again so that the system doesn't spend time creating Date
+     * objects unnecessarily.
+     * 
+     * @return Date
+     */
+    private Date getDate() {
+        // Only create a new Date once per second, max.
+        long systime = System.currentTimeMillis();
+        AccessDateStruct struct = currentDateStruct.get(); 
+        if ((systime - struct.currentDate.getTime()) > 1000) {
+            struct.currentDate.setTime(systime);
+            struct.currentDateString = null;
+        }
+        return struct.currentDate;
+    }
+-----CSCI578-----
+
+
+    
+    public void log(Request request, Response response, long time) {
+        if (logElements == null || condition != null
+                && null != request.getRequest().getAttribute(condition)) {
+            return;
+        }
+
+        Date date = getDate();
+        StringBuffer result = new StringBuffer(128);
+
+        for (int i = 0; i < logElements.length; i++) {
+            logElements[i].addElement(result, date, request, response, time);
+        }
+
+        log(result.toString());
+    }
+
+
+
+    /**
+     * Log the specified message to the log file, switching files if the date
+     * has changed since the previous log call.
+     *
+     * @param message Message to be logged
+     */
+    public void log(String message) {
+        if (rotatable) {
+            // Only do a logfile switch check once a second, max.
+            long systime = System.currentTimeMillis();
+            if ((systime - rotationLastChecked) > 1000) {
+                synchronized(this) {
+                    if ((systime - rotationLastChecked) > 1000) {
+                        rotationLastChecked = systime;
+    
+                        String tsDate;
+                        // Check for a change of date
+                        tsDate = fileDateFormatter.format(new Date(systime));
+    
+                        // If the date has changed, switch log files
+                        if (!dateStamp.equals(tsDate)) {
+                            close();
+                            dateStamp = tsDate;
+                            open();
+                        }
+                    }
+                }
+            }
+        }
+        
+        /* In case something external rotated the file instead */
+        if (checkExists) {
+            synchronized (this) {
+                if (currentLogFile != null && !currentLogFile.exists()) {
+                    try {
+                        close();
+                    } catch (Throwable e) {
+                        log.info(sm.getString("accessLogValve.closeFail"), e);
+                    }
+
+                    /* Make sure date is correct */
+                    dateStamp = fileDateFormatter.format(
+                            new Date(System.currentTimeMillis()));
+
+                    open();
+                }
+            }
+        }
+
+        // Log this message
+        synchronized(this) {
+            if (writer != null) {
+                writer.println(message);
+                if (!buffered) {
+                    writer.flush();
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+    
+
+    /**
+     * Log a message summarizing the specified request and response, according
+     * to the format specified by the <code>pattern</code> property.
+     *
+     * @param request Request being processed
+     * @param response Response being processed
+     *
+     * @exception IOException if an input/output error has occurred
+     * @exception ServletException if a servlet error has occurred
+     */
+    public void invoke(Request request, Response response) throws IOException,
+            ServletException {
+
+        if (started && getEnabled()) {                
+            // Pass this request on to the next valve in our pipeline
+            long t1 = System.currentTimeMillis();
+    
+            getNext().invoke(request, response);
+    
+            long t2 = System.currentTimeMillis();
+            long time = t2 - t1;
+            
+            log(request, response, time);
+        } else
+            getNext().invoke(request, response);       
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Properties
+
+    /**
+     * @return Returns the enabled.
+     */
+    public boolean getEnabled() {
+        return enabled;
+    }
+-----CSCI578-----
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Close the currently open log file (if any)
+     */
+    private synchronized void close() {
+        if (writer == null) {
+            return;
+        }
+        writer.flush();
+        writer.close();
+        writer = null;
+        dateStamp = "";
+        currentLogFile = null;
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Execute a periodic task, such as reloading, etc. This method will be
+     * invoked inside the classloading context of this container. Unexpected
+     * throwables will be caught and logged.
+     */
+    public void backgroundProcess() {
+        if (started && getEnabled() && writer != null && buffered) {
+            writer.flush();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Gracefully terminate the active use of the public methods of this
+     * component.  This method should be the last one called on a given
+     * instance of this component.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that needs to be reported
+     */
+    public void stop() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (!started)
+            throw new LifecycleException(sm
+                    .getString("accessLogValve.notStarted"));
+        lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+        started = false;
+        
+        close();
+    }

@@ -1,0 +1,343 @@
+13
+-----CSCI578-----
+
+    
+    
+    private final static void loadCorePackage(ClassLoader loader)
+        throws Exception {
+        String basePackage = "org.apache.catalina.";
+        loader.loadClass
+            (basePackage +
+             "core.ApplicationContextFacade$1");
+        loader.loadClass
+            (basePackage +
+             "core.ApplicationDispatcher$PrivilegedForward");
+        loader.loadClass
+            (basePackage +
+             "core.ApplicationDispatcher$PrivilegedInclude");
+        loader.loadClass
+            (basePackage +
+             "core.ContainerBase$PrivilegedAddChild");
+        loader.loadClass
+            (basePackage +
+             "core.StandardWrapper$1");
+        loader.loadClass
+            (basePackage +
+              "core.ApplicationHttpRequest$AttributeNamesEnumerator");
+    }
+-----CSCI578-----
+
+    
+    
+    private static final void loadServletsPackage(ClassLoader loader)
+            throws Exception {
+        final String basePackage = "org.apache.catalina.servlets.";
+        // Avoid a possible memory leak in the DefaultServlet when running with
+        // a security manager. The DefaultServlet needs to load an XML parser
+        // when running under a security manager. We want this to be loaded by
+        // the container rather than a web application to prevent a memory leak
+        // via web application class loader.
+        loader.loadClass(basePackage + "DefaultServlet");
+    }
+-----CSCI578-----
+
+
+    public static void securityClassLoad(ClassLoader loader)
+        throws Exception {
+
+        if( System.getSecurityManager() == null ){
+            return;
+        }
+        
+        loadCorePackage(loader);
+        loadLoaderPackage(loader);
+        loadServletsPackage(loader);
+        loadSessionPackage(loader);
+        loadUtilPackage(loader);
+        loadJavaxPackage(loader);
+        loadCoyotePackage(loader);
+        loadHttp11Package(loader);
+        loadTomcatPackage(loader);
+    }
+-----CSCI578-----
+
+    
+    
+    private final static void loadCoyotePackage(ClassLoader loader)
+        throws Exception {
+        String basePackage = "org.apache.catalina.connector.";
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetAttributePrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetParameterMapPrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetRequestDispatcherPrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetParameterPrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetParameterNamesPrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetParameterValuePrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetCharacterEncodingPrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetHeadersPrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetHeaderNamesPrivilegedAction");  
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetCookiesPrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetLocalePrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetLocalesPrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "ResponseFacade$SetContentTypePrivilegedAction");
+        loader.loadClass
+            (basePackage + 
+             "ResponseFacade$DateHeaderPrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "RequestFacade$GetSessionPrivilegedAction");
+        loader.loadClass
+            (basePackage +
+             "ResponseFacade$1");
+        loader.loadClass
+            (basePackage +
+             "OutputBuffer$1");
+        loader.loadClass
+            (basePackage +
+             "CoyoteInputStream$1");
+        loader.loadClass
+            (basePackage +
+             "CoyoteInputStream$2");
+        loader.loadClass
+            (basePackage +
+             "CoyoteInputStream$3");
+        loader.loadClass
+            (basePackage +
+             "CoyoteInputStream$4");
+        loader.loadClass
+            (basePackage +
+             "CoyoteInputStream$5");
+        loader.loadClass
+            (basePackage +
+             "InputBuffer$1");
+        loader.loadClass
+            (basePackage +
+             "Response$1");
+        loader.loadClass
+            (basePackage +
+             "Response$2");
+        loader.loadClass
+            (basePackage +
+             "Response$3");
+    }
+-----CSCI578-----
+
+
+    public void setCatalinaHome(String s) {
+        System.setProperty( "catalina.home", s );
+    }
+
+
+
+    /**
+     * Set the <code>catalina.home</code> System property to the current
+     * working directory if it has not been set.
+     */
+    private void setCatalinaHome() {
+
+        if (System.getProperty("catalina.home") != null)
+            return;
+        File bootstrapJar = 
+            new File(System.getProperty("user.dir"), "bootstrap.jar");
+        if (bootstrapJar.exists()) {
+            try {
+                System.setProperty
+                    ("catalina.home", 
+                     (new File(System.getProperty("user.dir"), ".."))
+                     .getCanonicalPath());
+            } catch (Exception e) {
+                // Ignore
+                System.setProperty("catalina.home",
+                                   System.getProperty("user.dir"));
+            }
+        } else {
+            System.setProperty("catalina.home",
+                               System.getProperty("user.dir"));
+        }
+
+    }
+-----CSCI578-----
+
+
+    public void setCatalinaBase(String s) {
+        System.setProperty( "catalina.base", s );
+    }
+
+
+
+    /**
+     * Set the <code>catalina.base</code> System property to the current
+     * working directory if it has not been set.
+     */
+    private void setCatalinaBase() {
+
+        if (System.getProperty("catalina.base") != null)
+            return;
+        if (System.getProperty("catalina.home") != null)
+            System.setProperty("catalina.base",
+                               System.getProperty("catalina.home"));
+        else
+            System.setProperty("catalina.base",
+                               System.getProperty("user.dir"));
+
+    }
+-----CSCI578-----
+
+
+    private final static void loadTomcatPackage(ClassLoader loader)
+        throws Exception {
+        String basePackage = "org.apache.tomcat.";
+        loader.loadClass(basePackage + "util.net.SSLSupport$CipherData");
+        // Make sure system property is read at this point
+        Class<?> clazz = loader.loadClass(
+                basePackage + "util.http.FastHttpDateFormat");
+        clazz.newInstance();
+
+        // security
+        loader.loadClass(basePackage + "util.security.PrivilegedGetTccl");
+        loader.loadClass(basePackage + "util.security.PrivilegedSetTccl");
+    }
+-----CSCI578-----
+
+
+
+    private final static void loadSessionPackage(ClassLoader loader)
+        throws Exception {
+        String basePackage = "org.apache.catalina.session.";
+        loader.loadClass(basePackage + "StandardSession");
+        loader.loadClass(basePackage + "StandardSession$1");
+        loader.loadClass(basePackage + "StandardManager$PrivilegedDoUnload");
+    }
+-----CSCI578-----
+
+    
+    
+    private final static void loadUtilPackage(ClassLoader loader)
+        throws Exception {
+        String basePackage = "org.apache.catalina.";
+        loader.loadClass
+            (basePackage + "util.URL");
+        loader.loadClass(basePackage + "util.Enumerator");
+        loader.loadClass(basePackage + "util.DefaultAnnotationProcessor$1");
+        loader.loadClass(basePackage + "util.DefaultAnnotationProcessor$2");
+        loader.loadClass(basePackage + "util.DefaultAnnotationProcessor$3");
+        loader.loadClass(basePackage + "util.DefaultAnnotationProcessor$4");
+    }
+-----CSCI578-----
+
+    
+
+    private final static void loadHttp11Package(ClassLoader loader)
+        throws Exception {
+        String basePackage = "org.apache.coyote.http11.";
+        loader.loadClass(basePackage + "InternalOutputBuffer$1");
+        loader.loadClass(basePackage + "InternalOutputBuffer$2");
+        loader.loadClass(basePackage + "Constants");
+    }
+-----CSCI578-----
+
+    
+    
+    private final static void loadLoaderPackage(ClassLoader loader)
+        throws Exception {
+        String basePackage = "org.apache.catalina.loader.";
+        loader.loadClass
+            (basePackage +
+             "ResourceEntry");
+        loader.loadClass
+            (basePackage +
+             "WebappClassLoader$PrivilegedFindResourceByName");
+    }
+-----CSCI578-----
+
+    
+    
+    private final static void loadJavaxPackage(ClassLoader loader)
+        throws Exception {
+        loader.loadClass("javax.servlet.http.Cookie");
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Initialize daemon.
+     */
+    public void init()
+        throws Exception
+    {
+
+        // Set Catalina path
+        setCatalinaHome();
+        setCatalinaBase();
+
+        initClassLoaders();
+
+        Thread.currentThread().setContextClassLoader(catalinaLoader);
+
+        SecurityClassLoad.securityClassLoad(catalinaLoader);
+
+        // Load our startup class and call its process() method
+        if (log.isDebugEnabled())
+            log.debug("Loading startup class");
+        Class startupClass =
+            catalinaLoader.loadClass
+            ("org.apache.catalina.startup.Catalina");
+        Object startupInstance = startupClass.newInstance();
+
+        // Set the shared extensions class loader
+        if (log.isDebugEnabled())
+            log.debug("Setting startup class properties");
+        String methodName = "setParentClassLoader";
+        Class paramTypes[] = new Class[1];
+        paramTypes[0] = Class.forName("java.lang.ClassLoader");
+        Object paramValues[] = new Object[1];
+        paramValues[0] = sharedLoader;
+        Method method =
+            startupInstance.getClass().getMethod(methodName, paramTypes);
+        method.invoke(startupInstance, paramValues);
+
+        catalinaDaemon = startupInstance;
+
+    }
+
+
+
+    // ----------------------------------------------------------- Main Program
+
+
+    /**
+     * Load the Catalina daemon.
+     */
+    public void init(String[] arguments)
+        throws Exception {
+
+        init();
+        load(arguments);
+
+    }

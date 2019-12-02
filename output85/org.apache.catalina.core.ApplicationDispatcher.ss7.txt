@@ -1,0 +1,212 @@
+9
+-----CSCI578-----
+
+
+    private void doForward(ServletRequest request, ServletResponse response)
+        throws ServletException, IOException
+    {
+
+        // Reset any output that has been buffered, but keep headers/cookies
+        if (response.isCommitted()) {
+            throw new IllegalStateException
+                (sm.getString("applicationDispatcher.forward.ise"));
+        }
+        try {
+            response.resetBuffer();
+        } catch (IllegalStateException e) {
+            throw e;
+        }
+
+        // Set up to handle the specified request and response
+        State state = new State(request, response, false);
+
+        if (WRAP_SAME_OBJECT) {
+            // Check SRV.8.2 / SRV.14.2.5.1 compliance
+            checkSameObjects(request, response);
+        }
+
+        wrapResponse(state);
+        // Handle an HTTP named dispatcher forward
+        if ((servletPath == null) && (pathInfo == null)) {
+
+            ApplicationHttpRequest wrequest =
+                (ApplicationHttpRequest) wrapRequest(state);
+            HttpServletRequest hrequest = state.hrequest;
+            wrequest.setRequestURI(hrequest.getRequestURI());
+            wrequest.setContextPath(hrequest.getContextPath());
+            wrequest.setServletPath(hrequest.getServletPath());
+            wrequest.setPathInfo(hrequest.getPathInfo());
+            wrequest.setQueryString(hrequest.getQueryString());
+
+            processRequest(request,response,state);
+        }
+
+        // Handle an HTTP path-based forward
+        else {
+
+            ApplicationHttpRequest wrequest =
+                (ApplicationHttpRequest) wrapRequest(state);
+            String contextPath = context.getPath();
+            HttpServletRequest hrequest = state.hrequest;
+            if (hrequest.getAttribute(
+                    RequestDispatcher.FORWARD_REQUEST_URI) == null) {
+                wrequest.setAttribute(RequestDispatcher.FORWARD_REQUEST_URI,
+                                      hrequest.getRequestURI());
+                wrequest.setAttribute(RequestDispatcher.FORWARD_CONTEXT_PATH,
+                                      hrequest.getContextPath());
+                wrequest.setAttribute(RequestDispatcher.FORWARD_SERVLET_PATH,
+                                      hrequest.getServletPath());
+                wrequest.setAttribute(RequestDispatcher.FORWARD_PATH_INFO,
+                                      hrequest.getPathInfo());
+                wrequest.setAttribute(RequestDispatcher.FORWARD_QUERY_STRING,
+                                      hrequest.getQueryString());
+            }
+
+            wrequest.setContextPath(contextPath);
+            wrequest.setRequestURI(requestURI);
+            wrequest.setServletPath(servletPath);
+            wrequest.setPathInfo(pathInfo);
+            if (queryString != null) {
+                wrequest.setQueryString(queryString);
+                wrequest.setQueryParams(queryString);
+            }
+
+            processRequest(request,response,state);
+        }
+
+        if (request.getAsyncContext() != null) {
+            // An async request was started during the forward, don't close the
+            // response as it may be written to during the async handling
+            return;
+        }
+
+        // This is not a real close in order to support error processing
+        if (wrapper.getLogger().isDebugEnabled() )
+            wrapper.getLogger().debug(" Disabling the response for futher output");
+
+        if  (response instanceof ResponseFacade) {
+            ((ResponseFacade) response).finish();
+        } else {
+            // Servlet SRV.6.2.2. The Request/Response may have been wrapped
+            // and may no longer be instance of RequestFacade
+            if (wrapper.getLogger().isDebugEnabled()){
+                wrapper.getLogger().debug( " The Response is vehiculed using a wrapper: "
+                           + response.getClass().getName() );
+            }
+
+            // Close anyway
+            try {
+                PrintWriter writer = response.getWriter();
+                writer.close();
+            } catch (IllegalStateException e) {
+                try {
+                    ServletOutputStream stream = response.getOutputStream();
+                    stream.close();
+                } catch (IllegalStateException f) {
+                    // Ignore
+                } catch (IOException f) {
+                    // Ignore
+                }
+            } catch (IOException e) {
+                // Ignore
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public void finish() {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        response.setSuspended(true);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the request URI for this request.
+     *
+     * @param requestURI The new request URI
+     */
+    void setRequestURI(String requestURI) {
+
+        this.requestURI = requestURI;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the context path for this request.
+     *
+     * @param contextPath The new context path
+     */
+    void setContextPath(String contextPath) {
+
+        this.contextPath = contextPath;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the servlet path for this request.
+     *
+     * @param servletPath The new servlet path
+     */
+    void setServletPath(String servletPath) {
+
+        this.servletPath = servletPath;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the path information for this request.
+     *
+     * @param pathInfo The new path info
+     */
+    void setPathInfo(String pathInfo) {
+
+        this.pathInfo = pathInfo;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the query string for this request.
+     *
+     * @param queryString The new query string
+     */
+    void setQueryString(String queryString) {
+
+        this.queryString = queryString;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Save query parameters for this request.
+     *
+     * @param queryString The query string containing parameters for this
+     *                    request
+     */
+    void setQueryParams(String queryString) {
+        this.queryParamString = queryString;
+    }

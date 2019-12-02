@@ -1,0 +1,318 @@
+12
+-----CSCI578-----
+
+
+    @Override
+    @SuppressWarnings("unchecked")
+    protected ArrayList list(File file) {
+        ArrayList entries = super.list(file);
+
+        // adds virtual tlds for WEB-INF listing
+        if ("WEB-INF".equals(file.getName())) {
+            entries.addAll(getVirtualNamingEntries());
+        }
+
+        return entries;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns a list of virtual naming entries.
+     * @return list of naming entries, containing tlds in virtualMappings
+     */
+    private List<NamingEntry> getVirtualNamingEntries() {
+        List<NamingEntry> virtual = new ArrayList<NamingEntry>();
+
+        for (String name : virtualMappings.keySet()) {
+
+            File file = virtualMappings.get(name);
+            NamingEntry entry = new NamingEntry(name, new FileResource(file),
+                    NamingEntry.ENTRY);
+            virtual.add(entry);
+        }
+        return virtual;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Enumerates the names bound in the named context, along with the class
+     * names of objects bound to them. The contents of any subcontexts are
+     * not included.
+     * <p>
+     * If a binding is added to or removed from this context, its effect on
+     * an enumeration previously returned is undefined.
+     *
+     * @param name the name of the context to list
+     * @return an enumeration of the names and class names of the bindings in
+     * this context. Each element of the enumeration is of type NameClassPair.
+     * @exception NamingException if a naming exception is encountered
+     */
+    public NamingEnumeration list(String name)
+        throws NamingException {
+
+        File file = file(name);
+
+        if (file == null)
+            throw new NamingException
+                (sm.getString("resources.notFound", name));
+
+        return new NamingContextEnumeration(list(file).iterator());
+
+    }
+
+
+
+    /**
+     * List the resources which are members of a collection.
+     *
+     * @param file Collection
+     * @return Vector containg NamingEntry objects
+     */
+    protected ArrayList list(File file) {
+
+        ArrayList entries = new ArrayList();
+        if (!file.isDirectory())
+            return entries;
+        String[] names = file.list();
+        if (names==null) {
+            /* Some IO error occurred such as bad file permissions.
+               Prevent a NPE with Arrays.sort(names) */
+            log.warn(sm.getString("fileResources.listingNull",
+                                  file.getAbsolutePath()));
+            return entries;
+        }
+
+        Arrays.sort(names);             // Sort alphabetically
+        if (names == null)
+            return entries;
+        NamingEntry entry = null;
+
+        for (int i = 0; i < names.length; i++) {
+
+            File currentFile = new File(file, names[i]);
+            Object object = null;
+            if (currentFile.isDirectory()) {
+                FileDirContext tempContext = new FileDirContext(env);
+                tempContext.setDocBase(currentFile.getPath());
+                tempContext.setAllowLinking(getAllowLinking());
+                tempContext.setCaseSensitive(isCaseSensitive());
+                object = tempContext;
+            } else {
+                object = new FileResource(currentFile);
+            }
+            entry = new NamingEntry(names[i], object, NamingEntry.ENTRY);
+            entries.add(entry);
+
+        }
+
+        return entries;
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Set the document root.
+     *
+     * @param docBase The new document root
+     *
+     * @exception IllegalArgumentException if the specified value is not
+     *  supported by this implementation
+     * @exception IllegalArgumentException if this would create a
+     *  malformed URL
+     */
+    public void setDocBase(String docBase) {
+
+    // Validate the format of the proposed document root
+    if (docBase == null)
+        throw new IllegalArgumentException
+        (sm.getString("resources.null"));
+
+    // Calculate a File object referencing this document base directory
+    base = new File(docBase);
+        try {
+            base = base.getCanonicalFile();
+        } catch (IOException e) {
+            // Ignore
+        }
+
+    // Validate that the document base is an existing directory
+    if (!base.exists() || !base.isDirectory() || !base.canRead())
+        throw new IllegalArgumentException
+        (sm.getString("fileResources.base", docBase));
+        this.absoluteBase = base.getAbsolutePath();
+        super.setDocBase(docBase);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Is linking allowed.
+     */
+    public boolean getAllowLinking() {
+        return allowLinking;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Is case sensitive ?
+     */
+    public boolean isCaseSensitive() {
+        return caseSensitive;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Context Methods
+
+
+    /**
+     * Retrieves the named object.
+     *
+     * @param name the name of the object to look up
+     * @return the object bound to name
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Object lookup(String name)
+        throws NamingException {
+        Object result = null;
+        File file = file(name);
+
+        if (file == null)
+            throw new NamingException
+                (sm.getString("resources.notFound", name));
+
+        if (file.isDirectory()) {
+            FileDirContext tempContext = new FileDirContext(env);
+            tempContext.setDocBase(file.getPath());
+            tempContext.setAllowLinking(getAllowLinking());
+            tempContext.setCaseSensitive(isCaseSensitive());
+            result = tempContext;
+        } else {
+            result = new FileResource(file);
+        }
+
+        return result;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Enumerates the names bound in the named context, along with the
+     * objects bound to them. The contents of any subcontexts are not
+     * included.
+     * <p>
+     * If a binding is added to or removed from this context, its effect on
+     * an enumeration previously returned is undefined.
+     *
+     * @param name the name of the context to list
+     * @return an enumeration of the bindings in this context.
+     * Each element of the enumeration is of type Binding.
+     * @exception NamingException if a naming exception is encountered
+     */
+    public NamingEnumeration listBindings(String name)
+        throws NamingException {
+
+        File file = file(name);
+
+        if (file == null)
+            throw new NamingException
+                (sm.getString("resources.notFound", name));
+
+        return new NamingContextBindingsEnumeration(list(file).iterator(),
+                this);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Retrieves the named object, following links except for the terminal
+     * atomic component of the name. If the object bound to name is not a
+     * link, returns the object itself.
+     *
+     * @param name the name of the object to look up
+     * @return the object bound to name, not following the terminal link
+     * (if any).
+     * @exception NamingException if a naming exception is encountered
+     */
+    public Object lookupLink(String name)
+        throws NamingException {
+        // Note : Links are not supported
+        return lookup(name);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Creates and binds a new context, along with associated attributes.
+     * This method creates a new subcontext with the given name, binds it in
+     * the target context (that named by all but terminal atomic component of
+     * the name), and associates the supplied attributes with the newly
+     * created object. All intermediate and target contexts must already
+     * exist. If attrs is null, this method is equivalent to
+     * Context.createSubcontext().
+     *
+     * @param name the name of the context to create; may not be empty
+     * @param attrs the attributes to associate with the newly created context
+     * @return the newly created context
+     * @exception NameAlreadyBoundException if the name is already bound
+     * @exception InvalidAttributesException if attrs does not contain all
+     * the mandatory attributes required for creation
+     * @exception NamingException if a naming exception is encountered
+     */
+    public DirContext createSubcontext(String name, Attributes attrs)
+        throws NamingException {
+
+        File file = new File(base, name);
+        if (file.exists())
+            throw new NameAlreadyBoundException
+                (sm.getString("resources.alreadyBound", name));
+        if (!file.mkdir())
+            throw new NamingException
+                (sm.getString("resources.bindFailed", name));
+        return (DirContext) lookup(name);
+
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object lookup(String name) throws NamingException {
+
+        // handle "virtual" tlds
+        if (name.startsWith("/WEB-INF/") && name.endsWith(".tld")) {
+            String tldName = name.substring(name.lastIndexOf("/") + 1);
+            if (virtualMappings.containsKey(tldName)) {
+                return new FileResource(virtualMappings.get(tldName));
+            }
+        } else if (name.startsWith("/META-INF/tags") && name.endsWith(".tag")
+                || name.endsWith(".tagx")) {
+
+            // already loaded tag file: we are sure that getAttributes() has
+            // already been called if we are here
+            File tagFile = tagfileMappings.get(name);
+            if (tagFile != null) {
+                return new FileResource(tagFile);
+            }
+        }
+
+        return super.lookup(name);
+    }

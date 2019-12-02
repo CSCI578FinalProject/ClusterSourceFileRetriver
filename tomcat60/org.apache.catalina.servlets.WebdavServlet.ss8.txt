@@ -1,0 +1,106 @@
+4
+    
+    
+    /**
+     * Get creation time.
+     * 
+     * @return creation time value
+     */
+    public long getCreation() {
+        if (creation != -1L)
+            return creation;
+        if (creationDate != null)
+            return creationDate.getTime();
+        if (attributes != null) {
+            Attribute attribute = attributes.get(CREATION_DATE);
+            if (attribute != null) {
+                try {
+                    Object value = attribute.get();
+                    if (value instanceof Long) {
+                        creation = ((Long) value).longValue();
+                    } else if (value instanceof Date) {
+                        creation = ((Date) value).getTime();
+                        creationDate = (Date) value;
+                    } else {
+                        String creationDateValue = value.toString();
+                        Date result = null;
+                        // Parsing the HTTP Date
+                        for (int i = 0; (result == null) && 
+                                 (i < formats.length); i++) {
+                            try {
+                                result = formats[i].parse(creationDateValue);
+                            } catch (ParseException e) {
+                                ;
+                            }
+                        }
+                        if (result != null) {
+                            creation = result.getTime();
+                            creationDate = result;
+                        }
+                    }
+                } catch (NamingException e) {
+                    ; // No value for the attribute
+                }
+            }
+        }
+        return creation;
+    }
+    
+    
+    /**
+     * Get creation date.
+     * 
+     * @return Creation date value
+     */
+    public Date getCreationDate() {
+        if (creationDate != null)
+            return creationDate;
+        if (creation != -1L) {
+            creationDate = new Date(creation);
+            return creationDate;
+        }
+        if (attributes != null) {
+            Attribute attribute = attributes.get(CREATION_DATE);
+            if (attribute != null) {
+                try {
+                    Object value = attribute.get();
+                    if (value instanceof Long) {
+                        creation = ((Long) value).longValue();
+                        creationDate = new Date(creation);
+                    } else if (value instanceof Date) {
+                        creation = ((Date) value).getTime();
+                        creationDate = (Date) value;
+                    } else {
+                        String creationDateValue = value.toString();
+                        Date result = null;
+                        // Parsing the HTTP Date
+                        for (int i = 0; (result == null) && 
+                                 (i < formats.length); i++) {
+                            try {
+                                result = formats[i].parse(creationDateValue);
+                            } catch (ParseException e) {
+                                ;
+                            }
+                        }
+                        if (result != null) {
+                            creation = result.getTime();
+                            creationDate = result;
+                        }
+                    }
+                } catch (NamingException e) {
+                    ; // No value for the attribute
+                }
+            }
+        }
+        return creationDate;
+    }
+
+
+    /**
+     * Write text.
+     *
+     * @param text Text to append
+     */
+    public void writeText(String text) {
+        buffer.append(text);
+    }

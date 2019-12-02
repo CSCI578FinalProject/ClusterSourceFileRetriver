@@ -1,0 +1,69 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Authenticate the user making this request, based on the specified
+     * login configuration.  Return <code>true</code> if any specified
+     * constraint has been satisfied, or <code>false</code> if we have
+     * created a response challenge already.
+     *
+     * @param request Request we are processing
+     * @param response Response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public boolean authenticate(Request request, HttpServletResponse response)
+            throws IOException {
+
+        if (checkForCachedAuthentication(request, response, true)) {
+            return true;
+        }
+
+        // Validate any credentials already included with this request
+        MessageBytes authorization =
+            request.getCoyoteRequest().getMimeHeaders()
+            .getValue("authorization");
+
+        if (authorization != null) {
+            authorization.toBytes();
+            ByteChunk authorizationBC = authorization.getByteChunk();
+            BasicCredentials credentials = null;
+            try {
+                credentials = new BasicCredentials(authorizationBC);
+                String username = credentials.getUsername();
+                String password = credentials.getPassword();
+
+                Principal principal = context.getRealm().authenticate(username, password);
+                if (principal != null) {
+                    register(request, response, principal,
+                        HttpServletRequest.BASIC_AUTH, username, password);
+                    return true;
+                }
+            }
+            catch (IllegalArgumentException iae) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Invalid Authorization" + iae.getMessage());
+                }
+            }
+        }
+
+        // the request could not be authenticated, so reissue the challenge
+        StringBuilder value = new StringBuilder(16);
+        value.append("Basic realm=\"");
+        value.append(getRealmName(context));
+        value.append('\"');
+        response.setHeader(AUTH_HEADER_NAME, value.toString());
+        response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+        return false;
+
+    }
+-----CSCI578-----
+-----CSCI578-----

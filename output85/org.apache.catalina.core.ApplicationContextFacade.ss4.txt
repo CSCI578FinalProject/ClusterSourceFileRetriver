@@ -1,0 +1,205 @@
+5
+-----CSCI578-----
+
+
+
+    @Override
+    public void addListener(Class<? extends EventListener> listenerClass) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            doPrivileged("addListener",
+                    new Class[]{Class.class},
+                    new Object[]{listenerClass});
+        } else {
+            context.addListener(listenerClass);
+        }
+    }
+
+
+
+    @Override
+    public void addListener(String className) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            doPrivileged("addListener",
+                    new Object[]{className});
+        } else {
+            context.addListener(className);
+        }
+    }
+
+
+
+    @Override
+    public <T extends EventListener> void addListener(T t) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            doPrivileged("addListener",
+                    new Class[]{EventListener.class},
+                    new Object[]{t});
+        } else {
+            context.addListener(t);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void addListener(Class<? extends EventListener> listenerClass) {
+        EventListener listener;
+        try {
+            listener = createListener(listenerClass);
+        } catch (ServletException e) {
+            throw new IllegalArgumentException(sm.getString(
+                    "applicationContext.addListener.iae.init",
+                    listenerClass.getName()), e);
+        }
+        addListener(listener);
+    }
+
+
+
+    @Override
+    public void addListener(String className) {
+
+        try {
+            if (context.getInstanceManager() != null) {
+                Object obj = context.getInstanceManager().newInstance(className);
+
+                if (!(obj instanceof EventListener)) {
+                    throw new IllegalArgumentException(sm.getString(
+                            "applicationContext.addListener.iae.wrongType",
+                            className));
+                }
+
+                EventListener listener = (EventListener) obj;
+                addListener(listener);
+            }
+        } catch (IllegalAccessException e) {
+            throw new IllegalArgumentException(sm.getString(
+                    "applicationContext.addListener.iae.cnfe", className),
+                    e);
+        } catch (InvocationTargetException e) {
+            ExceptionUtils.handleThrowable(e.getCause());
+            throw new IllegalArgumentException(sm.getString(
+                    "applicationContext.addListener.iae.cnfe", className),
+                    e);
+        } catch (NamingException e) {
+            throw new IllegalArgumentException(sm.getString(
+                    "applicationContext.addListener.iae.cnfe", className),
+                    e);
+        } catch (InstantiationException e) {
+            throw new IllegalArgumentException(sm.getString(
+                    "applicationContext.addListener.iae.cnfe", className),
+                    e);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalArgumentException(sm.getString(
+                    "applicationContext.addListener.iae.cnfe", className),
+                    e);
+        }
+
+    }
+
+
+
+    @Override
+    public <T extends EventListener> void addListener(T t) {
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            throw new IllegalStateException(
+                    sm.getString("applicationContext.addListener.ise",
+                            getContextPath()));
+        }
+
+        boolean match = false;
+        if (t instanceof ServletContextAttributeListener ||
+                t instanceof ServletRequestListener ||
+                t instanceof ServletRequestAttributeListener ||
+                t instanceof HttpSessionIdListener ||
+                t instanceof HttpSessionAttributeListener) {
+            context.addApplicationEventListener(t);
+            match = true;
+        }
+
+        if (t instanceof HttpSessionListener
+                || (t instanceof ServletContextListener &&
+                        newServletContextListenerAllowed)) {
+            // Add listener directly to the list of instances rather than to
+            // the list of class names.
+            context.addApplicationLifecycleListener(t);
+            match = true;
+        }
+
+        if (match) return;
+
+        if (t instanceof ServletContextListener) {
+            throw new IllegalArgumentException(sm.getString(
+                    "applicationContext.addListener.iae.sclNotAllowed",
+                    t.getClass().getName()));
+        } else {
+            throw new IllegalArgumentException(sm.getString(
+                    "applicationContext.addListener.iae.wrongType",
+                    t.getClass().getName()));
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a listener to the end of the list of initialized application
+     * lifecycle listeners.
+     *
+     * @param listener The listener to add
+     */
+    public void addApplicationLifecycleListener(Object listener) {
+        int len = applicationLifecycleListenersObjects.length;
+        Object[] newListeners = Arrays.copyOf(
+                applicationLifecycleListenersObjects, len + 1);
+        newListeners[len] = listener;
+        applicationLifecycleListenersObjects = newListeners;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a listener to the end of the list of initialized application event
+     * listeners.
+     *
+     * @param listener The listener to add
+     */
+    public void addApplicationEventListener(Object listener) {
+        applicationEventListenersList.add(listener);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public <T extends EventListener> T createListener(Class<T> c)
+            throws ServletException {
+        try {
+            @SuppressWarnings("unchecked")
+            T listener =
+                (T) context.getInstanceManager().newInstance(c);
+            if (listener instanceof ServletContextListener ||
+                    listener instanceof ServletContextAttributeListener ||
+                    listener instanceof ServletRequestListener ||
+                    listener instanceof ServletRequestAttributeListener ||
+                    listener instanceof HttpSessionListener ||
+                    listener instanceof HttpSessionIdListener ||
+                    listener instanceof HttpSessionAttributeListener) {
+                return listener;
+            }
+            throw new IllegalArgumentException(sm.getString(
+                    "applicationContext.addListener.iae.wrongType",
+                    listener.getClass().getName()));
+        } catch (IllegalAccessException e) {
+            throw new ServletException(e);
+        } catch (InvocationTargetException e) {
+            ExceptionUtils.handleThrowable(e.getCause());
+            throw new ServletException(e);
+        } catch (NamingException e) {
+            throw new ServletException(e);
+        } catch (InstantiationException e) {
+            throw new ServletException(e);
+        }
+    }

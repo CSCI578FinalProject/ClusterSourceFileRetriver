@@ -1,0 +1,395 @@
+16
+-----CSCI578-----
+
+
+
+    public static SecurityConstraint[] findUncoveredHttpMethods(
+            SecurityConstraint[] constraints,
+            boolean denyUncoveredHttpMethods, Log log) {
+
+        Set<String> coveredPatterns = new HashSet<>();
+        Map<String,Set<String>> urlMethodMap = new HashMap<>();
+        Map<String,Set<String>> urlOmittedMethodMap = new HashMap<>();
+
+        List<SecurityConstraint> newConstraints = new ArrayList<>();
+
+        // First build the lists of covered patterns and those patterns that
+        // might be uncovered
+        for (SecurityConstraint constraint : constraints) {
+            SecurityCollection[] collections = constraint.findCollections();
+            for (SecurityCollection collection : collections) {
+                String[] patterns = collection.findPatterns();
+                String[] methods = collection.findMethods();
+                String[] omittedMethods = collection.findOmittedMethods();
+                // Simple case: no methods
+                if (methods.length == 0 && omittedMethods.length == 0) {
+                    for (String pattern : patterns) {
+                        coveredPatterns.add(pattern);
+                    }
+                    continue;
+                }
+
+                // Pre-calculate so we don't do this for every iteration of the
+                // following loop
+                List<String> omNew = null;
+                if (omittedMethods.length != 0) {
+                    omNew = Arrays.asList(omittedMethods);
+                }
+
+                // Only need to process uncovered patterns
+                for (String pattern : patterns) {
+                    if (!coveredPatterns.contains(pattern)) {
+                        if (methods.length == 0) {
+                            // Build the interset of omitted methods for this
+                            // pattern
+                            Set<String> om = urlOmittedMethodMap.get(pattern);
+                            if (om == null) {
+                                om = new HashSet<>();
+                                urlOmittedMethodMap.put(pattern, om);
+                                om.addAll(omNew);
+                            } else {
+                                om.retainAll(omNew);
+                            }
+                        } else {
+                            // Build the union of methods for this pattern
+                            Set<String> m = urlMethodMap.get(pattern);
+                            if (m == null) {
+                                m = new HashSet<>();
+                                urlMethodMap.put(pattern, m);
+                            }
+                            for (String method : methods) {
+                                m.add(method);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Now check the potentially uncovered patterns
+        for (Map.Entry<String, Set<String>> entry : urlMethodMap.entrySet()) {
+            String pattern = entry.getKey();
+            if (coveredPatterns.contains(pattern)) {
+                // Fully covered. Ignore any partial coverage
+                urlOmittedMethodMap.remove(pattern);
+                continue;
+            }
+
+            Set<String> omittedMethods = urlOmittedMethodMap.remove(pattern);
+            Set<String> methods = entry.getValue();
+
+            if (omittedMethods == null) {
+                StringBuilder msg = new StringBuilder();
+                for (String method : methods) {
+                    msg.append(method);
+                    msg.append(' ');
+                }
+                if (denyUncoveredHttpMethods) {
+                    log.info(sm.getString(
+                            "securityConstraint.uncoveredHttpMethodFix",
+                            pattern, msg.toString().trim()));
+                    SecurityCollection collection = new SecurityCollection();
+                    for (String method : methods) {
+                        collection.addOmittedMethod(method);
+                    }
+                    collection.addPattern(pattern);
+                    collection.setName("deny-uncovered-http-methods");
+                    SecurityConstraint constraint = new SecurityConstraint();
+                    constraint.setAuthConstraint(true);
+                    constraint.addCollection(collection);
+                    newConstraints.add(constraint);
+                } else {
+                    log.error(sm.getString(
+                            "securityConstraint.uncoveredHttpMethod",
+                            pattern, msg.toString().trim()));
+                }
+                continue;
+            }
+
+            // As long as every omitted method as a corresponding method the
+            // pattern is fully covered.
+            omittedMethods.removeAll(methods);
+
+            handleOmittedMethods(omittedMethods, pattern, denyUncoveredHttpMethods,
+                    newConstraints, log);
+        }
+        for (Map.Entry<String, Set<String>> entry :
+                urlOmittedMethodMap.entrySet()) {
+            String pattern = entry.getKey();
+            if (coveredPatterns.contains(pattern)) {
+                // Fully covered. Ignore any partial coverage
+                continue;
+            }
+
+            handleOmittedMethods(entry.getValue(), pattern, denyUncoveredHttpMethods,
+                    newConstraints, log);
+        }
+
+        return newConstraints.toArray(new SecurityConstraint[newConstraints.size()]);
+    }
+-----CSCI578-----
+
+
+
+    private void checkConstraintsForUncoveredMethods(
+            SecurityConstraint[] constraints) {
+        SecurityConstraint[] newConstraints =
+                SecurityConstraint.findUncoveredHttpMethods(constraints,
+                        getDenyUncoveredHttpMethods(), getLogger());
+        for (SecurityConstraint constraint : newConstraints) {
+            addConstraint(constraint);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean getDenyUncoveredHttpMethods() {
+        return denyUncoveredHttpMethods;
+    }
+-----CSCI578-----
+
+
+
+    private static void handleOmittedMethods(Set<String> omittedMethods, String pattern,
+            boolean denyUncoveredHttpMethods, List<SecurityConstraint> newConstraints, Log log) {
+        if (omittedMethods.size() > 0) {
+            StringBuilder msg = new StringBuilder();
+            for (String method : omittedMethods) {
+                msg.append(method);
+                msg.append(' ');
+            }
+            if (denyUncoveredHttpMethods) {
+                log.info(sm.getString(
+                        "securityConstraint.uncoveredHttpOmittedMethodFix",
+                        pattern, msg.toString().trim()));
+                SecurityCollection collection = new SecurityCollection();
+                for (String method : omittedMethods) {
+                    collection.addMethod(method);
+                }
+                collection.addPattern(pattern);
+                collection.setName("deny-uncovered-http-methods");
+                SecurityConstraint constraint = new SecurityConstraint();
+                constraint.setAuthConstraint(true);
+                constraint.addCollection(collection);
+                newConstraints.add(constraint);
+            } else {
+                log.error(sm.getString(
+                        "securityConstraint.uncoveredHttpOmittedMethod",
+                        pattern, msg.toString().trim()));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a security constraint to the set for this web application.
+     *
+     * @param constraint the new security constraint
+     */
+    @Override
+    public void addConstraint(SecurityConstraint constraint) {
+
+        // Validate the proposed constraint
+        SecurityCollection collections[] = constraint.findCollections();
+        for (int i = 0; i < collections.length; i++) {
+            String patterns[] = collections[i].findPatterns();
+            for (int j = 0; j < patterns.length; j++) {
+                patterns[j] = adjustURLPattern(patterns[j]);
+                if (!validateURLPattern(patterns[j]))
+                    throw new IllegalArgumentException
+                        (sm.getString
+                         ("standardContext.securityConstraint.pattern",
+                          patterns[j]));
+            }
+            if (collections[i].findMethods().length > 0 &&
+                    collections[i].findOmittedMethods().length > 0) {
+                throw new IllegalArgumentException(sm.getString(
+                        "standardContext.securityConstraint.mixHttpMethod"));
+            }
+        }
+
+        // Add this constraint to the set for our web application
+        synchronized (constraintsLock) {
+            SecurityConstraint results[] =
+                new SecurityConstraint[constraints.length + 1];
+            for (int i = 0; i < constraints.length; i++)
+                results[i] = constraints[i];
+            results[constraints.length] = constraint;
+            constraints = results;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return all of the web resource collections protected by this
+     * security constraint.  If there are none, a zero-length array is
+     * returned.
+     * @return the collections array
+     */
+    public SecurityCollection[] findCollections() {
+
+        return (collections);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the set of URL patterns that are part of this web resource
+     * collection.  If none have been specified, a zero-length array is
+     * returned.
+     */
+    public String[] findPatterns() {
+
+        return (patterns);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the set of HTTP request methods that are part of this web
+     * resource collection, or a zero-length array if no methods have been
+     * explicitly included.
+     */
+    public String[] findMethods() {
+
+        return (methods);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the set of HTTP request methods that are explicitly excluded from
+     * this web resource collection, or a zero-length array if no request
+     * methods are excluded.
+     */
+    public String[] findOmittedMethods() {
+
+        return (omittedMethods);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the name of this web resource collection
+     *
+     * @param name The new name
+     */
+    public void setName(String name) {
+
+        this.name = name;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Add a URL pattern to be part of this web resource collection.
+     * @param pattern The pattern
+     */
+    public void addPattern(String pattern) {
+
+        if (pattern == null)
+            return;
+
+        String decodedPattern = UDecoder.URLDecode(pattern);
+        String results[] = new String[patterns.length + 1];
+        for (int i = 0; i < patterns.length; i++) {
+            results[i] = patterns[i];
+        }
+        results[patterns.length] = decodedPattern;
+        patterns = results;
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add an HTTP request method to be explicitly part of this web resource
+     * collection.
+     * @param method The method
+     */
+    public void addMethod(String method) {
+
+        if (method == null)
+            return;
+        String results[] = new String[methods.length + 1];
+        for (int i = 0; i < methods.length; i++)
+            results[i] = methods[i];
+        results[methods.length] = method;
+        methods = results;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add an HTTP request method to the methods explicitly excluded from this
+     * web resource collection.
+     * @param method The method
+     */
+    public void addOmittedMethod(String method) {
+        if (method == null)
+            return;
+        String results[] = new String[omittedMethods.length + 1];
+        for (int i = 0; i < omittedMethods.length; i++)
+            results[i] = omittedMethods[i];
+        results[omittedMethods.length] = method;
+        omittedMethods = results;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the authorization constraint present flag for this security
+     * constraint.
+     * @param authConstraint The new value
+     */
+    public void setAuthConstraint(boolean authConstraint) {
+
+        this.authConstraint = authConstraint;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new web resource collection to those protected by this
+     * security constraint.
+     *
+     * @param collection The new web resource collection
+     */
+    public void addCollection(SecurityCollection collection) {
+
+        if (collection == null)
+            return;
+        SecurityCollection results[] =
+            new SecurityCollection[collections.length + 1];
+        for (int i = 0; i < collections.length; i++)
+            results[i] = collections[i];
+        results[collections.length] = collection;
+        collections = results;
+
+    }

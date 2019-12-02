@@ -1,0 +1,107 @@
+10
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- Properties
+
+    /**
+     * @return Returns the operation.
+     */
+    public String getOperation() {
+        return operation;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * This method evaluates the condition
+     * It support for operation "&gt;,&gt;=,&lt;,&lt;=" the types <code>long</code> and <code>double</code>.
+     * @return expression <em>jmxValue</em> <em>operation</em> <em>value</em>
+     */
+    @Override
+    public boolean eval() {
+        String value = getValue();
+        if (operation == null) {
+            throw new BuildException("operation attribute is not set");
+        }
+        if (value == null) {
+            throw new BuildException("value attribute is not set");
+        }
+        if ((getName() == null || getAttribute() == null)) {
+            throw new BuildException(
+                    "Must specify an MBean name and attribute for condition");
+        }
+        if (testIfCondition() && testUnlessCondition()) {
+            String jmxValue = accessJMXValue();
+            if (jmxValue != null) {
+                String op = getOperation();
+                if ("==".equals(op)) {
+                    return jmxValue.equals(value);
+                } else if ("!=".equals(op)) {
+                    return !jmxValue.equals(value);
+                } else {
+                    if ("long".equals(type)) {
+                        long jvalue = Long.parseLong(jmxValue);
+                        long lvalue = Long.parseLong(value);
+                        if (">".equals(op)) {
+                            return jvalue > lvalue;
+                        } else if (">=".equals(op)) {
+                            return jvalue >= lvalue;
+                        } else if ("<".equals(op)) {
+                            return jvalue < lvalue;
+                        } else if ("<=".equals(op)) {
+                            return jvalue <= lvalue;
+                        }
+                    } else if ("double".equals(type)) {
+                        double jvalue = Double.parseDouble(jmxValue);
+                        double dvalue = Double.parseDouble(value);
+                        if (">".equals(op)) {
+                            return jvalue > dvalue;
+                        } else if (">=".equals(op)) {
+                            return jvalue >= dvalue;
+                        } else if ("<".equals(op)) {
+                            return jvalue < dvalue;
+                        } else if ("<=".equals(op)) {
+                            return jvalue <= dvalue;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * test the unless condition
+     * @return true if there is no unless condition,
+     *  or there is a named property but it doesn't exist
+     */
+    protected boolean testUnlessCondition() {
+        if (unlessCondition == null || "".equals(unlessCondition)) {
+            return true;
+        }
+        return getProject().getProperty(unlessCondition) == null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * test the if condition
+     * @return true if there is no if condition, or the named property exists
+     */
+    protected boolean testIfCondition() {
+        if (ifCondition == null || "".equals(ifCondition)) {
+            return true;
+        }
+        return getProject().getProperty(ifCondition) != null;
+    }
+-----CSCI578-----

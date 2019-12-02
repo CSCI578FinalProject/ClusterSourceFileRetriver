@@ -1,0 +1,61 @@
+3
+-----CSCI578-----
+
+
+
+   /**
+     * Return the specified alias name from the aliases for this Host
+     *
+     * @param alias Alias name to be removed
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public void removeAlias(String alias)
+        throws Exception {
+
+        StandardHost host = (StandardHost) this.resource;
+        host.removeAlias(alias);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified alias name from the aliases for this Host.
+     *
+     * @param alias Alias name to be removed
+     */
+    public void removeAlias(String alias) {
+
+        alias = alias.toLowerCase();
+
+        synchronized (aliasesLock) {
+
+            // Make sure this alias is currently present
+            int n = -1;
+            for (int i = 0; i < aliases.length; i++) {
+                if (aliases[i].equals(alias)) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                return;
+
+            // Remove the specified alias
+            int j = 0;
+            String results[] = new String[aliases.length - 1];
+            for (int i = 0; i < aliases.length; i++) {
+                if (i != n)
+                    results[j++] = aliases[i];
+            }
+            aliases = results;
+
+        }
+
+        // Inform interested listeners
+        fireContainerEvent(REMOVE_ALIAS_EVENT, alias);
+
+    }
+-----CSCI578-----

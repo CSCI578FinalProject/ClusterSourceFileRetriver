@@ -1,0 +1,79 @@
+4
+-----CSCI578-----
+
+
+
+    @Override
+    public ServletOutputStream getOutputStream()
+        throws IOException {
+
+        //        if (isFinished())
+        //            throw new IllegalStateException
+        //                (/*sm.getString("responseFacade.finished")*/);
+
+        ServletOutputStream sos = response.getOutputStream();
+        if (isFinished()) {
+            response.setSuspended(true);
+        }
+        return (sos);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the servlet output stream associated with this Response.
+     *
+     * @exception IllegalStateException if <code>getWriter</code> has
+     *  already been called for this response
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public ServletOutputStream getOutputStream()
+        throws IOException {
+
+        if (usingWriter) {
+            throw new IllegalStateException
+                (sm.getString("coyoteResponse.getOutputStream.ise"));
+        }
+
+        usingOutputStream = true;
+        if (outputStream == null) {
+            outputStream = new CoyoteOutputStream(outputBuffer);
+        }
+        return outputStream;
+
+    }
+-----CSCI578-----
+
+
+
+    public boolean isFinished() {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        return response.isSuspended();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public PrintWriter getWriter()
+        throws IOException {
+
+        //        if (isFinished())
+        //            throw new IllegalStateException
+        //                (/*sm.getString("responseFacade.finished")*/);
+
+        PrintWriter writer = response.getWriter();
+        if (isFinished()) {
+            response.setSuspended(true);
+        }
+        return (writer);
+
+    }

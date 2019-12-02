@@ -1,0 +1,73 @@
+6
+-----CSCI578-----
+
+    
+    public final void setNext(JkHandler ch) {
+        this.next=ch;
+    }
+-----CSCI578-----
+
+
+    public final void setConverter(C2BConverter c2b) {
+        this.c2b = c2b;
+    }
+-----CSCI578-----
+
+
+    public final void setMsg(int i, Msg msg) {
+        this.msgs[i]=msg;
+    }
+-----CSCI578-----
+
+
+
+    /** Create a msg context to be used with the shm channel
+     */
+    public MsgContext createMsgContext() {
+        if( nativeJkHandlerP==0 || apr==null  )
+            return null;
+
+        synchronized(this) {
+            try{ 
+                while(paused) {
+                    wait();
+                }
+            }catch(InterruptedException ie) {
+                // Ignore, since it can't happen
+            }
+        }
+
+        try {
+            MsgContext msgCtx=new MsgContext();
+            MsgAjp msg=new MsgAjp();
+
+            msgCtx.setSource( (JkChannel)this );
+            msgCtx.setWorkerEnv( wEnv );
+
+            msgCtx.setNext( this );
+
+            msgCtx.setMsg( MSG_NOTE, msg); // XXX Use noteId
+
+            C2BConverter c2b=new C2BConverter(  "iso-8859-1" );
+            msgCtx.setConverter( c2b );
+
+            MessageBytes tmpMB= MessageBytes.newInstance();
+            msgCtx.setNote( MB_NOTE, tmpMB );
+            return msgCtx;
+        } catch( Exception ex ) {
+            log.error("Can't create endpoint", ex);
+            return null;
+        }
+    }
+-----CSCI578-----
+
+    
+    public final void setSource(JkChannel ch) {
+        this.source=ch;
+    }
+-----CSCI578-----
+
+
+    public final void setWorkerEnv( WorkerEnv we ) {
+        this.wEnv=we;
+    }

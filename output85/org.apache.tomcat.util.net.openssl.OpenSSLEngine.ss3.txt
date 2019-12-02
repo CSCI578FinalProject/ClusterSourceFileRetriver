@@ -1,0 +1,43 @@
+5
+-----CSCI578-----
+
+
+    private void setClientAuth(ClientAuthMode mode) {
+        if (clientMode) {
+            return;
+        }
+        synchronized (this) {
+            if (clientAuth == mode) {
+                // No need to issue any JNI calls if the mode is the same
+                return;
+            }
+            switch (mode) {
+                case NONE:
+                    SSL.setVerify(ssl, SSL.SSL_CVERIFY_NONE, VERIFY_DEPTH);
+                    break;
+                case REQUIRE:
+                    SSL.setVerify(ssl, SSL.SSL_CVERIFY_REQUIRE, VERIFY_DEPTH);
+                    break;
+                case OPTIONAL:
+                    SSL.setVerify(ssl, SSL.SSL_CVERIFY_OPTIONAL, VERIFY_DEPTH);
+                    break;
+            }
+            clientAuth = mode;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void setNeedClientAuth(boolean b) {
+        setClientAuth(b ? ClientAuthMode.REQUIRE : ClientAuthMode.NONE);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setWantClientAuth(boolean b) {
+        setClientAuth(b ? ClientAuthMode.OPTIONAL : ClientAuthMode.NONE);
+    }

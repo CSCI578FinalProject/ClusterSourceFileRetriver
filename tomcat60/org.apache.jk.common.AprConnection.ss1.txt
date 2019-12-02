@@ -1,0 +1,23 @@
+4
+    
+    public void close(MsgContext ep) throws IOException {
+        super.nativeDispatch( ep.getMsg(0), ep, CH_CLOSE, 1 );
+    }
+
+    public int receive( Msg msg, MsgContext ep )
+        throws IOException
+    {
+        int rc=super.nativeDispatch( msg, ep, CH_READ, 1 );
+
+        if( rc!=0 ) {
+            log.error("receive error:   " + rc, new Throwable());
+            return -1;
+        }
+        
+        msg.processHeader();
+        
+        if (log.isDebugEnabled())
+             log.debug("receive:  total read = " + msg.getLen());
+
+	return msg.getLen();
+    }

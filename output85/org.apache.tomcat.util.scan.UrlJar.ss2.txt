@@ -1,0 +1,112 @@
+11
+-----CSCI578-----
+
+
+    @Override
+    public void reset() throws IOException {
+        close();
+        jarInputStream = createJarInputStream();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void close() {
+        if (jarInputStream != null) {
+            try {
+                jarInputStream.reallyClose();
+            } catch (IOException ioe) {
+                // Ignore
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public void reallyClose() throws IOException {
+        super.close();
+    }
+-----CSCI578-----
+
+
+    private NonClosingJarInputStream createJarInputStream() throws IOException {
+        JarURLConnection jarConn = (JarURLConnection) url.openConnection();
+        URL resourceURL = jarConn.getJarFileURL();
+        URLConnection resourceConn = resourceURL.openConnection();
+        resourceConn.setUseCaches(false);
+        return new NonClosingJarInputStream(resourceConn.getInputStream());
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private void closeInner() {
+        if (jarInputStream != null) {
+            try {
+                jarInputStream.reallyClose();
+            } catch (IOException ioe) {
+                // Ignore
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    private NonClosingJarInputStream createJarInputStream() throws IOException {
+        return new NonClosingJarInputStream(warFile.getInputStream(jarEntry));
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void nextEntry() {
+        if (jarInputStream == null) {
+            try {
+                jarInputStream = createJarInputStream();
+            } catch (IOException e) {
+                entry = null;
+                return;
+            }
+        }
+        try {
+            entry = jarInputStream.getNextJarEntry();
+        } catch (IOException ioe) {
+            entry = null;
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public InputStream getEntryInputStream() throws IOException {
+        if (jarInputStream == null) {
+            jarInputStream = createJarInputStream();
+        }
+        return jarInputStream;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void reset() throws IOException {
+        closeInner();
+        jarInputStream = createJarInputStream();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void close() {
+        closeInner();
+        if (warFile != null) {
+            try {
+                warFile.close();
+            } catch (IOException e) {
+                // Ignore
+            }
+        }
+    }

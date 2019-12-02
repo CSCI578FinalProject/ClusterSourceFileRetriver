@@ -1,0 +1,166 @@
+7
+
+
+
+    /**
+     * Return the URL to the resource that is mapped to a specified path.
+     * The path must begin with a "/" and is interpreted as relative to the
+     * current context root.
+     *
+     * @param path The path to the desired resource
+     *
+     * @exception MalformedURLException if the path is not given
+     *  in the correct form
+     */
+    public URL getResource(String path)
+        throws MalformedURLException {
+
+        if (path == null)
+            throw new MalformedURLException(sm.getString("applicationContext.requestDispatcher.iae", path));
+
+        if (!path.startsWith("/") && Globals.STRICT_SERVLET_COMPLIANCE)
+            throw new MalformedURLException(sm.getString("applicationContext.requestDispatcher.iae", path));
+
+
+        path = RequestUtil.normalize(path);
+        if (path == null)
+            return (null);
+
+        String libPath = "/WEB-INF/lib/";
+        if ((path.startsWith(libPath)) && (path.endsWith(".jar"))) {
+            File jarFile = null;
+            if (context.isFilesystemBased()) {
+                jarFile = new File(basePath, path);
+            } else {
+                jarFile = new File(context.getWorkPath(), path);
+            }
+            if (jarFile.exists()) {
+                return jarFile.toURL();
+            } else {
+                return null;
+            }
+        } else {
+
+            DirContext resources = context.getResources();
+            if (resources != null) {
+                String fullPath = context.getName() + path;
+                String hostName = context.getParent().getName();
+                try {
+                    resources.lookup(path);
+                    return new URL
+                        ("jndi", "", 0, getJNDIUri(hostName, fullPath),
+                         new DirContextURLStreamHandler(resources));
+                } catch (NamingException e) {
+                    // Ignore
+                } catch (Exception e) {
+                    // Unexpected
+                    log(sm.getString("applicationContext.lookup.error", path,
+                            getContextPath()), e);
+                }
+            }
+        }
+
+        return (null);
+
+    }
+
+
+    /**
+     * Return the requested resource as an <code>InputStream</code>.  The
+     * path must be specified according to the rules described under
+     * <code>getResource</code>.  If no such resource can be identified,
+     * return <code>null</code>.
+     *
+     * @param path The path to the desired resource.
+     */
+    public InputStream getResourceAsStream(String path) {
+
+        if (path == null)
+            return (null);
+
+        if (!path.startsWith("/") && Globals.STRICT_SERVLET_COMPLIANCE)
+            return null;
+
+        path = RequestUtil.normalize(path);
+        if (path == null)
+            return (null);
+
+        DirContext resources = context.getResources();
+        if (resources != null) {
+            try {
+                Object resource = resources.lookup(path);
+                if (resource instanceof Resource)
+                    return (((Resource) resource).streamContent());
+            } catch (NamingException e) {
+                // Ignore
+            } catch (Exception e) {
+                // Unexpected
+                log(sm.getString("applicationContext.lookup.error", path,
+                        getContextPath()), e);
+            }
+        }
+        return (null);
+
+    }
+
+
+    /**
+     * Return a Set containing the resource paths of resources member of the
+     * specified collection. Each path will be a String starting with
+     * a "/" character. The returned set is immutable.
+     *
+     * @param path Collection path
+     */
+    public Set getResourcePaths(String path) {
+
+        // Validate the path argument
+        if (path == null) {
+            return null;
+        }
+        if (!path.startsWith("/")) {
+            throw new IllegalArgumentException
+                (sm.getString("applicationContext.resourcePaths.iae", path));
+        }
+
+        path = RequestUtil.normalize(path);
+        if (path == null)
+            return (null);
+
+        DirContext resources = context.getResources();
+        if (resources != null) {
+            return (getResourcePathsInternal(resources, path));
+        }
+        return (null);
+
+    }
+
+
+    /**
+     * Internal implementation of getResourcesPath() logic.
+     *
+     * @param resources Directory context to search
+     * @param path Collection path
+     */
+    private Set getResourcePathsInternal(DirContext resources, String path) {
+
+        ResourceSet set = new ResourceSet();
+        try {
+            listCollectionPaths(set, resources, path);
+        } catch (NamingException e) {
+            return (null);
+        }
+        set.setLocked(true);
+        return (set);
+
+    }
+
+
+    /**
+     * Get full path, based on the host name and the context path.
+     */
+    private static String getJNDIUri(String hostName, String path) {
+        if (!path.startsWith("/"))
+            return "/" + hostName + "/" + path;
+        else
+            return "/" + hostName + path;
+    }

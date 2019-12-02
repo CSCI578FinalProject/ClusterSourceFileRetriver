@@ -1,0 +1,64 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------- Public Lifecycle Methods
+
+
+    /**
+     * Initialize the endpoint.
+     */
+    @Override
+    public void bind() throws Exception {
+
+        // Create worker collection
+        if ( getExecutor() == null ) {
+            createExecutor();
+        }
+        if (getExecutor() instanceof ExecutorService) {
+            threadGroup = AsynchronousChannelGroup.withThreadPool((ExecutorService) getExecutor());
+        }
+        // AsynchronousChannelGroup currently needs exclusive access to its executor service
+        if (!internalExecutor) {
+            log.warn(sm.getString("endpoint.nio2.exclusiveExecutor"));
+        }
+
+        serverSock = AsynchronousServerSocketChannel.open(threadGroup);
+        socketProperties.setProperties(serverSock);
+        InetSocketAddress addr = (getAddress()!=null?new InetSocketAddress(getAddress(),getPort()):new InetSocketAddress(getPort()));
+        serverSock.bind(addr,getBacklog());
+
+        // Initialize thread count defaults for acceptor, poller
+        if (acceptorThreadCount != 1) {
+            // NIO2 does not allow any form of IO concurrency
+            acceptorThreadCount = 1;
+        }
+
+        // Initialize SSL if needed
+        initialiseSsl();
+    }
+
+
+
+    /**
+     * Deallocate NIO memory pools, and close server socket.
+     */
+    @Override
+    public void unbind() throws Exception {
+        if (running) {
+            stop();
+        }
+        // Close server socket
+        serverSock.close();
+        serverSock = null;
+        destroySsl();
+        super.unbind();
+        // Unlike other connectors, the thread pool is tied to the server socket
+        shutdownExecutor();
+        releaseCaches();
+    }
+-----CSCI578-----

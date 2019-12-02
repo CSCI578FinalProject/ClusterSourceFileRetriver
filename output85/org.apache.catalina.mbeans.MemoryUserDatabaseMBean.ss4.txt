@@ -1,0 +1,83 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Operations
+
+
+    /**
+     * Create a new Group and return the corresponding MBean Name.
+     *
+     * @param groupname Group name of the new group
+     * @param description Description of the new group
+     * @return the new group object name
+     */
+    public String createGroup(String groupname, String description) {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        Group group = database.createGroup(groupname, description);
+        try {
+            MBeanUtils.createMBean(group);
+        } catch (Exception e) {
+            IllegalArgumentException iae = new IllegalArgumentException
+                ("Exception creating group [" + groupname + "] MBean");
+            iae.initCause(e);
+            throw iae;
+        }
+        return (findGroup(groupname));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the MBean Name for the specified group name (if any);
+     * otherwise return <code>null</code>.
+     *
+     * @param groupname Group name to look up
+     * @return the group object name
+     */
+    public String findGroup(String groupname) {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        Group group = database.findGroup(groupname);
+        if (group == null) {
+            return (null);
+        }
+        try {
+            ObjectName oname =
+                MBeanUtils.createObjectName(managedGroup.getDomain(), group);
+            return (oname.toString());
+        } catch (MalformedObjectNameException e) {
+            IllegalArgumentException iae = new IllegalArgumentException
+                ("Cannot create object name for group [" + groupname + "]");
+            iae.initCause(e);
+            throw iae;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+    /**
+     * @return the MBean Names of all groups defined in this database.
+     */
+    public String[] getGroups() {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        ArrayList<String> results = new ArrayList<>();
+        Iterator<Group> groups = database.getGroups();
+        while (groups.hasNext()) {
+            Group group = groups.next();
+            results.add(findGroup(group.getGroupname()));
+        }
+        return results.toArray(new String[results.size()]);
+
+    }

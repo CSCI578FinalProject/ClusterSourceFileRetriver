@@ -1,0 +1,47 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Return a property from the protocol handler.
+     *
+     * @param name the property name
+     * @return the property value
+     */
+    public Object getAttribute(String name) {
+        return getProperty(name);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean getCookies() {
+        return this.cookies;
+    }
+-----CSCI578-----
+
+
+
+    private void populateSessionTrackingModes() {
+        // URL re-writing is always enabled by default
+        defaultSessionTrackingModes = EnumSet.of(SessionTrackingMode.URL);
+        supportedSessionTrackingModes = EnumSet.of(SessionTrackingMode.URL);
+
+        if (context.getCookies()) {
+            defaultSessionTrackingModes.add(SessionTrackingMode.COOKIE);
+            supportedSessionTrackingModes.add(SessionTrackingMode.COOKIE);
+        }
+
+        // SSL not enabled by default as it can only used on its own
+        // Context > Host > Engine > Service
+        Service s = ((Engine) context.getParent().getParent()).getService();
+        Connector[] connectors = s.findConnectors();
+        // Need at least one SSL enabled connector to use the SSL session ID.
+        for (Connector connector : connectors) {
+            if (Boolean.TRUE.equals(connector.getAttribute("SSLEnabled"))) {
+                supportedSessionTrackingModes.add(SessionTrackingMode.SSL);
+                break;
+            }
+        }
+    }

@@ -1,0 +1,50 @@
+4
+
+    /**
+     * Returns true if the param o is a McastMember with the same name
+     * @param o
+     */
+    public boolean equals(Object o) {
+        if ( o instanceof MemberImpl )    {
+            return Arrays.equals(this.getHost(),((MemberImpl)o).getHost()) &&
+                   this.getPort() == ((MemberImpl)o).getPort() &&
+                   Arrays.equals(this.getUniqueId(),((MemberImpl)o).getUniqueId());
+        }
+        else
+            return false;
+    }
+
+    public byte[] getUniqueId() {
+        return uniqueId;
+    }
+
+    /**
+     * Return the TCP listen host for this member
+     * @return IP address or host name
+     */
+    public byte[] getHost()  {
+        return host;
+    }
+    
+    public String getHostname() {
+        if ( this.hostname != null ) return hostname;
+        else {
+            try {
+                if (DO_DNS_LOOKUPS)
+                    this.hostname = java.net.InetAddress.getByAddress(host).getHostName();
+                else 
+                    this.hostname = org.apache.catalina.tribes.util.Arrays.toString(host,0,host.length,true);
+                return this.hostname;
+            }catch ( IOException x ) {
+                throw new RuntimeException("Unable to parse hostname.",x);
+            }
+        }
+    }
+
+    /**
+     * @see java.lang.Object#hashCode()
+     * @return The hash code
+     */
+    public int hashCode() {
+        return getHost()[0]+getHost()[1]+getHost()[2]+getHost()[3];
+    }

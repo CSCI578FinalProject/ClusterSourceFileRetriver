@@ -1,0 +1,149 @@
+7
+-----CSCI578-----
+
+
+
+    /**
+     * Set the default host.
+     *
+     * @param host The new default host
+     */
+    public void setDefaultHost(String host) {
+
+        String oldDefaultHost = this.defaultHost;
+        if (host == null) {
+            this.defaultHost = null;
+        } else {
+            this.defaultHost = host.toLowerCase();
+        }
+        support.firePropertyChange("defaultHost", oldDefaultHost,
+                                   this.defaultHost);
+
+    }
+-----CSCI578-----
+
+
+
+   /**
+     * Create a new StandardEngine.
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param engineName Unique name of this Engine
+     * @param defaultHost Default hostname of this Engine
+     * @param serviceName Unique name of this Service
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+
+    public Vector createStandardEngineService(String parent, 
+            String engineName, String defaultHost, String serviceName)
+        throws Exception {
+
+        // Create a new StandardService instance
+        StandardService service = new StandardService();
+        service.setName(serviceName);
+        // Create a new StandardEngine instance
+        StandardEngine engine = new StandardEngine();
+        engine.setName(engineName);
+        engine.setDefaultHost(defaultHost);
+        // Need to set engine before adding it to server in order to set domain
+        service.setContainer(engine);
+        // Add the new instance to its parent component
+        Server server = ServerFactory.getServer();
+        server.addService(service);
+        Vector onames = new Vector();
+        // FIXME service & engine.getObjectName
+        //ObjectName oname = engine.getObjectName();
+        ObjectName oname = 
+            MBeanUtils.createObjectName(engineName, engine);
+        onames.add(0, oname);
+        //oname = service.getObjectName();
+        oname = 
+            MBeanUtils.createObjectName(engineName, service);
+        onames.add(1, oname);
+        return (onames);
+
+    }
+-----CSCI578-----
+
+    
+    public void setName(String name ) {
+        if( domain != null ) {
+            // keep name==domain, ignore override
+            // we are already registered
+            super.setName( domain );
+            return;
+        }
+        // The engine name is used as domain
+        domain=name; // XXX should we set it in init() ? It shouldn't matter
+        super.setName( name );
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add a new Service to the set of defined Services.
+     *
+     * @param service The Service to be added
+     */
+    public void addService(Service service);
+-----CSCI578-----
+
+
+
+    /**
+     * Set the name of this Service.
+     *
+     * @param name The new service name
+     */
+    public void setName(String name) {
+
+        this.name = name;
+
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- JMX registration  --------------------
+
+    public ObjectName preRegister(MBeanServer server,
+                                  ObjectName name) throws Exception
+    {
+        super.preRegister(server,name);
+
+        this.setName( name.getDomain());
+
+        return name;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create a new StandardService.
+     *
+     * @param parent MBean Name of the associated parent component
+     * @param name Unique name of this StandardService
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createStandardService(String parent, String name, String domain)
+        throws Exception {
+
+        // Create a new StandardService instance
+        StandardService service = new StandardService();
+        service.setName(name);
+
+        // Add the new instance to its parent component
+        Server server = ServerFactory.getServer();
+        server.addService(service);
+
+        // Return the corresponding MBean name
+        return (service.getObjectName().toString());
+
+    }

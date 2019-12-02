@@ -1,0 +1,172 @@
+5
+-----CSCI578-----
+
+
+    public void setFulfilled(boolean fulfilled) {
+        this.fulfilled = fulfilled;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gets the name of the resource
+     *
+     * @return The name of the resource
+     */
+    public String getResourceName() {
+        return resourceName;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Validates a <code>ArrayList</code> of <code>ManifestResource</code>
+     * objects. This method requires an application name (which is the
+     * context root of the application at runtime).
+     *
+     * <code>false</false> is returned if the extension dependencies
+     * represented by any given <code>ManifestResource</code> objects
+     * is not met.
+     *
+     * This method should also provide static validation of a Web Application
+     * if provided with the necessary parameters.
+     *
+     * @param appName The name of the Application that will appear in the
+     *                error messages
+     * @param resources A list of <code>ManifestResource</code> objects
+     *                  to be validated.
+     *
+     * @return true if manifest resource file requirements are met
+     */
+    private static boolean validateManifestResources(String appName,
+            ArrayList<ManifestResource> resources) {
+        boolean passes = true;
+        int failureCount = 0;
+        ArrayList<Extension> availableExtensions = null;
+
+        Iterator<ManifestResource> it = resources.iterator();
+        while (it.hasNext()) {
+            ManifestResource mre = it.next();
+            ArrayList<Extension> requiredList = mre.getRequiredExtensions();
+            if (requiredList == null) {
+                continue;
+            }
+
+            // build the list of available extensions if necessary
+            if (availableExtensions == null) {
+                availableExtensions = buildAvailableExtensionsList(resources);
+            }
+
+            // load the container level resource map if it has not been built
+            // yet
+            if (containerAvailableExtensions == null) {
+                containerAvailableExtensions
+                    = buildAvailableExtensionsList(containerManifestResources);
+            }
+
+            // iterate through the list of required extensions
+            Iterator<Extension> rit = requiredList.iterator();
+            while (rit.hasNext()) {
+                boolean found = false;
+                Extension requiredExt = rit.next();
+                // check the application itself for the extension
+                if (availableExtensions != null) {
+                    Iterator<Extension> ait = availableExtensions.iterator();
+                    while (ait.hasNext()) {
+                        Extension targetExt = ait.next();
+                        if (targetExt.isCompatibleWith(requiredExt)) {
+                            requiredExt.setFulfilled(true);
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                // check the container level list for the extension
+                if (!found && containerAvailableExtensions != null) {
+                    Iterator<Extension> cit =
+                        containerAvailableExtensions.iterator();
+                    while (cit.hasNext()) {
+                        Extension targetExt = cit.next();
+                        if (targetExt.isCompatibleWith(requiredExt)) {
+                            requiredExt.setFulfilled(true);
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found) {
+                    // Failure
+                    log.info(sm.getString(
+                        "extensionValidator.extension-not-found-error",
+                        appName, mre.getResourceName(),
+                        requiredExt.getExtensionName()));
+                    passes = false;
+                    failureCount++;
+                }
+            }
+        }
+
+        if (!passes) {
+            log.info(sm.getString(
+                     "extensionValidator.extension-validation-error", appName,
+                     failureCount + ""));
+        }
+
+        return passes;
+    }
+-----CSCI578-----
+
+
+
+    public String getExtensionName() {
+        return (this.extensionName);
+    }
+-----CSCI578-----
+
+
+   /*
+    * Build this list of available extensions so that we do not have to
+    * re-build this list every time we iterate through the list of required
+    * extensions. All available extensions in all of the
+    * <code>MainfestResource</code> objects will be added to a
+    * <code>HashMap</code> which is returned on the first dependency list
+    * processing pass.
+    *
+    * The key is the name + implementation version.
+    *
+    * NOTE: A list is built only if there is a dependency that needs
+    * to be checked (performance optimization).
+    *
+    * @param resources A list of <code>ManifestResource</code> objects
+    *
+    * @return HashMap Map of available extensions
+    */
+    private static ArrayList<Extension> buildAvailableExtensionsList(
+            ArrayList<ManifestResource> resources) {
+
+        ArrayList<Extension> availableList = null;
+
+        Iterator<ManifestResource> it = resources.iterator();
+        while (it.hasNext()) {
+            ManifestResource mre = it.next();
+            ArrayList<Extension> list = mre.getAvailableExtensions();
+            if (list != null) {
+                Iterator<Extension> values = list.iterator();
+                while (values.hasNext()) {
+                    Extension ext = values.next();
+                    if (availableList == null) {
+                        availableList = new ArrayList<>();
+                        availableList.add(ext);
+                    } else {
+                        availableList.add(ext);
+                    }
+                }
+            }
+        }
+
+        return availableList;
+    }

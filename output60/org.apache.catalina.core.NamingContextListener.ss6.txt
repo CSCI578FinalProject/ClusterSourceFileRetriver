@@ -1,0 +1,123 @@
+7
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified resources in the naming context.
+     */
+    public void addResource(ContextResource resource) {
+
+        // Create a reference to the resource.
+        Reference ref = new ResourceRef
+            (resource.getType(), resource.getDescription(),
+             resource.getScope(), resource.getAuth());
+        // Adding the additional parameters, if any
+        Iterator params = resource.listProperties();
+        while (params.hasNext()) {
+            String paramName = (String) params.next();
+            String paramValue = (String) resource.getProperty(paramName);
+            StringRefAddr refAddr = new StringRefAddr(paramName, paramValue);
+            ref.add(refAddr);
+        }
+        try {
+            if (logger.isDebugEnabled()) {
+                logger.debug("  Adding resource ref "
+                             + resource.getName() + "  " + ref);
+            }
+            createSubcontexts(envCtx, resource.getName());
+            envCtx.bind(resource.getName(), ref);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.bindFailed", e));
+        }
+
+        if ("javax.sql.DataSource".equals(ref.getClassName())) {
+            try {
+                ObjectName on = createObjectName(resource);
+                Object actualResource = envCtx.lookup(resource.getName());
+                Registry.getRegistry(null, null).registerComponent(actualResource, on, null);
+                objectNames.put(resource.getName(), on);
+            } catch (Exception e) {
+                logger.warn(sm.getString("naming.jmxRegistrationFailed", e));
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getScope() {
+        return (this.scope);
+    }
+-----CSCI578-----
+
+
+    public String getAuth() {
+        return (this.auth);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- Instance Variables
+
+
+    // ------------------------------------------------------------- Attributes
+
+
+    /**
+     * Obtain and return the value of a specific attribute of this MBean.
+     *
+     * @param name Name of the requested attribute
+     *
+     * @exception AttributeNotFoundException if this attribute is not
+     *  supported by this MBean
+     * @exception MBeanException if the initializer of an object
+     *  throws an exception
+     * @exception ReflectionException if a Java reflection exception
+     *  occurs when invoking the getter
+     */
+    public Object getAttribute(String name)
+        throws AttributeNotFoundException, MBeanException,
+        ReflectionException {
+ 
+        // Validate the input parameters
+        if (name == null)
+            throw new RuntimeOperationsException
+                (new IllegalArgumentException("Attribute name is null"),
+                 "Attribute name is null");
+
+        ContextResource cr = null;
+        try {
+            cr = (ContextResource) getManagedResource();
+        } catch (InstanceNotFoundException e) {
+            throw new MBeanException(e);
+        } catch (InvalidTargetObjectTypeException e) {
+             throw new MBeanException(e);
+        }
+        
+        String value = null;
+        if ("auth".equals(name)) {
+            return (cr.getAuth());
+        } else if ("description".equals(name)) {
+            return (cr.getDescription());
+        } else if ("name".equals(name)) {
+            return (cr.getName());              
+        } else if ("scope".equals(name)) {
+            return (cr.getScope());  
+        } else if ("type".equals(name)) {
+            return (cr.getType());
+        } else {
+            value = (String) cr.getProperty(name);
+            if (value == null) {
+                throw new AttributeNotFoundException
+                    ("Cannot find attribute "+name);
+            }
+        }
+        
+        return value;
+        
+    }

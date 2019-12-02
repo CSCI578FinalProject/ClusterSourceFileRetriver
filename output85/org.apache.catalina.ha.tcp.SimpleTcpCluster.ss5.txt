@@ -1,0 +1,145 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Start the cluster deployer, the owning container will invoke this
+     * @throws Exception - if failure to start cluster
+     */
+    public void start() throws Exception;
+-----CSCI578-----
+
+
+    /**
+     * Start and stop sequences can be controlled by these constants
+     * This allows you to start separate components of the channel <br>
+     * DEFAULT - starts or stops all components in the channel
+     * @see #start(int)
+     * @see #stop(int)
+     */
+    public static final int DEFAULT = 15;
+
+
+    /**
+     * Start and stop sequences can be controlled by these constants
+     * This allows you to start separate components of the channel <br>
+     * SND_RX_SEQ - starts or stops the data receiver. Start means opening a server socket
+     * in case of a TCP implementation
+     * @see #start(int)
+     * @see #stop(int)
+     */
+    public static final int SND_RX_SEQ = 1;
+
+
+    /**
+     * Start and stop sequences can be controlled by these constants
+     * This allows you to start separate components of the channel <br>
+     * SND_TX_SEQ - starts or stops the data sender. This should not open any sockets,
+     * as sockets are opened on demand when a message is being sent
+     * @see #start(int)
+     * @see #stop(int)
+     */
+    public static final int SND_TX_SEQ = 2;
+
+
+    /**
+     * Start and stop sequences can be controlled by these constants
+     * This allows you to start separate components of the channel <br>
+     * MBR_RX_SEQ - starts or stops the membership listener. In a multicast implementation
+     * this will open a datagram socket and join a group and listen for membership messages
+     * members joining
+     * @see #start(int)
+     * @see #stop(int)
+     */
+    public static final int MBR_RX_SEQ = 4;
+
+
+    /**
+     * Start and stop sequences can be controlled by these constants
+     * This allows you to start separate components of the channel <br>
+     * MBR_TX_SEQ - starts or stops the membership broadcaster. In a multicast implementation
+     * this will open a datagram socket and join a group and broadcast the local member information
+     * @see #start(int)
+     * @see #stop(int)
+     */
+    public static final int MBR_TX_SEQ = 8;
+
+
+    /**
+     * Starts up the channel. This can be called multiple times for individual services to start
+     * The svc parameter can be the logical or value of any constants
+     * @param svc int value of <BR>
+     * DEFAULT - will start all services <BR>
+     * MBR_RX_SEQ - starts the membership receiver <BR>
+     * MBR_TX_SEQ - starts the membership broadcaster <BR>
+     * SND_TX_SEQ - starts the replication transmitter<BR>
+     * SND_RX_SEQ - starts the replication receiver<BR>
+     * <b>Note:</b> In order for the membership broadcaster to
+     * transmit the correct information, it has to be started after the replication receiver.
+     * @throws ChannelException if a startup error occurs or the service is already started or an error occurs.
+     */
+    public void start(int svc) throws ChannelException;
+-----CSCI578-----
+
+
+    /**
+     * register all cluster valve to host or engine
+     */
+    protected void registerClusterValve() {
+        if(container != null ) {
+            for (Iterator<Valve> iter = valves.iterator(); iter.hasNext();) {
+                ClusterValve valve = (ClusterValve) iter.next();
+                if (log.isDebugEnabled())
+                    log.debug("Invoking addValve on " + getContainer()
+                            + " with class=" + valve.getClass().getName());
+                if (valve != null) {
+                    container.getPipeline().addValve(valve);
+                    valve.setCluster(this);
+                }
+            }
+        }
+    }
+
+
+    /**
+     * unregister all cluster valve to host or engine
+     */
+    protected void unregisterClusterValve() {
+        for (Iterator<Valve> iter = valves.iterator(); iter.hasNext();) {
+            ClusterValve valve = (ClusterValve) iter.next();
+            if (log.isDebugEnabled())
+                log.debug("Invoking removeValve on " + getContainer()
+                        + " with class=" + valve.getClass().getName());
+            if (valve != null) {
+                container.getPipeline().removeValve(valve);
+                valve.setCluster(null);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    private void registerMember(Member member) {
+        // JMX registration
+        StringBuilder name = new StringBuilder("type=Cluster");
+        Container container = getContainer();
+        if (container != null) {
+            name.append(container.getMBeanKeyProperties());
+        }
+        name.append(",component=Member,name=");
+        name.append(ObjectName.quote(member.getName()));
+
+        ObjectName oname = register(member, name.toString());
+        memberOnameMap.put(member, oname);
+    }
+
+
+    private void unregisterMember(Member member) {
+        if (member == null) return;
+        ObjectName oname = memberOnameMap.remove(member);
+        if (oname != null) {
+            unregister(oname);
+        }
+    }
+-----CSCI578-----

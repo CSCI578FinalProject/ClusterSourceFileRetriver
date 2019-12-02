@@ -1,0 +1,51 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified resources in the naming context.
+     *
+     * @param resource the resource descriptor
+     */
+    public void addResource(ContextResource resource) {
+
+        // Create a reference to the resource.
+        Reference ref = new ResourceRef
+            (resource.getType(), resource.getDescription(),
+             resource.getScope(), resource.getAuth(),
+             resource.getSingleton());
+        // Adding the additional parameters, if any
+        Iterator<String> params = resource.listProperties();
+        while (params.hasNext()) {
+            String paramName = params.next();
+            String paramValue = (String) resource.getProperty(paramName);
+            StringRefAddr refAddr = new StringRefAddr(paramName, paramValue);
+            ref.add(refAddr);
+        }
+        try {
+            if (logger.isDebugEnabled()) {
+                logger.debug("  Adding resource ref "
+                             + resource.getName() + "  " + ref);
+            }
+            createSubcontexts(envCtx, resource.getName());
+            envCtx.bind(resource.getName(), ref);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.bindFailed", e));
+        }
+
+        if ("javax.sql.DataSource".equals(ref.getClassName()) &&
+                resource.getSingleton()) {
+            try {
+                ObjectName on = createObjectName(resource);
+                Object actualResource = envCtx.lookup(resource.getName());
+                Registry.getRegistry(null, null).registerComponent(actualResource, on, null);
+                objectNames.put(resource.getName(), on);
+            } catch (Exception e) {
+                logger.warn(sm.getString("naming.jmxRegistrationFailed", e));
+            }
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,112 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Search the provided pattern and get the C standard
+     * Date/Time formatting rules and convert them to the
+     * Java equivalent.
+     *
+     * @param pattern The pattern to search
+     * @return The modified pattern
+     */
+    protected String convertDateFormat( String pattern ) {
+        boolean inside = false;
+        boolean mark = false;
+        boolean modifiedCommand = false;
+
+        StringBuffer buf = new StringBuffer();
+
+        for(int i = 0; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+
+            if ( c=='%' && !mark ) {
+                mark=true;
+            } else {
+                if ( mark ) {
+                    if ( modifiedCommand ) {
+                        //don't do anything--we just wanted to skip a char
+                        modifiedCommand = false;
+                        mark = false;
+                    } else {
+                        inside = translateCommand( buf, pattern, i, inside );
+                        //It's a modifier code
+                        if ( c=='O' || c=='E' ) {
+                            modifiedCommand = true;
+                        } else {
+                            mark=false;
+                        }
+                    }
+                } else {
+                    if ( !inside && c != ' ' ) {
+                        //We start a literal, which we need to quote
+                        buf.append("'");
+                        inside = true;
+                    }
+                    
+                    buf.append(c);
+                }
+            }
+        }
+
+        if ( buf.length() > 0 ) {
+            char lastChar = buf.charAt( buf.length() - 1 );
+
+            if( lastChar!='\'' && inside ) {
+                buf.append('\'');
+            }
+        }
+        return buf.toString();
+    }
+-----CSCI578-----
+
+
+    protected String quote( String str, boolean insideQuotes ) {
+        String retVal = str;
+        if ( !insideQuotes ) {
+            retVal = '\'' + retVal + '\'';
+        }
+        return retVal;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Try to get the Java Date/Time formatting associated with
+     * the C standard provided.
+     *
+     * @param buf The buffer
+     * @param pattern The date/time pattern
+     * @param index The char index
+     * @param oldInside Flag value
+     * @return True if new is inside buffer
+     */
+    protected boolean translateCommand( StringBuffer buf, String pattern, int index, boolean oldInside ) {
+        char firstChar = pattern.charAt( index );
+        boolean newInside = oldInside;
+
+        //O and E are modifiers, they mean to present an alternative representation of the next char
+        //we just handle the next char as if the O or E wasn't there
+        if ( firstChar == 'O' || firstChar == 'E' ) {
+            if ( index + 1 < pattern.length() ) {               
+                newInside = translateCommand( buf, pattern, index + 1, oldInside );
+            } else {
+                buf.append( quote("%" + firstChar, oldInside ) );
+            }
+        } else {
+            String command = translate.getProperty( String.valueOf( firstChar ) );
+            
+            //If we don't find a format, treat it as a literal--That's what apache does
+            if ( command == null ) {
+                buf.append( quote( "%" + firstChar, oldInside ) );
+            } else {
+                //If we were inside quotes, close the quotes
+                if ( oldInside ) {
+                    buf.append( '\'' );
+                }
+                buf.append( command );
+                newInside = false;
+            }
+        }
+        return newInside;
+    }

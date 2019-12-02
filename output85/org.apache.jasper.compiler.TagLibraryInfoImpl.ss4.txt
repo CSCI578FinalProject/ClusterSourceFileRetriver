@@ -1,0 +1,201 @@
+16
+-----CSCI578-----
+
+
+    public String getValidatorClass() {
+        return validatorClass;
+    }
+-----CSCI578-----
+
+
+    public Map<String, String> getInitParams() {
+        return initParams;
+    }
+-----CSCI578-----
+
+
+    private TagLibraryValidator createValidator(ValidatorXml validatorXml) throws JasperException {
+
+        if (validatorXml == null) {
+            return null;
+        }
+
+        String validatorClass = validatorXml.getValidatorClass();
+        if (validatorClass == null || validatorClass.isEmpty()) {
+            return null;
+        }
+
+        Map<String,Object> initParams = new Hashtable<>();
+        initParams.putAll(validatorXml.getInitParams());
+
+        try {
+            Class<?> tlvClass = ctxt.getClassLoader().loadClass(validatorClass);
+            TagLibraryValidator tlv = (TagLibraryValidator) tlvClass.newInstance();
+            tlv.setInitParameters(initParams);
+            return tlv;
+        } catch (Exception e) {
+            err.jspError(e, "jsp.error.tlvclass.instantiation", validatorClass);
+            return null;
+        }
+    }
+-----CSCI578-----
+
+
+    /** ---------- Access resources in the webapp ---------- */
+
+    /**
+     * Get the full value of a URI relative to this compilations context
+     * uses current file as the base.
+     * @param uri The relative URI
+     * @return absolute URI
+     */
+    public String resolveRelativeUri(String uri) {
+        // sometimes we get uri's massaged from File(String), so check for
+        // a root directory separator char
+        if (uri.startsWith("/") || uri.startsWith(File.separator)) {
+            return uri;
+        } else {
+            return baseURI + uri;
+        }
+    }
+-----CSCI578-----
+
+
+    /*
+     * @param uri The uri of the TLD
+     * @param ctxt The compilation context
+     *
+     * @return the location of the TLD identified by the uri
+     */
+    private TldResourcePath generateTldResourcePath(String uri,
+            JspCompilationContext ctxt) throws JasperException {
+
+        // TODO: this matches the current implementation but the URL logic looks fishy
+        // map URI to location per JSP 7.3.6.2
+        if (uri.indexOf(':') != -1) {
+            // abs_uri, this was not found in the taglibMap so raise an error
+            err.jspError("jsp.error.taglibDirective.absUriCannotBeResolved", uri);
+        } else if (uri.charAt(0) != '/') {
+            // noroot_rel_uri, resolve against the current JSP page
+            uri = ctxt.resolveRelativeUri(uri);
+            try {
+                // Can't use RequestUtils.normalize since that package is not
+                // available to Jasper.
+                uri = (new URI(uri)).normalize().toString();
+                if (uri.startsWith("../")) {
+                    // Trying to go outside context root
+                    err.jspError("jsp.error.taglibDirective.uriInvalid", uri);
+                }
+            } catch (URISyntaxException e) {
+                err.jspError("jsp.error.taglibDirective.uriInvalid", uri);
+            }
+        }
+
+        URL url = null;
+        try {
+            url = ctxt.getResource(uri);
+        } catch (Exception ex) {
+            err.jspError("jsp.error.tld.unable_to_get_jar", uri, ex.toString());
+        }
+        if (uri.endsWith(".jar")) {
+            if (url == null) {
+                err.jspError("jsp.error.tld.missing_jar", uri);
+            }
+            return new TldResourcePath(url, uri, "META-INF/taglib.tld");
+        } else {
+            return new TldResourcePath(url, uri);
+        }
+    }
+-----CSCI578-----
+
+
+
+    public URL getResource(String res) throws MalformedURLException {
+        return context.getResource(canonicalURI(res));
+    }
+-----CSCI578-----
+
+
+    public String getDisplayName() {
+        return displayName;
+    }
+-----CSCI578-----
+
+
+    public String getInfo() {
+        return info;
+    }
+-----CSCI578-----
+
+
+    public String getTagClass() {
+        return tagClass;
+    }
+-----CSCI578-----
+
+
+    private TagInfo createTagInfo(TagXml tagXml) throws JasperException {
+
+        String teiClassName = tagXml.getTeiClass();
+        TagExtraInfo tei = null;
+        if (teiClassName != null && !teiClassName.isEmpty()) {
+            try {
+                Class<?> teiClass = ctxt.getClassLoader().loadClass(teiClassName);
+                tei = (TagExtraInfo) teiClass.newInstance();
+            } catch (Exception e) {
+                err.jspError(e, "jsp.error.teiclass.instantiation", teiClassName);
+            }
+        }
+
+        List<TagAttributeInfo> attributeInfos = tagXml.getAttributes();
+        List<TagVariableInfo> variableInfos = tagXml.getVariables();
+
+        return new TagInfo(tagXml.getName(),
+                tagXml.getTagClass(),
+                tagXml.getBodyContent(),
+                tagXml.getInfo(),
+                this,
+                tei,
+                attributeInfos.toArray(new TagAttributeInfo[attributeInfos.size()]),
+                tagXml.getDisplayName(),
+                tagXml.getSmallIcon(),
+                tagXml.getLargeIcon(),
+                variableInfos.toArray(new TagVariableInfo[variableInfos.size()]),
+                tagXml.hasDynamicAttributes());
+    }
+-----CSCI578-----
+
+
+    public boolean hasDynamicAttributes() {
+        return dynamicAttributes;
+    }
+-----CSCI578-----
+
+
+    public String getSmallIcon() {
+        return smallIcon;
+    }
+-----CSCI578-----
+
+
+    public String getLargeIcon() {
+        return largeIcon;
+    }
+-----CSCI578-----
+
+
+    public String getBodyContent() {
+        return bodyContent;
+    }
+-----CSCI578-----
+
+
+    public String getName() {
+        return name;
+    }
+-----CSCI578-----
+
+
+    public String getTeiClass() {
+        return teiClass;
+    }

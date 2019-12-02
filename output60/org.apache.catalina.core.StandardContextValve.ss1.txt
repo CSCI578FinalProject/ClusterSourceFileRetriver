@@ -1,0 +1,329 @@
+12
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Report a "not found" error for the specified resource.  FIXME:  We
+     * should really be using the error reporting settings for this web
+     * application, but currently that code runs at the wrapper level rather
+     * than the context level.
+     *
+     * @param response The response we are creating
+     */
+    private void notFound(HttpServletResponse response) {
+
+        try {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+        } catch (IllegalStateException e) {
+            ;
+        } catch (IOException e) {
+            ;
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns true if the message bytes starts with the specified string.
+     * @param s the string
+     * @param pos The start position
+     */
+    public boolean startsWithIgnoreCase(String s, int pos) {
+	switch (type) {
+	case T_STR:
+	    if( strValue==null ) return false;
+	    if( strValue.length() < pos + s.length() ) return false;
+
+	    for( int i=0; i<s.length(); i++ ) {
+		if( Ascii.toLower( s.charAt( i ) ) !=
+		    Ascii.toLower( strValue.charAt( pos + i ))) {
+		    return false;
+		}
+	    }
+	    return true;
+	case T_CHARS:
+	    return charC.startsWithIgnoreCase( s, pos );
+	case T_BYTES:
+	    return byteC.startsWithIgnoreCase( s, pos );
+	default:
+	    return false;
+	}
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Select the appropriate child Wrapper to process this request,
+     * based on the specified request URI.  If no matching Wrapper can
+     * be found, return an appropriate HTTP error.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     * @param valveContext Valve context used to forward to the next Valve
+     *
+     * @exception IOException if an input/output error occurred
+     * @exception ServletException if a servlet error occurred
+     */
+    public final void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        // Disallow any direct access to resources under WEB-INF or META-INF
+        MessageBytes requestPathMB = request.getRequestPathMB();
+        if ((requestPathMB.startsWithIgnoreCase("/META-INF/", 0))
+            || (requestPathMB.equalsIgnoreCase("/META-INF"))
+            || (requestPathMB.startsWithIgnoreCase("/WEB-INF/", 0))
+            || (requestPathMB.equalsIgnoreCase("/WEB-INF"))) {
+            notFound(response);
+            return;
+        }
+
+        // Wait if we are reloading
+        boolean reloaded = false;
+        while (context.getPaused()) {
+            reloaded = true;
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                ;
+            }
+        }
+
+        // Reloading will have stopped the old webappclassloader and
+        // created a new one
+        if (reloaded &&
+                context.getLoader() != null &&
+                context.getLoader().getClassLoader() != null) {
+            Thread.currentThread().setContextClassLoader(
+                    context.getLoader().getClassLoader());
+        }
+
+        // Select the Wrapper to be used for this Request
+        Wrapper wrapper = request.getWrapper();
+        if (wrapper == null) {
+            notFound(response);
+            return;
+        } else if (wrapper.isUnavailable()) {
+            // May be as a result of a reload, try and find the new wrapper
+            wrapper = (Wrapper) container.findChild(wrapper.getName());
+            if (wrapper == null) {
+                notFound(response);
+                return;
+            }
+        }
+
+        // Normal request processing
+        Object instances[] = context.getApplicationEventListeners();
+
+        ServletRequestEvent event = null;
+
+        if ((instances != null) 
+                && (instances.length > 0)) {
+            event = new ServletRequestEvent
+                (((StandardContext) container).getServletContext(), 
+                 request.getRequest());
+            // create pre-service event
+            for (int i = 0; i < instances.length; i++) {
+                if (instances[i] == null)
+                    continue;
+                if (!(instances[i] instanceof ServletRequestListener))
+                    continue;
+                ServletRequestListener listener =
+                    (ServletRequestListener) instances[i];
+                try {
+                    listener.requestInitialized(event);
+                } catch (Throwable t) {
+                    container.getLogger().error(sm.getString("standardContext.requestListener.requestInit",
+                                     instances[i].getClass().getName()), t);
+                    ServletRequest sreq = request.getRequest();
+                    sreq.setAttribute(Globals.EXCEPTION_ATTR,t);
+                    return;
+                }
+            }
+        }
+
+        wrapper.getPipeline().getFirst().invoke(request, response);
+
+        if ((instances !=null ) &&
+                (instances.length > 0)) {
+            // create post-service event
+            for (int i = 0; i < instances.length; i++) {
+                if (instances[i] == null)
+                    continue;
+                if (!(instances[i] instanceof ServletRequestListener))
+                    continue;
+                ServletRequestListener listener =
+                    (ServletRequestListener) instances[i];
+                try {
+                    listener.requestDestroyed(event);
+                } catch (Throwable t) {
+                    container.getLogger().error(sm.getString("standardContext.requestListener.requestDestroy",
+                                     instances[i].getClass().getName()), t);
+                    ServletRequest sreq = request.getRequest();
+                    sreq.setAttribute(Globals.EXCEPTION_ATTR,t);
+                }
+            }
+        }
+                
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns true if the message bytes starts with the specified string.
+     * @param s the string
+     * @param pos The position
+     */
+    public boolean startsWithIgnoreCase(String s, int pos) {
+        byte[] b = buff;
+        int len = s.length();
+        if (b == null || len+pos > end-start) {
+            return false;
+        }
+        int off = start+pos;
+        for (int i = 0; i < len; i++) {
+            if (Ascii.toLower( b[off++] ) != Ascii.toLower( s.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * <p>Return the Valve instance that has been distinguished as the basic
+     * Valve for this Pipeline (if any).
+     */
+    public Valve getFirst();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the request processing paused flag for this Context.
+     */
+    public boolean getPaused() {
+
+        return (this.paused);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Is this servlet currently unavailable?
+     */
+    public boolean isUnavailable();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the lower case equivalent of the specified ASCII character.
+     */
+
+    public static int toLower(int c) {
+        return toLower[c & 0xff] & 0xff;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the first valve in the pipeline.
+     */
+    public Valve getFirst() {
+
+        return (pipeline.getFirst());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Select the appropriate child Wrapper to process this request,
+     * based on the specified request URI.  If no matching Wrapper can
+     * be found, return an appropriate HTTP error.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     * @param valveContext Valve context used to forward to the next Valve
+     *
+     * @exception IOException if an input/output error occurred
+     * @exception ServletException if a servlet error occurred
+     */
+    public final void event(Request request, Response response, CometEvent event)
+        throws IOException, ServletException {
+
+        // Select the Wrapper to be used for this Request
+        Wrapper wrapper = request.getWrapper();
+
+        // Normal request processing
+        // FIXME: This could be an addition to the core API too
+        /*
+        Object instances[] = context.getApplicationEventListeners();
+
+        ServletRequestEvent event = null;
+
+        if ((instances != null) 
+                && (instances.length > 0)) {
+            event = new ServletRequestEvent
+                (((StandardContext) container).getServletContext(), 
+                 request.getRequest());
+            // create pre-service event
+            for (int i = 0; i < instances.length; i++) {
+                if (instances[i] == null)
+                    continue;
+                if (!(instances[i] instanceof ServletRequestListener))
+                    continue;
+                ServletRequestListener listener =
+                    (ServletRequestListener) instances[i];
+                try {
+                    listener.requestInitialized(event);
+                } catch (Throwable t) {
+                    container.getLogger().error(sm.getString("requestListenerValve.requestInit",
+                                     instances[i].getClass().getName()), t);
+                    ServletRequest sreq = request.getRequest();
+                    sreq.setAttribute(Globals.EXCEPTION_ATTR,t);
+                    return;
+                }
+            }
+        }
+        */
+
+        wrapper.getPipeline().getFirst().event(request, response, event);
+
+        /*
+        if ((instances !=null ) &&
+                (instances.length > 0)) {
+            // create post-service event
+            for (int i = 0; i < instances.length; i++) {
+                if (instances[i] == null)
+                    continue;
+                if (!(instances[i] instanceof ServletRequestListener))
+                    continue;
+                ServletRequestListener listener =
+                    (ServletRequestListener) instances[i];
+                try {
+                    listener.requestDestroyed(event);
+                } catch (Throwable t) {
+                    container.getLogger().error(sm.getString("requestListenerValve.requestDestroy",
+                                     instances[i].getClass().getName()), t);
+                    ServletRequest sreq = request.getRequest();
+                    sreq.setAttribute(Globals.EXCEPTION_ATTR,t);
+                }
+            }
+        }
+        */
+      
+    }

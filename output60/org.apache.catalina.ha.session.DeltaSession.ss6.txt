@@ -1,0 +1,60 @@
+5
+-----CSCI578-----
+
+
+        /**
+         * Applies a diff to an existing object.
+         * @param diff byte[]
+         * @param offset int
+         * @param length int
+         * @throws IOException
+         */
+        public void applyDiff(byte[] diff, int offset, int length) throws IOException, ClassNotFoundException {
+            try {
+                lock();
+                ReplicationStream stream = ( (ClusterManager) getManager()).getReplicationStream(diff, offset, length);
+                ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
+                try {
+                    ClassLoader[] loaders = getClassLoaders();
+                    if (loaders != null && loaders.length > 0)
+                        Thread.currentThread().setContextClassLoader(loaders[0]);
+                    getDeltaRequest().readExternal(stream);
+                    getDeltaRequest().execute(this, ((ClusterManager)getManager()).isNotifyListenersOnReplication());
+                } finally {
+                    Thread.currentThread().setContextClassLoader(contextLoader);
+                }
+            }finally {
+                unlock();
+            }
+        }
+-----CSCI578-----
+
+   
+   public ReplicationStream getReplicationStream(byte[] data) throws IOException;
+
+
+   public ReplicationStream getReplicationStream(byte[] data, int offset, int length) throws IOException;
+-----CSCI578-----
+
+   
+   public boolean isNotifyListenersOnReplication();
+-----CSCI578-----
+
+
+    public DeltaRequest getDeltaRequest() {
+        if (deltaRequest == null) resetDeltaRequest();
+        return deltaRequest;
+    }
+-----CSCI578-----
+
+
+    // ----------------------------------------------------- ReplicatedMapEntry
+
+    /**
+         * Has the object changed since last replication
+         * and is not in a locked state
+         * @return boolean
+         */
+        public boolean isDirty() {
+            return getDeltaRequest().getSize()>0;
+        }

@@ -1,0 +1,136 @@
+11
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Invoke a pre-startup initialization. This is used to allow connectors
+     * to bind to restricted ports under Unix operating environments.
+     */
+    @Override
+    protected void initInternal() throws LifecycleException {
+
+        super.initInternal();
+
+        // Register global String cache
+        // Note although the cache is global, if there are multiple Servers
+        // present in the JVM (may happen when embedding) then the same cache
+        // will be registered under multiple names
+        onameStringCache = register(new StringCache(), "type=StringCache");
+
+        // Register the MBeanFactory
+        MBeanFactory factory = new MBeanFactory();
+        factory.setContainer(this);
+        onameMBeanFactory = register(factory, "type=MBeanFactory");
+
+        // Register the naming resources
+        globalNamingResources.init();
+
+        // Populate the extension validator with JARs from common and shared
+        // class loaders
+        if (getCatalina() != null) {
+            ClassLoader cl = getCatalina().getParentClassLoader();
+            // Walk the class loader hierarchy. Stop at the system class loader.
+            // This will add the shared (if present) and common class loaders
+            while (cl != null && cl != ClassLoader.getSystemClassLoader()) {
+                if (cl instanceof URLClassLoader) {
+                    URL[] urls = ((URLClassLoader) cl).getURLs();
+                    for (URL url : urls) {
+                        if (url.getProtocol().equals("file")) {
+                            try {
+                                File f = new File (url.toURI());
+                                if (f.isFile() &&
+                                        f.getName().endsWith(".jar")) {
+                                    ExtensionValidator.addSystemResource(f);
+                                }
+                            } catch (URISyntaxException e) {
+                                // Ignore
+                            } catch (IOException e) {
+                                // Ignore
+                            }
+                        }
+                    }
+                }
+                cl = cl.getParent();
+            }
+        }
+        // Initialize our defined Services
+        for (int i = 0; i < services.length; i++) {
+            services[i].init();
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the outer Catalina startup/shutdown component if present.
+     */
+    @Override
+    public Catalina getCatalina() {
+        return catalina;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Operations
+
+    /**
+     * Set the container that this factory was created for.
+     * @param container The associated container
+     */
+    public void setContainer(Object container) {
+        this.container = container;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public ClassLoader getParentClassLoader() {
+        if (parentClassLoader != null) {
+            return (parentClassLoader);
+        }
+        return ClassLoader.getSystemClassLoader();
+    }
+-----CSCI578-----
+
+
+    @Override
+    protected void initInternal() throws LifecycleException {
+        super.initInternal();
+
+        // Register the naming resources
+        if (namingResources != null) {
+            namingResources.init();
+        }
+
+        if (resources != null) {
+            resources.start();
+        }
+
+        // Send j2ee.object.created notification
+        if (this.getObjectName() != null) {
+            Notification notification = new Notification("j2ee.object.created",
+                    this.getObjectName(), sequenceNumber.getAndIncrement());
+            broadcaster.sendNotification(notification);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the parent class loader for this component.
+     */
+    @Override
+    public ClassLoader getParentClassLoader() {
+        if (parentClassLoader != null)
+            return (parentClassLoader);
+        if (catalina != null) {
+            return (catalina.getParentClassLoader());
+        }
+        return (ClassLoader.getSystemClassLoader());
+    }

@@ -1,0 +1,307 @@
+43
+
+    // -------------------- Jk specific methods --------------------
+
+
+    /**
+     * Set the flag saying that the server is sending a body
+     */
+    public void setIsReadRequired(boolean irr) {
+        isReadRequired = irr;
+    }
+
+    /**
+     * Set the headers from which cookies will be pulled.
+     * This has the side effect of recycling the object.
+     *
+     * @param headers Cookies are lazy-evaluated and will extract the
+     *     information from the provided headers.
+     */
+    // [seguin] added so that an empty Cookies object could be
+    // created, have headers set, then recycled.
+    public void setHeaders(MimeHeaders headers) {
+        recycle();
+        this.headers=headers;
+    }
+
+
+    // -------------------- debug --------------------
+
+    public String toString() {
+        return "R( " + requestURI().toString() + ")";
+    }
+
+    public JkInputStream getInputStream() {
+        return jkIS;
+    }
+    
+    /**
+     * Resets the message bytes to an uninitialized state.
+     */
+    public void recycle() {
+        //        buff=null;
+        isSet=false; // XXX
+        start=0;
+        end=0;
+    }
+
+
+    public MimeHeaders getMimeHeaders() {
+        return headers;
+    }
+
+    /** Create a new named header , return the MessageBytes
+        container for the new value
+    */
+    public MessageBytes addValue( String name ) {
+         MimeHeaderField mh = createHeader();
+        mh.getName().setString(name);
+        return mh.getValue();
+    }
+
+    /** Create a new named header using un-translated byte[].
+        The conversion to chars can be delayed until
+        encoding is known.
+     */
+    public MessageBytes addValue(byte b[], int startN, int len)
+    {
+        MimeHeaderField mhf=createHeader();
+        mhf.getName().setBytes(b, startN, len);
+        return mhf.getValue();
+    }
+
+    /** Create a new named header using translated char[].
+     */
+    public MessageBytes addValue(char c[], int startN, int len)
+    {
+        MimeHeaderField mhf=createHeader();
+        mhf.getName().setChars(c, startN, len);
+        return mhf.getValue();
+    }
+
+    private MessageBytes methodMB = MessageBytes.newInstance();
+    
+    public MessageBytes method() {
+        return methodMB;
+    }
+
+    public MessageBytes queryString() {
+        return queryMB;
+    }
+
+    public MessageBytes requestURI() {
+        return uriMB;
+    }
+
+
+    public final Object getNote(int pos) {
+        return notes[pos];
+    }
+
+    // -------------------- Per-Request "notes" --------------------
+
+
+    /** 
+     * Used to store private data. Thread data could be used instead - but 
+     * if you have the req, getting/setting a note is just a array access, may
+     * be faster than ThreadLocal for very frequent operations.
+     * 
+     *  Example use: 
+     *   Jk:
+     *     HandlerRequest.HOSTBUFFER = 10 CharChunk, buffer for Host decoding
+     *     WorkerEnv: SSL_CERT_NOTE=16 - MessageBytes containing the cert
+     *                
+     *   Catalina CoyoteAdapter:
+     *      ADAPTER_NOTES = 1 - stores the HttpServletRequest object ( req/res)             
+     *      
+     *   To avoid conflicts, note in the range 0 - 8 are reserved for the 
+     *   servlet container ( catalina connector, etc ), and values in 9 - 16 
+     *   for connector use. 
+     *   
+     *   17-31 range is not allocated or used.
+     */
+    public final void setNote(int pos, Object value) {
+        notes[pos] = value;
+    }
+
+    private MessageBytes schemeMB = MessageBytes.newInstance();
+
+    // -------------------- Request data --------------------
+
+
+    public MessageBytes scheme() {
+        return schemeMB;
+    }
+    
+    public void setServerPort(int serverPort ) {
+        this.serverPort=serverPort;
+    }
+    private MessageBytes serverNameMB = MessageBytes.newInstance();
+    
+    /** 
+     * Return the buffer holding the server name, if
+     * any. Use isNull() to check if there is no value
+     * set.
+     * This is the "virtual host", derived from the
+     * Host: header.
+     */
+    public MessageBytes serverName() {
+        return serverNameMB;
+    }
+    
+    public MessageBytes getRemoteUser() {
+        return remoteUser;
+    }
+
+    public MessageBytes getAuthType() {
+        return authType;
+    }
+    private MessageBytes localNameMB = MessageBytes.newInstance();
+
+    public MessageBytes localName() {
+        return localNameMB;
+    }    
+
+
+    // -------------------- Cookies --------------------
+
+
+    public Cookies getCookies() {
+        return cookies;
+    }
+
+    public MessageBytes protocol() {
+        return protoMB;
+    }
+    
+    public int getLocalPort(){
+        return localPort;
+    }
+    private MessageBytes contentTypeMB = null;
+
+
+    public MessageBytes contentType() {
+        if (contentTypeMB == null)
+            contentTypeMB = headers.getValue("content-type");
+        return contentTypeMB;
+    }
+
+    public void setStartTime(long startTime) {
+        this.startTime = startTime;
+    }
+
+
+    /**
+     * Sets the content to the specified subarray of bytes.
+     *
+     * @param b the bytes
+     * @param off the start offset of the bytes
+     * @param len the length of the bytes
+     */
+    public void setBytes(byte[] b, int off, int len) {
+        byteC.setBytes( b, off, len );
+        type=T_BYTES;
+        hasStrValue=false;
+        hasHashCode=false;
+        hasIntValue=false;
+        hasLongValue=false;
+        hasDateValue=false;
+    }
+        
+    public void setLocalPort(int port){
+        this.localPort = port;
+    }
+
+    /**
+     * Set limit on the number of header fields.
+     */
+    public void setLimit(int limit) {
+        this.limit = limit;
+        if (limit > 0 && headers.length > limit && count < limit) {
+            // shrink header list array
+            MimeHeaderField tmp[] = new MimeHeaderField[limit];
+            System.arraycopy(headers, 0, tmp, 0, count);
+            headers = tmp;
+        }
+    }
+        
+    public void setRemotePort(int port){
+        this.remotePort = port;
+    }
+
+    private MessageBytes instanceId = MessageBytes.newInstance();
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Get the instance id (or JVM route). Curently Ajp is sending it with each
+     * request. In future this should be fixed, and sent only once ( or
+     * 'negociated' at config time so both tomcat and apache share the same name.
+     * 
+     * @return the instance id
+     */
+    public MessageBytes instanceId() {
+        return instanceId;
+    }
+
+    public void getBytes(MessageBytes mb) {
+        int length = getInt();
+        if( (length == 0xFFFF) || (length == -1) ) {
+            mb.recycle();
+            return;
+        }
+        mb.setBytes( buf, pos, length );
+        mb.getCharChunk().recycle();
+        pos += length;
+        pos++; // Skip the terminating \0
+    }
+    
+    /**
+     * Copy a chunk of bytes from the packet into an array and advance
+     * the read position past the chunk.  See appendBytes() for details
+     * on the encoding.
+     *
+     * @return The number of bytes copied.
+     */
+    public int getBytes(byte dest[]) {
+        int length = getInt();
+        if( length > buf.length ) {
+            // XXX Should be if(pos + length > buff.legth)?
+            log.error("getBytes() buffer overflow " + length + " " + buf.length );
+        }
+	
+        if( (length == 0xFFFF) || (length == -1) ) {
+            log.info("Null string " + length);
+            return 0;
+        }
+
+        System.arraycopy( buf, pos,  dest, 0, length );
+        pos += length;
+        pos++; // Skip terminating \0  XXX I believe this is wrong but harmless
+        return length;
+    }
+
+    /** The high level request object associated with this context
+     */
+    public final void setRequest( Request req ) {
+        this.req=req;
+        req.setInputBuffer(jkIS);
+        Response res = req.getResponse();
+        res.setOutputBuffer(jkIS);
+        res.setHook(this);
+    }
+
+
+    public void setInputBuffer(InputBuffer inputBuffer) {
+        this.inputBuffer = inputBuffer;
+    }
+
+
+    public void setHook(ActionHook hook) {
+        this.hook = hook;
+    }
+
+
+    public void setOutputBuffer(OutputBuffer outputBuffer) {
+        this.outputBuffer = outputBuffer;
+    }

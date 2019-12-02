@@ -1,0 +1,81 @@
+9
+-----CSCI578-----
+
+
+    /** Find the first direct child with a given attribute.
+     * @param parent
+     * @param elemName name of the element, or null for any 
+     * @param attName attribute we're looking for
+     * @param attVal attribute value or null if we just want any
+     */ 
+    public static Node findChildWithAtt(Node parent, String elemName,
+                                        String attName, String attVal) {
+        
+        Node child=DomUtil.getChild(parent, Node.ELEMENT_NODE);
+        if( attVal== null ) {
+            while( child!= null &&
+                    ( elemName==null || elemName.equals( child.getNodeName())) && 
+                    DomUtil.getAttribute(child, attName) != null ) {
+                child=getNext(child, elemName, Node.ELEMENT_NODE );
+            }
+        } else {
+            while( child!= null && 
+                    ( elemName==null || elemName.equals( child.getNodeName())) && 
+                    ! attVal.equals( DomUtil.getAttribute(child, attName)) ) {
+                child=getNext(child, elemName, Node.ELEMENT_NODE );
+            }
+        }
+        return child;        
+    }
+-----CSCI578-----
+
+    
+    public void updateField( ObjectName oname, String name, 
+                             Object value )
+    {
+        if( loading ) return;
+        // nothing by default
+        //log.info( "XXX UpdateField " + oname + " " + name + " " + value);
+        Node n=(Node)object2Node.get( oname );
+        if( n == null ) {
+            log.info( "Node not found " + oname );
+            return;
+        }
+        Node attNode=DomUtil.findChildWithAtt(n, "attribute", "name", name);
+        if( attNode == null ) {
+            // found no existing attribute with this name
+            attNode=n.getOwnerDocument().createElement("attribute");
+            DomUtil.setAttribute(attNode, "name", name);
+            n.appendChild(attNode);
+        } 
+        String oldValue=DomUtil.getAttribute(attNode, "value");
+        if( oldValue != null ) {
+            // we'll convert all values to text content
+            DomUtil.removeAttribute( attNode, "value");
+        }
+        DomUtil.setText(attNode, value.toString());
+
+        //store();
+    }
+-----CSCI578-----
+
+    
+    
+    /** Set or replace the text value 
+     */ 
+    public static void setText(Node node, String val) {
+        Node chld=DomUtil.getChild(node, Node.TEXT_NODE);
+        if( chld == null ) {
+            Node textN=node.getOwnerDocument().createTextNode(val);
+            node.appendChild(textN);
+            return;
+        }
+        // change the value
+        chld.setNodeValue(val);           
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

@@ -1,0 +1,97 @@
+2
+
+
+    protected boolean isMetaChar(char c) {
+        return Character.isWhitespace(c) || c == '(' || c == ')' || c == '!'
+                || c == '<' || c == '>' || c == '|' || c == '&' || c == '=';
+    }
+
+
+    /**
+     * Returns the next token type and initializes any state variables
+     * accordingly.
+     */
+    public int nextToken() {
+        // Skip any leading white space
+        while (index < length && Character.isWhitespace(expr[index]))
+            index++;
+        // Clear the current token val
+        tokenVal = null;
+        if (index == length) return TOKEN_END; // End of string
+        int start = index;
+        char currentChar = expr[index];
+        char nextChar = (char)0;
+        index++;
+        if (index < length) nextChar = expr[index];
+        // Check for a known token start
+        switch (currentChar) {
+            case '(' :
+                return TOKEN_LBRACE;
+            case ')' :
+                return TOKEN_RBRACE;
+            case '=' :
+                return TOKEN_EQ;
+            case '!' :
+                if (nextChar == '=') {
+                    index++;
+                    return TOKEN_NOT_EQ;
+                } else {
+                    return TOKEN_NOT;
+                }
+            case '|' :
+                if (nextChar == '|') {
+                    index++;
+                    return TOKEN_OR;
+                }
+                break;
+            case '&' :
+                if (nextChar == '&') {
+                    index++;
+                    return TOKEN_AND;
+                }
+                break;
+            case '>' :
+                if (nextChar == '=') {
+                    index++;
+                    return TOKEN_GE; // Greater than or equal
+                } else {
+                    return TOKEN_GT; // Greater than
+                }
+            case '<' :
+                if (nextChar == '=') {
+                    index++;
+                    return TOKEN_LE; // Less than or equal
+                } else {
+                    return TOKEN_LT; // Less than
+                }
+            default :
+                // Otherwise it's a string
+                break;
+        }
+        int end = index;
+        // If it's a quoted string then end is the next unescaped quote
+        if (currentChar == '"' || currentChar == '\'') {
+            char endChar = currentChar;
+            boolean escaped = false;
+            start++;
+            for (; index < length; index++) {
+                if (expr[index] == '\\' && !escaped) {
+                    escaped = true;
+                    continue;
+                }
+                if (expr[index] == endChar && !escaped) break;
+                escaped = false;
+            }
+            end = index;
+            index++; // Skip the end quote
+        } else {
+            // End is the next whitespace character
+            for (; index < length; index++) {
+                if (isMetaChar(expr[index])) break;
+            }
+            end = index;
+        }
+        // Extract the string from the array
+        this.tokenVal = new String(expr, start, end - start);
+        return TOKEN_STRING;
+    }

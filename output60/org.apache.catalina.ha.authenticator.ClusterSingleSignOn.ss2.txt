@@ -1,0 +1,100 @@
+6
+-----CSCI578-----
+
+
+    public void setCluster(CatalinaCluster cluster) {
+
+        this.cluster = cluster;
+
+    }
+-----CSCI578-----
+
+
+    public void setClusterSSO(ClusterSingleSignOn clusterSSO) {
+
+        this.clusterSSO = clusterSSO;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called after <code>configure()</code>,
+     * and before any of the public methods of the component are utilized.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (started)
+            throw new LifecycleException
+                (sm.getString("authenticator.alreadyStarted"));
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+        started = true;
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Lifecycle Methods
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called after <code>configure()</code>,
+     * and before any of the public methods of the component are utilized.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+
+	super.start();
+
+	clusterSSOListener = new ClusterSingleSignOnListener();
+	clusterSSOListener.setClusterSSO(this);
+
+        // Load the cluster component, if any
+        try {
+            //the channel is already running
+            Cluster cluster = getCluster();
+            // stop remove cluster binding
+            if(cluster == null) {
+		Container host = getContainer();
+		if(host != null && host instanceof Host) {
+		    cluster = host.getCluster();
+		    if(cluster != null && cluster instanceof CatalinaCluster) {
+			setCluster((CatalinaCluster) cluster);
+			getCluster().addClusterListener(clusterSSOListener);
+		    } else {
+			Container engine = host.getParent();
+			if(engine != null && engine instanceof Engine) {
+			    cluster = engine.getCluster();
+			    if(cluster != null && cluster instanceof CatalinaCluster) {
+				setCluster((CatalinaCluster) cluster);
+				getCluster().addClusterListener(clusterSSOListener);
+			    }
+			} else {
+			    cluster = null;
+			}
+		    }
+                }
+            }
+            if (cluster == null) {
+		throw new LifecycleException
+		    ("There is no Cluster for ClusterSingleSignOn");
+            }
+
+        } catch (Throwable t) {
+	    throw new LifecycleException
+		("ClusterSingleSignOn exception during clusterLoad " + t);
+        }
+
+    }
+-----CSCI578-----

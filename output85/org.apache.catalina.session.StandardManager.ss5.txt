@@ -1,0 +1,126 @@
+6
+-----CSCI578-----
+
+
+
+    @Override
+    public void unload() throws IOException {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                AccessController.doPrivileged(new PrivilegedDoUnload());
+            } catch (PrivilegedActionException ex){
+                Exception exception = ex.getException();
+                if (exception instanceof IOException) {
+                    throw (IOException)exception;
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug("Unreported exception in unLoad()", exception);
+                }
+            }
+        } else {
+            doUnload();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Save any currently active sessions in the appropriate persistence
+     * mechanism, if any.  If persistence is not supported, this method
+     * returns without doing anything.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    protected void doUnload() throws IOException {
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("standardManager.unloading.debug"));
+
+        if (sessions.isEmpty()) {
+            log.debug(sm.getString("standardManager.unloading.nosessions"));
+            return; // nothing to do
+        }
+
+        // Open an output stream to the specified pathname, if any
+        File file = file();
+        if (file == null) {
+            return;
+        }
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("standardManager.unloading", pathname));
+        }
+
+        // Keep a note of sessions that are expired
+        ArrayList<StandardSession> list = new ArrayList<>();
+
+        try (FileOutputStream fos = new FileOutputStream(file.getAbsolutePath());
+                BufferedOutputStream bos = new BufferedOutputStream(fos);
+                ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+
+            synchronized (sessions) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Unloading " + sessions.size() + " sessions");
+                }
+                // Write the number of active sessions, followed by the details
+                oos.writeObject(Integer.valueOf(sessions.size()));
+                Iterator<Session> elements = sessions.values().iterator();
+                while (elements.hasNext()) {
+                    StandardSession session =
+                        (StandardSession) elements.next();
+                    list.add(session);
+                    session.passivate();
+                    session.writeObjectData(oos);
+                }
+            }
+        }
+
+        // Expire all the sessions we just wrote
+        if (log.isDebugEnabled()) {
+            log.debug("Expiring " + list.size() + " persisted sessions");
+        }
+        Iterator<StandardSession> expires = list.iterator();
+        while (expires.hasNext()) {
+            StandardSession session = expires.next();
+            try {
+                session.expire(false);
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+            } finally {
+                session.recycle();
+            }
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("Unloading complete");
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+    /**
+     * Return a File object representing the pathname to our
+     * persistence file, if any.
+     * @return the file
+     */
+    protected File file() {
+        if (pathname == null || pathname.length() == 0) {
+            return null;
+        }
+        File file = new File(pathname);
+        if (!file.isAbsolute()) {
+            Context context = getContext();
+            ServletContext servletContext = context.getServletContext();
+            File tempdir = (File) servletContext.getAttribute(ServletContext.TEMPDIR);
+            if (tempdir != null) {
+                file = new File(tempdir, pathname);
+            }
+        }
+        return file;
+    }
+-----CSCI578-----
+-----CSCI578-----

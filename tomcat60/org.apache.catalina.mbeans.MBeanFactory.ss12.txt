@@ -1,0 +1,41 @@
+3
+
+
+    /**
+     * Remove an existing Connector.
+     *
+     * @param name MBean Name of the component to remove
+     *
+     * @exception Exception if a component cannot be removed
+     */
+    public void removeConnector(String name) throws Exception {
+
+        // Acquire a reference to the component to be removed
+        ObjectName oname = new ObjectName(name);
+        Server server = ServerFactory.getServer();
+        Service service = getService(oname);
+        String port = oname.getKeyProperty("port");
+        //String address = oname.getKeyProperty("address");
+
+        Connector conns[] = (Connector[]) service.findConnectors();
+
+        for (int i = 0; i < conns.length; i++) {
+            String connAddress = String.valueOf(conns[i].getProperty("address"));
+            String connPort = ""+conns[i].getPort();
+
+            // if (((address.equals("null")) &&
+            if ((connAddress==null) && port.equals(connPort)) {
+                service.removeConnector(conns[i]);
+                conns[i].destroy();
+                break;
+            }
+            // } else if (address.equals(connAddress))
+            if (port.equals(connPort)) {
+                // Remove this component from its parent component
+                service.removeConnector(conns[i]);
+                conns[i].destroy();
+                break;
+            }
+        }
+
+    }

@@ -1,0 +1,112 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Return a File object representing the specified normalized
+     * context-relative path if it exists and is readable.  Otherwise,
+     * return <code>null</code>.
+     *
+     * @param name Normalized context-relative path (with leading '/')
+     */
+    protected File file(String name) {
+
+        File file = new File(base, name);
+        if (file.exists() && file.canRead()) {
+
+        	if (allowLinking)
+        		return file;
+        	
+            // Check that this file belongs to our root path
+            String canPath = null;
+            try {
+                canPath = file.getCanonicalPath();
+            } catch (IOException e) {
+            }
+            if (canPath == null)
+                return null;
+
+            // Check to see if going outside of the web application root
+            if (!canPath.startsWith(absoluteBase)) {
+                return null;
+            }
+
+            // Case sensitivity check
+            if (caseSensitive) {
+                String fileAbsPath = file.getAbsolutePath();
+                if (fileAbsPath.endsWith("."))
+                    fileAbsPath = fileAbsPath + "/";
+                String absPath = normalize(fileAbsPath);
+                if (canPath != null)
+                    canPath = normalize(canPath);
+                if ((absoluteBase.length() < absPath.length())
+                    && (absoluteBase.length() < canPath.length())) {
+                    absPath = absPath.substring(absoluteBase.length() + 1);
+                    if ((canPath == null) || (absPath == null))
+                        return null;
+                    if (absPath.equals(""))
+                        absPath = "/";
+                    canPath = canPath.substring(absoluteBase.length() + 1);
+                    if (canPath.equals(""))
+                        canPath = "/";
+                    if (!canPath.equals(absPath))
+                        return null;
+                }
+            }
+
+        } else {
+            return null;
+        }
+        return file;
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Return a context-relative path, beginning with a "/", that represents
+     * the canonical version of the specified path after ".." and "." elements
+     * are resolved out.  If the specified path attempts to go outside the
+     * boundaries of the current context (i.e. too many ".." path elements
+     * are present), return <code>null</code> instead.
+     *
+     * @param path Path to be normalized
+     */
+    protected String normalize(String path) {
+
+        return RequestUtil.normalize(path, File.separatorChar == '\\');
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Binds a new name to the object bound to an old name, and unbinds the
+     * old name. Both names are relative to this context. Any attributes
+     * associated with the old name become associated with the new name.
+     * Intermediate contexts of the old name are not changed.
+     *
+     * @param oldName the name of the existing binding; may not be empty
+     * @param newName the name of the new binding; may not be empty
+     * @exception NameAlreadyBoundException if newName is already bound
+     * @exception NamingException if a naming exception is encountered
+     */
+    public void rename(String oldName, String newName)
+        throws NamingException {
+
+        File file = file(oldName);
+
+        if (file == null)
+            throw new NamingException
+                (sm.getString("resources.notFound", oldName));
+
+        File newFile = new File(base, newName);
+
+        file.renameTo(newFile);
+
+    }

@@ -1,0 +1,58 @@
+13
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public void setEnforceNoAddAfterHandshake(
+            boolean enforceNoAddAfterHandshake) {
+        this.enforceNoAddAfterHandshake = enforceNoAddAfterHandshake;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    static WsServerContainer init(ServletContext servletContext,
+            boolean initBySciMechanism) {
+
+        WsServerContainer sc = new WsServerContainer(servletContext);
+
+        servletContext.setAttribute(
+                Constants.SERVER_CONTAINER_SERVLET_CONTEXT_ATTRIBUTE, sc);
+
+        servletContext.addListener(new WsSessionListener(sc));
+        // Can't register the ContextListener again if the ContextListener is
+        // calling this method
+        if (initBySciMechanism) {
+            servletContext.addListener(new WsContextListener());
+        }
+
+        return sc;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    protected WebSocketContainer getContainer() {
+        return new WsWebSocketContainer();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void contextInitialized(ServletContextEvent sce) {
+        ServletContext sc = sce.getServletContext();
+        // Don't trigger WebSocket initialization if a WebSocket Server
+        // Container is already present
+        if (sc.getAttribute(Constants.SERVER_CONTAINER_SERVLET_CONTEXT_ATTRIBUTE) == null) {
+            WsSci.init(sce.getServletContext(), false);
+        }
+    }

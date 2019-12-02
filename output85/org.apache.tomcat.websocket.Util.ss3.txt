@@ -1,0 +1,114 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /*
+     * For a generic parameter, return either the Class used or if the type
+     * is unknown, the index for the type in definition of the class
+     */
+    private static TypeResult getTypeParameter(Class<?> clazz, Type argType) {
+        if (argType instanceof Class<?>) {
+            return new TypeResult((Class<?>) argType, -1, 0);
+        } else if (argType instanceof ParameterizedType) {
+            return new TypeResult((Class<?>)((ParameterizedType) argType).getRawType(), -1, 0);
+        } else if (argType instanceof GenericArrayType) {
+            Type arrayElementType = ((GenericArrayType) argType).getGenericComponentType();
+            TypeResult result = getTypeParameter(clazz, arrayElementType);
+            result.incrementDimension(1);
+            return result;
+        } else {
+            TypeVariable<?>[] tvs = clazz.getTypeParameters();
+            for (int i = 0; i < tvs.length; i++) {
+                if (tvs[i].equals(argType)) {
+                    return new TypeResult(null, i, 0);
+                }
+            }
+            return null;
+        }
+    }
+-----CSCI578-----
+
+
+
+    private static <T> TypeResult getGenericType(Class<T> type,
+            Class<? extends T> clazz) {
+
+        // Look to see if this class implements the interface of interest
+
+        // Get all the interfaces
+        Type[] interfaces = clazz.getGenericInterfaces();
+        for (Type iface : interfaces) {
+            // Only need to check interfaces that use generics
+            if (iface instanceof ParameterizedType) {
+                ParameterizedType pi = (ParameterizedType) iface;
+                // Look for the interface of interest
+                if (pi.getRawType() instanceof Class) {
+                    if (type.isAssignableFrom((Class<?>) pi.getRawType())) {
+                        return getTypeParameter(
+                                clazz, pi.getActualTypeArguments()[0]);
+                    }
+                }
+            }
+        }
+
+        // Interface not found on this class. Look at the superclass.
+        @SuppressWarnings("unchecked")
+        Class<? extends T> superClazz =
+                (Class<? extends T>) clazz.getSuperclass();
+        if (superClazz == null) {
+            // Finished looking up the class hierarchy without finding anything
+            return null;
+        }
+
+        TypeResult superClassTypeResult = getGenericType(type, superClazz);
+        int dimension = superClassTypeResult.getDimension();
+        if (superClassTypeResult.getIndex() == -1 && dimension == 0) {
+            // Superclass implements interface and defines explicit type for
+            // the interface of interest
+            return superClassTypeResult;
+        }
+
+        if (superClassTypeResult.getIndex() > -1) {
+            // Superclass implements interface and defines unknown type for
+            // the interface of interest
+            // Map that unknown type to the generic types defined in this class
+            ParameterizedType superClassType =
+                    (ParameterizedType) clazz.getGenericSuperclass();
+            TypeResult result = getTypeParameter(clazz,
+                    superClassType.getActualTypeArguments()[
+                            superClassTypeResult.getIndex()]);
+            result.incrementDimension(superClassTypeResult.getDimension());
+            if (result.getClazz() != null && result.getDimension() > 0) {
+                superClassTypeResult = result;
+            } else {
+                return result;
+            }
+        }
+
+        if (superClassTypeResult.getDimension() > 0) {
+            StringBuilder className = new StringBuilder();
+            for (int i = 0; i < dimension; i++) {
+                className.append('[');
+            }
+            className.append('L');
+            className.append(superClassTypeResult.getClazz().getCanonicalName());
+            className.append(';');
+
+            Class<?> arrayClazz;
+            try {
+                arrayClazz = Class.forName(className.toString());
+            } catch (ClassNotFoundException e) {
+                throw new IllegalArgumentException(e);
+            }
+
+            return new TypeResult(arrayClazz, -1, 0);
+        }
+
+        // Error will be logged further up the call stack
+        return null;
+    }
+-----CSCI578-----
+-----CSCI578-----

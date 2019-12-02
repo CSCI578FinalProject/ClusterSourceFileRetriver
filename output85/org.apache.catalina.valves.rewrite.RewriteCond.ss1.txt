@@ -1,0 +1,64 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Evaluate the condition based on the context
+     *
+     * @param rule corresponding matched rule
+     * @param cond last matched condition
+     * @param resolver Property resolver
+     * @return <code>true</code> if the condition matches
+     */
+    public boolean evaluate(Matcher rule, Matcher cond, Resolver resolver) {
+        String value = test.evaluate(rule, cond, resolver);
+        if (nocase) {
+            value = value.toLowerCase(Locale.ENGLISH);
+        }
+        Condition condition = this.condition.get();
+        if (condition == null) {
+            if (condPattern.startsWith("<")) {
+                LexicalCondition ncondition = new LexicalCondition();
+                ncondition.type = -1;
+                ncondition.condition = condPattern.substring(1);
+                condition = ncondition;
+            } else if (condPattern.startsWith(">")) {
+                LexicalCondition ncondition = new LexicalCondition();
+                ncondition.type = 1;
+                ncondition.condition = condPattern.substring(1);
+                condition = ncondition;
+            } else if (condPattern.startsWith("=")) {
+                LexicalCondition ncondition = new LexicalCondition();
+                ncondition.type = 0;
+                ncondition.condition = condPattern.substring(1);
+                condition = ncondition;
+            } else if (condPattern.equals("-d")) {
+                ResourceCondition ncondition = new ResourceCondition();
+                ncondition.type = 0;
+                condition = ncondition;
+            } else if (condPattern.equals("-f")) {
+                ResourceCondition ncondition = new ResourceCondition();
+                ncondition.type = 1;
+                condition = ncondition;
+            } else if (condPattern.equals("-s")) {
+                ResourceCondition ncondition = new ResourceCondition();
+                ncondition.type = 2;
+                condition = ncondition;
+            } else {
+                PatternCondition ncondition = new PatternCondition();
+                int flags = 0;
+                if (isNocase()) {
+                    flags |= Pattern.CASE_INSENSITIVE;
+                }
+                ncondition.pattern = Pattern.compile(condPattern, flags);
+                condition = ncondition;
+            }
+            this.condition.set(condition);
+        }
+        if (positive) {
+            return condition.evaluate(value, resolver);
+        } else {
+            return !condition.evaluate(value, resolver);
+        }
+    }

@@ -1,0 +1,99 @@
+6
+-----CSCI578-----
+
+
+    /**
+     * Return the external form of the URL representing this TLD.
+     * This can be used as a canonical location for the TLD itself, for example,
+     * as the systemId to use when parsing its XML.
+     *
+     * @return the external form of the URL representing this TLD
+     */
+    public String toExternalForm() {
+        if (entryName == null) {
+            return url.toExternalForm();
+        } else {
+            return "jar:" + url.toExternalForm() + "!/" + entryName;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public TaglibXml parse(TldResourcePath path) throws IOException, SAXException {
+        ClassLoader original;
+        if (Constants.IS_SECURITY_ENABLED) {
+            PrivilegedGetTccl pa = new PrivilegedGetTccl();
+            original = AccessController.doPrivileged(pa);
+        } else {
+            original = Thread.currentThread().getContextClassLoader();
+        }
+        try (InputStream is = path.openStream()) {
+            if (Constants.IS_SECURITY_ENABLED) {
+                PrivilegedSetTccl pa = new PrivilegedSetTccl(TldParser.class.getClassLoader());
+                AccessController.doPrivileged(pa);
+            } else {
+                Thread.currentThread().setContextClassLoader(TldParser.class.getClassLoader());
+            }
+            XmlErrorHandler handler = new XmlErrorHandler();
+            digester.setErrorHandler(handler);
+
+            TaglibXml taglibXml = new TaglibXml();
+            digester.push(taglibXml);
+
+            InputSource source = new InputSource(path.toExternalForm());
+            source.setByteStream(is);
+            digester.parse(source);
+            if (!handler.getWarnings().isEmpty() || !handler.getErrors().isEmpty()) {
+                handler.logFindings(log, source.getSystemId());
+                if (!handler.getErrors().isEmpty()) {
+                    // throw the first to indicate there was a error during processing
+                    throw handler.getErrors().iterator().next();
+                }
+            }
+            return taglibXml;
+        } finally {
+            digester.reset();
+            if (Constants.IS_SECURITY_ENABLED) {
+                PrivilegedSetTccl pa = new PrivilegedSetTccl(original);
+                AccessController.doPrivileged(pa);
+            } else {
+                Thread.currentThread().setContextClassLoader(original);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Opens a stream to access the TLD.
+     *
+     * @return a stream containing the TLD content
+     * @throws IOException if there was a problem opening the stream
+     */
+    public InputStream openStream() throws IOException {
+        if (entryName == null) {
+            return url.openStream();
+        } else {
+            URL entryUrl = JarFactory.getJarEntryURL(url, entryName);
+            return entryUrl.openStream();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public static URL getJarEntryURL(URL baseUrl, String entryName)
+            throws MalformedURLException {
+
+        String baseExternal = baseUrl.toExternalForm();
+
+        if (baseExternal.startsWith("jar")) {
+            // Assume this is pointing to a JAR file within a WAR. Java doesn't
+            // support jar:jar:file:... so switch to Tomcat's war:file:...
+            baseExternal = baseExternal.replaceFirst("^jar:", "war:");
+            baseExternal = baseExternal.replaceFirst("!/", "*/");
+        }
+
+        return new URL("jar:" + baseExternal + "!/" + entryName);
+    }

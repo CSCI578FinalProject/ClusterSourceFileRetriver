@@ -1,0 +1,122 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Removes /./ and /../ sequences from absolute URLs.
+     * Code borrowed heavily from CoyoteAdapter.normalize()
+     *
+     * @param cc the char chunk containing the chars to normalize
+     */
+    private void normalize(CharChunk cc) {
+        // Strip query string and/or fragment first as doing it this way makes
+        // the normalization logic a lot simpler
+        int truncate = cc.indexOf('?');
+        if (truncate == -1) {
+            truncate = cc.indexOf('#');
+        }
+        char[] truncateCC = null;
+        if (truncate > -1) {
+            truncateCC = Arrays.copyOfRange(cc.getBuffer(),
+                    cc.getStart() + truncate, cc.getEnd());
+            cc.setEnd(cc.getStart() + truncate);
+        }
+
+        if (cc.endsWith("/.") || cc.endsWith("/..")) {
+            try {
+                cc.append('/');
+            } catch (IOException e) {
+                throw new IllegalArgumentException(cc.toString(), e);
+            }
+        }
+
+        char[] c = cc.getChars();
+        int start = cc.getStart();
+        int end = cc.getEnd();
+        int index = 0;
+        int startIndex = 0;
+
+        // Advance past the first three / characters (should place index just
+        // scheme://host[:port]
+
+        for (int i = 0; i < 3; i++) {
+            startIndex = cc.indexOf('/', startIndex + 1);
+        }
+
+        // Remove /./
+        index = startIndex;
+        while (true) {
+            index = cc.indexOf("/./", 0, 3, index);
+            if (index < 0) {
+                break;
+            }
+            copyChars(c, start + index, start + index + 2,
+                      end - start - index - 2);
+            end = end - 2;
+            cc.setEnd(end);
+        }
+
+        // Remove /../
+        index = startIndex;
+        int pos;
+        while (true) {
+            index = cc.indexOf("/../", 0, 4, index);
+            if (index < 0) {
+                break;
+            }
+            // Can't go above the server root
+            if (index == startIndex) {
+                throw new IllegalArgumentException();
+            }
+            int index2 = -1;
+            for (pos = start + index - 1; (pos >= 0) && (index2 < 0); pos --) {
+                if (c[pos] == (byte) '/') {
+                    index2 = pos;
+                }
+            }
+            copyChars(c, start + index2, start + index + 3,
+                      end - start - index - 3);
+            end = end + index2 - index - 3;
+            cc.setEnd(end);
+            index = index2;
+        }
+
+        // Add the query string and/or fragment (if present) back in
+        if (truncateCC != null) {
+            try {
+                cc.append(truncateCC, 0, truncateCC.length);
+            } catch (IOException ioe) {
+                throw new IllegalArgumentException(ioe);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    private void copyChars(char[] c, int dest, int src, int len) {
+        for (int pos = 0; pos < len; pos++) {
+            c[pos + dest] = c[pos + src];
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return <code>true</code> if the message bytes end with the specified string.
+     * @param s The string
+     */
+    public boolean endsWith(String s) {
+        char[] c = buff;
+        int len = s.length();
+        if (c == null || len > end-start) {
+            return false;
+        }
+        int off = end - len;
+        for (int i = 0; i < len; i++) {
+            if (c[off++] != s.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
+    }

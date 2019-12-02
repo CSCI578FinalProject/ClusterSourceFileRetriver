@@ -1,0 +1,114 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Handle an HTTP status code or Java exception by forwarding control
+     * to the location included in the specified errorPage object.  It is
+     * assumed that the caller has already recorded any request attributes
+     * that are to be forwarded to this page.  Return <code>true</code> if
+     * we successfully utilized the specified error page location, or
+     * <code>false</code> if the default error report should be rendered.
+     *
+     * @param request The request being processed
+     * @param response The response being generated
+     * @param errorPage The errorPage directive we are obeying
+     */
+    protected boolean custom(Request request, Response response,
+                             ErrorPage errorPage) {
+
+        if (container.getLogger().isDebugEnabled())
+            container.getLogger().debug("Processing " + errorPage);
+
+        request.setPathInfo(errorPage.getLocation());
+
+        try {
+            // Forward control to the specified location
+            ServletContext servletContext =
+                request.getContext().getServletContext();
+            RequestDispatcher rd =
+                servletContext.getRequestDispatcher(errorPage.getLocation());
+
+            if (response.isCommitted()) {
+                // Response is committed - including the error page is the
+                // best we can do 
+                rd.include(request.getRequest(), response.getResponse());
+            } else {
+                // Reset the response (keeping the real error code and message)
+                response.resetBuffer(true);
+
+                rd.forward(request.getRequest(), response.getResponse());
+
+                // If we forward, the response is suspended again
+                response.setSuspended(false);
+            }
+
+            // Indicate that we have successfully processed this custom page
+            return (true);
+
+        } catch (Throwable t) {
+
+            // Report our failure to process this custom page
+            container.getLogger().error("Exception Processing " + errorPage, t);
+            return (false);
+
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the path information for this Request.  This will normally be called
+     * when the associated Context is mapping the Request to a particular
+     * Wrapper.
+     *
+     * @param path The path information
+     */
+    public void setPathInfo(String path) {
+        mappingData.pathInfo.setString(path);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Reset the data buffer but not any status or header information.
+     *
+     * @exception IllegalStateException if the response has already
+     *  been committed
+     */
+    public void resetBuffer() {
+        resetBuffer(false);
+    }
+
+
+    
+    /**
+     * Reset the data buffer and the using Writer/Stream flags but not any
+     * status or header information.
+     *
+     * @param resetWriterStreamFlags <code>true</code> if the internal
+     *        <code>usingWriter</code>, <code>usingOutputStream</code>,
+     *        <code>isCharacterEncodingSet</code> flags should also be reset
+     * 
+     * @exception IllegalStateException if the response has already
+     *  been committed
+     */
+    public void resetBuffer(boolean resetWriterStreamFlags) {
+
+        if (isCommitted())
+            throw new IllegalStateException
+                (sm.getString("coyoteResponse.resetBuffer.ise"));
+
+        outputBuffer.reset();
+        
+        if(resetWriterStreamFlags) {
+            usingOutputStream = false;
+            usingWriter = false;
+            isCharacterEncodingSet = false;
+        }
+
+    }

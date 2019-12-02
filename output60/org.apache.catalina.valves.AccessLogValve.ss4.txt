@@ -1,0 +1,125 @@
+5
+-----CSCI578-----
+
+    
+    
+    private String calculateTimeZoneOffset(long offset) {
+        StringBuffer tz = new StringBuffer();
+        if ((offset < 0)) {
+            tz.append("-");
+            offset = -offset;
+        } else {
+            tz.append("+");
+        }
+
+        long hourOffset = offset / (1000 * 60 * 60);
+        long minuteOffset = (offset / (1000 * 60)) % 60;
+
+        if (hourOffset < 10)
+            tz.append("0");
+        tz.append(hourOffset);
+
+        if (minuteOffset < 10)
+            tz.append("0");
+        tz.append(minuteOffset);
+
+        return tz.toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called after <code>configure()</code>,
+     * and before any of the public methods of the component are utilized.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (started)
+            throw new LifecycleException(sm
+                    .getString("accessLogValve.alreadyStarted"));
+        lifecycle.fireLifecycleEvent(START_EVENT, null);
+        started = true;
+
+        // Initialize the timeZone, Date formatters, and currentDate
+        timezone = TimeZone.getDefault();
+        timeZoneNoDST = calculateTimeZoneOffset(timezone.getRawOffset());
+        int offset = timezone.getDSTSavings();
+        timeZoneDST = calculateTimeZoneOffset(timezone.getRawOffset() + offset);
+
+        if (fileDateFormat == null || fileDateFormat.length() == 0)
+            fileDateFormat = "yyyy-MM-dd";
+        fileDateFormatter = new SimpleDateFormat(fileDateFormat);
+        fileDateFormatter.setTimeZone(timezone);
+        dateStamp = fileDateFormatter.format(currentDateStruct.get().currentDate);
+        open();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Open the new log file for the date specified by <code>dateStamp</code>.
+     */
+    protected synchronized void open() {
+        // Create the directory if necessary
+        File dir = new File(directory);
+        if (!dir.isAbsolute())
+            dir = new File(System.getProperty("catalina.base"), directory);
+        if (!dir.exists()) {
+            if (!dir.mkdirs()) {
+                log.error(sm.getString("accessLogValve.openDirFail", dir));
+            }
+        }
+
+        // Open the current log file
+        File pathname;
+        // If no rotate - no need for dateStamp in fileName
+        if (rotatable) {
+            pathname = new File(dir.getAbsoluteFile(), prefix + dateStamp
+                    + suffix);
+        } else {
+            pathname = new File(dir.getAbsoluteFile(), prefix + suffix);
+        }
+        File parent = pathname.getParentFile();
+        if (!parent.exists()) {
+            if (!parent.mkdirs()) {
+                log.error(sm.getString("accessLogValve.openDirFail", parent));
+            }
+        }
+
+        Charset charset = null;
+        if (encoding != null) {
+            try {
+                charset = B2CConverter.getCharset(encoding);
+            } catch (UnsupportedEncodingException ex) {
+                log.error(sm.getString(
+                        "accessLogValve.unsupportedEncoding", encoding), ex);
+            }
+        }
+        if (charset == null) {
+            charset = Charset.defaultCharset();
+        }
+
+        try {
+            writer = new PrintWriter(new BufferedWriter(new OutputStreamWriter(
+                    new FileOutputStream(pathname, true), charset), 128000),
+                    false);
+
+            currentLogFile = pathname;
+        } catch (IOException e) {
+            writer = null;
+            currentLogFile = null;
+            log.error(sm.getString("accessLogValve.openFail", pathname), e);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    }
+        super.open();

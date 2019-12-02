@@ -1,0 +1,112 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Return the real path for the specified context-relative
+     * virtual path.
+     *
+     * @param path The context-relative virtual path to resolve
+     */
+    public String getRealPath(String path) {
+
+        if (!myResourceBaseURL.getProtocol().equals("file"))
+            return (null);
+        if (!path.startsWith("/"))
+            return (null);
+        try {
+            return
+                (getResource(path).getFile().replace('/', File.separatorChar));
+        } catch (Throwable t) {
+            return (null);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of resource paths for the "directory" at the
+     * specified context path.
+     *
+     * @param path Context-relative base path
+     */
+    public Set getResourcePaths(String path) {
+
+        Set thePaths = new HashSet();
+        if (!path.endsWith("/"))
+            path += "/";
+        String basePath = getRealPath(path);
+        if (basePath == null)
+            return (thePaths);
+        File theBaseDir = new File(basePath);
+        if (!theBaseDir.exists() || !theBaseDir.isDirectory())
+            return (thePaths);
+        String theFiles[] = theBaseDir.list();
+        for (int i = 0; i < theFiles.length; i++) {
+            File testFile = new File(basePath + File.separator + theFiles[i]);
+            if (testFile.isFile())
+                thePaths.add(path + theFiles[i]);
+            else if (testFile.isDirectory())
+                thePaths.add(path + theFiles[i] + "/");
+        }
+        return (thePaths);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a URL object of a resource that is mapped to the
+     * specified context-relative path.
+     *
+     * @param path Context-relative path of the desired resource
+     *
+     * @exception MalformedURLException if the resource path is
+     *  not properly formed
+     */
+    public URL getResource(String path) throws MalformedURLException {
+
+        if (!path.startsWith("/"))
+            throw new MalformedURLException("Path '" + path +
+                                            "' does not start with '/'");
+        URL url = new URL(myResourceBaseURL, path.substring(1));
+        InputStream is = null;
+        try {
+            is = url.openStream();
+        } catch (Throwable t) {
+            url = null;
+        } finally {
+            if (is != null) {
+                try {
+                    is.close();
+                } catch (Throwable t2) {
+                    // Ignore
+                }
+            }
+        }
+        return url;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return an InputStream allowing access to the resource at the
+     * specified context-relative path.
+     *
+     * @param path Context-relative path of the desired resource
+     */
+    public InputStream getResourceAsStream(String path) {
+
+        try {
+            return (getResource(path).openStream());
+        } catch (Throwable t) {
+            return (null);
+        }
+
+    }

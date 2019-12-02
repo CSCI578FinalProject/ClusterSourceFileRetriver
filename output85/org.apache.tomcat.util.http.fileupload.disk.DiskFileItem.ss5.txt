@@ -1,0 +1,109 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * A convenience method to write an uploaded item to disk. The client code
+     * is not concerned with whether or not the item is stored in memory, or on
+     * disk in a temporary location. They just want to write the uploaded item
+     * to a file.
+     * <p>
+     * This implementation first attempts to rename the uploaded item to the
+     * specified destination file, if the item was originally written to disk.
+     * Otherwise, the data will be copied to the specified file.
+     * <p>
+     * This method is only guaranteed to work <em>once</em>, the first time it
+     * is invoked for a particular item. This is because, in the event that the
+     * method renames a temporary file, that file will no longer be available
+     * to copy or rename again at a later time.
+     *
+     * @param file The <code>File</code> into which the uploaded item should
+     *             be stored.
+     *
+     * @throws Exception if an error occurs.
+     */
+    @Override
+    public void write(File file) throws Exception {
+        if (isInMemory()) {
+            FileOutputStream fout = null;
+            try {
+                fout = new FileOutputStream(file);
+                fout.write(get());
+                fout.close();
+            } finally {
+                IOUtils.closeQuietly(fout);
+            }
+        } else {
+            File outputFile = getStoreLocation();
+            if (outputFile != null) {
+                // Save the length of the file
+                size = outputFile.length();
+                /*
+                 * The uploaded file is being stored on disk
+                 * in a temporary location so move it to the
+                 * desired file.
+                 */
+                if (!outputFile.renameTo(file)) {
+                    BufferedInputStream in = null;
+                    BufferedOutputStream out = null;
+                    try {
+                        in = new BufferedInputStream(
+                            new FileInputStream(outputFile));
+                        out = new BufferedOutputStream(
+                                new FileOutputStream(file));
+                        IOUtils.copy(in, out);
+                        out.close();
+                    } finally {
+                        IOUtils.closeQuietly(in);
+                        IOUtils.closeQuietly(out);
+                    }
+                }
+            } else {
+                /*
+                 * For whatever reason we cannot write the
+                 * file to disk.
+                 */
+                throw new FileUploadException(
+                    "Cannot write uploaded file to disk!");
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // ------------------------------------------------------- FileItem methods
+
+    /**
+     * Provides a hint as to whether or not the file contents will be read
+     * from memory.
+     *
+     * @return <code>true</code> if the file contents will be read
+     *         from memory; <code>false</code> otherwise.
+     */
+    @Override
+    public boolean isInMemory() {
+        if (cachedContent != null) {
+            return true;
+        }
+        return dfos.isInMemory();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Deletes the underlying storage for a file item, including deleting any
+     * associated temporary disk file. Although this storage will be deleted
+     * automatically when the <code>FileItem</code> instance is garbage
+     * collected, this method can be used to ensure that this is done at an
+     * earlier time, thus preserving system resources.
+     */
+    @Override
+    public void delete() {
+        cachedContent = null;
+        File outputFile = getStoreLocation();
+        if (outputFile != null && outputFile.exists()) {
+            outputFile.delete();
+        }
+    }

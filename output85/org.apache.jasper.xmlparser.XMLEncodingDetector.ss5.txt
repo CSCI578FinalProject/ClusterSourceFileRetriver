@@ -1,0 +1,249 @@
+4
+-----CSCI578-----
+ // isInvalid(int):boolean
+
+    /**
+     * Returns true if the specified character can be considered content.
+     *
+     * @param c The character to check.
+     * @return <code>true</code> if the character is content
+     */
+    public static boolean isContent(int c) {
+        return (c < 0x10000 && (CHARS[c] & MASK_CONTENT) != 0) ||
+               (0x10000 <= c && c <= 0x10FFFF);
+    }
+ // isContent(int):boolean
+
+    /**
+     * Returns true if the specified character is a space character
+     * as defined by production [3] in the XML 1.0 specification.
+     *
+     * @param c The character to check.
+     * @return <code>true</code> if the character is space
+     */
+    public static boolean isSpace(int c) {
+        return c <= 0x20 && (CHARS[c] & MASK_SPACE) != 0;
+    }
+-----CSCI578-----
+
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLEntityManager.EntityScanner.scanLiteral
+    /**
+     * Scans a range of attribute value data, setting the fields of the
+     * XMLString structure, appropriately.
+     * <p>
+     * <strong>Note:</strong> The characters are consumed.
+     * <p>
+     * <strong>Note:</strong> This method does not guarantee to return
+     * the longest run of attribute value data. This method may return
+     * before the quote character due to reaching the end of the input
+     * buffer or any other reason.
+     * <p>
+     * <strong>Note:</strong> The fields contained in the XMLString
+     * structure are not guaranteed to remain valid upon subsequent calls
+     * to the entity scanner. Therefore, the caller is responsible for
+     * immediately using the returned character data or making a copy of
+     * the character data.
+     *
+     * @param quote   The quote character that signifies the end of the
+     *                attribute value data.
+     * @param content The content structure to fill.
+     *
+     * @return Returns the next character on the input, if known. This
+     *         value may be -1 but this does <em>note</em> designate
+     *         end of file.
+     *
+     * @throws IOException  Thrown if i/o error occurs.
+     * @throws EOFException Thrown on end of file.
+     */
+    public int scanLiteral(int quote, XMLString content)
+        throws IOException {
+
+        // load more characters, if needed
+        if (fCurrentEntity.position == fCurrentEntity.count) {
+            load(0, true);
+        } else if (fCurrentEntity.position == fCurrentEntity.count - 1) {
+            fCurrentEntity.ch[0] = fCurrentEntity.ch[fCurrentEntity.count - 1];
+            load(1, false);
+            fCurrentEntity.position = 0;
+        }
+
+        // normalize newlines
+        int offset = fCurrentEntity.position;
+        int c = fCurrentEntity.ch[offset];
+        int newlines = 0;
+        boolean external = fCurrentEntity.isExternal();
+        if (c == '\n' || (c == '\r' && external)) {
+            do {
+                c = fCurrentEntity.ch[fCurrentEntity.position++];
+                if (c == '\r' && external) {
+                    newlines++;
+                    if (fCurrentEntity.position == fCurrentEntity.count) {
+                        offset = 0;
+                        fCurrentEntity.position = newlines;
+                        if (load(newlines, false)) {
+                            break;
+                        }
+                    }
+                    if (fCurrentEntity.ch[fCurrentEntity.position] == '\n') {
+                        fCurrentEntity.position++;
+                        offset++;
+                    }
+                    /*** NEWLINE NORMALIZATION ***/
+                    else {
+                        newlines++;
+                    }
+                    /***/
+                }
+                else if (c == '\n') {
+                    newlines++;
+                    if (fCurrentEntity.position == fCurrentEntity.count) {
+                        offset = 0;
+                        fCurrentEntity.position = newlines;
+                        if (load(newlines, false)) {
+                            break;
+                        }
+                    }
+                    /*** NEWLINE NORMALIZATION ***
+                         if (fCurrentEntity.ch[fCurrentEntity.position] == '\r'
+                         && external) {
+                         fCurrentEntity.position++;
+                         offset++;
+                         }
+                         /***/
+                }
+                else {
+                    fCurrentEntity.position--;
+                    break;
+                }
+            } while (fCurrentEntity.position < fCurrentEntity.count - 1);
+            for (int i = offset; i < fCurrentEntity.position; i++) {
+                fCurrentEntity.ch[i] = '\n';
+            }
+            int length = fCurrentEntity.position - offset;
+            if (fCurrentEntity.position == fCurrentEntity.count - 1) {
+                content.setValues(fCurrentEntity.ch, offset, length);
+                return -1;
+            }
+        }
+
+        // scan literal value
+        while (fCurrentEntity.position < fCurrentEntity.count) {
+            c = fCurrentEntity.ch[fCurrentEntity.position++];
+            if (c == quote || c == '%' || !XMLChar.isContent(c)) {
+                fCurrentEntity.position--;
+                break;
+            }
+        }
+        int length = fCurrentEntity.position - offset;
+        content.setValues(fCurrentEntity.ch, offset, length);
+
+        // return next character
+        if (fCurrentEntity.position != fCurrentEntity.count) {
+            c = fCurrentEntity.ch[fCurrentEntity.position];
+        }
+        else {
+            c = -1;
+        }
+        return c;
+
+    }
+-----CSCI578-----
+ // isSpace(int):boolean
+
+    /**
+     * Returns true if the specified character is a valid name start
+     * character as defined by production [5] in the XML 1.0
+     * specification.
+     *
+     * @param c The character to check.
+     * @return <code>true</code> if the character is a valid start name
+     */
+    public static boolean isNameStart(int c) {
+        return c < 0x10000 && (CHARS[c] & MASK_NAME_START) != 0;
+    }
+ // isNameStart(int):boolean
+
+    /**
+     * Returns true if the specified character is a valid name
+     * character as defined by production [4] in the XML 1.0
+     * specification.
+     *
+     * @param c The character to check.
+     * @return <code>true</code> if the character is valid in a name
+     */
+    public static boolean isName(int c) {
+        return c < 0x10000 && (CHARS[c] & MASK_NAME) != 0;
+    }
+-----CSCI578-----
+
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLEntityManager.EntityScanner.scanName
+    /**
+     * Returns a string matching the Name production appearing immediately
+     * on the input as a symbol, or null if no Name string is present.
+     * <p>
+     * <strong>Note:</strong> The Name characters are consumed.
+     * <p>
+     * <strong>Note:</strong> The string returned must be a symbol. The
+     * SymbolTable can be used for this purpose.
+     * @return the name
+     * @throws IOException  Thrown if i/o error occurs.
+     * @throws EOFException Thrown on end of file.
+     *
+     * @see SymbolTable
+     * @see XMLChar#isName
+     * @see XMLChar#isNameStart
+     */
+    public String scanName() throws IOException {
+
+        // load more characters, if needed
+        if (fCurrentEntity.position == fCurrentEntity.count) {
+            load(0, true);
+        }
+
+        // scan name
+        int offset = fCurrentEntity.position;
+        if (XMLChar.isNameStart(fCurrentEntity.ch[offset])) {
+            if (++fCurrentEntity.position == fCurrentEntity.count) {
+                fCurrentEntity.ch[0] = fCurrentEntity.ch[offset];
+                offset = 0;
+                if (load(1, false)) {
+                    String symbol = fSymbolTable.addSymbol(fCurrentEntity.ch,
+                                                           0, 1);
+                    return symbol;
+                }
+            }
+            while (XMLChar.isName(fCurrentEntity.ch[fCurrentEntity.position])) {
+                if (++fCurrentEntity.position == fCurrentEntity.count) {
+                    int length = fCurrentEntity.position - offset;
+                    if (length == fBufferSize) {
+                        // bad luck we have to resize our buffer
+                        char[] tmp = new char[fBufferSize * 2];
+                        System.arraycopy(fCurrentEntity.ch, offset,
+                                         tmp, 0, length);
+                        fCurrentEntity.ch = tmp;
+                        fBufferSize *= 2;
+                    } else {
+                        System.arraycopy(fCurrentEntity.ch, offset,
+                                         fCurrentEntity.ch, 0, length);
+                    }
+                    offset = 0;
+                    if (load(length, false)) {
+                        break;
+                    }
+                }
+            }
+        }
+        int length = fCurrentEntity.position - offset;
+
+        // return name
+        String symbol = null;
+        if (length > 0) {
+            symbol = fSymbolTable.addSymbol(fCurrentEntity.ch, offset, length);
+        }
+        return symbol;
+
+    }

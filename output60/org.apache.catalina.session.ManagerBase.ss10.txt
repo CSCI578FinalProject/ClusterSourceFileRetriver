@@ -1,0 +1,111 @@
+4
+-----CSCI578-----
+
+
+    /** 
+     * Use /dev/random-type special device. This is new code, but may reduce
+     * the big delay in generating the random.
+     *
+     *  You must specify a path to a random generator file. Use /dev/urandom
+     *  for linux ( or similar ) systems. Use /dev/random for maximum security
+     *  ( it may block if not enough "random" exist ). You can also use
+     *  a pipe that generates random.
+     *
+     *  The code will check if the file exists, and default to java Random
+     *  if not found. There is a significant performance difference, very
+     *  visible on the first call to getSession ( like in the first JSP )
+     *  - so use it if available.
+     */
+    public void setRandomFile( String s ) {
+        // as a hack, you can use a static file - and generate the same
+        // session ids ( good for strange debugging )
+        if (Globals.IS_SECURITY_ENABLED){
+            AccessController.doPrivileged(new PrivilegedSetRandomFile(s));
+        } else {
+            doSetRandomFile(s);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void doSetRandomFile(String s) {
+        DataInputStream is = null;
+        try {
+            if (s == null || s.length() == 0) {
+                return;
+            }
+            File f = new File(s);
+            if( ! f.exists() ) return;
+            if( log.isDebugEnabled() ) {
+                log.debug( "Opening " + s );
+            }
+            is = new DataInputStream( new FileInputStream(f));
+            is.readLong();
+        } catch( IOException ex ) {
+            log.warn("Error reading " + s, ex);
+            if (is != null) {
+                try {
+                    is.close();
+                } catch (Exception ex2) {
+                    log.warn("Failed to close " + s, ex2);
+                }
+                is = null;
+            }
+        } finally {
+            DataInputStream oldIS = randomIS;
+            if (is != null) {
+                devRandomSource = s;
+            } else {
+                devRandomSource = null;
+            }
+            randomIS = is;
+            if (oldIS != null) {
+                try {
+                    oldIS.close();
+                } catch (Exception ex) {
+                    log.warn("Failed to close RandomIS", ex);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the random number generator instance we should use for
+     * generating session identifiers.  If there is no such generator
+     * currently defined, construct and seed a new one.
+     */
+    public Random getRandom() {
+        if (this.random == null) {
+            // Calculate the new random number generator seed
+            long seed = System.currentTimeMillis();
+            long t1 = seed;
+            char entropy[] = getEntropy().toCharArray();
+            for (int i = 0; i < entropy.length; i++) {
+                long update = ((long) entropy[i]) << ((i % 8) * 8);
+                seed ^= update;
+            }
+            try {
+                // Construct and seed a new random number generator
+                Class<?> clazz = Class.forName(randomClass);
+                this.random = (Random) clazz.newInstance();
+                this.random.setSeed(seed);
+            } catch (Exception e) {
+                // Fall back to the simple case
+                log.error(sm.getString("managerBase.random", randomClass),
+                        e);
+                this.random = new java.util.Random();
+                this.random.setSeed(seed);
+            }
+            if(log.isDebugEnabled()) {
+                long t2=System.currentTimeMillis();
+                if( (t2-t1) > 100 )
+                    log.debug(sm.getString("managerBase.seeding", randomClass) + " " + (t2-t1));
+            }
+        }
+        
+        return this.random;
+    }

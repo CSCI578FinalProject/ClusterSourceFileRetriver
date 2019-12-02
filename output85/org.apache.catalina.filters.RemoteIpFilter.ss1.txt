@@ -1,0 +1,181 @@
+11
+-----CSCI578-----
+
+
+    @Override
+    public void init(FilterConfig filterConfig) throws ServletException {
+        if (filterConfig.getInitParameter(INTERNAL_PROXIES_PARAMETER) != null) {
+            setInternalProxies(filterConfig.getInitParameter(INTERNAL_PROXIES_PARAMETER));
+        }
+
+        if (filterConfig.getInitParameter(PROTOCOL_HEADER_PARAMETER) != null) {
+            setProtocolHeader(filterConfig.getInitParameter(PROTOCOL_HEADER_PARAMETER));
+        }
+
+        if (filterConfig.getInitParameter(PROTOCOL_HEADER_HTTPS_VALUE_PARAMETER) != null) {
+            setProtocolHeaderHttpsValue(filterConfig.getInitParameter(PROTOCOL_HEADER_HTTPS_VALUE_PARAMETER));
+        }
+
+        if (filterConfig.getInitParameter(PORT_HEADER_PARAMETER) != null) {
+            setPortHeader(filterConfig.getInitParameter(PORT_HEADER_PARAMETER));
+        }
+
+        if (filterConfig.getInitParameter(CHANGE_LOCAL_PORT_PARAMETER) != null) {
+            setChangeLocalPort(Boolean.parseBoolean(filterConfig.getInitParameter(CHANGE_LOCAL_PORT_PARAMETER)));
+        }
+
+        if (filterConfig.getInitParameter(PROXIES_HEADER_PARAMETER) != null) {
+            setProxiesHeader(filterConfig.getInitParameter(PROXIES_HEADER_PARAMETER));
+        }
+
+        if (filterConfig.getInitParameter(REMOTE_IP_HEADER_PARAMETER) != null) {
+            setRemoteIpHeader(filterConfig.getInitParameter(REMOTE_IP_HEADER_PARAMETER));
+        }
+
+        if (filterConfig.getInitParameter(TRUSTED_PROXIES_PARAMETER) != null) {
+            setTrustedProxies(filterConfig.getInitParameter(TRUSTED_PROXIES_PARAMETER));
+        }
+
+        if (filterConfig.getInitParameter(HTTP_SERVER_PORT_PARAMETER) != null) {
+            try {
+                setHttpServerPort(Integer.parseInt(filterConfig.getInitParameter(HTTP_SERVER_PORT_PARAMETER)));
+            } catch (NumberFormatException e) {
+                throw new NumberFormatException("Illegal " + HTTP_SERVER_PORT_PARAMETER + " : " + e.getMessage());
+            }
+        }
+
+        if (filterConfig.getInitParameter(HTTPS_SERVER_PORT_PARAMETER) != null) {
+            try {
+                setHttpsServerPort(Integer.parseInt(filterConfig.getInitParameter(HTTPS_SERVER_PORT_PARAMETER)));
+            } catch (NumberFormatException e) {
+                throw new NumberFormatException("Illegal " + HTTPS_SERVER_PORT_PARAMETER + " : " + e.getMessage());
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @see #setTrustedProxies(String)
+     */
+    private Pattern trustedProxies = null;
+-----CSCI578-----
+
+
+    /**
+     * @see #setHttpServerPort(int)
+     */
+    private int httpServerPort = 80;
+-----CSCI578-----
+
+
+    /**
+     * @see #setProtocolHeader(String)
+     */
+    private String protocolHeader = null;
+
+
+    /**
+     * <p>
+     * Header that holds the incoming protocol, usually named <code>X-Forwarded-Proto</code>. If <code>null</code>, request.scheme and
+     * request.secure will not be modified.
+     * </p>
+     * <p>
+     * Default value : <code>null</code>
+     * </p>
+     * @param protocolHeader The header name
+     */
+    public void setProtocolHeader(String protocolHeader) {
+        this.protocolHeader = protocolHeader;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * @see #setInternalProxies(String)
+     */
+    private Pattern internalProxies = Pattern.compile(
+            "10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|" +
+            "192\\.168\\.\\d{1,3}\\.\\d{1,3}|" +
+            "169\\.254\\.\\d{1,3}\\.\\d{1,3}|" +
+            "127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|" +
+            "172\\.1[6-9]{1}\\.\\d{1,3}\\.\\d{1,3}|" +
+            "172\\.2[0-9]{1}\\.\\d{1,3}\\.\\d{1,3}|" +
+            "172\\.3[0-1]{1}\\.\\d{1,3}\\.\\d{1,3}");
+-----CSCI578-----
+
+
+    /**
+     * @see #setRemoteIpHeader(String)
+     */
+    private String remoteIpHeader = "X-Forwarded-For";
+
+
+    /**
+     * <p>
+     * Name of the http header from which the remote ip is extracted.
+     * </p>
+     * <p>
+     * The value of this header can be comma delimited.
+     * </p>
+     * <p>
+     * Default value : <code>X-Forwarded-For</code>
+     * </p>
+     * @param remoteIpHeader The header name
+     */
+    public void setRemoteIpHeader(String remoteIpHeader) {
+        this.remoteIpHeader = remoteIpHeader;
+    }
+-----CSCI578-----
+
+
+    /**
+     * <p>
+     * Case insensitive value of the protocol header to indicate that the incoming http request uses HTTPS.
+     * </p>
+     * <p>
+     * Default value : <code>https</code>
+     * </p>
+     * @param protocolHeaderHttpsValue The header value
+     */
+    public void setProtocolHeaderHttpsValue(String protocolHeaderHttpsValue) {
+        this.protocolHeaderHttpsValue = protocolHeaderHttpsValue;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @see #setProxiesHeader(String)
+     */
+    private String proxiesHeader = "X-Forwarded-By";
+
+
+    /**
+     * <p>
+     * The proxiesHeader directive specifies a header into which mod_remoteip will collect a list of all of the intermediate client IP
+     * addresses trusted to resolve the actual remote IP. Note that intermediate RemoteIPTrustedProxy addresses are recorded in this header,
+     * while any intermediate RemoteIPInternalProxy addresses are discarded.
+     * </p>
+     * <p>
+     * Name of the http header that holds the list of trusted proxies that has been traversed by the http request.
+     * </p>
+     * <p>
+     * The value of this header can be comma delimited.
+     * </p>
+     * <p>
+     * Default value : <code>X-Forwarded-By</code>
+     * </p>
+     * @param proxiesHeader The header name
+     */
+    public void setProxiesHeader(String proxiesHeader) {
+        this.proxiesHeader = proxiesHeader;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * @see #setHttpsServerPort(int)
+     */
+    private int httpsServerPort = 443;

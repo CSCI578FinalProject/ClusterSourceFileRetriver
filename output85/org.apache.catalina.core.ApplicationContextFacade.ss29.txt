@@ -1,0 +1,46 @@
+2
+-----CSCI578-----
+
+
+
+    @Override
+    public <T extends Filter> T createFilter(Class<T> c) throws ServletException {
+        try {
+            @SuppressWarnings("unchecked")
+            T filter = (T) context.getInstanceManager().newInstance(c.getName());
+            return filter;
+        } catch (IllegalAccessException e) {
+            throw new ServletException(e);
+        } catch (InvocationTargetException e) {
+            ExceptionUtils.handleThrowable(e.getCause());
+            throw new ServletException(e);
+        } catch (NamingException e) {
+            throw new ServletException(e);
+        } catch (InstantiationException e) {
+            throw new ServletException(e);
+        } catch (ClassNotFoundException e) {
+            throw new ServletException(e);
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public <T extends Filter> T createFilter(Class<T> c)
+    throws ServletException {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                return (T) invokeMethod(context, "createFilter",
+                                              new Object[]{c});
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                if (t instanceof ServletException) {
+                    throw (ServletException) t;
+                }
+                return null;
+            }
+        } else {
+            return context.createFilter(c);
+        }
+    }

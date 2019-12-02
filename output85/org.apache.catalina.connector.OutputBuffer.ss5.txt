@@ -1,0 +1,122 @@
+8
+-----CSCI578-----
+
+
+
+    /**
+     * Close the output buffer. This tries to calculate the response size if
+     * the response has not been committed yet.
+     *
+     * @throws IOException An underlying IOException occurred
+     */
+    @Override
+    public void close()
+        throws IOException {
+
+        if (closed) {
+            return;
+        }
+        if (suspended) {
+            return;
+        }
+
+        // If there are chars, flush all of them to the byte buffer now as bytes are used to
+        // calculate the content-length (if everything fits into the byte buffer, of course).
+        if (cb.getLength() > 0) {
+            cb.flushBuffer();
+        }
+
+        if ((!coyoteResponse.isCommitted())
+            && (coyoteResponse.getContentLengthLong() == -1)) {
+            // If this didn't cause a commit of the response, the final content
+            // length can be calculated
+            if (!coyoteResponse.isCommitted()) {
+                coyoteResponse.setContentLength(bb.getLength());
+            }
+        }
+
+        if (coyoteResponse.getStatus() ==
+                HttpServletResponse.SC_SWITCHING_PROTOCOLS) {
+            doFlush(true);
+        } else {
+            doFlush(false);
+        }
+        closed = true;
+
+        // The request should have been completely read by the time the response
+        // is closed. Further reads of the input a) are pointless and b) really
+        // confuse AJP (bug 50189) so close the input buffer to prevent them.
+        Request req = (Request) coyoteResponse.getRequest().getNote(
+                CoyoteAdapter.ADAPTER_NOTES);
+        req.inputBuffer.close();
+
+        coyoteResponse.action(ActionCode.CLOSE, null);
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Properties
+
+    public Request getRequest() {
+        return req;
+    }
+-----CSCI578-----
+
+
+
+    public final Object getNote(int pos) {
+        return notes[pos];
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Close the input buffer.
+     *
+     * @throws IOException An underlying IOException occurred
+     */
+    @Override
+    public void close()
+        throws IOException {
+        closed = true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void close()
+        throws IOException {
+        ob.close();
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Reader Methods
+
+
+    @Override
+    public void close()
+        throws IOException {
+        ib.close();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void close() {
+
+        // We don't close the PrintWriter - super() is not called,
+        // so the stream can be reused. We close ob.
+        try {
+            ob.close();
+        } catch (IOException ex ) {
+            // Ignore
+        }
+        error = false;
+
+    }

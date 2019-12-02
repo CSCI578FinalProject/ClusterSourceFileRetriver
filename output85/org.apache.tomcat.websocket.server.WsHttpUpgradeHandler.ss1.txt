@@ -1,0 +1,249 @@
+13
+-----CSCI578-----
+
+
+
+    @Override
+    public SocketState upgradeDispatch(SocketEvent status) {
+        switch (status) {
+            case OPEN_READ:
+                try {
+                    wsFrame.onDataAvailable();
+                } catch (WsIOException ws) {
+                    close(ws.getCloseReason());
+                } catch (EOFException eof) {
+                    CloseReason cr = new CloseReason(
+                            CloseCodes.CLOSED_ABNORMALLY, eof.getMessage());
+                    close(cr);
+                } catch (IOException ioe) {
+                    onError(ioe);
+                    CloseReason cr = new CloseReason(
+                            CloseCodes.CLOSED_ABNORMALLY, ioe.getMessage());
+                    close(cr);
+                }
+                break;
+            case OPEN_WRITE:
+                wsRemoteEndpointServer.onWritePossible(false);
+                break;
+            case STOP:
+                CloseReason cr = new CloseReason(CloseCodes.GOING_AWAY,
+                        sm.getString("wsHttpUpgradeHandler.serverStop"));
+                try {
+                    wsSession.close(cr);
+                } catch (IOException ioe) {
+                    onError(ioe);
+                    cr = new CloseReason(
+                            CloseCodes.CLOSED_ABNORMALLY, ioe.getMessage());
+                    close(cr);
+                }
+                break;
+            case ERROR:
+                String msg = sm.getString("wsHttpUpgradeHandler.closeOnError");
+                wsSession.doClose(new CloseReason(CloseCodes.GOING_AWAY, msg),
+                        new CloseReason(CloseCodes.CLOSED_ABNORMALLY, msg));
+                //$FALL-THROUGH$
+            case DISCONNECT:
+            case TIMEOUT:
+                return SocketState.CLOSED;
+
+        }
+        if (wsFrame.isOpen()) {
+            return SocketState.UPGRADED;
+        } else {
+            return SocketState.CLOSED;
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void onError(Throwable throwable) {
+        // Need to call onError using the web application's class loader
+        Thread t = Thread.currentThread();
+        ClassLoader cl = t.getContextClassLoader();
+        t.setContextClassLoader(applicationClassLoader);
+        try {
+            ep.onError(wsSession, throwable);
+        } finally {
+            t.setContextClassLoader(cl);
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void close(CloseReason cr) {
+        /*
+         * Any call to this method is a result of a problem reading from the
+         * client. At this point that state of the connection is unknown.
+         * Attempt to send a close frame to the client and then close the socket
+         * immediately. There is no point in waiting for a close frame from the
+         * client because there is no guarantee that we can recover from
+         * whatever messed up state the client put the connection into.
+         */
+        wsSession.onClose(cr);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Called when a close message is received. Should only ever happen once.
+     * Also called after a protocol error when the ProtocolHandler needs to
+     * force the closing of the connection.
+     *
+     * @param closeReason The reason contained within the received close
+     *                    message.
+     */
+    public void onClose(CloseReason closeReason) {
+
+        synchronized (stateLock) {
+            if (state != State.CLOSED) {
+                try {
+                    wsRemoteEndpoint.setBatchingAllowed(false);
+                } catch (IOException e) {
+                    log.warn(sm.getString("wsSession.flushFailOnClose"), e);
+                    fireEndpointOnError(e);
+                }
+                if (state == State.OPEN) {
+                    state = State.OUTPUT_CLOSED;
+                    sendCloseMessage(closeReason);
+                    fireEndpointOnClose(closeReason);
+                }
+                state = State.CLOSED;
+
+                // Close the socket
+                wsRemoteEndpoint.close();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public CloseReason getCloseReason() {
+        return closeReason;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setBatchingAllowed(boolean batchingAllowed) throws IOException {
+        boolean oldValue = this.batchingAllowed.getAndSet(batchingAllowed);
+
+        if (oldValue && !batchingAllowed) {
+            flushBatch();
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void flushBatch() throws IOException {
+        sendMessageBlock(Constants.INTERNAL_OPCODE_FLUSH, null, true);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * WebSocket 1.0. Section 2.1.5.
+     * Need internal close method as spec requires that the local endpoint
+     * receives a 1006 on timeout.
+     *
+     * @param closeReasonMessage The close reason to pass to the remote endpoint
+     * @param closeReasonLocal   The close reason to pass to the local endpoint
+     */
+    public void doClose(CloseReason closeReasonMessage, CloseReason closeReasonLocal) {
+        // Double-checked locking. OK because state is volatile
+        if (state != State.OPEN) {
+            return;
+        }
+
+        synchronized (stateLock) {
+            if (state != State.OPEN) {
+                return;
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("wsSession.doClose", id));
+            }
+            try {
+                wsRemoteEndpoint.setBatchingAllowed(false);
+            } catch (IOException e) {
+                log.warn(sm.getString("wsSession.flushFailOnClose"), e);
+                fireEndpointOnError(e);
+            }
+
+            state = State.OUTPUT_CLOSED;
+
+            sendCloseMessage(closeReasonMessage);
+            fireEndpointOnClose(closeReasonLocal);
+        }
+
+        IOException ioe = new IOException(sm.getString("wsSession.messageFailed"));
+        SendResult sr = new SendResult(ioe);
+        for (FutureToSendHandler f2sh : futures.keySet()) {
+            f2sh.onResult(sr);
+        }
+    }
+-----CSCI578-----
+
+
+
+
+    private void fireEndpointOnError(Throwable throwable) {
+
+        // Fire the onError event
+        Thread t = Thread.currentThread();
+        ClassLoader cl = t.getContextClassLoader();
+        t.setContextClassLoader(applicationClassLoader);
+        try {
+            localEndpoint.onError(this, throwable);
+        } finally {
+            t.setContextClassLoader(cl);
+        }
+    }
+-----CSCI578-----
+
+
+    private void fireEndpointOnClose(CloseReason closeReason) {
+
+        // Fire the onClose event
+        InstanceManager instanceManager = webSocketContainer.getInstanceManager();
+        Thread t = Thread.currentThread();
+        ClassLoader cl = t.getContextClassLoader();
+        t.setContextClassLoader(applicationClassLoader);
+        try {
+            localEndpoint.onClose(this, closeReason);
+            if (instanceManager == null) {
+                instanceManager = InstanceManagerBindings.get(applicationClassLoader);
+            }
+            if (instanceManager != null) {
+                instanceManager.destroyInstance(localEndpoint);
+            }
+        } catch (Throwable throwable) {
+            ExceptionUtils.handleThrowable(throwable);
+            localEndpoint.onError(this, throwable);
+        } finally {
+            t.setContextClassLoader(cl);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public final void setBatchingAllowed(boolean batchingAllowed) throws IOException {
+        base.setBatchingAllowed(batchingAllowed);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public final void flushBatch() throws IOException {
+        base.flushBatch();
+    }

@@ -1,0 +1,247 @@
+10
+-----CSCI578-----
+
+
+
+    /**
+     * Undeploy the web application at the specified context path.
+     *
+     * @param writer Writer to render to
+     * @param path Context path of the application to be removed
+     */
+    protected void undeploy(PrintWriter writer, String path) {
+
+        if (debug >= 1)
+            log("undeploy: Undeploying web application at '" + path + "'");
+
+        if ((path == null) || (!path.startsWith("/") && path.equals(""))) {
+            writer.println(sm.getString("managerServlet.invalidPath",
+                                        RequestUtil.filter(path)));
+            return;
+        }
+        String displayPath = path;
+        if( path.equals("/") )
+            path = "";
+
+        try {
+
+            // Validate the Context of the specified application
+            Context context = (Context) host.findChild(path);
+            if (context == null) {
+                writer.println(sm.getString("managerServlet.noContext",
+                                            RequestUtil.filter(displayPath)));
+                return;
+            }
+
+            // Identify the appBase of the owning Host of this Context (if any)
+            String appBase = null;
+            File appBaseDir = null;
+            if (context.getParent() instanceof Host) {
+                appBase = ((Host) context.getParent()).getAppBase();
+                appBaseDir = new File(appBase);
+                if (!appBaseDir.isAbsolute()) {
+                    appBaseDir = new File(System.getProperty("catalina.base"),
+                                          appBase);
+                }
+            }
+
+            if (!isDeployed(path)) {
+                writer.println(sm.getString("managerServlet.notDeployed",
+                        RequestUtil.filter(displayPath)));
+                return;
+            }
+
+            if (!isServiced(path)) {
+                addServiced(path);
+                try {
+                    // Try to stop the context first to be nicer
+                    ((Lifecycle) context).stop();
+                } catch (Throwable t) {
+                    // Ignore
+                }
+                try {
+                    if (path.lastIndexOf('/') > 0) {
+                        path = "/" + path.substring(1).replace('/','#');
+                    }
+                    File war = new File(getAppBase(), getDocBase(path) + ".war");
+                    File dir = new File(getAppBase(), getDocBase(path));
+                    File xml = new File(configBase, getConfigFile(path) + ".xml");
+                    if (war.exists()) {
+                        war.delete();
+                    } else if (dir.exists()) {
+                        undeployDir(dir);
+                    } else {
+                        xml.delete();
+                    }
+                    // Perform new deployment
+                    check(path.replace('#', '/'));
+                } finally {
+                    removeServiced(path.replace('#','/'));
+                }
+            }
+            writer.println(sm.getString("managerServlet.undeployed",
+                                        displayPath));
+        } catch (Throwable t) {
+            log("ManagerServlet.undeploy[" + displayPath + "]", t);
+            writer.println(sm.getString("managerServlet.exception",
+                                        t.toString()));
+        }
+
+    }
+-----CSCI578-----
+
+    
+
+    /**
+     * Delete the specified directory, including all of its contents and
+     * subdirectories recursively.
+     *
+     * @param dir File object representing the directory to be deleted
+     */
+    protected void undeployDir(File dir) {
+
+        String files[] = dir.list();
+        if (files == null) {
+            files = new String[0];
+        }
+        for (int i = 0; i < files.length; i++) {
+            File file = new File(dir, files[i]);
+            if (file.isDirectory()) {
+                undeployDir(file);
+            } else {
+                file.delete();
+            }
+        }
+        dir.delete();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Invoke the isDeployed method on the deployer.
+     */
+    protected boolean isDeployed(String name) 
+        throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        Boolean result = 
+            (Boolean) mBeanServer.invoke(oname, "isDeployed", params, signature);
+        return result.booleanValue();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Given a context path, get the doc base.
+     */
+    protected String getDocBase(String path) {
+        String basename = null;
+        if (path.equals("")) {
+            basename = "ROOT";
+        } else {
+            basename = path.substring(1).replace('/', '#');
+        }
+        return (basename);
+    }
+-----CSCI578-----
+
+    
+
+    /**
+     * Invoke the isServiced method on the deployer.
+     */
+    protected boolean isServiced(String name) 
+        throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        Boolean result = 
+            (Boolean) mBeanServer.invoke(oname, "isServiced", params, signature);
+        return result.booleanValue();
+    }
+-----CSCI578-----
+
+    
+
+    /**
+     * Invoke the addServiced method on the deployer.
+     */
+    protected void addServiced(String name) 
+        throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "addServiced", params, signature);
+    }
+-----CSCI578-----
+
+
+    
+    /**
+     * Return a File object representing the "application root" directory
+     * for our associated Host.
+     */
+    protected File getAppBase() {
+
+        if (appBase != null) {
+            return appBase;
+        }
+
+        File file = new File(host.getAppBase());
+        if (!file.isAbsolute())
+            file = new File(System.getProperty("catalina.base"),
+                            host.getAppBase());
+        try {
+            appBase = file.getCanonicalFile();
+        } catch (IOException e) {
+            appBase = file;
+        }
+        return (appBase);
+
+    }
+-----CSCI578-----
+
+    
+
+    /**
+     * Invoke the check method on the deployer.
+     */
+    protected void check(String name) 
+        throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "check", params, signature);
+    }
+-----CSCI578-----
+
+    
+
+    /**
+     * Invoke the removeServiced method on the deployer.
+     */
+    protected void removeServiced(String name) 
+        throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "removeServiced", params, signature);
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Support Methods
+
+
+    /**
+     * Given a context path, get the config file name.
+     */
+    protected String getConfigFile(String path) {
+        String basename = null;
+        if (path.equals("")) {
+            basename = "ROOT";
+        } else {
+            basename = path.substring(1).replace('/', '#');
+        }
+        return (basename);
+    }

@@ -1,0 +1,85 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Skip until the given string is matched in the stream.
+     * When returned, the context is positioned past the end of the match.
+     *
+     * @param s The String to match.
+     * @return A non-null <code>Mark</code> instance (positioned immediately
+     *         before the search string) if found, <strong>null</strong>
+     *         otherwise.
+     */
+    Mark skipUntil(String limit) {
+        Mark ret = mark();
+        int limlen = limit.length();
+        char firstChar = limit.charAt(0);
+        Boolean result = null;
+        Mark restart = null;
+
+    skip:
+        while((result = indexOf(firstChar, ret)) != null) {
+           if (result.booleanValue()) {
+               if (restart != null) {
+                   restart.init(current, true);
+               } else {
+                   restart = mark();
+               }
+               for (int i = 1 ; i < limlen ; i++) {
+                   if (peekChar() == limit.charAt(i)) {
+                       nextChar();
+                   } else {
+                       current.init(restart, true);
+                       continue skip;
+                   }
+               }
+               return ret;
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Search the given character, If it was found, then mark the current cursor
+     * and the cursor point to next character.
+     */
+    private Boolean indexOf(char c, Mark mark) {
+        if (!hasMoreInput())
+            return null;
+
+        int end = current.stream.length;
+        int ch;
+        int line = current.line;
+        int col = current.col;
+        int i = current.cursor;
+        for(; i < end; i ++) {
+           ch = current.stream[i];
+
+           if (ch == c) {
+               mark.update(i, line, col);
+           }
+           if (ch == '\n') {
+                line++;
+                col = 0;
+            } else {
+                col++;
+            }
+           if (ch == c) {
+               current.update(i+1, line, col);
+               return Boolean.TRUE;
+           }
+        }
+        current.update(i, line, col);
+        return Boolean.FALSE;
+    }
+-----CSCI578-----
+
+
+    void update(int cursor, int line, int col) {
+        this.cursor = cursor;
+        this.line = line;
+        this.col = col;
+    }

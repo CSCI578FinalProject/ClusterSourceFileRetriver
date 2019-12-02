@@ -1,0 +1,307 @@
+16
+-----CSCI578-----
+
+
+
+    /**
+     * @return the Context with which this Loader has been associated.
+     */
+    public Context getContext();
+-----CSCI578-----
+
+
+
+    /**
+     * Create an <code>ObjectName</code> for this
+     * <code>Service</code> object.
+     *
+     * @param domain Domain in which this name is to be created
+     * @param environment The ContextEnvironment to be named
+     * @return a new object name
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    public static ObjectName createObjectName(String domain,
+                                              ContextEnvironment environment)
+        throws MalformedObjectNameException {
+
+        ObjectName name = null;
+        Object container =
+                environment.getNamingResources().getContainer();
+        if (container instanceof Server) {
+            name = new ObjectName(domain + ":type=Environment" +
+                        ",resourcetype=Global,name=" + environment.getName());
+        } else if (container instanceof Context) {
+            Context context = ((Context)container);
+            ContextName cn = new ContextName(context.getName(), false);
+            Container host = context.getParent();
+            name = new ObjectName(domain + ":type=Environment" +
+                        ",resourcetype=Context,host=" + host.getName() +
+                        ",context=" + cn.getDisplayName() +
+                        ",name=" + environment.getName());
+        }
+        return (name);
+
+    }
+
+
+
+    /**
+     * Create an <code>ObjectName</code> for this
+     * <code>ContextResource</code> object.
+     *
+     * @param domain Domain in which this name is to be created
+     * @param resource The ContextResource to be named
+     * @return a new object name
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    public static ObjectName createObjectName(String domain,
+                                              ContextResource resource)
+        throws MalformedObjectNameException {
+
+        ObjectName name = null;
+        String quotedResourceName = ObjectName.quote(resource.getName());
+        Object container =
+                resource.getNamingResources().getContainer();
+        if (container instanceof Server) {
+            name = new ObjectName(domain + ":type=Resource" +
+                    ",resourcetype=Global,class=" + resource.getType() +
+                    ",name=" + quotedResourceName);
+        } else if (container instanceof Context) {
+            Context context = ((Context)container);
+            ContextName cn = new ContextName(context.getName(), false);
+            Container host = context.getParent();
+            name = new ObjectName(domain + ":type=Resource" +
+                    ",resourcetype=Context,host=" + host.getName() +
+                    ",context=" + cn.getDisplayName() +
+                    ",class=" + resource.getType() +
+                    ",name=" + quotedResourceName);
+        }
+
+        return (name);
+
+    }
+
+
+
+     /**
+     * Create an <code>ObjectName</code> for this
+     * <code>ContextResourceLink</code> object.
+     *
+     * @param domain Domain in which this name is to be created
+     * @param resourceLink The ContextResourceLink to be named
+     * @return a new object name
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    public static ObjectName createObjectName(String domain,
+                                              ContextResourceLink resourceLink)
+        throws MalformedObjectNameException {
+
+        ObjectName name = null;
+        String quotedResourceLinkName
+                = ObjectName.quote(resourceLink.getName());
+        Object container =
+                resourceLink.getNamingResources().getContainer();
+        if (container instanceof Server) {
+            name = new ObjectName(domain + ":type=ResourceLink" +
+                    ",resourcetype=Global" +
+                    ",name=" + quotedResourceLinkName);
+        } else if (container instanceof Context) {
+            Context context = ((Context)container);
+            ContextName cn = new ContextName(context.getName(), false);
+            Container host = context.getParent();
+            name = new ObjectName(domain + ":type=ResourceLink" +
+                    ",resourcetype=Context,host=" + host.getName() +
+                    ",context=" + cn.getDisplayName() +
+                    ",name=" + quotedResourceLinkName);
+        }
+
+        return (name);
+
+    }
+
+
+
+    /**
+     * Create an <code>ObjectName</code> for this
+     * <code>Group</code> object.
+     *
+     * @param domain Domain in which this name is to be created
+     * @param group The Group to be named
+     * @return a new object name
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    static ObjectName createObjectName(String domain,
+                                              Group group)
+        throws MalformedObjectNameException {
+
+        ObjectName name = null;
+        name = new ObjectName(domain + ":type=Group,groupname=" +
+                              ObjectName.quote(group.getGroupname()) +
+                              ",database=" + group.getUserDatabase().getId());
+        return (name);
+
+    }
+
+
+
+    /**
+     * Create an <code>ObjectName</code> for this
+     * <code>Loader</code> object.
+     *
+     * @param domain Domain in which this name is to be created
+     * @param loader The Loader to be named
+     * @return a new object name
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    static ObjectName createObjectName(String domain, Loader loader)
+        throws MalformedObjectNameException {
+
+        ObjectName name = null;
+        Context context = loader.getContext();
+
+        ContextName cn = new ContextName(context.getName(), false);
+        Container host = context.getParent();
+        name = new ObjectName(domain + ":type=Loader,host=" + host.getName() +
+                ",context=" + cn.getDisplayName());
+
+        return name;
+    }
+
+
+
+    /**
+     * Create an <code>ObjectName</code> for this
+     * <code>Role</code> object.
+     *
+     * @param domain Domain in which this name is to be created
+     * @param role The Role to be named
+     * @return a new object name
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    static ObjectName createObjectName(String domain, Role role)
+            throws MalformedObjectNameException {
+
+         ObjectName name = new ObjectName(domain + ":type=Role,rolename=" +
+                 ObjectName.quote(role.getRolename()) +
+                 ",database=" + role.getUserDatabase().getId());
+        return name;
+    }
+
+
+
+    /**
+     * Create an <code>ObjectName</code> for this
+     * <code>User</code> object.
+     *
+     * @param domain Domain in which this name is to be created
+     * @param user The User to be named
+     * @return a new object name
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    static ObjectName createObjectName(String domain, User user)
+            throws MalformedObjectNameException {
+
+        ObjectName name = new ObjectName(domain + ":type=User,username=" +
+                ObjectName.quote(user.getUsername()) +
+                ",database=" + user.getUserDatabase().getId());
+        return name;
+    }
+
+
+
+    /**
+     * Create an <code>ObjectName</code> for this
+     * <code>UserDatabase</code> object.
+     *
+     * @param domain Domain in which this name is to be created
+     * @param userDatabase The UserDatabase to be named
+     * @return a new object name
+     * @exception MalformedObjectNameException if a name cannot be created
+     */
+    static ObjectName createObjectName(String domain,
+                                              UserDatabase userDatabase)
+        throws MalformedObjectNameException {
+
+        ObjectName name = null;
+        name = new ObjectName(domain + ":type=UserDatabase,database=" +
+                              userDatabase.getId());
+        return (name);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the unique global identifier of this user database.
+     */
+    public String getId();
+-----CSCI578-----
+
+
+    Object getContainer();
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getDisplayName() {
+        StringBuilder tmp = new StringBuilder();
+        if ("".equals(path)) {
+            tmp.append('/');
+        } else {
+            tmp.append(path);
+        }
+
+        if (!"".equals(version)) {
+            tmp.append(VERSION_MARKER);
+            tmp.append(version);
+        }
+
+        return tmp.toString();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Create a new Web Application Loader.
+     *
+     * @param parent MBean Name of the associated parent component
+     * @return the object name of the created loader
+     *
+     * @exception Exception if an MBean cannot be created or registered
+     */
+    public String createWebappLoader(String parent)
+        throws Exception {
+
+        // Create a new WebappLoader instance
+        WebappLoader loader = new WebappLoader();
+
+        // Add the new instance to its parent component
+        ObjectName pname = new ObjectName(parent);
+        Container container = getParentContainerFromParent(pname);
+        if (container instanceof Context) {
+            ((Context) container).setLoader(loader);
+        }
+        // FIXME add Loader.getObjectName
+        //ObjectName oname = loader.getObjectName();
+        ObjectName oname =
+            MBeanUtils.createObjectName(pname.getDomain(), loader);
+        return (oname.toString());
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public String toString() {
+        return getDisplayName();
+    }

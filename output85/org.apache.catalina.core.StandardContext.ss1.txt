@@ -1,0 +1,59 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Check for unusual but valid <code>&lt;url-pattern&gt;</code>s.
+     * See Bugzilla 34805, 43079 & 43080
+     */
+    private void checkUnusualURLPattern(String urlPattern) {
+        if (log.isInfoEnabled()) {
+            // First group checks for '*' or '/foo*' style patterns
+            // Second group checks for *.foo.bar style patterns
+            if((urlPattern.endsWith("*") && (urlPattern.length() < 2 ||
+                        urlPattern.charAt(urlPattern.length()-2) != '/')) ||
+                    urlPattern.startsWith("*.") && urlPattern.length() > 2 &&
+                        urlPattern.lastIndexOf('.') > 1) {
+                log.info("Suspicious url pattern: \"" + urlPattern + "\"" +
+                        " in context [" + getName() + "] - see" +
+                        " sections 12.1 and 12.2 of the Servlet specification");
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Validate the syntax of a proposed <code>&lt;url-pattern&gt;</code>
+     * for conformance with specification requirements.
+     *
+     * @param urlPattern URL pattern to be validated
+     * @return <code>true</code> if the URL pattern is conformant
+     */
+    private boolean validateURLPattern(String urlPattern) {
+
+        if (urlPattern == null)
+            return false;
+        if (urlPattern.indexOf('\n') >= 0 || urlPattern.indexOf('\r') >= 0) {
+            return false;
+        }
+        if (urlPattern.equals("")) {
+            return true;
+        }
+        if (urlPattern.startsWith("*.")) {
+            if (urlPattern.indexOf('/') < 0) {
+                checkUnusualURLPattern(urlPattern);
+                return true;
+            } else
+                return false;
+        }
+        if ( (urlPattern.startsWith("/")) &&
+                (urlPattern.indexOf("*.") < 0)) {
+            checkUnusualURLPattern(urlPattern);
+            return true;
+        } else
+            return false;
+
+    }

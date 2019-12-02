@@ -1,0 +1,60 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Starts the channel
+     * @param svc int - what service to start
+     * @throws ChannelException
+     * @see org.apache.catalina.tribes.Channel#start(int)
+     */
+    public synchronized void start(int svc) throws ChannelException {
+        setupDefaultStack();
+        if (optionCheck) checkOptionFlags();
+        super.start(svc);
+        if ( hbthread == null && heartbeat ) {
+            hbthread = new HeartbeatThread(this,heartbeatSleeptime);
+            hbthread.start();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets up the default implementation interceptor stack
+     * if no interceptors have been added
+     * @throws ChannelException
+     */
+    protected synchronized void setupDefaultStack() throws ChannelException {
+
+        if ( getFirstInterceptor() != null &&
+             ((getFirstInterceptor().getNext() instanceof ChannelCoordinator))) {
+            ChannelInterceptor interceptor = null;
+            Class clazz = null;
+            try {
+                clazz = Class.forName("org.apache.catalina.tribes.group.interceptors.MessageDispatch15Interceptor",
+                                      true,GroupChannel.class.getClassLoader());
+                clazz.newInstance();
+            } catch ( Throwable x ) {
+                clazz = MessageDispatchInterceptor.class;
+            }//catch
+            try {
+                interceptor = (ChannelInterceptor) clazz.newInstance();
+            } catch (Exception x) {
+                throw new ChannelException("Unable to add MessageDispatchInterceptor to interceptor chain.",x);
+            }
+            this.addInterceptor(interceptor);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the first interceptor of the stack. Useful for traversal.
+     * @return ChannelInterceptor
+     */
+    public ChannelInterceptor getFirstInterceptor() {
+        if (interceptors != null) return interceptors;
+        else return coordinator;
+    }

@@ -1,0 +1,128 @@
+26
+-----CSCI578-----
+
+
+    /**
+     * Sends a heart beat through the interceptor stacks
+     * Use this method to alert interceptors and other components to
+     * clean up garbage, timed out messages etc.<br>
+     * If you application has a background thread, then you can save one thread,
+     * by configuring your channel to not use an internal heartbeat thread
+     * and invoking this method.
+     * @see #setHeartbeat(boolean)
+     */
+    public void heartbeat();
+
+
+    /**
+     * Enables or disables internal heartbeat.
+     * @param enable boolean - default value is implementation specific
+     * @see #heartbeat()
+     */
+    public void setHeartbeat(boolean enable);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Add cluster message listener and register cluster to this listener.
+     *
+     * @param listener The new listener
+     * @see org.apache.catalina.ha.CatalinaCluster#addClusterListener(org.apache.catalina.ha.ClusterListener)
+     */
+    @Override
+    public void addClusterListener(ClusterListener listener) {
+        if (listener != null && !clusterListeners.contains(listener)) {
+            clusterListeners.add(listener);
+            listener.setCluster(this);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Add cluster valve
+     * Cluster Valves are only add to container when cluster is started!
+     * @param valve The new cluster Valve.
+     */
+    @Override
+    public void addValve(Valve valve) {
+        if (valve instanceof ClusterValve && (!valves.contains(valve)))
+            valves.add(valve);
+    }
+-----CSCI578-----
+
+
+    protected void checkDefaults() {
+        if ( clusterListeners.size() == 0 && managerTemplate instanceof DeltaManager ) {
+            addClusterListener(new ClusterSessionListener());
+        }
+        if ( valves.size() == 0 ) {
+            addValve(new JvmRouteBinderValve());
+            addValve(new ReplicationValve());
+        }
+        if ( clusterDeployer != null ) clusterDeployer.setCluster(this);
+        if ( channel == null ) channel = new GroupChannel();
+        if ( channel instanceof GroupChannel && !((GroupChannel)channel).getInterceptors().hasNext()) {
+            channel.addInterceptor(new MessageDispatchInterceptor());
+            channel.addInterceptor(new TcpFailureDetector());
+        }
+        if (heartbeatBackgroundEnabled) channel.setHeartbeat(false);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Adds an interceptor to the channel message chain.
+     * @param interceptor ChannelInterceptor
+     */
+    public void addInterceptor(ChannelInterceptor interceptor);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setCluster(CatalinaCluster cluster) {
+        if (log.isDebugEnabled()) {
+            if (cluster != null)
+                log.debug("add ClusterListener " + this.toString() +
+                        " to cluster" + cluster);
+            else
+                log.debug("remove ClusterListener " + this.toString() +
+                        " from cluster");
+        }
+        this.cluster = cluster;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Remove message listener and deregister Cluster from listener.
+     *
+     * @param listener The listener to remove
+     * @see org.apache.catalina.ha.CatalinaCluster#removeClusterListener(org.apache.catalina.ha.ClusterListener)
+     */
+    @Override
+    public void removeClusterListener(ClusterListener listener) {
+        if (listener != null) {
+            clusterListeners.remove(listener);
+            listener.setCluster(null);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

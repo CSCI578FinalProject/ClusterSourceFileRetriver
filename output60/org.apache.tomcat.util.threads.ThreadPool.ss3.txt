@@ -1,0 +1,94 @@
+3
+-----CSCI578-----
+
+
+    private ControlRunnable findControlRunnable() {
+        ControlRunnable c=null;
+
+        if ( stopThePool ) {
+            throw new IllegalStateException();
+        }
+
+        // Obtain a free thread from the pool.
+        synchronized(this) {
+
+            while (currentThreadsBusy == currentThreadCount) {
+                 // All threads are busy
+                if (currentThreadCount < maxThreads) {
+                    // Not all threads were open,
+                    // Open new threads up to the max number of idel threads
+                    int toOpen = currentThreadCount + minSpareThreads;
+                    openThreads(toOpen);
+                } else {
+                    logFull(log, currentThreadCount, maxThreads);
+                    // Wait for a thread to become idel.
+                    try {
+                        this.wait();
+                    }
+                    // was just catch Throwable -- but no other
+                    // exceptions can be thrown by wait, right?
+                    // So we catch and ignore this one, since
+                    // it'll never actually happen, since nowhere
+                    // do we say pool.interrupt().
+                    catch(InterruptedException e) {
+                        log.error("Unexpected exception", e);
+                    }
+		    if( log.isDebugEnabled() ) {
+			log.debug("Finished waiting: CTC="+currentThreadCount +
+				  ", CTB=" + currentThreadsBusy);
+                    }
+                    // Pool was stopped. Get away of the pool.
+                    if( stopThePool) {
+                        break;
+                    }
+                }
+            }
+            // Pool was stopped. Get away of the pool.
+            if(0 == currentThreadCount || stopThePool) {
+                throw new IllegalStateException();
+            }
+                    
+            // If we are here it means that there is a free thread. Take it.
+            int pos = currentThreadCount - currentThreadsBusy - 1;
+            c = pool[pos];
+            pool[pos] = null;
+            currentThreadsBusy++;
+
+        }
+        return c;
+    }
+-----CSCI578-----
+
+
+    private static void logFull(Log loghelper, int currentThreadCount,
+                                int maxThreads) {
+	if( logfull ) {
+            log.error(sm.getString("threadpool.busy",
+                                   new Integer(currentThreadCount),
+                                   new Integer(maxThreads)));
+            logfull=false;
+        } else if( log.isDebugEnabled() ) {
+            log.debug("All threads are busy " + currentThreadCount + " " +
+                      maxThreads );
+        }
+    }
+-----CSCI578-----
+
+
+    public void run(Runnable r) {
+        ControlRunnable c = findControlRunnable();
+        c.runIt(r);
+    }
+
+
+    /**
+     * Inform the pool that the specific thread finish.
+     *
+     * Called by the ControlRunnable.run() when the runnable
+     * throws an exception.
+     */
+    protected synchronized void notifyThreadEnd(ControlRunnable c) {
+        currentThreadsBusy--;
+        currentThreadCount --;
+        notify();
+    }

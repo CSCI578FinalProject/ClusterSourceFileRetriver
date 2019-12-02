@@ -1,0 +1,45 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    protected void openWriter() {
+
+        // Create the directory if necessary
+        File dir = new File(directory);
+        dir.mkdirs();
+
+        // Open the current log file
+        writerLock.writeLock().lock();
+        try {
+            File pathname = new File(dir.getAbsoluteFile(), prefix
+                    + (rotatable ? date : "") + suffix);
+            File parent = pathname.getParentFile();
+            if (!parent.exists()) {
+                parent.mkdirs();
+            }
+            String encoding = getEncoding();
+            FileOutputStream fos = new FileOutputStream(pathname, true);
+            OutputStream os = bufferSize>0?new BufferedOutputStream(fos,bufferSize):fos;
+            writer = new PrintWriter(
+                    (encoding != null) ? new OutputStreamWriter(os, encoding)
+                                       : new OutputStreamWriter(os), false);
+            writer.write(getFormatter().getHead(this));
+        } catch (Exception e) {
+            reportError(null, e, ErrorManager.OPEN_FAILURE);
+            writer = null;
+        } finally {
+            writerLock.writeLock().unlock();
+        }
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Open the new log file for the date specified by <code>date</code>.
+     */
+    protected void open() {
+        openWriter();
+    }

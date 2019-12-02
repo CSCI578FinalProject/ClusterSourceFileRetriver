@@ -1,0 +1,91 @@
+7
+-----CSCI578-----
+-----CSCI578-----
+
+
+    
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return a String representation of this object.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("ContextLocalEjb[");
+        sb.append("name=");
+        sb.append(getName());
+        if (getDescription() != null) {
+            sb.append(", description=");
+            sb.append(getDescription());
+        }
+        if (getType() != null) {
+            sb.append(", type=");
+            sb.append(getType());
+        }
+        if (home != null) {
+            sb.append(", home=");
+            sb.append(home);
+        }
+        if (link != null) {
+            sb.append(", link=");
+            sb.append(link);
+        }
+        if (local != null) {
+            sb.append(", local=");
+            sb.append(local);
+        }
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Add a local EJB resource reference for this web application.
+     *
+     * @param ejb New EJB resource reference
+     */
+    public void addLocalEjb(ContextLocalEjb ejb) {
+
+        if (entries.containsKey(ejb.getName())) {
+            return;
+        } else {
+            entries.put(ejb.getName(), ejb.getType());
+        }
+
+        synchronized (localEjbs) {
+            ejb.setNamingResources(this);
+            localEjbs.put(ejb.getName(), ejb);
+        }
+        support.firePropertyChange("localEjb", null, ejb);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any local EJB resource reference with the specified name.
+     *
+     * @param name Name of the EJB resource reference to remove
+     */
+    public void removeLocalEjb(String name) {
+
+        entries.remove(name);
+
+        ContextLocalEjb localEjb = null;
+        synchronized (localEjbs) {
+            localEjb = (ContextLocalEjb) localEjbs.remove(name);
+        }
+        if (localEjb != null) {
+            support.firePropertyChange("localEjb", localEjb, null);
+            localEjb.setNamingResources(null);
+        }
+
+    }

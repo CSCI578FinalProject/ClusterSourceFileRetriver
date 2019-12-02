@@ -1,0 +1,105 @@
+7
+-----CSCI578-----
+
+
+
+    /**
+     * Return the filter definition for the specified filter name, if any;
+     * otherwise return <code>null</code>.
+     *
+     * @param filterName Filter name to look up
+     */
+    public FilterDef findFilterDef(String filterName) {
+
+        synchronized (filterDefs) {
+            return ((FilterDef) filterDefs.get(filterName));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a filter mapping to this Context.
+     *
+     * @param filterMap The filter mapping to be added
+     *
+     * @exception IllegalArgumentException if the specified filter name
+     *  does not match an existing filter definition, or the filter mapping
+     *  is malformed
+     */
+    public void addFilterMap(FilterMap filterMap) {
+
+        // Validate the proposed filter mapping
+        String filterName = filterMap.getFilterName();
+        String[] servletNames = filterMap.getServletNames();
+        String[] urlPatterns = filterMap.getURLPatterns();
+        if (findFilterDef(filterName) == null)
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.filterMap.name", filterName));
+//      <= Servlet API 2.4
+//      if ((servletNames.length == 0) && (urlPatterns.length == 0))
+//      Servlet API 2.5 (FIX 43338)
+//      SRV 6.2.5 says supporting for '*' as the servlet-name in filter-mapping.
+        if (!filterMap.getMatchAllServletNames() &&
+            !filterMap.getMatchAllUrlPatterns() &&
+            (servletNames.length == 0) && (urlPatterns.length == 0))
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.filterMap.either"));
+        // FIXME: Older spec revisions may still check this
+        /*
+        if ((servletNames.length != 0) && (urlPatterns.length != 0))
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.filterMap.either"));
+        */
+        // Because filter-pattern is new in 2.3, no need to adjust
+        // for 2.2 backwards compatibility
+        for (int i = 0; i < urlPatterns.length; i++) {
+            if (!validateURLPattern(urlPatterns[i])) {
+                throw new IllegalArgumentException
+                    (sm.getString("standardContext.filterMap.pattern",
+                            urlPatterns[i]));
+            }
+        }
+
+        // Add this filter mapping to our registered set
+        synchronized (filterMaps) {
+            FilterMap results[] =new FilterMap[filterMaps.length + 1];
+            System.arraycopy(filterMaps, 0, results, 0, filterMaps.length);
+            results[filterMaps.length] = filterMap;
+            filterMaps = results;
+        }
+        fireContainerEvent("addFilterMap", filterMap);
+
+    }
+-----CSCI578-----
+    
+
+    public String getFilterName() {
+        return (this.filterName);
+    }
+-----CSCI578-----
+
+    
+    public boolean getMatchAllUrlPatterns() {
+        return matchAllUrlPatterns;
+    }
+-----CSCI578-----
+
+
+    public String[] getURLPatterns() {
+        return (this.urlPatterns);
+    }
+-----CSCI578-----
+
+    
+    public boolean getMatchAllServletNames() {
+        return matchAllServletNames;
+    }
+-----CSCI578-----
+
+
+    public String[] getServletNames() {
+        return (this.servletNames);
+    }

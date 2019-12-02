@@ -1,0 +1,71 @@
+6
+-----CSCI578-----
+
+
+
+    private void loadPersistentRegistrations() {
+        synchronized (CONFIG_FILE_LOCK) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("authConfigFactoryImpl.load",
+                        CONFIG_FILE.getAbsolutePath()));
+            }
+            if (!CONFIG_FILE.isFile()) {
+                return;
+            }
+            Providers providers = PersistentProviderRegistrations.loadProviders(CONFIG_FILE);
+            for (Provider provider : providers.getProviders()) {
+                doRegisterConfigProvider(provider.getClassName(), provider.getProperties(),
+                        provider.getLayer(), provider.getAppContext(), provider.getDescription());
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    static Providers loadProviders(File configFile) {
+        try (InputStream is = new FileInputStream(configFile)) {
+            // Construct a digester to read the XML input file
+            Digester digester = new Digester();
+
+            try {
+                digester.setFeature("http://apache.org/xml/features/allow-java-encodings", true);
+                digester.setValidating(true);
+                digester.setNamespaceAware(true);
+            } catch (Exception e) {
+                throw new SecurityException(e);
+            }
+
+            // Create an object to hold the parse results and put it on the top
+            // of the digester's stack
+            Providers result = new Providers();
+            digester.push(result);
+
+            // Configure the digester
+            digester.addObjectCreate("jaspic-providers/provider", Provider.class.getName());
+            digester.addSetProperties("jaspic-providers/provider");
+            digester.addSetNext("jaspic-providers/provider", "addProvider", Provider.class.getName());
+
+            digester.addObjectCreate("jaspic-providers/provider/property", Property.class.getName());
+            digester.addSetProperties("jaspic-providers/provider/property");
+            digester.addSetNext("jaspic-providers/provider/property", "addProperty", Property.class.getName());
+
+            // Parse the input
+            digester.parse(is);
+
+            return result;
+        } catch (IOException | SAXException e) {
+            throw new SecurityException(e);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void refresh() {
+        loadPersistentRegistrations();
+    }

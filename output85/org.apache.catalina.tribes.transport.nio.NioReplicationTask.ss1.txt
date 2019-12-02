@@ -1,0 +1,511 @@
+32
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // loop forever waiting for work to do
+    @Override
+    public synchronized void run() {
+        if ( buffer == null ) {
+            int size = getRxBufSize();
+            if (key.channel() instanceof DatagramChannel) {
+                size = ChannelReceiver.MAX_UDP_SIZE;
+            }
+            if ( (getOptions() & OPTION_DIRECT_BUFFER) == OPTION_DIRECT_BUFFER) {
+                buffer = ByteBuffer.allocateDirect(size);
+            } else {
+                buffer = ByteBuffer.allocate(size);
+            }
+        } else {
+            buffer.clear();
+        }
+        if (key == null) {
+            return; // just in case
+        }
+        if ( log.isTraceEnabled() )
+            log.trace("Servicing key:"+key);
+
+        try {
+            ObjectReader reader = (ObjectReader)key.attachment();
+            if ( reader == null ) {
+                if ( log.isTraceEnabled() )
+                    log.trace("No object reader, cancelling:"+key);
+                cancelKey(key);
+            } else {
+                if ( log.isTraceEnabled() )
+                    log.trace("Draining channel:"+key);
+
+                drainChannel(key, reader);
+            }
+        } catch (Exception e) {
+            //this is common, since the sockets on the other
+            //end expire after a certain time.
+            if ( e instanceof CancelledKeyException ) {
+                //do nothing
+            } else if ( e instanceof IOException ) {
+                //dont spew out stack traces for IO exceptions unless debug is enabled.
+                if (log.isDebugEnabled()) log.debug ("IOException in replication worker, unable to drain channel. Probable cause: Keep alive socket closed["+e.getMessage()+"].", e);
+                else log.warn (sm.getString("nioReplicationTask.unable.drainChannel.ioe", e.getMessage()));
+            } else if ( log.isErrorEnabled() ) {
+                //this is a real error, log it.
+                log.error(sm.getString("nioReplicationTask.exception.drainChannel"),e);
+            }
+            cancelKey(key);
+        }
+        key = null;
+        // done, ready for more, return to pool
+        getTaskPool().returnWorker (this);
+    }
+
+
+    /**
+     * Called to initiate a unit of work by this worker thread
+     * on the provided SelectionKey object.  This method is
+     * synchronized, as is the run() method, so only one key
+     * can be serviced at a given time.
+     * Before waking the worker thread, and before returning
+     * to the main selection loop, this key's interest set is
+     * updated to remove OP_READ.  This will cause the selector
+     * to ignore read-readiness for this channel while the
+     * worker thread is servicing it.
+     * @param key The key to process
+     */
+    public synchronized void serviceChannel (SelectionKey key) {
+        if ( log.isTraceEnabled() ) log.trace("About to service key:"+key);
+        ObjectReader reader = (ObjectReader)key.attachment();
+        if ( reader != null ) reader.setLastAccess(System.currentTimeMillis());
+        this.key = key;
+        key.interestOps (key.interestOps() & (~SelectionKey.OP_READ));
+        key.interestOps (key.interestOps() & (~SelectionKey.OP_WRITE));
+    }
+-----CSCI578-----
+
+
+
+    public boolean hasPackage() {
+        return buffer.countPackages(true)>0;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Send a reply-acknowledgement (6,2,3), sends it doing a busy write, the ACK is so small
+     * that it should always go to the buffer.
+     * @param key The key to use
+     * @param channel The channel
+     * @param command The command to write
+     * @param udpaddr Target address
+     */
+    protected void sendAck(SelectionKey key, WritableByteChannel channel, byte[] command, SocketAddress udpaddr) {
+        try {
+
+            ByteBuffer buf = ByteBuffer.wrap(command);
+            int total = 0;
+            if (channel instanceof DatagramChannel) {
+                DatagramChannel dchannel = (DatagramChannel)channel;
+                //were using a shared channel, document says its thread safe
+                //TODO check optimization, one channel per thread?
+                while ( total < command.length ) {
+                    total += dchannel.send(buf, udpaddr);
+                }
+            } else {
+                while ( total < command.length ) {
+                    total += channel.write(buf);
+                }
+            }
+            if (log.isTraceEnabled()) {
+                log.trace("ACK sent to " +
+                        ( (channel instanceof SocketChannel) ?
+                          ((SocketChannel)channel).socket().getInetAddress() :
+                          ((DatagramChannel)channel).socket().getInetAddress()));
+            }
+        } catch ( java.io.IOException x ) {
+            log.warn(sm.getString("nioReplicationTask.unable.ack", x.getMessage()));
+        }
+    }
+-----CSCI578-----
+
+
+    public synchronized void access() {
+        this.accessed = true;
+        this.lastAccess = System.currentTimeMillis();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void remoteEof(SelectionKey key) {
+        // close channel on EOF, invalidates the key
+        if ( log.isDebugEnabled() ) log.debug("Channel closed on the remote end, disconnecting");
+        cancelKey(key);
+    }
+-----CSCI578-----
+
+
+    public void addEvent(Runnable event) {
+        Selector selector = this.selector.get();
+        if (selector != null) {
+            events.add(event);
+            if (log.isTraceEnabled()) {
+                log.trace("Adding event to selector:" + event);
+            }
+            if (isListening()) {
+                selector.wakeup();
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public int getRxBufSize() {
+        return rxBufSize;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * <p> Is trace logging currently enabled? </p>
+     *
+     * <p> Call this method to prevent having to perform expensive operations
+     * (for example, <code>String</code> concatenation)
+     * when the log level is more than trace. </p>
+     *
+     * @return <code>true</code> if trace level logging is enabled, otherwise
+     *         <code>false</code>
+     */
+    public boolean isTraceEnabled();
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Logging Methods
+
+
+    /**
+     * <p> Log a message with trace log level. </p>
+     *
+     * @param message log this message
+     */
+    public void trace(Object message);
+
+
+
+    /**
+     * <p> Log an error with trace log level. </p>
+     *
+     * @param message log this message
+     * @param t log this cause
+     */
+    public void trace(Object message, Throwable t);
+-----CSCI578-----
+
+
+
+    /**
+     * <p> Is error logging currently enabled? </p>
+     *
+     * <p> Call this method to prevent having to perform expensive operations
+     * (for example, <code>String</code> concatenation)
+     * when the log level is more than error. </p>
+     *
+     * @return <code>true</code> if error level logging is enabled, otherwise
+     *         <code>false</code>
+     */
+    public boolean isErrorEnabled();
+-----CSCI578-----
+
+
+
+    /**
+     * Get a string from the underlying resource bundle or return null if the
+     * String is not found.
+     *
+     * @param key to desired resource String
+     *
+     * @return resource String matching <i>key</i> from underlying bundle or
+     *         null if not found.
+     *
+     * @throws IllegalArgumentException if <i>key</i> is null
+     */
+    public String getString(String key) {
+        if (key == null){
+            String msg = "key may not have a null value";
+            throw new IllegalArgumentException(msg);
+        }
+
+        String str = null;
+
+        try {
+            // Avoid NPE if bundle is null and treat it like an MRE
+            if (bundle != null) {
+                str = bundle.getString(key);
+            }
+        } catch (MissingResourceException mre) {
+            //bad: shouldn't mask an exception the following way:
+            //   str = "[cannot find message associated with key '" + key +
+            //         "' due to " + mre + "]";
+            //     because it hides the fact that the String was missing
+            //     from the calling code.
+            //good: could just throw the exception (or wrap it in another)
+            //      but that would probably cause much havoc on existing
+            //      code.
+            //better: consistent with container pattern to
+            //      simply return null.  Calling code can then do
+            //      a null check.
+            str = null;
+        }
+
+        return str;
+    }
+
+
+
+    /**
+     * Get a string from the underlying resource bundle and format
+     * it with the given set of arguments.
+     *
+     * @param key  The key for the required message
+     * @param args The values to insert into the message
+     *
+     * @return The requested string formatted with the provided arguments
+     */
+    public String getString(final String key, final Object... args) {
+        String value = getString(key);
+        if (value == null) {
+            value = key;
+        }
+
+        MessageFormat mf = new MessageFormat(value);
+        mf.setLocale(locale);
+        return mf.format(args, new StringBuffer(), null).toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * The byte buffer that contains the actual message payload
+     * @param buf XByteBuffer
+     */
+    public void setMessage(XByteBuffer buf);
+-----CSCI578-----
+
+
+    /**
+     * Append new bytes to buffer.
+     * @see XByteBuffer#countPackages()
+     * @param data new transfer buffer
+     * @param len length in buffer
+     * @param count whether to return the count
+     * @return number of messages that was sent to callback (or -1 if count == false)
+     */
+    public int append(ByteBuffer data, int len, boolean count) {
+       buffer.append(data,len);
+       int pkgCnt = -1;
+       if ( count ) pkgCnt = buffer.countPackages();
+       return pkgCnt;
+   }
+
+
+     public int append(byte[] data,int off,int len, boolean count) {
+        buffer.append(data,off,len);
+        int pkgCnt = -1;
+        if ( count ) pkgCnt = buffer.countPackages();
+        return pkgCnt;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Internal mechanism to make a check if a complete package exists
+     * within the buffer
+     * @return - true if a complete package (header,compress,size,data,footer) exists within the buffer
+     */
+    public int countPackages() {
+        return countPackages(false);
+    }
+
+
+    public int countPackages(boolean first)
+    {
+        int cnt = 0;
+        int pos = START_DATA.length;
+        int start = 0;
+
+        while ( start < bufSize ) {
+            //first check start header
+            int index = XByteBuffer.firstIndexOf(buf,start,START_DATA);
+            //if the header (START_DATA) isn't the first thing or
+            //the buffer isn't even 14 bytes
+            if ( index != start || ((bufSize-start)<14) ) break;
+            //next 4 bytes are compress flag not needed for count packages
+            //then get the size 4 bytes
+            int size = toInt(buf, pos);
+            //now the total buffer has to be long enough to hold
+            //START_DATA.length+4+size+END_DATA.length
+            pos = start + START_DATA.length + 4 + size;
+            if ( (pos + END_DATA.length) > bufSize) break;
+            //and finally check the footer of the package END_DATA
+            int newpos = firstIndexOf(buf, pos, END_DATA);
+            //mismatch, there is no package
+            if (newpos != pos) break;
+            //increase the packet count
+            cnt++;
+            //reset the values
+            start = pos + END_DATA.length;
+            pos = start + START_DATA.length;
+            //we only want to verify that we have at least one package
+            if ( first ) break;
+        }
+        return cnt;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Send buffer to cluster listener (callback).
+     * Is message complete receiver send message to callback?
+     *
+     * @see org.apache.catalina.tribes.transport.ReceiverBase#messageDataReceived(ChannelMessage)
+     * @see XByteBuffer#doesPackageExist()
+     * @see XByteBuffer#extractPackage(boolean)
+     *
+     * @return number of received packages/messages
+     */
+    public ChannelMessage[] execute() {
+        int pkgCnt = buffer.countPackages();
+        ChannelMessage[] result = new ChannelMessage[pkgCnt];
+        for (int i=0; i<pkgCnt; i++)  {
+            ChannelMessage data = buffer.extractPackage(true);
+            result[i] = data;
+        }
+        return result;
+    }
+-----CSCI578-----
+
+    /**
+     * Returns the number of packages that the reader has read
+     * @return int
+     */
+    public int count() {
+        return buffer.countPackages();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Utility method, returns true if the options flag indicates that an ack
+     * is to be sent after the message has been received but not yet processed
+     * @param options int - the options for the message
+     * @return boolean
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_USE_ACK
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_SYNCHRONIZED_ACK
+     */
+    public static boolean sendAckAsync(int options) {
+        return ( (Channel.SEND_OPTIONS_USE_ACK & options) == Channel.SEND_OPTIONS_USE_ACK) &&
+            ( (Channel.SEND_OPTIONS_SYNCHRONIZED_ACK & options) != Channel.SEND_OPTIONS_SYNCHRONIZED_ACK);
+    }
+-----CSCI578-----
+
+    /**
+     * This method is invoked on the callback object to notify it that new data has
+     * been received from one of the cluster nodes.
+     * @param data - the message bytes received from the cluster/replication system
+     */
+     public void messageDataReceived(ChannelMessage data);
+-----CSCI578-----
+
+
+    /**
+     * Utility method, returns true if the options flag indicates that an ack
+     * is to be sent after the message has been received and processed
+     * @param options int - the options for the message
+     * @return boolean
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_USE_ACK
+     * @see org.apache.catalina.tribes.Channel#SEND_OPTIONS_SYNCHRONIZED_ACK
+     */
+    public static boolean sendAckSync(int options) {
+        return ( (Channel.SEND_OPTIONS_USE_ACK & options) == Channel.SEND_OPTIONS_USE_ACK) &&
+            ( (Channel.SEND_OPTIONS_SYNCHRONIZED_ACK & options) == Channel.SEND_OPTIONS_SYNCHRONIZED_ACK);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void messageReceived(ChannelMessage msg) {
+        if ( Logs.MESSAGES.isTraceEnabled() ) {
+            Logs.MESSAGES.trace("ChannelCoordinator - Received msg:" +
+                    new UniqueId(msg.getUniqueId()) + " at " +
+                    new java.sql.Timestamp(System.currentTimeMillis()) + " from " +
+                    msg.getAddress().getName());
+        }
+        super.messageReceived(msg);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Adds a channel listener to the channel.<br>
+     * Channel listeners are uniquely identified using the equals(Object) method
+     * @param channelListener ChannelListener
+     */
+    @Override
+    public void addChannelListener(ChannelListener channelListener) {
+        if (!this.channelListeners.contains(channelListener) ) {
+            this.channelListeners.add(channelListener);
+        } else {
+            throw new IllegalArgumentException(sm.getString("groupChannel.listener.alreadyExist",
+                    channelListener,channelListener.getClass().getName()));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public Object clone() {
+        throw new UnsupportedOperationException(sm.getString("abstractReplicatedMap.unsupport.operation"));
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Process the end of this element.
+     */
+    @Override
+    public void end(String namespace, String name) throws Exception {
+
+        // check if object was created
+        // this only happens if an exception was thrown and we're ignoring them
+        if (
+                ignoreCreateExceptions &&
+                exceptionIgnoredStack != null &&
+                !(exceptionIgnoredStack.empty())) {
+
+            if ((exceptionIgnoredStack.pop()).booleanValue()) {
+                // creation exception was ignored
+                // nothing was put onto the stack
+                if (digester.log.isTraceEnabled()) {
+                    digester.log.trace("[FactoryCreateRule] No creation so no push so no pop");
+                }
+                return;
+            }
+        }
+
+        Object top = digester.pop();
+        if (digester.log.isDebugEnabled()) {
+            digester.log.debug("[FactoryCreateRule]{" + digester.match +
+                    "} Pop " + top.getClass().getName());
+        }
+
+    }
+-----CSCI578-----

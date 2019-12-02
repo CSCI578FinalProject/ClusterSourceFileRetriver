@@ -1,0 +1,76 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Prepare the request based on the filter configuration.
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     * @param state The RD state
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    private void processRequest(ServletRequest request,
+                                ServletResponse response,
+                                State state)
+        throws IOException, ServletException {
+
+        DispatcherType disInt = (DispatcherType) request.getAttribute(Globals.DISPATCHER_TYPE_ATTR);
+        if (disInt != null) {
+            boolean doInvoke = true;
+
+            if (context.getFireRequestListenersOnForwards() &&
+                    !context.fireRequestInitEvent(request)) {
+                doInvoke = false;
+            }
+
+            if (doInvoke) {
+                if (disInt != DispatcherType.ERROR) {
+                    state.outerRequest.setAttribute(
+                            Globals.DISPATCHER_REQUEST_PATH_ATTR,
+                            getCombinedPath());
+                    state.outerRequest.setAttribute(
+                            Globals.DISPATCHER_TYPE_ATTR,
+                            DispatcherType.FORWARD);
+                    invoke(state.outerRequest, response, state);
+                } else {
+                    invoke(state.outerRequest, response, state);
+                }
+
+                if (context.getFireRequestListenersOnForwards()) {
+                    context.fireRequestDestroyEvent(request);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return whether or not requests listeners will be fired on forwards for
+     * this Context.
+     */
+    public boolean getFireRequestListenersOnForwards();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Combine the servletPath and the pathInfo. If pathInfo is
+     * <code>null</code> it is ignored. If servletPath is <code>null</code> then
+     * <code>null</code> is returned.
+     * @return The combined path with pathInfo appended to servletInfo
+     */
+    private String getCombinedPath() {
+        if (servletPath == null) {
+            return null;
+        }
+        if (pathInfo == null) {
+            return servletPath;
+        }
+        return servletPath + pathInfo;
+    }

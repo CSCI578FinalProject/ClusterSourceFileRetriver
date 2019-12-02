@@ -1,0 +1,62 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Send the response status line.
+     */
+    public void sendStatus() {
+
+        // Write protocol name
+        write(Constants.HTTP_11_BYTES);
+        buf[pos++] = Constants.SP;
+
+        // Write status code
+        int status = response.getStatus();
+        switch (status) {
+        case 200:
+            write(Constants._200_BYTES);
+            break;
+        case 400:
+            write(Constants._400_BYTES);
+            break;
+        case 404:
+            write(Constants._404_BYTES);
+            break;
+        default:
+            write(status);
+        }
+
+        buf[pos++] = Constants.SP;
+
+        // Write message
+        String message = null;
+        if (org.apache.coyote.Constants.USE_CUSTOM_STATUS_MSG_IN_HEADER &&
+                HttpMessages.isSafeInHttpHeader(response.getMessage())) {
+            message = response.getMessage();
+        }
+        if (message == null) {
+            write(HttpMessages.getMessage(status)); 
+        } else {
+            write(message);
+        }
+
+        // End the response status line
+        if (org.apache.coyote.Constants.IS_SECURITY_ENABLED){
+           AccessController.doPrivileged(
+                new PrivilegedAction(){
+                    public Object run(){
+                        buf[pos++] = Constants.CR;
+                        buf[pos++] = Constants.LF;
+                        return null;
+                    }
+                }
+           );
+        } else {
+            buf[pos++] = Constants.CR;
+            buf[pos++] = Constants.LF;
+        }
+
+    }
+-----CSCI578-----

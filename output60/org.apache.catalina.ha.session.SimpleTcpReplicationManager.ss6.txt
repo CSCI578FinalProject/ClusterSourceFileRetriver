@@ -1,0 +1,217 @@
+17
+-----CSCI578-----
+
+    
+    /**
+     * Open Stream and use correct ClassLoader (Container) Switch
+     * ThreadClassLoader
+     * 
+     * @param data
+     * @return The object input stream
+     * @throws IOException
+     */
+    public ReplicationStream getReplicationStream(byte[] data) throws IOException {
+        return getReplicationStream(data,0,data.length);
+    }
+
+    
+    public ReplicationStream getReplicationStream(byte[] data, int offset, int length) throws IOException {
+        ByteArrayInputStream fis =null;
+        ReplicationStream ois = null;
+        Loader loader = null;
+        ClassLoader classLoader = null;
+        //fix to be able to run the DeltaManager
+        //stand alone without a container.
+        //use the Threads context class loader
+        if (container != null)
+            loader = container.getLoader();
+        if (loader != null)
+            classLoader = loader.getClassLoader();
+        else
+            classLoader = Thread.currentThread().getContextClassLoader();
+        //end fix
+        fis = new ByteArrayInputStream(data, offset, length);
+        if ( classLoader == Thread.currentThread().getContextClassLoader() ) {
+            ois = new ReplicationStream(fis, new ClassLoader[] {classLoader});
+        } else {
+            ois = new ReplicationStream(fis, new ClassLoader[] {classLoader,Thread.currentThread().getContextClassLoader()});
+        }
+        return ois;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read a serialized version of the contents of this session object from
+     * the specified object input stream, without requiring that the
+     * StandardSession itself have been serialized.
+     *
+     * @param stream The object input stream to read from
+     *
+     * @exception ClassNotFoundException if an unknown class is specified
+     * @exception IOException if an input/output error occurs
+     */
+    public void readObjectData(ObjectInputStream stream)
+        throws ClassNotFoundException, IOException {
+
+        super.readObjectData(stream);
+
+    }
+-----CSCI578-----
+
+    public void setThisAccessedTime(long thisAccessedTime) {
+        this.thisAccessedTime = thisAccessedTime;
+    }
+-----CSCI578-----
+    
+
+
+    
+
+    /**
+     * Reinstantiates a serialized session from the data passed in.
+     * This will first call createSession() so that we get a fresh instance with all
+     * the managers set and all the transient fields validated.
+     * Then it calls Session.readObjectData(byte[]) to deserialize the object
+     * @param data - a byte array containing session data
+     * @return a valid Session object, null if an error occurs
+     *
+     */
+    protected Session readSession( byte[] data, String sessionId )
+    {
+        try
+        {
+            ReplicationStream session_in = getReplicationStream(data);
+
+            Session session = sessionId!=null?this.findSession(sessionId):null;
+            boolean isNew = (session==null);
+            //clear the old values from the existing session
+            if ( session!=null ) {
+                ReplicatedSession rs = (ReplicatedSession)session;
+                rs.expire(false);  //cleans up the previous values, since we are not doing removes
+                session = null;
+            }//end if
+
+            if (session==null) {
+                session = createSession(null,false, false);
+                sessions.remove(session.getIdInternal());
+            }
+            
+            
+            boolean hasPrincipal = session_in.readBoolean();
+            SerializablePrincipal p = null;
+            if ( hasPrincipal )
+                p = (SerializablePrincipal)session_in.readObject();
+            ((ReplicatedSession)session).readObjectData(session_in);
+            if ( hasPrincipal )
+                session.setPrincipal(p.getPrincipal(getContainer().getRealm()));
+            ((ReplicatedSession)session).setId(sessionId,isNew);
+            ReplicatedSession rsession = (ReplicatedSession)session; 
+            rsession.setAccessCount(1);
+            session.setManager(this);
+            session.setValid(true);
+            rsession.setLastAccessedTime(System.currentTimeMillis());
+            rsession.setThisAccessedTime(System.currentTimeMillis());
+            ((ReplicatedSession)session).setAccessCount(0);
+            session.setNew(false);
+            if(log.isTraceEnabled())
+                 log.trace("Session loaded id="+sessionId +
+                               " actualId="+session.getId()+ 
+                               " exists="+this.sessions.containsKey(sessionId)+
+                               " valid="+rsession.isValid());
+            return session;
+
+        }
+        catch ( Exception x )
+        {
+            log.error("Failed to deserialize the session!",x);
+        }
+        return null;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    public void setLastAccessedTime(long lastAccessedTime) {
+        this.lastAccessedTime = lastAccessedTime;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void expire() {
+        SimpleTcpReplicationManager mgr =(SimpleTcpReplicationManager)getManager();
+        mgr.sessionInvalidated(getIdInternal());
+        setIsDirty(true);
+        super.expire();
+    }
+-----CSCI578-----
+
+    public void setAccessCount(int accessCount) {
+        this.accessCount.set(accessCount);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the session identifier for this session.
+     */
+    public String getId();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the authenticated Principal that is associated with this Session.
+     * This provides an <code>Authenticator</code> with a means to cache a
+     * previously authenticated Principal, and avoid potentially expensive
+     * <code>Realm.authenticate()</code> calls on every request.
+     *
+     * @param principal The new Principal, or <code>null</code> if none
+     */
+    public void setPrincipal(Principal principal);
+-----CSCI578-----
+
+
+    /**
+     * Open Stream and use correct ClassLoader (Container) Switch
+     * ThreadClassLoader
+     * 
+     * @param data
+     * @return The object input stream
+     * @throws IOException
+     */
+    public ReplicationStream getReplicationStream(byte[] data) throws IOException {
+        return getReplicationStream(data,0,data.length);
+    }
+
+
+    public ReplicationStream getReplicationStream(byte[] data, int offset, int length) throws IOException {
+        ByteArrayInputStream fis = new ByteArrayInputStream(data, offset, length);
+        return new ReplicationStream(fis, getClassLoaders());
+    }
+-----CSCI578-----
+
+
+    /**
+     * Open Stream and use correct ClassLoader (Container) Switch
+     * ThreadClassLoader
+     * 
+     * @param data
+     * @return The object input stream
+     * @throws IOException
+     */
+    public ReplicationStream getReplicationStream(byte[] data) throws IOException {
+        return getReplicationStream(data,0,data.length);
+    }
+
+
+    public ReplicationStream getReplicationStream(byte[] data, int offset, int length) throws IOException {
+        ByteArrayInputStream fis = new ByteArrayInputStream(data, offset, length);
+        return new ReplicationStream(fis, getClassLoaders());
+    }
+-----CSCI578-----

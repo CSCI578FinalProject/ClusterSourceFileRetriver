@@ -1,0 +1,292 @@
+44
+
+
+    /**
+     * Construct a new Digester, allowing a SAXParser to be passed in.  This
+     * allows Digester to be used in environments which are unfriendly to
+     * JAXP1.1 (such as WebLogic 6.0).  Thanks for the request to change go to
+     * James House (james@interobjective.com).  This may help in places where
+     * you are able to load JAXP 1.1 classes yourself.
+     */
+    public Digester(SAXParser parser) {
+
+        super();
+
+        this.parser = parser;
+
+    }
+
+
+    /**
+     * The SAXParser we will use to parse the input stream.
+     */
+    protected SAXParser parser = null;
+
+
+    /**
+     * Receive notification of an unparsed entity declaration event.
+     *
+     * @param name The unparsed entity name
+     * @param publicId The public identifier (if any)
+     * @param systemId The system identifier (if any)
+     * @param notation The name of the associated notation
+     */
+    public void unparsedEntityDecl(String name, String publicId,
+                                   String systemId, String notation) {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("unparsedEntityDecl(" + name + "," + publicId + "," +
+                    systemId + "," + notation + ")");
+        }
+
+    }
+
+
+    /**
+     * Parse the content of the specified file using this Digester.  Returns
+     * the root element from the object stack (if any).
+     *
+     * @param file File containing the XML data to be parsed
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception SAXException if a parsing exception occurs
+     */
+    public Object parse(File file) throws IOException, SAXException {
+
+        configure();
+        InputSource input = new InputSource(new FileInputStream(file));
+        input.setSystemId("file://" + file.getAbsolutePath());
+        getXMLReader().parse(input);
+        return (root);
+
+    }
+    /**
+     * Parse the content of the specified input source using this Digester.
+     * Returns the root element from the object stack (if any).
+     *
+     * @param input Input source containing the XML data to be parsed
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception SAXException if a parsing exception occurs
+     */
+    public Object parse(InputSource input) throws IOException, SAXException {
+
+        configure();
+        getXMLReader().parse(input);
+        return (root);
+
+    }
+
+
+    /**
+     * Parse the content of the specified input stream using this Digester.
+     * Returns the root element from the object stack (if any).
+     *
+     * @param input Input stream containing the XML data to be parsed
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception SAXException if a parsing exception occurs
+     */
+    public Object parse(InputStream input) throws IOException, SAXException {
+
+        configure();
+        InputSource is = new InputSource(input);
+        getXMLReader().parse(is);
+        return (root);
+
+    }
+
+
+    /**
+     * Parse the content of the specified reader using this Digester.
+     * Returns the root element from the object stack (if any).
+     *
+     * @param reader Reader containing the XML data to be parsed
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception SAXException if a parsing exception occurs
+     */
+    public Object parse(Reader reader) throws IOException, SAXException {
+
+        configure();
+        InputSource is = new InputSource(reader);
+        getXMLReader().parse(is);
+        return (root);
+
+    }
+
+
+    /**
+     * Parse the content of the specified URI using this Digester.
+     * Returns the root element from the object stack (if any).
+     *
+     * @param uri URI containing the XML data to be parsed
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception SAXException if a parsing exception occurs
+     */
+    public Object parse(String uri) throws IOException, SAXException {
+
+        configure();
+        InputSource is = new InputSource(uri);
+        getXMLReader().parse(is);
+        return (root);
+
+    }
+
+
+    public void reset() {
+        root = null;
+        setErrorHandler(null);
+        clear();
+    }
+
+     /**
+     * Read input from reader and write it to writer until there is no more
+     * input from reader.
+     *
+     * @param reader the reader to read from.
+     * @param writer the writer to write to.
+     * @param buf the char array to use as a bufferx
+     */
+    public static void flow( Reader reader, Writer writer, char[] buf ) 
+        throws IOException {
+        int numRead;
+        while ( (numRead = reader.read(buf) ) >= 0) {
+            writer.write(buf, 0, numRead);
+        }
+    }
+
+    /**
+     * @see #flow( Reader, Writer, char[] )
+     */
+    public static void flow( Reader reader, Writer writer ) 
+        throws IOException {
+        char[] buf = new char[DEFAULT_BUFFER_SIZE];
+        flow( reader, writer, buf );
+    }
+
+    /**
+     * Read input from input stream and write it to output stream 
+     * until there is no more input from input stream.
+     *
+     * @param is input stream the input stream to read from.
+     * @param os output stream the output stream to write to.
+     * @param buf the byte array to use as a buffer
+     */
+    public static void flow( InputStream is, OutputStream os, byte[] buf ) 
+        throws IOException {
+        int numRead;
+        while ( (numRead = is.read(buf) ) >= 0) {
+            os.write(buf, 0, numRead);
+        }
+    }  
+
+    /**
+     * @see #flow( java.io.InputStream, java.io.OutputStream, byte[] )
+     */ 
+    public static void flow( InputStream is, OutputStream os ) 
+        throws IOException {
+        byte[] buf = new byte[DEFAULT_BUFFER_SIZE];
+        flow( is, os, buf );
+    }
+
+
+    /**
+     * Set the error handler for this Digester.
+     *
+     * @param errorHandler The new error handler
+     */
+    public void setErrorHandler(ErrorHandler errorHandler) {
+
+        this.errorHandler = errorHandler;
+
+    }
+    
+    
+    /**
+     * Delete the specified directory, including all of its contents and
+     * sub-directories recursively. Any failure will be logged.
+     *
+     * @param dir File object representing the directory to be deleted
+     */
+    public static boolean delete(File dir) {
+        // Log failure by default
+        return delete(dir, true);
+    }
+
+    /**
+     * Delete the specified directory, including all of its contents and
+     * sub-directories recursively.
+     *
+     * @param dir File object representing the directory to be deleted
+     * @param logFailure <code>true</code> if failure to delete the resource
+     *                   should be logged
+     */
+    public static boolean delete(File dir, boolean logFailure) {
+        boolean result;
+        if (dir.isDirectory()) {
+            result = deleteDir(dir, logFailure);
+        } else {
+            if (dir.exists()) {
+                result = dir.delete();
+            } else {
+                result = true;
+            }
+        }
+        if (logFailure && !result) {
+            log.error(sm.getString(
+                    "expandWar.deleteFailed", dir.getAbsolutePath()));
+        }
+        return result;
+    }
+    
+    
+    /**
+     * Delete the specified directory, including all of its contents and
+     * sub-directories recursively. Any failure will be logged.
+     *
+     * @param dir File object representing the directory to be deleted
+     */
+    public static boolean deleteDir(File dir) {
+        return deleteDir(dir, true);
+    }
+
+    /**
+     * Delete the specified directory, including all of its contents and
+     * sub-directories recursively.
+     *
+     * @param dir File object representing the directory to be deleted
+     * @param logFailure <code>true</code> if failure to delete the resource
+     *                   should be logged
+     */
+    public static boolean deleteDir(File dir, boolean logFailure) {
+
+        String files[] = dir.list();
+        if (files == null) {
+            files = new String[0];
+        }
+        for (int i = 0; i < files.length; i++) {
+            File file = new File(dir, files[i]);
+            if (file.isDirectory()) {
+                deleteDir(file, logFailure);
+            } else {
+                file.delete();
+            }
+        }
+
+        boolean result;
+        if (dir.exists()) {
+            result = dir.delete();
+        } else {
+            result = true;
+        }
+        
+        if (logFailure && !result) {
+            log.error(sm.getString(
+                    "expandWar.deleteFailed", dir.getAbsolutePath()));
+        }
+        
+        return result;
+
+    }

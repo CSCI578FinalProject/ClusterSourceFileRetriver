@@ -1,0 +1,97 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Sets the ClassLoader to be used for creating descriptor objects.
+     * @param classLoader the ClassLoader to be used for creating descriptor objects
+     */
+    public void setClassLoader(ClassLoader classLoader) {
+        webDigester.setClassLoader(classLoader);
+        webFragmentDigester.setClassLoader(classLoader);
+    }
+-----CSCI578-----
+
+
+    private WebXml buildMergedWebXml(boolean validate, boolean blockExternal)
+            throws JasperException {
+        WebXml webXml = new WebXml();
+        WebXmlParser webXmlParser = new WebXmlParser(validate, validate, blockExternal);
+        // Use this class's classloader as Ant will have set the TCCL to its own
+        webXmlParser.setClassLoader(getClass().getClassLoader());
+
+        try {
+            URL url = getResource(
+                    org.apache.tomcat.util.descriptor.web.Constants.WEB_XML_LOCATION);
+            if (!webXmlParser.parseWebXml(url, webXml, false)) {
+                throw new JasperException(Localizer.getMessage("jspc.error.invalidWebXml"));
+            }
+        } catch (IOException e) {
+            throw new JasperException(e);
+        }
+
+        // if the application is metadata-complete then we can skip fragment processing
+        if (webXml.isMetadataComplete()) {
+            return webXml;
+        }
+
+        // If an empty absolute ordering element is present, fragment processing
+        // may be skipped.
+        Set<String> absoluteOrdering = webXml.getAbsoluteOrdering();
+        if (absoluteOrdering != null && absoluteOrdering.isEmpty()) {
+            return webXml;
+        }
+
+        Map<String, WebXml> fragments = scanForFragments(webXmlParser);
+        Set<WebXml> orderedFragments = WebXml.orderWebFragments(webXml, fragments, this);
+
+        // JspC is not affected by annotations so skip that processing, proceed to merge
+        webXml.merge(orderedFragments);
+        return webXml;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the class loader to be used for instantiating application objects
+     * when required.  This is determined based upon the following rules:
+     * <ul>
+     * <li>The class loader set by <code>setClassLoader()</code>, if any</li>
+     * <li>The thread context class loader, if it exists and the
+     *     <code>useContextClassLoader</code> property is set to true</li>
+     * <li>The class loader used to load the Digester class itself.
+     * </ul>
+     * @return the classloader
+     */
+    public ClassLoader getClassLoader() {
+
+        if (this.classLoader != null) {
+            return (this.classLoader);
+        }
+        if (this.useContextClassLoader) {
+            ClassLoader classLoader =
+                    Thread.currentThread().getContextClassLoader();
+            if (classLoader != null) {
+                return (classLoader);
+            }
+        }
+        return (this.getClass().getClassLoader());
+
+    }
+
+
+
+    /**
+     * Set the class loader to be used for instantiating application objects
+     * when required.
+     *
+     * @param classLoader The new class loader to use, or <code>null</code>
+     *  to revert to the standard rules
+     */
+    public void setClassLoader(ClassLoader classLoader) {
+
+        this.classLoader = classLoader;
+
+    }

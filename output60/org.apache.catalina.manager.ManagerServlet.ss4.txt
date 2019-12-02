@@ -1,0 +1,347 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * File object representing the directory into which the deploy() command
+     * will store the WAR and context configuration files that have been
+     * uploaded.
+     */
+    protected File deployed = null;
+
+
+
+    /**
+     * Install an application for the specified path from the specified
+     * web application archive.
+     *
+     * @param writer Writer to render results to
+     * @param tag Revision tag to deploy from
+     * @param path Context path of the application to be installed
+     */
+    protected void deploy(PrintWriter writer, String path, String tag) {
+
+        // Validate the requested context path
+        if ((path == null) || path.length() == 0 || !path.startsWith("/")) {
+            writer.println(sm.getString("managerServlet.invalidPath", path));
+            return;
+        }
+        String displayPath = path;
+        if( path.equals("/") )
+            path = "";
+
+        // Calculate the base path
+        File deployedPath = versioned;
+        if (tag != null) {
+            deployedPath = new File(deployedPath, tag);
+        }
+
+        // Find the local WAR file
+        File localWar = new File(deployedPath, getDocBase(path) + ".war");
+        // Find the local context deployment file (if any)
+        File localXml = new File(configBase, getConfigFile(path) + ".xml");
+
+        // Check if app already exists, or undeploy it if updating
+        Context context = (Context) host.findChild(path);
+        if (context != null) {
+            undeploy(writer, displayPath);
+        }
+
+        // Copy WAR to appBase
+        try {
+            if (!isServiced(path)) {
+                addServiced(path);
+                try {
+                    copy(localWar, new File(getAppBase(), getDocBase(path) + ".war"));
+                    // Perform new deployment
+                    check(path);
+                } finally {
+                    removeServiced(path);
+                }
+            }
+        } catch (Exception e) {
+            log("managerServlet.check[" + displayPath + "]", e);
+            writer.println(sm.getString("managerServlet.exception",
+                                        e.toString()));
+            return;
+        }
+        
+        context = (Context) host.findChild(path);
+        if (context != null && context.getConfigured()) {
+            writer.println(sm.getString("managerServlet.deployed", displayPath));
+        } else {
+            // Something failed
+            writer.println(sm.getString("managerServlet.deployFailed", displayPath));
+        }
+        
+    }
+
+
+
+    /**
+     * Install an application for the specified path from the specified
+     * web application archive.
+     *
+     * @param writer Writer to render results to
+     * @param config URL of the context configuration file to be installed
+     * @param path Context path of the application to be installed
+     * @param war URL of the web application archive to be installed
+     * @param update true to override any existing webapp on the path
+     */
+    protected void deploy(PrintWriter writer, String config,
+            String path, String war, boolean update) {
+        
+        if (config != null && config.length() == 0) {
+            config = null;
+        }
+        if (war != null && war.length() == 0) {
+            war = null;
+        }
+        
+        if (debug >= 1) {
+            if (config != null && config.length() > 0) {
+                if (war != null) {
+                    log("install: Installing context configuration at '" +
+                            config + "' from '" + war + "'");
+                } else {
+                    log("install: Installing context configuration at '" +
+                            config + "'");
+                }
+            } else {
+                if (path != null && path.length() > 0) {
+                    log("install: Installing web application at '" + path +
+                            "' from '" + war + "'");
+                } else {
+                    log("install: Installing web application from '" + war + "'");
+                }
+            }
+        }
+        
+        if (path == null || path.length() == 0 || !path.startsWith("/")) {
+            writer.println(sm.getString("managerServlet.invalidPath",
+                                        RequestUtil.filter(path)));
+            return;
+        }
+        String displayPath = path;
+        if("/".equals(path)) {
+            path = "";
+        }
+        
+        // Check if app already exists, or undeploy it if updating
+        Context context = (Context) host.findChild(path);
+        if (update) {
+            if (context != null) {
+                undeploy(writer, displayPath);
+            }
+            context = (Context) host.findChild(path);
+        }
+        if (context != null) {
+            writer.println
+            (sm.getString("managerServlet.alreadyContext",
+                    displayPath));
+            return;
+        }
+        
+        if (config != null && (config.startsWith("file:"))) {
+            config = config.substring("file:".length());
+        }
+        if (war != null && (war.startsWith("file:"))) {
+            war = war.substring("file:".length());
+        }
+        
+        try {
+            if (!isServiced(path)) {
+                addServiced(path);
+                try {
+                    if (config != null) {
+                        configBase.mkdirs();
+                        copy(new File(config), 
+                                new File(configBase, getConfigFile(path) + ".xml"));
+                    }
+                    if (war != null) {
+                        if (war.endsWith(".war")) {
+                            copy(new File(war), 
+                                    new File(getAppBase(), getDocBase(path) + ".war"));
+                        } else {
+                            copy(new File(war), 
+                                    new File(getAppBase(), getDocBase(path)));
+                        }
+                    }
+                    // Perform new deployment
+                    check(path);
+                } finally {
+                    removeServiced(path);
+                }
+            }
+            context = (Context) host.findChild(path);
+            if (context != null && context.getConfigured() && context.getAvailable()) {
+                writer.println(sm.getString("managerServlet.deployed", displayPath));
+            } else if (context!=null && !context.getAvailable()) {
+                writer.println(sm.getString("managerServlet.deployedButNotStarted", displayPath));
+            } else {
+                // Something failed
+                writer.println(sm.getString("managerServlet.deployFailed", displayPath));
+            }
+        } catch (Throwable t) {
+            log("ManagerServlet.install[" + displayPath + "]", t);
+            writer.println(sm.getString("managerServlet.exception",
+                    t.toString()));
+        }
+        
+    }
+
+
+
+    /**
+     * Undeploy the web application at the specified context path.
+     *
+     * @param writer Writer to render to
+     * @param path Context path of the application to be removed
+     */
+    protected void undeploy(PrintWriter writer, String path) {
+
+        if (debug >= 1)
+            log("undeploy: Undeploying web application at '" + path + "'");
+
+        if ((path == null) || (!path.startsWith("/") && path.equals(""))) {
+            writer.println(sm.getString("managerServlet.invalidPath",
+                                        RequestUtil.filter(path)));
+            return;
+        }
+        String displayPath = path;
+        if( path.equals("/") )
+            path = "";
+
+        try {
+
+            // Validate the Context of the specified application
+            Context context = (Context) host.findChild(path);
+            if (context == null) {
+                writer.println(sm.getString("managerServlet.noContext",
+                                            RequestUtil.filter(displayPath)));
+                return;
+            }
+
+            // Identify the appBase of the owning Host of this Context (if any)
+            String appBase = null;
+            File appBaseDir = null;
+            if (context.getParent() instanceof Host) {
+                appBase = ((Host) context.getParent()).getAppBase();
+                appBaseDir = new File(appBase);
+                if (!appBaseDir.isAbsolute()) {
+                    appBaseDir = new File(System.getProperty("catalina.base"),
+                                          appBase);
+                }
+            }
+
+            if (!isDeployed(path)) {
+                writer.println(sm.getString("managerServlet.notDeployed",
+                        RequestUtil.filter(displayPath)));
+                return;
+            }
+
+            if (!isServiced(path)) {
+                addServiced(path);
+                try {
+                    // Try to stop the context first to be nicer
+                    ((Lifecycle) context).stop();
+                } catch (Throwable t) {
+                    // Ignore
+                }
+                try {
+                    if (path.lastIndexOf('/') > 0) {
+                        path = "/" + path.substring(1).replace('/','#');
+                    }
+                    File war = new File(getAppBase(), getDocBase(path) + ".war");
+                    File dir = new File(getAppBase(), getDocBase(path));
+                    File xml = new File(configBase, getConfigFile(path) + ".xml");
+                    if (war.exists()) {
+                        war.delete();
+                    } else if (dir.exists()) {
+                        undeployDir(dir);
+                    } else {
+                        xml.delete();
+                    }
+                    // Perform new deployment
+                    check(path.replace('#', '/'));
+                } finally {
+                    removeServiced(path.replace('#','/'));
+                }
+            }
+            writer.println(sm.getString("managerServlet.undeployed",
+                                        displayPath));
+        } catch (Throwable t) {
+            log("ManagerServlet.undeploy[" + displayPath + "]", t);
+            writer.println(sm.getString("managerServlet.exception",
+                                        t.toString()));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the "correctly configured" flag for this Context.
+     */
+    public boolean getConfigured();
+-----CSCI578-----
+
+
+
+    /**
+     * Upload the WAR file included in this request, and store it at the
+     * specified file location.
+     *
+     * @param request The servlet request we are processing
+     * @param war The file into which we should store the uploaded WAR
+     *
+     * @exception IOException if an I/O error occurs during processing
+     */
+    protected void uploadWar(HttpServletRequest request, File war)
+        throws IOException {
+
+        war.delete();
+        ServletInputStream istream = null;
+        BufferedOutputStream ostream = null;
+        try {
+            istream = request.getInputStream();
+            ostream =
+                new BufferedOutputStream(new FileOutputStream(war), 1024);
+            byte buffer[] = new byte[1024];
+            while (true) {
+                int n = istream.read(buffer);
+                if (n < 0) {
+                    break;
+                }
+                ostream.write(buffer, 0, n);
+            }
+            ostream.flush();
+            ostream.close();
+            ostream = null;
+            istream.close();
+            istream = null;
+        } catch (IOException e) {
+            war.delete();
+            throw e;
+        } finally {
+            if (ostream != null) {
+                try {
+                    ostream.close();
+                } catch (Throwable t) {
+                    ;
+                }
+                ostream = null;
+            }
+            if (istream != null) {
+                try {
+                    istream.close();
+                } catch (Throwable t) {
+                    ;
+                }
+                istream = null;
+            }
+        }
+
+    }

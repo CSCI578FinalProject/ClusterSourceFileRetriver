@@ -1,0 +1,105 @@
+21
+-----CSCI578-----
+
+
+    public long getTimeoutInterval() {
+        return timeoutInterval;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Returns true if a worker thread is available for processing.
+     * @return boolean
+     */
+    protected boolean isWorkerAvailable() {
+        if ( executor != null ) {
+            return true;
+        } else {
+            if (workers.size() > 0) {
+                return true;
+            }
+            if ( (maxThreads > 0) && (curThreads < maxThreads)) {
+                return true;
+            } else {
+                if (maxThreads < 0) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- OOM Parachute Methods
+
+    protected void checkParachute() {
+        boolean para = reclaimParachute(false);
+        if (!para && (System.currentTimeMillis()-lastParachuteCheck)>10000) {
+            try {
+                log.fatal(oomParachuteMsg);
+            }catch (Throwable t) {
+                System.err.println(oomParachuteMsg);
+            }
+            lastParachuteCheck = System.currentTimeMillis();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * <p> Log a message with fatal log level. </p>
+     *
+     * @param message log this message
+     */
+    public void fatal(Object message);
+
+
+
+    /**
+     * <p> Log an error with fatal log level. </p>
+     *
+     * @param message log this message
+     * @param t log this cause
+     */
+    public void fatal(Object message, Throwable t);
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Return the amount of threads that are in use
+     *
+     * @return the amount of threads that are in use
+     */
+    public int getCurrentThreadsBusy() {
+        if (executor!=null) {
+            if (executor instanceof ThreadPoolExecutor) {
+                return ((ThreadPoolExecutor)executor).getActiveCount();
+            } else {
+                return -1;
+            }
+        } else {
+            return workers!=null?curThreads - workers.size():0;
+        }
+    }

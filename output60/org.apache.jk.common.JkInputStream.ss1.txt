@@ -1,0 +1,72 @@
+2
+-----CSCI578-----
+
+    
+    /**
+     * Get more request body data from the web server and store it in the 
+     * internal buffer.
+     *
+     * @return true if there is more data, false if not.    
+     */
+    private boolean refillReadBuffer() throws IOException 
+    {
+        // If the server returns an empty packet, assume that that end of
+        // the stream has been reached (yuck -- fix protocol??).
+        if(isReplay) {
+            end_of_stream = true; // we've read everything there is
+        }
+        if (end_of_stream) {
+            if( log.isDebugEnabled() ) 
+                log.debug("refillReadBuffer: end of stream " );
+            return false;
+        }
+
+        // Why not use outBuf??
+        bodyMsg.reset();
+        bodyMsg.appendByte(AjpConstants.JK_AJP13_GET_BODY_CHUNK);
+        // Adjust allowed size if packetSize != default (AjpConstants.MAX_PACKET_SIZE)
+        bodyMsg.appendInt(AjpConstants.MAX_READ_SIZE + packetSize - AjpConstants.MAX_PACKET_SIZE);
+        
+        if( log.isDebugEnabled() )
+            log.debug("refillReadBuffer " + Thread.currentThread());
+
+        mc.getSource().send(bodyMsg, mc);
+        mc.getSource().flush(bodyMsg, mc); // Server needs to get it
+
+        // In JNI mode, response will be in bodyMsg. In TCP mode, response need to be
+        // read
+
+        boolean moreData=receive();
+        if( !moreData ) {
+            end_of_stream=true;
+        }
+        return moreData;
+    }
+-----CSCI578-----
+
+
+    public int doRead(ByteChunk responseChunk, Request req) 
+        throws IOException {
+
+        if( log.isDebugEnabled())
+            log.debug( "doRead "  + end_of_stream+
+                       " " + responseChunk.getOffset()+ " " + responseChunk.getLength());
+        if( end_of_stream ) {
+            return -1;
+        }
+
+        if( isFirst && isReadRequired ) {
+            // Handle special first-body-chunk, but only if httpd expects it.
+            if( !receive() ) {
+                return 0;
+            }
+        } else if(isEmpty) {
+            if ( !refillReadBuffer() ){
+                return -1;
+            }
+        }
+        ByteChunk bc = bodyBuff.getByteChunk();
+        responseChunk.setBytes( bc.getBuffer(), bc.getStart(), bc.getLength() );
+        isEmpty = true;
+        return responseChunk.getLength();
+    }

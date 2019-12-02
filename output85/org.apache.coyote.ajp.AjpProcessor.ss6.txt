@@ -1,0 +1,92 @@
+7
+-----CSCI578-----
+
+
+
+    private void writeData(ByteChunk chunk) throws IOException {
+        boolean blocking = (response.getWriteListener() == null);
+
+        int len = chunk.getLength();
+        int off = 0;
+
+        // Write this chunk
+        while (len > 0) {
+            int thisTime = len;
+            if (thisTime > outputMaxChunkSize) {
+                thisTime = outputMaxChunkSize;
+            }
+            responseMessage.reset();
+            responseMessage.appendByte(Constants.JK_AJP13_SEND_BODY_CHUNK);
+            responseMessage.appendBytes(chunk.getBytes(), chunk.getOffset() + off, thisTime);
+            responseMessage.end();
+            socketWrapper.write(blocking, responseMessage.getBuffer(), 0, responseMessage.getLen());
+            socketWrapper.flush(blocking);
+
+            len -= thisTime;
+            off += thisTime;
+        }
+
+        bytesWritten += off;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Prepare this packet for accumulating a message from the container to
+     * the web server.  Set the write position to just after the header
+     * (but leave the length unwritten, because it is as yet unknown).
+     */
+    public void reset() {
+        len = 4;
+        pos = 4;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * For a packet to be sent to the web server, finish the process of
+     * accumulating data and write the length of the data payload into
+     * the header.
+     */
+    public void end() {
+        len = pos;
+        int dLen = len - 4;
+
+        buf[0] = (byte) 0x41;
+        buf[1] = (byte) 0x42;
+        buf[2] = (byte) ((dLen>>>8) & 0xFF);
+        buf[3] = (byte) (dLen & 0xFF);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the current message length.
+     *
+     * @return For read, it's the length of the payload (excluding the header).
+     * For write, it's the length of the packet as a whole (counting the
+     * header).
+     */
+    public int getLen() {
+        return len;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the underlying byte buffer.
+     *
+     * @return The buffer
+     */
+    public byte[] getBuffer() {
+        return buf;
+    }
+-----CSCI578-----

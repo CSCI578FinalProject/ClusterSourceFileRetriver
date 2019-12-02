@@ -1,0 +1,133 @@
+11
+-----CSCI578-----
+
+
+    private final Target getTarget(EvaluationContext ctx) throws ELException {
+        // evaluate expr-a to value-a
+        Object base = this.children[0].getValue(ctx);
+
+        // if our base is null (we know there are more properites to evaluate)
+        if (base == null) {
+            throw new PropertyNotFoundException(MessageFactory.get(
+                    "error.unreachable.base", this.children[0].getImage()));
+        }
+
+        // set up our start/end
+        Object property = null;
+        int propCount = this.jjtGetNumChildren() - 1;
+        int i = 1;
+
+        // evaluate any properties before our target
+        ELResolver resolver = ctx.getELResolver();
+        if (propCount > 1) {
+            while (base != null && i < propCount) {
+                property = this.children[i].getValue(ctx);
+                ctx.setPropertyResolved(false);
+                base = resolver.getValue(ctx, base, property);
+                i++;
+            }
+            // if we are in this block, we have more properties to resolve,
+            // but our base was null
+            if (base == null || property == null) {
+                throw new PropertyNotFoundException(MessageFactory.get(
+                        "error.unreachable.property", property));
+            }
+        }
+
+        property = this.children[i].getValue(ctx);
+
+        if (property == null) {
+            throw new PropertyNotFoundException(MessageFactory.get(
+                    "error.unreachable.property", this.children[i]));
+        }
+
+        Target t = new Target();
+        t.base = base;
+        t.property = property;
+        return t;
+    }
+-----CSCI578-----
+
+  
+  public String getImage();
+-----CSCI578-----
+-----CSCI578-----
+
+  
+  public Object getValue(EvaluationContext ctx) throws ELException;
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see javax.el.ValueExpression#getValue(javax.el.ELContext)
+     */
+    public Object getValue(ELContext context) throws PropertyNotFoundException,
+            ELException {
+        EvaluationContext ctx = new EvaluationContext(context, this.fnMapper,
+                this.varMapper);
+        Object value = this.getNode().getValue(ctx);
+        if (this.expectedType != null) {
+            return ELSupport.coerceToType(value, this.expectedType);
+        }
+        return value;
+    }
+-----CSCI578-----
+
+
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        return this.children[0].getValue(ctx);
+    }
+-----CSCI578-----
+
+
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        StringBuffer sb = new StringBuffer(16);
+        Object obj = null;
+        if (this.children != null) {
+            for (int i = 0; i < this.children.length; i++) {
+                obj = this.children[i].getValue(ctx);
+                if (obj != null) {
+                    sb.append(ELSupport.coerceToString(obj));
+                }
+            }
+        }
+        return sb.toString();
+    }
+-----CSCI578-----
+
+
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        return this.children[0].getValue(ctx);
+    }
+-----CSCI578-----
+
+
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        return this.children[0].getValue(ctx);
+    }
+-----CSCI578-----
+
+
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        Object obj = this.children[0].getValue(ctx);
+        if (obj == null) {
+            return Boolean.TRUE;
+        } else if (obj instanceof String) {
+            return Boolean.valueOf(((String) obj).length() == 0);
+        } else if (obj instanceof Object[]) {
+            return Boolean.valueOf(((Object[]) obj).length == 0);
+        } else if (obj instanceof Collection) {
+            return Boolean.valueOf(((Collection) obj).isEmpty());
+        } else if (obj instanceof Map) {
+            return Boolean.valueOf(((Map) obj).isEmpty());
+        }
+        return Boolean.FALSE;
+    }

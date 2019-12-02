@@ -1,0 +1,59 @@
+13
+
+    public void setQueryStringEncoding( String s ) {
+        queryStringEncoding=s;
+        if(log.isDebugEnabled()) {
+            log.debug( "Set query string encoding to " + s );
+        }
+    }
+
+
+    /**
+     * Set the locked state of this parameter map.
+     *
+     * @param locked The new locked state
+     */
+    public void setLocked(boolean locked) {
+
+        this.locked = locked;
+
+    }
+
+    public Enumeration<String> getParameterNames() {
+        handleQueryParameters();
+        return Collections.enumeration(paramHashValues.keySet());
+    }
+
+    public String[] getParameterValues(String name) {
+        handleQueryParameters();
+        // no "facade"
+        ArrayList<String> values = paramHashValues.get(name);
+        if (values == null) {
+            return null;
+        }
+        return values.toArray(new String[values.size()]);
+    }
+    // -------------------- Processing --------------------
+    /** Process the query string into parameters
+     */
+    public void handleQueryParameters() {
+        if( didQueryParameters ) return;
+
+        didQueryParameters=true;
+
+        if( queryMB==null || queryMB.isNull() )
+            return;
+
+        if(log.isDebugEnabled()) {
+            log.debug("Decoding query " + decodedQuery + " " +
+                    queryStringEncoding);
+        }
+
+        try {
+            decodedQuery.duplicate( queryMB );
+        } catch (IOException e) {
+            // Can't happen, as decodedQuery can't overflow
+            e.printStackTrace();
+        }
+        processParameters( decodedQuery, queryStringEncoding );
+    }

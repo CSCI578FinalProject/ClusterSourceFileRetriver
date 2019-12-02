@@ -1,0 +1,220 @@
+8
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the lastModificationTest.
+     */
+    public long getLastModificationTest() {
+        return lastModificationTest;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get a list of files that the current page has source dependency on.
+     */
+    public java.util.List getDependants() {
+        try {
+            Object target;
+            if (isTagFile) {
+                if (reload) {
+                    tagHandlerClass = ctxt.load();
+                    reload = false;
+                }
+                target = tagHandlerClass.newInstance();
+            } else {
+                target = getServlet();
+            }
+            if (target != null && target instanceof JspSourceDependent) {
+                return ((java.util.List) ((JspSourceDependent) target).getDependants());
+            }
+        } catch (Throwable ex) {
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * This is a protected method intended to be overridden by subclasses of
+     * Compiler. This is used by the compile method to do all the compilation.
+     */
+    public boolean isOutDated() {
+        return isOutDated(true);
+    }
+
+
+    /**
+     * Determine if a compilation is necessary by checking the time stamp of the
+     * JSP page with that of the corresponding .class or .java file. If the page
+     * has dependencies, the check is also extended to its dependeants, and so
+     * on. This method can by overidden by a subclasses of Compiler.
+     * 
+     * @param checkClass
+     *            If true, check against .class file, if false, check against
+     *            .java file.
+     */
+    public boolean isOutDated(boolean checkClass) {
+
+        String jsp = ctxt.getJspFile();
+
+        if (jsw != null
+                && (ctxt.getOptions().getModificationTestInterval() > 0)) {
+
+            if (jsw.getLastModificationTest()
+                    + (ctxt.getOptions().getModificationTestInterval() * 1000) > System
+                    .currentTimeMillis()) {
+                return false;
+            } else {
+                jsw.setLastModificationTest(System.currentTimeMillis());
+            }
+        }
+
+        long jspRealLastModified = 0;
+        try {
+            URL jspUrl = ctxt.getResource(jsp);
+            if (jspUrl == null) {
+                ctxt.incrementRemoved();
+                return true;
+            }
+            URLConnection uc = jspUrl.openConnection();
+            if (uc instanceof JarURLConnection) {
+                jspRealLastModified =
+                    ((JarURLConnection) uc).getJarEntry().getTime();
+            } else {
+                jspRealLastModified = uc.getLastModified();
+            }
+            uc.getInputStream().close();
+        } catch (Exception e) {
+            if (log.isDebugEnabled())
+                log.debug("Problem accessing resource. Treat as outdated.", e);
+            return true;
+        }
+
+        long targetLastModified = 0;
+        File targetFile;
+
+        if (checkClass) {
+            targetFile = new File(ctxt.getClassFileName());
+        } else {
+            targetFile = new File(ctxt.getServletJavaFileName());
+        }
+
+        if (!targetFile.exists()) {
+            return true;
+        }
+
+        targetLastModified = targetFile.lastModified();
+        if (checkClass && jsw != null) {
+            jsw.setServletClassLastModifiedTime(targetLastModified);
+        }
+        if (targetLastModified < jspRealLastModified) {
+            if (log.isDebugEnabled()) {
+                log.debug("Compiler: outdated: " + targetFile + " "
+                        + targetLastModified);
+            }
+            return true;
+        }
+
+        // determine if source dependent files (e.g. includes using include
+        // directives) have been changed.
+        if (jsw == null) {
+            return false;
+        }
+
+        List depends = jsw.getDependants();
+        if (depends == null) {
+            return false;
+        }
+
+        Iterator it = depends.iterator();
+        while (it.hasNext()) {
+            String include = (String) it.next();
+            try {
+                URL includeUrl = ctxt.getResource(include);
+                if (includeUrl == null) {
+                    return true;
+                }
+
+                URLConnection iuc = includeUrl.openConnection();
+                long includeLastModified = 0;
+                if (iuc instanceof JarURLConnection) {
+                    includeLastModified =
+                        ((JarURLConnection) iuc).getJarEntry().getTime();
+                } else {
+                    includeLastModified = iuc.getLastModified();
+                }
+                iuc.getInputStream().close();
+
+                if (includeLastModified > targetLastModified) {
+                    return true;
+                }
+            } catch (Exception e) {
+                if (log.isDebugEnabled())
+                    log.debug("Problem accessing resource. Treat as outdated.",
+                            e);
+                return true;
+            }
+        }
+
+        return false;
+
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Modification test interval.
+     */
+    public int getModificationTestInterval();
+-----CSCI578-----
+
+    /**
+     * @param lastModificationTest The lastModificationTest to set.
+     */
+    public void setLastModificationTest(long lastModificationTest) {
+        this.lastModificationTest = lastModificationTest;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Path of the JSP URI. Note that this is not a file name. This is
+     * the context rooted URI of the JSP file. 
+     */
+    public String getJspFile() {
+        return jspUri;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the last-modified time of the servlet class file associated with
+     * this JspServletWrapper.
+     *
+     * @param lastModified Last-modified time of servlet class
+     */
+    public void setServletClassLastModifiedTime(long lastModified) {
+        // DCL requires servletClassLastModifiedTime be volatile
+        // to force read and write barriers on access/set
+        // (and to get atomic write of long)
+        if (this.servletClassLastModifiedTime < lastModified) {
+            synchronized (this) {
+                if (this.servletClassLastModifiedTime < lastModified) {
+                    this.servletClassLastModifiedTime = lastModified;
+                    reload = true;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+   /**
+    * Returns a list of files names that the current page has a source
+    * dependency on.
+    */
+    // FIXME: Type used is Object due to very weird behavior 
+    // with Eclipse JDT 3.1 in Java 5 mode
+    public Object getDependants();

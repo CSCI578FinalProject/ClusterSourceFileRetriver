@@ -1,0 +1,125 @@
+14
+
+    /**
+     * Process a POST request for the specified resource.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    public void doPost(HttpServletRequest request,
+                      HttpServletResponse response)
+        throws IOException, ServletException {
+
+        // Identify the request parameters that we need
+        String command = request.getPathInfo();
+
+        if (command == null || !command.equals("/upload")) {
+            doGet(request,response);
+            return;
+        }
+
+        // Prepare our output writer to generate the response message
+        response.setContentType("text/html; charset=" + Constants.CHARSET);
+
+        String message = "";
+
+        // Create a new file upload handler
+        DiskFileUpload upload = new DiskFileUpload();
+
+        // Get the tempdir
+        File tempdir = (File) getServletContext().getAttribute
+            ("javax.servlet.context.tempdir");
+        // Set upload parameters
+        upload.setSizeMax(-1);
+        upload.setRepositoryPath(tempdir.getCanonicalPath());
+    
+        // Parse the request
+        String basename = null;
+        String war = null;
+        FileItem warUpload = null;
+        try {
+            List items = upload.parseRequest(request);
+        
+            // Process the uploaded fields
+            Iterator iter = items.iterator();
+            while (iter.hasNext()) {
+                FileItem item = (FileItem) iter.next();
+        
+                if (!item.isFormField()) {
+                    if (item.getFieldName().equals("deployWar") &&
+                        warUpload == null) {
+                        warUpload = item;
+                    } else {
+                        item.delete();
+                    }
+                }
+            }
+            while (true) {
+                if (warUpload == null) {
+                    message = sm.getString
+                        ("htmlManagerServlet.deployUploadNoFile");
+                    break;
+                }
+                war = warUpload.getName();
+                if (!war.toLowerCase().endsWith(".war")) {
+                    message = sm.getString
+                        ("htmlManagerServlet.deployUploadNotWar",war);
+                    break;
+                }
+                // Get the filename if uploaded name includes a path
+                if (war.lastIndexOf('\\') >= 0) {
+                    war = war.substring(war.lastIndexOf('\\') + 1);
+                }
+                if (war.lastIndexOf('/') >= 0) {
+                    war = war.substring(war.lastIndexOf('/') + 1);
+                }
+                // Identify the appBase of the owning Host of this Context
+                // (if any)
+                basename = war.substring(0, war.toLowerCase().indexOf(".war"));
+                File file = new File(getAppBase(), war);
+                if (file.exists()) {
+                    message = sm.getString
+                        ("htmlManagerServlet.deployUploadWarExists",war);
+                    break;
+                }
+                String path = null;
+                if (basename.equals("ROOT")) {
+                    path = "";
+                } else {
+                    path = "/" + basename.replace('#', '/');
+                }
+
+                if ((host.findChild(path) != null) && !isDeployed(path)) {
+                    message = sm.getString
+                        ("htmlManagerServlet.deployUploadInServerXml", war);
+                    break;
+                }
+
+                if (!isServiced(path)) {
+                    addServiced(path);
+                    try {
+                        warUpload.write(file);
+                        // Perform new deployment
+                        check(path);
+                    } finally {
+                        removeServiced(path);
+                    }
+                }
+                break;
+            }
+        } catch(Exception e) {
+            message = sm.getString
+                ("htmlManagerServlet.deployUploadFail", e.getMessage());
+            log(message, e);
+        } finally {
+            if (warUpload != null) {
+                warUpload.delete();
+            }
+            warUpload = null;
+        }
+
+        list(request, response, message);
+    }

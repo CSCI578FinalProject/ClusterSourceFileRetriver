@@ -1,0 +1,109 @@
+5
+-----CSCI578-----
+
+
+    @Override
+    public void setAttribute(final String name, final Object attribute) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            AccessController.doPrivileged(new PrivilegedAction<Void>() {
+                @Override
+                public Void run() {
+                    doSetAttribute(name, attribute);
+                    return null;
+                }
+            });
+        } else {
+            doSetAttribute(name, attribute);
+        }
+    }
+
+
+    @Override
+    public void setAttribute(final String name, final Object o, final int scope) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            AccessController.doPrivileged(new PrivilegedAction<Void>() {
+                @Override
+                public Void run() {
+                    doSetAttribute(name, o, scope);
+                    return null;
+                }
+            });
+        } else {
+            doSetAttribute(name, o, scope);
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void doSetAttribute(String name, Object attribute) {
+        if (attribute != null) {
+            attributes.put(name, attribute);
+        } else {
+            removeAttribute(name, PAGE_SCOPE);
+        }
+    }
+
+
+    private void doSetAttribute(String name, Object o, int scope) {
+        if (o != null) {
+            switch (scope) {
+            case PAGE_SCOPE:
+                attributes.put(name, o);
+                break;
+
+            case REQUEST_SCOPE:
+                request.setAttribute(name, o);
+                break;
+
+            case SESSION_SCOPE:
+                if (session == null) {
+                    throw new IllegalStateException(Localizer
+                            .getMessage("jsp.error.page.noSession"));
+                }
+                session.setAttribute(name, o);
+                break;
+
+            case APPLICATION_SCOPE:
+                context.setAttribute(name, o);
+                break;
+
+            default:
+                throw new IllegalArgumentException("Invalid scope");
+            }
+        } else {
+            removeAttribute(name, scope);
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public JspWriter popBody() {
+        depth--;
+        if (depth >= 0) {
+            out = outs[depth];
+        } else {
+            out = baseOut;
+        }
+
+        // Update the value of the "out" attribute in the page scope
+        // attribute namespace of this PageContext
+        setAttribute(OUT, out);
+
+        return out;
+    }

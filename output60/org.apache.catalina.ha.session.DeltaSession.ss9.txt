@@ -1,0 +1,45 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+        public ClassLoader[] getClassLoaders() {
+            if ( manager instanceof BackupManager ) return ((BackupManager)manager).getClassLoaders();
+            else if ( manager instanceof ClusterManagerBase ) return ((ClusterManagerBase)manager).getClassLoaders();
+            else if ( manager instanceof StandardManager ) {
+                StandardManager sm = (StandardManager)manager;
+                return ClusterManagerBase.getClassLoaders(sm.getContainer());
+            } else if ( manager instanceof ManagerBase ) {
+                ManagerBase mb = (ManagerBase)manager;
+                return ClusterManagerBase.getClassLoaders(mb.getContainer());
+            }//end if
+            return null;
+        }
+-----CSCI578-----
+
+    
+    public ClassLoader[] getClassLoaders() {
+        return ClusterManagerBase.getClassLoaders(this.container);
+    }
+-----CSCI578-----
+
+
+
+    public static ClassLoader[] getClassLoaders(Container container) {
+        Loader loader = null;
+        ClassLoader classLoader = null;
+        if (container != null) loader = container.getLoader();
+        if (loader != null) classLoader = loader.getClassLoader();
+        else classLoader = Thread.currentThread().getContextClassLoader();
+        if ( classLoader == Thread.currentThread().getContextClassLoader() ) {
+            return new ClassLoader[] {classLoader};
+        } else {
+            return new ClassLoader[] {classLoader,Thread.currentThread().getContextClassLoader()};
+        }
+    }
+
+
+
+    public ClassLoader[] getClassLoaders() {
+        return getClassLoaders(container);
+    }

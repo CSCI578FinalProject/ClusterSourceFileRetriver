@@ -1,0 +1,291 @@
+14
+-----CSCI578-----
+
+
+
+    /**
+     * Set the validating parser flag.  This must be called before
+     * <code>parse()</code> is called the first time.
+     *
+     * @param validating The new validating parser flag.
+     */
+    public void setValidating(boolean validating) {
+
+        this.validating = validating;
+
+    }
+
+
+
+    /**
+     * Set the rules validation flag.  This must be called before
+     * <code>parse()</code> is called the first time.
+     *
+     * @param rulesValidation The new rules validation flag.
+     */
+    public void setRulesValidation(boolean rulesValidation) {
+
+        this.rulesValidation = rulesValidation;
+
+    }
+
+
+
+    // ----------------------------------------------- EntityResolver Methods
+
+    /**
+     * Set the <code>EntityResolver</code> used by SAX when resolving
+     * public id and system id.
+     * This must be called before the first call to <code>parse()</code>.
+     * @param entityResolver a class that implement the <code>EntityResolver</code> interface.
+     */
+    public void setEntityResolver(EntityResolver entityResolver){
+        this.entityResolver = entityResolver;
+    }
+
+
+
+    // ------------------------------------------------------- Public Methods
+
+    /**
+     * Parse the content of the specified file using this Digester.  Returns
+     * the root element from the object stack (if any).
+     *
+     * @param file File containing the XML data to be parsed
+     * @return the root object
+     * @exception IOException if an input/output error occurs
+     * @exception SAXException if a parsing exception occurs
+     */
+    public Object parse(File file) throws IOException, SAXException {
+
+        configure();
+        InputSource input = new InputSource(new FileInputStream(file));
+        input.setSystemId("file://" + file.getAbsolutePath());
+        getXMLReader().parse(input);
+        return (root);
+
+    }
+
+    /**
+     * Parse the content of the specified input source using this Digester.
+     * Returns the root element from the object stack (if any).
+     *
+     * @param input Input source containing the XML data to be parsed
+     * @return the root object
+     * @exception IOException if an input/output error occurs
+     * @exception SAXException if a parsing exception occurs
+     */
+    public Object parse(InputSource input) throws IOException, SAXException {
+
+        configure();
+        getXMLReader().parse(input);
+        return (root);
+
+    }
+
+
+
+    /**
+     * Parse the content of the specified input stream using this Digester.
+     * Returns the root element from the object stack (if any).
+     *
+     * @param input Input stream containing the XML data to be parsed
+     * @return the root object
+     * @exception IOException if an input/output error occurs
+     * @exception SAXException if a parsing exception occurs
+     */
+    public Object parse(InputStream input) throws IOException, SAXException {
+
+        configure();
+        InputSource is = new InputSource(input);
+        getXMLReader().parse(is);
+        return (root);
+
+    }
+
+
+
+    /**
+     * <p>Register the specified DTD URL for the specified public identifier.
+     * This must be called before the first call to <code>parse()</code>.
+     * </p><p>
+     * <code>Digester</code> contains an internal <code>EntityResolver</code>
+     * implementation. This maps <code>PUBLICID</code>'s to URLs
+     * (from which the resource will be loaded). A common use case for this
+     * method is to register local URLs (possibly computed at runtime by a
+     * classloader) for DTDs. This allows the performance advantage of using
+     * a local version without having to ensure every <code>SYSTEM</code>
+     * URI on every processed xml document is local. This implementation provides
+     * only basic functionality. If more sophisticated features are required,
+     * using {@link #setEntityResolver} to set a custom resolver is recommended.
+     * </p><p>
+     * <strong>Note:</strong> This method will have no effect when a custom
+     * <code>EntityResolver</code> has been set. (Setting a custom
+     * <code>EntityResolver</code> overrides the internal implementation.)
+     * </p>
+     * @param publicId Public identifier of the DTD to be resolved
+     * @param entityURL The URL to use for reading this DTD
+     */
+    public void register(String publicId, String entityURL) {
+
+        if (log.isDebugEnabled()) {
+            log.debug("register('" + publicId + "', '" + entityURL + "'");
+        }
+        entityValidator.put(publicId, entityURL);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the XMLReader to be used for parsing the input document.
+     *
+     * FIX ME: there is a bug in JAXP/XERCES that prevent the use of a
+     * parser that contains a schema with a DTD.
+     * @return the XML reader
+     * @exception SAXException if no XMLReader can be instantiated
+     */
+    public XMLReader getXMLReader() throws SAXException {
+        if (reader == null){
+            reader = getParser().getXMLReader();
+        }
+
+        reader.setDTDHandler(this);
+        reader.setContentHandler(this);
+
+        if (entityResolver == null){
+            reader.setEntityResolver(this);
+        } else {
+            reader.setEntityResolver(entityResolver);
+        }
+
+        reader.setProperty(
+                "http://xml.org/sax/properties/lexical-handler", this);
+
+        reader.setErrorHandler(this);
+        return reader;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Sets a flag indicating whether the requested feature is supported
+     * by the underlying implementation of <code>org.xml.sax.XMLReader</code>.
+     * See <a href="http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description">
+     * http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description</a>
+     * for information about the standard SAX2 feature flags.  In order to be
+     * effective, this method must be called <strong>before</strong> the
+     * <code>getParser()</code> method is called for the first time, either
+     * directly or indirectly.
+     *
+     * @param feature Name of the feature to set the status for
+     * @param value The new value for this feature
+     *
+     * @exception ParserConfigurationException if a parser configuration error
+     *  occurs
+     * @exception SAXNotRecognizedException if the property name is
+     *  not recognized
+     * @exception SAXNotSupportedException if the property name is
+     *  recognized but not supported
+     */
+    public void setFeature(String feature, boolean value)
+        throws ParserConfigurationException, SAXNotRecognizedException,
+        SAXNotSupportedException {
+
+        getFactory().setFeature(feature, value);
+
+    }
+
+
+
+    /**
+     * @return the SAXParser we will use to parse the input stream.  If there
+     * is a problem creating the parser, return <code>null</code>.
+     */
+    public SAXParser getParser() {
+
+        // Return the parser we already created (if any)
+        if (parser != null) {
+            return (parser);
+        }
+
+        // Create a new parser
+        try {
+            parser = getFactory().newSAXParser();
+        } catch (Exception e) {
+            log.error("Digester.getParser: ", e);
+            return (null);
+        }
+
+        return (parser);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------ Parameter Stack Methods
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * <p>
+     * Provide a hook for lazy configuration of this <code>Digester</code>
+     * instance.  The default implementation does nothing, but subclasses
+     * can override as needed.
+     * </p>
+     *
+     * <p>
+     * <strong>Note</strong> This method may be called more than once.
+     * </p>
+     */
+    protected void configure() {
+
+        // Do not configure more than once
+        if (configured) {
+            return;
+        }
+
+        log = LogFactory.getLog("org.apache.tomcat.util.digester.Digester");
+        saxLog = LogFactory.getLog("org.apache.tomcat.util.digester.Digester.sax");
+
+        // Set the configuration flag to avoid repeating
+        configured = true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the current value of the specified property for the underlying
+     * <code>XMLReader</code> implementation.
+     * See <a href="http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description">
+     * http://www.saxproject.org/apidoc/xml/sax/package-summary.html#package-description</a>
+     * for information about the standard SAX2 properties.
+     *
+     * @param property Property name to be retrieved
+     * @return the property value
+     * @exception SAXNotRecognizedException if the property name is
+     *  not recognized
+     * @exception SAXNotSupportedException if the property name is
+     *  recognized but not supported
+     */
+    public Object getProperty(String property)
+        throws SAXNotRecognizedException, SAXNotSupportedException {
+
+        return (getParser().getProperty(property));
+
+    }

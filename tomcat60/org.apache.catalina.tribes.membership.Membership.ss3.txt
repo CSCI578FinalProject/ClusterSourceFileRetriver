@@ -1,0 +1,61 @@
+11
+
+    public byte[] getPayload() {
+        return payload;
+    }
+
+    public void setMemberAliveTime(long time) {
+       memberAliveTime=time;
+    }
+
+    public void setCommand(byte[] command) {
+        this.command = command!=null?command:new byte[0];
+        getData(true,true);
+    }
+
+    public byte[] getCommand() {
+        return command;
+    }
+
+    /**
+     * Contains information on how long this member has been online.
+     * The result is the number of milli seconds this member has been
+     * broadcasting its membership to the cluster.
+     * @return nr of milliseconds since this member started.
+     */
+    public long getMemberAliveTime() {
+       return memberAliveTime;
+    }
+
+
+    public void memberAdded(Member member) {
+        if ( membership == null ) setupMembership();
+        boolean notify = false;
+        synchronized (membership) {
+            notify = Arrays.equals(domain,member.getDomain());
+            if ( notify ) notify = membership.memberAlive((MemberImpl)member);
+        }
+        if ( notify ) super.memberAdded(member);
+    }
+    
+    
+    public void memberAdded(Member member) {
+        if ( membership == null ) setupMembership();
+        boolean notify = false;
+        synchronized (membership) {
+            if (removeSuspects.containsKey(member)) {
+                //previously marked suspect, system below picked up the member again
+                removeSuspects.remove(member);
+            } else if (membership.getMember( (MemberImpl) member) == null){
+                //if we add it here, then add it upwards too
+                //check to see if it is alive
+                if (memberAlive(member)) {
+                    membership.memberAlive( (MemberImpl) member);
+                    notify = true;
+                } else {
+                    addSuspects.put(member, new Long(System.currentTimeMillis()));
+                }
+            }
+        }
+        if ( notify ) super.memberAdded(member);
+    }

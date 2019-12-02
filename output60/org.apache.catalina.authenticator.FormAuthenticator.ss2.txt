@@ -1,0 +1,543 @@
+37
+-----CSCI578-----
+
+
+
+    /**
+     * Does this request match the saved one (so that it must be the redirect
+     * we signalled after successful authentication?
+     *
+     * @param request The request to be verified
+     */
+    protected boolean matchRequest(Request request) {
+
+      // Has a session been created?
+      Session session = request.getSessionInternal(false);
+      if (session == null)
+          return (false);
+
+      // Is there a saved request?
+      SavedRequest sreq = (SavedRequest)
+          session.getNote(Constants.FORM_REQUEST_NOTE);
+      if (sreq == null)
+          return (false);
+
+      // Is there a saved principal?
+      if (session.getNote(Constants.FORM_PRINCIPAL_NOTE) == null)
+          return (false);
+
+      // Does the request URI match?
+      String decodedRequestURI = request.getDecodedRequestURI();
+      if (decodedRequestURI == null) {
+          return (false);
+      }
+      return (decodedRequestURI.equals(sreq.getDecodedRequestURI()));
+    }
+-----CSCI578-----
+
+
+    public String getDecodedRequestURI() {
+        return (this.decodedRequestURI);
+    }
+-----CSCI578-----
+
+    
+    public String getContentType() {
+        return (this.contentType);
+    }
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------------- HttpRequest Methods
+
+
+    /**
+     * Add a Cookie to the set of Cookies associated with this Request.
+     *
+     * @param cookie The new cookie
+     */
+    public void addCookie(Cookie cookie) {
+
+        if (!cookiesParsed)
+            parseCookies();
+
+        int size = 0;
+        if (cookies != null) {
+            size = cookies.length;
+        }
+
+        Cookie[] newCookies = new Cookie[size + 1];
+        for (int i = 0; i < size; i++) {
+            newCookies[i] = cookies[i];
+        }
+        newCookies[size] = cookie;
+
+        cookies = newCookies;
+
+    }
+-----CSCI578-----
+
+
+    public Iterator getLocales() {
+        return (locales.iterator());
+    }
+-----CSCI578-----
+
+
+
+    public void setContentType(String type) {
+        contentTypeMB.setString(type);
+    }
+
+
+
+    public void setContentType(MessageBytes mb) {
+        contentTypeMB=mb;
+    }
+-----CSCI578-----
+
+
+    public Iterator getHeaderNames() {
+        return (headers.keySet().iterator());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Clear the collection of Cookies associated with this Request.
+     */
+    public void clearCookies() {
+        cookiesParsed = true;
+        cookies = null;
+    }
+-----CSCI578-----
+
+    
+    public ByteChunk getBody() {
+        return (this.body);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Restore the original request from information stored in our session.
+     * If the original request is no longer present (because the session
+     * timed out), return <code>false</code>; otherwise, return
+     * <code>true</code>.
+     *
+     * @param request The request to be restored
+     * @param session The session containing the saved information
+     */
+    protected boolean restoreRequest(Request request, Session session)
+        throws IOException {
+
+        // Retrieve and remove the SavedRequest object from our session
+        SavedRequest saved = (SavedRequest)
+            session.getNote(Constants.FORM_REQUEST_NOTE);
+        session.removeNote(Constants.FORM_REQUEST_NOTE);
+        session.removeNote(Constants.FORM_PRINCIPAL_NOTE);
+        if (saved == null)
+            return (false);
+
+        // Modify our current request to reflect the original one
+        request.clearCookies();
+        Iterator cookies = saved.getCookies();
+        while (cookies.hasNext()) {
+            request.addCookie((Cookie) cookies.next());
+        }
+
+        String method = saved.getMethod();
+        MimeHeaders rmh = request.getCoyoteRequest().getMimeHeaders();
+        rmh.recycle();
+        boolean cachable = "GET".equalsIgnoreCase(method) ||
+                           "HEAD".equalsIgnoreCase(method);
+        Iterator names = saved.getHeaderNames();
+        while (names.hasNext()) {
+            String name = (String) names.next();
+            // The browser isn't expecting this conditional response now.
+            // Assuming that it can quietly recover from an unexpected 412.
+            // BZ 43687
+            if(!("If-Modified-Since".equalsIgnoreCase(name) ||
+                 (cachable && "If-None-Match".equalsIgnoreCase(name)))) {
+                Iterator values = saved.getHeaderValues(name);
+                while (values.hasNext()) {
+                    rmh.addValue(name).setString( (String)values.next() );
+                }
+            }
+        }
+        
+        request.clearLocales();
+        Iterator locales = saved.getLocales();
+        while (locales.hasNext()) {
+            request.addLocale((Locale) locales.next());
+        }
+        
+        request.getCoyoteRequest().getParameters().recycle();
+        request.getCoyoteRequest().getParameters().setQueryStringEncoding(
+                request.getConnector().getURIEncoding());
+
+        ByteChunk body = saved.getBody();
+
+        if (body != null) {
+            request.getCoyoteRequest().action
+                (ActionCode.ACTION_REQ_SET_BODY_REPLAY, body);
+
+            // Set content type
+            MessageBytes contentType = MessageBytes.newInstance();
+            
+            //If no content type specified, use default for POST
+            String savedContentType = saved.getContentType();
+            if (savedContentType == null && "POST".equalsIgnoreCase(method)) {
+                savedContentType = "application/x-www-form-urlencoded";
+            }
+
+            contentType.setString(savedContentType);
+            request.getCoyoteRequest().setContentType(contentType);
+        }
+        request.getCoyoteRequest().method().setString(method);
+
+        request.getCoyoteRequest().queryString().setString
+            (saved.getQueryString());
+
+        request.getCoyoteRequest().requestURI().setString
+            (saved.getRequestURI());
+        return (true);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Clear the collection of Locales associated with this Request.
+     */
+    public void clearLocales() {
+        locales.clear();
+    }
+-----CSCI578-----
+
+
+    public Iterator getCookies() {
+        return (cookies.iterator());
+    }
+-----CSCI578-----
+
+
+    public Iterator getHeaderValues(String name) {
+        ArrayList values = (ArrayList) headers.get(name);
+        if (values == null)
+            return ((new ArrayList()).iterator());
+        else
+            return (values.iterator());
+    }
+-----CSCI578-----
+
+
+    public String getMethod() {
+        return (this.method);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove any object bound to the specified name in the internal notes
+     * for this session.
+     *
+     * @param name Name of the note to be removed
+     */
+    public void removeNote(String name);
+-----CSCI578-----
+
+
+    /**
+     * Clears all header fields.
+     */
+    // [seguin] added for consistency -- most other objects have recycle().
+    public void recycle() {
+        clear();
+    }
+
+
+    public void recycle() {
+        nameB.recycle();
+        valueB.recycle();
+        next=null;
+    }
+-----CSCI578-----
+
+
+    public void recycle() {
+        parameterCount = 0;
+        paramHashValues.clear();
+        didQueryParameters=false;
+        encoding=null;
+        decodedQuery.recycle();
+        parseFailedReason = null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Clears all header fields.
+     */
+    public void clear() {
+        for (int i = 0; i < count; i++) {
+            headers[i].recycle();
+        }
+        count = 0;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Recycles this object and readies it further use.
+     */
+    public void recycle() {
+        method.recycle();
+        protocol.recycle();
+        requestURI.recycle();
+        remoteAddr.recycle();
+        remoteHost.recycle();
+        serverName.recycle();
+        serverPort = 80;
+        remoteUser.recycle();
+        authType.recycle();
+        queryString.recycle();
+        authorization.recycle();
+        scheme = SCHEME_HTTP;
+        secure = false;
+        contentLength = 0;
+        contentType.recycle();
+        headers.recycle();
+        cookies.recycle();
+        attributes.clear();
+        tomcatInstanceId.recycle();
+    }
+-----CSCI578-----
+
+    
+    public void setContentType(String contentType) {
+        this.contentType = contentType;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the maximum size of a POST which will be saved by the container
+     * during authentication.
+     */
+    public int getMaxSavePostSize() {
+
+        return (maxSavePostSize);
+
+    }
+-----CSCI578-----
+
+
+    public void addHeader(String name, String value) {
+        ArrayList<String> values = (ArrayList<String>) headers.get(name);
+        if (values == null) {
+            values = new ArrayList<String>();
+            headers.put(name, values);
+        }
+        values.add(value);
+    }
+-----CSCI578-----
+
+
+    public void addCookie(Cookie cookie) {
+        cookies.add(cookie);
+    }
+-----CSCI578-----
+
+
+    public void setDecodedRequestURI(String decodedRequestURI) {
+        this.decodedRequestURI = decodedRequestURI;
+    }
+-----CSCI578-----
+
+
+    public void setRequestURI(String requestURI) {
+        this.requestURI = requestURI;
+    }
+-----CSCI578-----
+
+
+    public void addLocale(Locale locale) {
+        locales.add(locale);
+    }
+-----CSCI578-----
+
+
+    public void setQueryString(String queryString) {
+        this.queryString = queryString;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Save the original request information into our session.
+     *
+     * @param request The request to be saved
+     * @param session The session to contain the saved information
+     * @throws IOException
+     */
+    protected void saveRequest(Request request, Session session)
+        throws IOException {
+
+        // Create and populate a SavedRequest object for this request
+        SavedRequest saved = new SavedRequest();
+        Cookie cookies[] = request.getCookies();
+        if (cookies != null) {
+            for (int i = 0; i < cookies.length; i++)
+                saved.addCookie(cookies[i]);
+        }
+        Enumeration names = request.getHeaderNames();
+        while (names.hasMoreElements()) {
+            String name = (String) names.nextElement();
+            Enumeration values = request.getHeaders(name);
+            while (values.hasMoreElements()) {
+                String value = (String) values.nextElement();
+                saved.addHeader(name, value);
+            }
+        }
+        Enumeration locales = request.getLocales();
+        while (locales.hasMoreElements()) {
+            Locale locale = (Locale) locales.nextElement();
+            saved.addLocale(locale);
+        }
+
+        // May need to acknowledge a 100-continue expectation
+        request.getResponse().sendAcknowledgement();
+
+        ByteChunk body = new ByteChunk();
+        body.setLimit(request.getConnector().getMaxSavePostSize());
+
+        byte[] buffer = new byte[4096];
+        int bytesRead;
+        InputStream is = request.getInputStream();
+    
+        while ( (bytesRead = is.read(buffer) ) >= 0) {
+            body.append(buffer, 0, bytesRead);
+        }
+
+        // Only save the request body if there is something to save
+        if (body.getLength() > 0) {
+            saved.setContentType(request.getContentType());
+            saved.setBody(body);
+        }
+
+        saved.setMethod(request.getMethod());
+        saved.setQueryString(request.getQueryString());
+        saved.setRequestURI(request.getRequestURI());
+        saved.setDecodedRequestURI(request.getDecodedRequestURI());
+
+        // Stash the SavedRequest in our session for later use
+        session.setNote(Constants.FORM_REQUEST_NOTE, saved);
+
+    }
+-----CSCI578-----
+
+
+    public void setBody(ByteChunk body) {
+        this.body = body;
+    }
+-----CSCI578-----
+
+
+    public void setMethod(String method) {
+        this.method = method;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Bind an object to a specified name in the internal notes associated
+     * with this session, replacing any existing binding for this name.
+     *
+     * @param name Name to which the object should be bound
+     * @param value Object to be bound to the specified name
+     */
+    public void setNote(String name, Object value);
+-----CSCI578-----
+
+
+    /**
+     * Return the Response with which this Request is associated.
+     */
+    public org.apache.catalina.connector.Response getResponse() {
+        return (this.response);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the servlet input stream for this Request.  The default
+     * implementation returns a servlet input stream created by
+     * <code>createInputStream()</code>.
+     *
+     * @exception IllegalStateException if <code>getReader()</code> has
+     *  already been called for this request
+     * @exception IOException if an input/output error occurs
+     */
+    public ServletInputStream getInputStream() throws IOException {
+
+        if (usingReader)
+            throw new IllegalStateException
+                (sm.getString("coyoteRequest.getInputStream.ise"));
+
+        usingInputStream = true;
+        if (inputStream == null) {
+            inputStream = new CoyoteInputStream(inputBuffer);
+        }
+        return inputStream;
+
+    }
+
+
+
+    /**
+     * Read the Reader wrapping the input stream for this Request.  The
+     * default implementation wraps a <code>BufferedReader</code> around the
+     * servlet input stream returned by <code>createInputStream()</code>.
+     *
+     * @exception IllegalStateException if <code>getInputStream()</code>
+     *  has already been called for this request
+     * @exception IOException if an input/output error occurs
+     */
+    public BufferedReader getReader() throws IOException {
+
+        if (usingInputStream)
+            throw new IllegalStateException
+                (sm.getString("coyoteRequest.getReader.ise"));
+
+        usingReader = true;
+        inputBuffer.checkConverter();
+        if (reader == null) {
+            reader = new CoyoteReader(inputBuffer);
+        }
+        return reader;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Change the session ID of the current session to a new randomly generated
+     * session ID.
+     * 
+     * @param session   The session to change the session ID for
+     */
+    public void changeSessionId(Session session);

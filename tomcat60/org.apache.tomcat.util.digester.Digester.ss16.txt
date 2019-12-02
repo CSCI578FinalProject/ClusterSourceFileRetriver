@@ -1,0 +1,82 @@
+12
+
+
+    /**
+     * Register a set of Rule instances defined in a RuleSet.
+     *
+     * @param ruleSet The RuleSet instance to configure from
+     */
+    public void addRuleSet(RuleSet ruleSet) {
+
+        String oldNamespaceURI = getRuleNamespaceURI();
+        String newNamespaceURI = ruleSet.getNamespaceURI();
+        if (log.isDebugEnabled()) {
+            if (newNamespaceURI == null) {
+                log.debug("addRuleSet() with no namespace URI");
+            } else {
+                log.debug("addRuleSet() with namespace URI " + newNamespaceURI);
+            }
+        }
+        setRuleNamespaceURI(newNamespaceURI);
+        ruleSet.addRuleInstances(this);
+        setRuleNamespaceURI(oldNamespaceURI);
+
+    }
+
+
+    /**
+     * Return the namespace URI that will be applied to all subsequently
+     * added <code>Rule</code> objects.
+     */
+    public String getRuleNamespaceURI() {
+
+        return (getRules().getNamespaceURI());
+
+    }
+
+
+    /**
+     * Set the namespace URI that will be applied to all subsequently
+     * added <code>Rule</code> objects.
+     *
+     * @param ruleNamespaceURI Namespace URI that must match on all
+     *  subsequently added rules, or <code>null</code> for matching
+     *  regardless of the current namespace URI
+     */
+    public void setRuleNamespaceURI(String ruleNamespaceURI) {
+
+        getRules().setNamespaceURI(ruleNamespaceURI);
+
+    }
+    
+    /** Gets namespace to apply to Rule's added */
+    public String getNamespaceURI() {
+        return wrappedRules.getNamespaceURI();
+    }
+    
+    /** Sets namespace to apply to Rule's added subsequently */
+    public void setNamespaceURI(String namespaceURI) {
+        wrappedRules.setNamespaceURI(namespaceURI);
+    }
+    
+    /** Adds a rule to be fired when wrapped implementation returns no matches */
+    public void addDefault(Rule rule) {
+        // set up rule
+        if (wrappedRules.getDigester() != null) {
+            rule.setDigester(wrappedRules.getDigester());
+        }
+        
+        if (wrappedRules.getNamespaceURI() != null) {
+            rule.setNamespaceURI(wrappedRules.getNamespaceURI());
+        }
+        
+        defaultRules.add(rule);
+        allRules.add(rule);
+    }
+
+    // --------------------------------------------------------- Properties
+    
+    /** Gets digester using these Rules */
+    public Digester getDigester() {
+        return wrappedRules.getDigester();
+    }

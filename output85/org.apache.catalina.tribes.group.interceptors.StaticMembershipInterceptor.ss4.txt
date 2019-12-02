@@ -1,0 +1,42 @@
+2
+-----CSCI578-----
+
+
+    @Override
+    public void messageReceived(ChannelMessage msg) {
+        if (msg.getMessage().getLength() == MEMBER_START.length &&
+                Arrays.equals(MEMBER_START, msg.getMessage().getBytes())) {
+            // receive member start
+            Member member = getMember(msg.getAddress());
+            if (member != null) {
+                super.memberAdded(member);
+            }
+        } else if (msg.getMessage().getLength() == MEMBER_STOP.length &&
+                    Arrays.equals(MEMBER_STOP, msg.getMessage().getBytes())) {
+            // receive member shutdown
+            Member member = getMember(msg.getAddress());
+            if (member != null) {
+                try {
+                    member.setCommand(Member.SHUTDOWN_PAYLOAD);
+                    super.memberDisappeared(member);
+                } finally {
+                    member.setCommand(new byte[0]);
+                }
+            }
+        } else {
+            super.messageReceived(msg);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get the address that this message originated from.
+     * Almost always <code>Channel.getLocalMember(boolean)</code><br>
+     * This would be set to a different address
+     * if the message was being relayed from a host other than the one
+     * that originally sent it.
+     * @return the source or reply-to address of this message
+     */
+    public Member getAddress();

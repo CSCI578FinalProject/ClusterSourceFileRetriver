@@ -1,0 +1,111 @@
+10
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private static boolean isAllRecordAvailable(ByteBuffer bb) {
+        // Next two bytes (unsigned) are the size of the record. We need all of
+        // it.
+        int size = bb.getChar();
+        return isAvailable(bb, size);
+    }
+-----CSCI578-----
+
+
+
+    private static boolean isTLSHandshake(ByteBuffer bb) {
+        // For a TLS client hello the first byte must be 22 - handshake
+        if (bb.get() != 22) {
+            return false;
+        }
+        // Next two bytes are major/minor version. We need at least 3.1.
+        byte b2 = bb.get();
+        byte b3 = bb.get();
+        if (b2 < 3 || b2 == 3 && b3 == 0) {
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    private static String readSniExtension(ByteBuffer bb) {
+        // SNI extension is type 0
+        char extensionType = bb.getChar();
+        // Next byte is data size
+        char extensionDataSize = bb.getChar();
+        if (extensionType == 0) {
+            // First 2 bytes are size of server name list (only expecting one)
+            // Next byte is type (0 for hostname)
+            skipBytes(bb, 3);
+            // Next 2 bytes are length of host name
+            char serverNameSize = bb.getChar();
+            byte[] serverNameBytes = new byte[serverNameSize];
+            bb.get(serverNameBytes);
+            return new String(serverNameBytes, StandardCharsets.UTF_8);
+        } else {
+            skipBytes(bb, extensionDataSize);
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    private static boolean isClientHello(ByteBuffer bb) {
+        // Client hello is handshake type 1
+        if (bb.get() == 1) {
+            return true;
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    private static void skipBytes(ByteBuffer bb, int size) {
+        bb.position(bb.position() + size);
+    }
+-----CSCI578-----
+
+
+
+    private static boolean isAllClientHelloAvailable(ByteBuffer bb) {
+        // Next three bytes (unsigned) are the size of the client hello. We need
+        // all of it.
+        int size = ((bb.get() & 0xFF) << 16) + ((bb.get() & 0xFF) << 8) + (bb.get() & 0xFF);
+        return isAvailable(bb, size);
+    }
+-----CSCI578-----
+
+
+
+    private static boolean isAvailable(ByteBuffer bb, int size) {
+        if (bb.remaining() < size) {
+            bb.position(bb.limit());
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    private static ExtractorResult handleIncompleteRead(ByteBuffer bb) {
+        if (bb.limit() == bb.capacity()) {
+            // Buffer not big enough
+            return ExtractorResult.UNDERFLOW;
+        } else {
+            // Need to read more data into buffer
+            return ExtractorResult.NEED_READ;
+        }
+    }
+-----CSCI578-----
+
+
+
+    public static Cipher valueOf(int cipherId) {
+        return idMap.get(Integer.valueOf(cipherId));
+    }

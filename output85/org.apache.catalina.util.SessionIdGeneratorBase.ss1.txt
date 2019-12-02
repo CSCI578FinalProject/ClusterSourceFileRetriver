@@ -1,0 +1,82 @@
+2
+-----CSCI578-----
+
+
+
+    protected void getRandomBytes(byte bytes[]) {
+
+        SecureRandom random = randoms.poll();
+        if (random == null) {
+            random = createSecureRandom();
+        }
+        random.nextBytes(bytes);
+        randoms.add(random);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create a new random number generator instance we should use for
+     * generating session identifiers.
+     */
+    private SecureRandom createSecureRandom() {
+
+        SecureRandom result = null;
+
+        long t1 = System.currentTimeMillis();
+        if (secureRandomClass != null) {
+            try {
+                // Construct and seed a new random number generator
+                Class<?> clazz = Class.forName(secureRandomClass);
+                result = (SecureRandom) clazz.newInstance();
+            } catch (Exception e) {
+                log.error(sm.getString("sessionIdGeneratorBase.random",
+                        secureRandomClass), e);
+            }
+        }
+
+        if (result == null) {
+            // No secureRandomClass or creation failed. Use SecureRandom.
+            try {
+                if (secureRandomProvider != null &&
+                        secureRandomProvider.length() > 0) {
+                    result = SecureRandom.getInstance(secureRandomAlgorithm,
+                            secureRandomProvider);
+                } else if (secureRandomAlgorithm != null &&
+                        secureRandomAlgorithm.length() > 0) {
+                    result = SecureRandom.getInstance(secureRandomAlgorithm);
+                }
+            } catch (NoSuchAlgorithmException e) {
+                log.error(sm.getString("sessionIdGeneratorBase.randomAlgorithm",
+                        secureRandomAlgorithm), e);
+            } catch (NoSuchProviderException e) {
+                log.error(sm.getString("sessionIdGeneratorBase.randomProvider",
+                        secureRandomProvider), e);
+            }
+        }
+
+        if (result == null) {
+            // Invalid provider / algorithm
+            try {
+                result = SecureRandom.getInstance("SHA1PRNG");
+            } catch (NoSuchAlgorithmException e) {
+                log.error(sm.getString("sessionIdGeneratorBase.randomAlgorithm",
+                        secureRandomAlgorithm), e);
+            }
+        }
+
+        if (result == null) {
+            // Nothing works - use platform default
+            result = new SecureRandom();
+        }
+
+        // Force seeding to take place
+        result.nextInt();
+
+        long t2=System.currentTimeMillis();
+        if( (t2-t1) > 100 )
+            log.info(sm.getString("sessionIdGeneratorBase.createRandom",
+                    result.getAlgorithm(), Long.valueOf(t2-t1)));
+        return result;
+    }

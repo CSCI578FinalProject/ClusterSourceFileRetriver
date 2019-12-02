@@ -1,0 +1,55 @@
+2
+-----CSCI578-----
+
+
+    public void init() throws IOException {
+        setupSocket();
+        sendPacket = new DatagramPacket(new byte[MAX_PACKET_SIZE],MAX_PACKET_SIZE);
+        sendPacket.setAddress(address);
+        sendPacket.setPort(port);
+        receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE],MAX_PACKET_SIZE);
+        receivePacket.setAddress(address);
+        receivePacket.setPort(port);
+        member.setCommand(new byte[0]);
+        if ( membership == null ) membership = new Membership(member);
+    }
+-----CSCI578-----
+
+
+    protected void setupSocket() throws IOException {
+        if (mcastBindAddress != null) {
+            try {
+                log.info(sm.getString("mcastServiceImpl.bind", address, Integer.toString(port)));
+                socket = new MulticastSocket(new InetSocketAddress(address,port));
+            } catch (BindException e) {
+                /*
+                 * On some platforms (e.g. Linux) it is not possible to bind
+                 * to the multicast address. In this case only bind to the
+                 * port.
+                 */
+                log.info(sm.getString("mcastServiceImpl.bind.failed"));
+                socket = new MulticastSocket(port);
+            }
+        } else {
+            socket = new MulticastSocket(port);
+        }
+        socket.setLoopbackMode(localLoopbackDisabled); //hint if we want disable loop back(local machine) messages
+        if (mcastBindAddress != null) {
+            if(log.isInfoEnabled())
+                log.info(sm.getString("mcastServiceImpl.setInterface", mcastBindAddress));
+            socket.setInterface(mcastBindAddress);
+        } //end if
+        //force a so timeout so that we don't block forever
+        if (mcastSoTimeout <= 0) mcastSoTimeout = (int)sendFrequency;
+        if (log.isInfoEnabled()) {
+            log.info(sm.getString("mcastServiceImpl.setSoTimeout",
+                    Integer.toString(mcastSoTimeout)));
+        }
+        socket.setSoTimeout(mcastSoTimeout);
+
+        if ( mcastTTL >= 0 ) {
+            if(log.isInfoEnabled())
+                log.info(sm.getString("mcastServiceImpl.setTTL", Integer.toString(mcastTTL)));
+            socket.setTimeToLive(mcastTTL);
+        }
+    }

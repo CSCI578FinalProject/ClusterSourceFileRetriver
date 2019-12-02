@@ -1,0 +1,45 @@
+4
+
+    /** Unregister a component. We'll first check if it is registered,
+     * and mask all errors. This is mostly a helper.
+     * 
+     * @param oname
+     * 
+     * @since 1.1
+     */ 
+    public void unregisterComponent( String oname ) {
+        try {
+            unregisterComponent(new ObjectName(oname));
+        } catch (MalformedObjectNameException e) {
+            log.info("Error creating object name " + e );
+        }
+    }    
+
+    /** Unregister a component. This is just a helper that
+     * avoids exceptions by checking if the mbean is already registered
+     *
+     * @param oname
+     */
+    public void unregisterComponent( ObjectName oname ) {
+        try {
+            if( getMBeanServer().isRegistered(oname)) {
+                getMBeanServer().unregisterMBean(oname);
+            }
+        } catch( Throwable t ) {
+            log.error( "Error unregistering mbean ", t);
+        }
+    }
+
+    
+
+    // should be removed
+    public void unregisterComponent( String domain, String name ) {
+        try {
+            ObjectName oname=new ObjectName( domain + ":" + name );
+
+            // XXX remove from our tables.
+            getMBeanServer().unregisterMBean( oname );
+        } catch( Throwable t ) {
+            log.error( "Error unregistering mbean ", t );
+        }
+    }

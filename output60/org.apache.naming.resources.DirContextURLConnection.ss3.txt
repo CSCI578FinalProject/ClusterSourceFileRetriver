@@ -1,0 +1,108 @@
+4
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+    
+    
+    /**
+     * Connect to the DirContext, and retrive the bound object, as well as
+     * its attributes. If no object is bound with the name specified in the
+     * URL, then an IOException is thrown.
+     * 
+     * @throws IOException Object not found
+     */
+    public void connect()
+        throws IOException {
+        
+        if (!connected) {
+            
+            try {
+                date = System.currentTimeMillis();
+                String path = getURL().getFile();
+                if (context instanceof ProxyDirContext) {
+                    ProxyDirContext proxyDirContext = 
+                        (ProxyDirContext) context;
+                    String hostName = proxyDirContext.getHostName();
+                    String contextName = proxyDirContext.getContextName();
+                    if (hostName != null) {
+                        if (!path.startsWith("/" + hostName + "/"))
+                            return;
+                        path = path.substring(hostName.length()+ 1);
+                    }
+                    if (contextName != null) {
+                        if (!path.startsWith(contextName + "/")) {
+                            return;
+                        } else {
+                            path = path.substring(contextName.length());
+                        }
+                    }
+                }
+                object = context.lookup(path);
+                attributes = context.getAttributes(path);
+                if (object instanceof Resource)
+                    resource = (Resource) object;
+                if (object instanceof DirContext)
+                    collection = (DirContext) object;
+            } catch (NamingException e) {
+                // Object not found
+            }
+            
+            connected = true;
+            
+        }
+        
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the host name.
+     */
+    public String getHostName() {
+        return this.hostName;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the context name.
+     */
+    public String getContextName() {
+        return this.contextName;
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Return the last modified date.
+     */
+    public long getLastModified() {
+
+        if (!connected) {
+            // Try to connect (silently)
+            try {
+                connect();
+            } catch (IOException e) {
+            }
+        }
+
+        if (attributes == null)
+            return 0;
+
+        Attribute lastModified = 
+            attributes.get(ResourceAttributes.LAST_MODIFIED);
+        if (lastModified != null) {
+            try {
+                Date lmDate = (Date) lastModified.get();
+                return lmDate.getTime();
+            } catch (Exception e) {
+            }
+        }
+
+        return 0;
+    }

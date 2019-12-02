@@ -1,0 +1,422 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Add watched resources to the specified Context.
+     * @param app HostConfig deployed app
+     * @param docBase web app docBase
+     * @param context web application context
+     */
+    protected void addWatchedResources(DeployedApplication app, String docBase, Context context) {
+        // FIXME: Feature idea. Add support for patterns (ex: WEB-INF/*, WEB-INF/*.xml), where
+        //        we would only check if at least one resource is newer than app.timestamp
+        File docBaseFile = null;
+        if (docBase != null) {
+            docBaseFile = new File(docBase);
+            if (!docBaseFile.isAbsolute()) {
+                docBaseFile = new File(appBase(), docBase);
+            }
+        }
+        String[] watchedResources = context.findWatchedResources();
+        for (int i = 0; i < watchedResources.length; i++) {
+            File resource = new File(watchedResources[i]);
+            if (!resource.isAbsolute()) {
+                if (docBase != null) {
+                    resource = new File(docBaseFile, watchedResources[i]);
+                } else {
+                    if(log.isDebugEnabled())
+                        log.debug("Ignoring non-existent WatchedResource '"
+                            + resource.getAbsolutePath() + "'");
+                   continue;
+                }
+            }
+            if(log.isDebugEnabled())
+                log.debug("Watching WatchedResource '" + resource.getAbsolutePath() + "'");
+            app.reloadResources.put(resource.getAbsolutePath(),
+                    new Long(resource.lastModified()));
+        }
+    }
+
+
+    /**
+     * Check resources for redeployment and reloading.
+     */
+    protected synchronized void checkResources(DeployedApplication app) {
+        String[] resources = app.redeployResources.keySet().toArray(new String[0]);
+        for (int i = 0; i < resources.length; i++) {
+            File resource = new File(resources[i]);
+            if (log.isDebugEnabled())
+                log.debug("Checking context[" + app.name + "] redeploy resource " + resource);
+            if (resource.exists()) {
+                long lastModified = app.redeployResources.get(resources[i]).longValue();
+                if ((!resource.isDirectory()) && resource.lastModified() > lastModified) {
+                    // Undeploy application
+                    if (log.isInfoEnabled())
+                        log.info(sm.getString("hostConfig.undeploy", app.name));
+                    ContainerBase context = (ContainerBase) host.findChild(app.name);
+                    try {
+                        host.removeChild(context);
+                    } catch (Throwable t) {
+                        log.warn(sm.getString
+                                 ("hostConfig.context.remove", app.name), t);
+                    }
+                    try {
+                        context.destroy();
+                    } catch (Throwable t) {
+                        log.warn(sm.getString
+                                 ("hostConfig.context.destroy", app.name), t);
+                    }
+                    // Delete other redeploy resources
+                    for (int j = i + 1; j < resources.length; j++) {
+                        try {
+                            File current = new File(resources[j]);
+                            current = current.getCanonicalFile();
+                            if ((current.getAbsolutePath().startsWith(appBase().getAbsolutePath() + File.separator))
+                                    || (current.getAbsolutePath().startsWith(configBase().getAbsolutePath()))) {
+                                if (log.isDebugEnabled())
+                                    log.debug("Delete " + current);
+                                ExpandWar.delete(current);
+                            }
+                        } catch (IOException e) {
+                            log.warn(sm.getString
+                                    ("hostConfig.canonicalizing", app.name), e);
+                        }
+                    }
+                    deployed.remove(app.name);
+                    return;
+                }
+            } else {
+                // There is a chance the the resource was only missing
+                // temporarily eg renamed during a text editor save
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e1) {
+                    // Ignore
+                }
+                // Recheck the resource to see if it was really deleted
+                if (resource.exists()) {
+                    continue;
+                }
+                long lastModified = app.redeployResources.get(resources[i]).longValue();
+
+                if (lastModified == 0L) {
+                    continue;
+                }
+                // Undeploy application
+                if (log.isInfoEnabled())
+                    log.info(sm.getString("hostConfig.undeploy", app.name));
+                ContainerBase context = (ContainerBase) host.findChild(app.name);
+                try {
+                    host.removeChild(context);
+                } catch (Throwable t) {
+                    log.warn(sm.getString
+                             ("hostConfig.context.remove", app.name), t);
+                }
+                if (context != null) {
+                    try {
+                        context.destroy();
+                    } catch (Throwable t) {
+                        log.warn(sm.getString
+                                ("hostConfig.context.destroy", app.name), t);
+                    }
+                }
+                // Delete all redeploy resources
+                for (int j = i + 1; j < resources.length; j++) {
+                    try {
+                        File current = new File(resources[j]);
+                        current = current.getCanonicalFile();
+                        if ((current.getAbsolutePath().startsWith(appBase().getAbsolutePath() + File.separator))
+                            || (current.getAbsolutePath().startsWith(configBase().getAbsolutePath()))) {
+                            if (log.isDebugEnabled())
+                                log.debug("Delete " + current);
+                            ExpandWar.delete(current);
+                        }
+                    } catch (IOException e) {
+                        log.warn(sm.getString
+                                ("hostConfig.canonicalizing", app.name), e);
+                    }
+                }
+                // Delete reload resources as well (to remove any remaining .xml descriptor)
+                String[] resources2 = app.reloadResources.keySet().toArray(new String[0]);
+                for (int j = 0; j < resources2.length; j++) {
+                    try {
+                        File current = new File(resources2[j]);
+                        current = current.getCanonicalFile();
+                        if ((current.getAbsolutePath().startsWith(appBase().getAbsolutePath() + File.separator))
+                            || ((current.getAbsolutePath().startsWith(configBase().getAbsolutePath())
+                                 && (current.getAbsolutePath().endsWith(".xml"))))) {
+                            if (log.isDebugEnabled())
+                                log.debug("Delete " + current);
+                            ExpandWar.delete(current);
+                        }
+                    } catch (IOException e) {
+                        log.warn(sm.getString
+                                ("hostConfig.canonicalizing", app.name), e);
+                    }
+                }
+                deployed.remove(app.name);
+                return;
+            }
+        }
+        resources = app.reloadResources.keySet().toArray(new String[0]);
+        boolean update = false;
+        for (int i = 0; i < resources.length; i++) {
+            File resource = new File(resources[i]);
+            if (log.isDebugEnabled()) {
+                log.debug("Checking context[" + app.name + "] reload resource " + resource);
+            }
+            long lastModified = app.reloadResources.get(resources[i]).longValue();
+            if (resource.lastModified() != lastModified || update) {
+                if (!update) {
+                    // Reload application
+                    if(log.isInfoEnabled()) {
+                        log.info(sm.getString("hostConfig.reload", app.name));
+                    }
+                    Container context = host.findChild(app.name);
+                    try {
+                        ((Lifecycle) context).stop();
+                    } catch (Exception e) {
+                        log.warn(sm.getString
+                                 ("hostConfig.context.restart", app.name), e);
+                    }
+                    // If the context was not started (for example an error
+                    // in web.xml) we'll still get to try to start
+                    try {
+                        ((Lifecycle) context).start();
+                    } catch (Exception e) {
+                        log.warn(sm.getString
+                                 ("hostConfig.context.restart", app.name), e);
+                    }
+                    update = true;
+                }
+                // Update times. More than one file may have been updated. We
+                // don't want to trigger a series of reloads.
+                app.reloadResources.put(resources[i], Long.valueOf(resource.lastModified()));
+            }
+            app.timestamp = System.currentTimeMillis();
+        }
+    }
+
+
+    /**
+     * Process a "start" event for this Host.
+     */
+    public void start() {
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("hostConfig.start"));
+
+        try {
+            ObjectName hostON = new ObjectName(host.getObjectName());
+            oname = new ObjectName
+                (hostON.getDomain() + ":type=Deployer,host=" + host.getName());
+            Registry.getRegistry(null, null).registerComponent
+                (this, oname, this.getClass().getName());
+        } catch (Exception e) {
+            log.error(sm.getString("hostConfig.jmx.register", oname), e);
+        }
+
+        if (host.getDeployOnStartup())
+            deployApps();
+
+    }
+
+
+    /**
+     * Process a "stop" event for this Host.
+     */
+    public void stop() {
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("hostConfig.stop"));
+
+        undeployApps();
+
+        if (oname != null) {
+            try {
+                Registry.getRegistry(null, null).unregisterComponent(oname);
+            } catch (Exception e) {
+                log.error(sm.getString("hostConfig.jmx.unregister", oname), e);
+            }
+        }
+        oname = null;
+        appBase = null;
+        configBase = null;
+
+    }
+
+
+    /**
+     * Undeploy all deployed applications.
+     */
+    protected void undeployApps() {
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("hostConfig.undeploying"));
+
+        // Soft undeploy all contexts we have deployed
+        DeployedApplication[] apps = deployed.values().toArray(new DeployedApplication[0]);
+        for (int i = 0; i < apps.length; i++) {
+            try {
+                host.removeChild(host.findChild(apps[i].name));
+            } catch (Throwable t) {
+                log.warn(sm.getString
+                        ("hostConfig.context.remove", apps[i].name), t);
+            }
+        }
+
+        deployed.clear();
+
+    }
+
+
+    /**
+     * Check status of all webapps.
+     */
+    protected void check() {
+
+        if (host.getAutoDeploy()) {
+            // Check for resources modification to trigger redeployment
+            DeployedApplication[] apps = deployed.values().toArray(new DeployedApplication[0]);
+            for (int i = 0; i < apps.length; i++) {
+                if (!isServiced(apps[i].name))
+                    checkResources(apps[i]);
+            }
+            // Hotdeploy applications
+            deployApps();
+        }
+
+    }
+
+
+    /**
+     * Check status of a specific webapp, for use with stuff like management webapps.
+     */
+    public void check(String name) {
+        DeployedApplication app = deployed.get(name);
+        if (app != null) {
+            checkResources(app);
+        } else {
+            deployApps(name);
+        }
+    }
+
+    /**
+     * Add a new Context to be managed by us.
+     * Entry point for the admin webapp, and other JMX Context controlers.
+     */
+    public void manageApp(Context context)  {
+
+        String contextPath = context.getPath();
+
+        if (deployed.containsKey(contextPath))
+            return;
+
+        DeployedApplication deployedApp = new DeployedApplication(contextPath);
+
+        // Add the associated docBase to the redeployed list if it's a WAR
+        boolean isWar = false;
+        if (context.getDocBase() != null) {
+            File docBase = new File(context.getDocBase());
+            if (!docBase.isAbsolute()) {
+                docBase = new File(appBase(), context.getDocBase());
+            }
+            deployedApp.redeployResources.put(docBase.getAbsolutePath(),
+                                          new Long(docBase.lastModified()));
+            if (docBase.getAbsolutePath().toLowerCase().endsWith(".war")) {
+                isWar = true;
+            }
+        }
+        host.addChild(context);
+        // Add the eventual unpacked WAR and all the resources which will be
+        // watched inside it
+        if (isWar && unpackWARs) {
+            String name = null;
+            String path = context.getPath();
+            if (path.equals("")) {
+                name = "ROOT";
+            } else {
+                if (path.startsWith("/")) {
+                    name = path.substring(1);
+                } else {
+                    name = path;
+                }
+            }
+            File docBase = new File(name);
+            if (!docBase.isAbsolute()) {
+                docBase = new File(appBase(), name);
+            }
+            deployedApp.redeployResources.put(docBase.getAbsolutePath(),
+                        new Long(docBase.lastModified()));
+            addWatchedResources(deployedApp, docBase.getAbsolutePath(), context);
+        } else {
+            addWatchedResources(deployedApp, null, context);
+        }
+        deployed.put(contextPath, deployedApp);
+    }
+
+    /**
+     * Remove a webapp from our control.
+     * Entry point for the admin webapp, and other JMX Context controlers.
+     */
+    public void unmanageApp(String contextPath) {
+        if(isServiced(contextPath)) {
+            deployed.remove(contextPath);
+            host.removeChild(host.findChild(contextPath));
+        }
+    }
+
+    // ----------------------------------------------------- Instance Variables
+
+
+    /**
+     * This class represents the state of a deployed application, as well as
+     * the monitored resources.
+     */
+    protected class DeployedApplication {
+    	public DeployedApplication(String name) {
+    		this.name = name;
+    	}
+
+    	/**
+    	 * Application context path. The assertion is that
+    	 * (host.getChild(name) != null).
+    	 */
+    	public String name;
+
+    	/**
+    	 * Any modification of the specified (static) resources will cause a
+    	 * redeployment of the application. If any of the specified resources is
+    	 * removed, the application will be undeployed. Typically, this will
+    	 * contain resources like the context.xml file, a compressed WAR path.
+         * The value is the last modification time.
+    	 */
+    	public LinkedHashMap<String,Long> redeployResources = new LinkedHashMap<String,Long>();
+
+    	/**
+    	 * Any modification of the specified (static) resources will cause a
+    	 * reload of the application. This will typically contain resources
+    	 * such as the web.xml of a webapp, but can be configured to contain
+    	 * additional descriptors.
+         * The value is the last modification time.
+    	 */
+    	public HashMap<String,Long> reloadResources = new HashMap<String,Long>();
+
+    	/**
+    	 * Instant where the application was last put in service.
+    	 */
+    	public long timestamp = System.currentTimeMillis();
+    }
+
+}
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of watched resources for this Context. If none are 
+     * defined, a zero length array will be returned.
+     */
+    public String[] findWatchedResources();

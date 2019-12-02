@@ -1,0 +1,38 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public Future<Integer> read(ByteBuffer dst) {
+        WrapperFuture<Integer,Void> future = new WrapperFuture<>();
+
+        if (!reading.compareAndSet(false, true)) {
+            throw new IllegalStateException(sm.getString(
+                    "asyncChannelWrapperSecure.concurrentRead"));
+        }
+
+        ReadTask readTask = new ReadTask(dst, future);
+
+        executor.execute(readTask);
+
+        return future;
+    }
+
+
+    @Override
+    public <B,A extends B> void read(ByteBuffer dst, A attachment,
+            CompletionHandler<Integer,B> handler) {
+
+        WrapperFuture<Integer,B> future =
+                new WrapperFuture<>(handler, attachment);
+
+        if (!reading.compareAndSet(false, true)) {
+            throw new IllegalStateException(sm.getString(
+                    "asyncChannelWrapperSecure.concurrentRead"));
+        }
+
+        ReadTask readTask = new ReadTask(dst, future);
+
+        executor.execute(readTask);
+    }

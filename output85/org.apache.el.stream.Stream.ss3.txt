@@ -1,0 +1,29 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public Stream flatMap(final LambdaExpression le) {
+        Iterator<Object> downStream = new OpIterator() {
+
+            private Iterator<?> inner;
+
+            @Override
+            protected void findNext() {
+                while (iterator.hasNext() ||
+                        (inner != null && inner.hasNext())) {
+                    if (inner == null || !inner.hasNext()) {
+                        inner = ((Stream) le.invoke(iterator.next())).iterator;
+                    }
+
+                    if (inner.hasNext()) {
+                        next = inner.next();
+                        foundNext = true;
+                        break;
+                    }
+                }
+            }
+        };
+        return new Stream(downStream);
+    }

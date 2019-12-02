@@ -1,0 +1,63 @@
+6
+-----CSCI578-----
+
+
+
+    public int getStreamId() {
+        return streamId;
+    }
+-----CSCI578-----
+
+
+
+    void resetStream(StreamException se) throws IOException {
+
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("upgradeHandler.rst.debug", connectionId,
+                    Integer.toString(se.getStreamId()), se.getError()));
+        }
+
+        // Write a RST frame
+        byte[] rstFrame = new byte[13];
+        // Length
+        ByteUtil.setThreeBytes(rstFrame, 0, 4);
+        // Type
+        rstFrame[3] = FrameType.RST.getIdByte();
+        // No flags
+        // Stream ID
+        ByteUtil.set31Bits(rstFrame, 5, se.getStreamId());
+        // Payload
+        ByteUtil.setFourBytes(rstFrame, 9, se.getError().getCode());
+
+        synchronized (socketWrapper) {
+            socketWrapper.write(true, rstFrame, 0, rstFrame.length);
+            socketWrapper.flush(true);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public static void setFourBytes(byte[] output, int firstByte, long value) {
+        output[firstByte]     = (byte) ((value & 0xFF000000) >> 24);
+        output[firstByte + 1] = (byte) ((value & 0xFF0000) >> 16);
+        output[firstByte + 2] = (byte) ((value & 0xFF00) >> 8);
+        output[firstByte + 3] = (byte) (value & 0xFF);
+    }
+-----CSCI578-----
+
+
+
+    public long getCode() {
+        return code;
+    }
+-----CSCI578-----
+
+
+
+    public byte[] getCodeBytes() {
+        byte[] codeByte = new byte[4];
+        ByteUtil.setFourBytes(codeByte, 0, code);
+        return codeByte;
+    }

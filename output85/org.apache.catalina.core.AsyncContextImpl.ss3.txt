@@ -1,0 +1,24 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /* When a request uses a sequence of multiple start(); dispatch() with
+     * non-container threads it is possible for a previous dispatch() to
+     * interfere with a following start(). This lock prevents that from
+     * happening. It is a dedicated object as user code may lock on the
+     * AsyncContext so if container code also locks on that object deadlocks may
+     * occur.
+     */
+    private final Object asyncContextLock = new Object();
+
+
+    @Override
+    public void start(final Runnable run) {
+        if (log.isDebugEnabled()) {
+            logDebug("start      ");
+        }
+        check();
+        Runnable wrapper = new RunnableWrapper(run, context, this.request.getCoyoteRequest());
+        this.request.getCoyoteRequest().action(ActionCode.ASYNC_RUN, wrapper);
+    }

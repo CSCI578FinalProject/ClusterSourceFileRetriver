@@ -1,0 +1,59 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a single Session from a SingleSignOn.  Called when
+     * a session is timed out and no longer active.
+     *
+     * @param ssoId Single sign on identifier from which to remove the session.
+     * @param session the session to be removed.
+     */
+    protected void removeSession(String ssoId, Session session) {
+
+        if (containerLog.isDebugEnabled()) {
+            containerLog.debug(sm.getString("singleSignOn.debug.removeSession", session, ssoId));
+        }
+
+        // Get a reference to the SingleSignOn
+        SingleSignOnEntry entry = cache.get(ssoId);
+        if (entry == null) {
+            return;
+        }
+
+        // Remove the inactive session from SingleSignOnEntry
+        entry.removeSession(session);
+
+        // If there are not sessions left in the SingleSignOnEntry,
+        // deregister the entry.
+        if (entry.findSessions().size() == 0) {
+            deregister(ssoId);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Removes the given <code>Session</code> from the list of those
+     * associated with this SSO.
+     *
+     * @param session  the <code>Session</code> to remove.
+     */
+    public void removeSession(Session session) {
+        SingleSignOnSessionKey key = new SingleSignOnSessionKey(session);
+        sessionKeys.remove(key);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the HTTP Session identifiers associated with this SSO.
+     *
+     * @return The identifiers for the HTTP sessions that are current associated
+     *         with this SSo entry
+     */
+    public Set<SingleSignOnSessionKey> findSessions() {
+        return sessionKeys.keySet();
+    }
+-----CSCI578-----

@@ -1,0 +1,143 @@
+7
+-----CSCI578-----
+
+
+
+
+    /**
+     * Return the URL to the resource that is mapped to a specified path.
+     * The path must begin with a "/" and is interpreted as relative to the
+     * current context root.
+     *
+     * @param path The path to the desired resource
+     *
+     * @exception MalformedURLException if the path is not given
+     *  in the correct form
+     */
+    public URL getResource(String path)
+        throws MalformedURLException {
+
+        if (path == null)
+            throw new MalformedURLException(sm.getString("applicationContext.requestDispatcher.iae", path));
+
+        if (!path.startsWith("/") && Globals.STRICT_SERVLET_COMPLIANCE)
+            throw new MalformedURLException(sm.getString("applicationContext.requestDispatcher.iae", path));
+
+
+        path = RequestUtil.normalize(path);
+        if (path == null)
+            return (null);
+
+        String libPath = "/WEB-INF/lib/";
+        if ((path.startsWith(libPath)) && (path.endsWith(".jar"))) {
+            File jarFile = null;
+            if (context.isFilesystemBased()) {
+                jarFile = new File(basePath, path);
+            } else {
+                jarFile = new File(context.getWorkPath(), path);
+            }
+            if (jarFile.exists()) {
+                return jarFile.toURL();
+            } else {
+                return null;
+            }
+        } else {
+
+            DirContext resources = context.getResources();
+            if (resources != null) {
+                String fullPath = context.getName() + path;
+                String hostName = context.getParent().getName();
+                try {
+                    resources.lookup(path);
+                    return new URL
+                        ("jndi", "", 0, getJNDIUri(hostName, fullPath),
+                         new DirContextURLStreamHandler(resources));
+                } catch (NamingException e) {
+                    // Ignore
+                } catch (Exception e) {
+                    // Unexpected
+                    log(sm.getString("applicationContext.lookup.error", path,
+                            getContextPath()), e);
+                }
+            }
+        }
+
+        return (null);
+
+    }
+-----CSCI578-----
+
+
+
+    public URL getResource(String path)
+        throws MalformedURLException {
+        if (Globals.IS_SECURITY_ENABLED) {
+            try {
+                return (URL) invokeMethod(context, "getResource", 
+                                          new Object[]{path});
+            } catch(Throwable t) {
+                if (t instanceof MalformedURLException){
+                    throw (MalformedURLException)t;
+                }
+                return null;
+            }
+        } else {
+            return context.getResource(path);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get full path, based on the host name and the context path.
+     */
+    private static String getJNDIUri(String hostName, String path) {
+        if (!path.startsWith("/"))
+            return "/" + hostName + "/" + path;
+        else
+            return "/" + hostName + path;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Returns true if the resources associated with this context are
+     * filesystem based.
+     */
+    public boolean isFilesystemBased() {
+
+        return (filesystemBased);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    // ----------------------------------------------------- Instance Variables
+    
+    
+    // ------------------------------------------------------------- Properties
+    
+    
+    // ---------------------------------------- URLStreamHandlerFactory Methods
+    
+    
+    /**
+     * Creates a new URLStreamHandler instance with the specified protocol.
+     * Will return null if the protocol is not <code>jndi</code>.
+     * 
+     * @param protocol the protocol (must be "jndi" here)
+     * @return a URLStreamHandler for the jndi protocol, or null if the 
+     * protocol is not JNDI
+     */
+    public URLStreamHandler createURLStreamHandler(String protocol) {
+        if (protocol.equals("jndi")) {
+            return new DirContextURLStreamHandler();
+        } else {
+            return null;
+        }
+    }
+-----CSCI578-----

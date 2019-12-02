@@ -1,0 +1,49 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Try to parse the given date as a HTTP date.
+     * @param value The HTTP date
+     * @param threadLocalformats Local format to avoid synchronization
+     * @return the date as a long
+     */
+    public static final long parseDate(String value,
+                                       DateFormat[] threadLocalformats) {
+
+        Long cachedDate = parseCache.get(value);
+        if (cachedDate != null) {
+            return cachedDate.longValue();
+        }
+
+        Long date = null;
+        if (threadLocalformats != null) {
+            date = internalParseDate(value, threadLocalformats);
+            updateParseCache(value, date);
+        } else {
+            throw new IllegalArgumentException();
+        }
+        if (date == null) {
+            return (-1L);
+        }
+
+        return date.longValue();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Update cache.
+     */
+    private static void updateParseCache(String key, Long value) {
+        if (value == null) {
+            return;
+        }
+        if (parseCache.size() > CACHE_SIZE) {
+            parseCache.clear();
+        }
+        parseCache.put(key, value);
+    }
+-----CSCI578-----

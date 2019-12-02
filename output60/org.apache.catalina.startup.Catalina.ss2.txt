@@ -1,0 +1,194 @@
+21
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the default Realm for our Containers.
+     *
+     * @param realm The new default realm
+     */
+    public void setRealm(Realm realm) {
+
+        Realm oldRealm = this.realm;
+        this.realm = realm;
+        support.firePropertyChange("realm", oldRealm, this.realm);
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Set the security package.definition value.
+     */
+     public void setPackageDefinition(){
+        // If catalina.properties is missing, protect all by default.
+         if (packageDefinition == null){
+            setSecurityProperty("package.definition", PACKAGE_DEFINITION);
+         } else {
+            setSecurityProperty("package.definition", packageDefinition);
+         }
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Set the security package.access value.
+     */
+    public void setPackageAccess(){
+        // If catalina.properties is missing, protect all by default.
+        if (packageAccess == null){
+            setSecurityProperty("package.access", PACKAGE_ACCESS);   
+        } else {
+            setSecurityProperty("package.access", packageAccess);   
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    /**
+     * Returns the singleton instance of that class.
+     * @return an instance of that class.
+     */
+    public static SecurityConfig newInstance(){
+        if (singleton == null){
+            singleton = new SecurityConfig();
+        }
+        return singleton;
+    }
+-----CSCI578-----
+
+     
+     
+    /**
+     * Set the proper security property
+     * @param properties the package.* property.
+     */
+    private final void setSecurityProperty(String properties, String packageList){
+        if (System.getSecurityManager() != null){
+            String definition = Security.getProperty(properties);
+            if( definition != null && definition.length() > 0 ){
+                if (packageList.length() > 0) {
+                    definition = definition + ',' + packageList;
+                }
+            } else {
+                definition = packageList;
+            }
+
+            Security.setProperty(properties, definition);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+
+    // -------------------------------------------------------- Private Methods
+
+    /**
+     * Set the security package access/protection.
+     */
+    protected void setSecurityProtection(){
+        SecurityConfig securityConfig = SecurityConfig.newInstance();
+        securityConfig.setPackageDefinition();
+        securityConfig.setPackageAccess();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Set the <code>catalina.home</code> System property to the current
+     * working directory if it has not been set.
+     * @deprecated Use initDirs()
+     */
+    public void setCatalinaHome() {
+        initDirs();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>catalina.base</code> System property to the current
+     * working directory if it has not been set.
+     * @deprecated Use initDirs()
+     */
+    public void setCatalinaBase() {
+        initDirs();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * The instance main program.
+     *
+     * @param args Command line arguments
+     */
+    public void process(String args[]) {
+
+        setAwait(true);
+        setCatalinaHome();
+        setCatalinaBase();
+        try {
+            if (arguments(args)) {
+                if (starting) {
+                    load(args);
+                    start();
+                } else if (stopping) {
+                    stopServer();
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace(System.out);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>catalina.base</code> System property to the current
+     * working directory if it has not been set.
+     * @deprecated Use initDirs()
+     */
+    public void setCatalinaBase() {
+        initDirs();
+    }
+
+
+    /**
+     * Set the <code>catalina.home</code> System property to the current
+     * working directory if it has not been set.
+     * @deprecated Use initDirs()
+     */
+    public void setCatalinaHome() {
+        initDirs();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a File object representing our configuration file.
+     */
+    protected File configFile() {
+
+        File file = new File(configFile);
+        if (!file.isAbsolute())
+            file = new File(System.getProperty("catalina.base"), configFile);
+        return (file);
+
+    }

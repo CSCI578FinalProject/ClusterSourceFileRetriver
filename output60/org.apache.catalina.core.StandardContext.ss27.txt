@@ -1,0 +1,179 @@
+10
+-----CSCI578-----
+
+
+
+    /**
+     * Finalize and release the set of filters for this Context.
+     * Return <code>true</code> if all filter finalization completed
+     * successfully, or <code>false</code> otherwise.
+     */
+    public boolean filterStop() {
+
+        if (getLogger().isDebugEnabled())
+            getLogger().debug("Stopping filters");
+
+        // Release all Filter and FilterConfig instances
+        synchronized (filterConfigs) {
+            Iterator names = filterConfigs.keySet().iterator();
+            while (names.hasNext()) {
+                String name = (String) names.next();
+                if (getLogger().isDebugEnabled())
+                    getLogger().debug(" Stopping filter '" + name + "'");
+                ApplicationFilterConfig filterConfig =
+                  (ApplicationFilterConfig) filterConfigs.get(name);
+                filterConfig.release();
+            }
+            filterConfigs.clear();
+        }
+        return (true);
+
+    }
+-----CSCI578-----
+
+    
+    private void unregisterJMX() {
+        // unregister this component
+        if (oname != null) {
+            try {
+                Registry.getRegistry(null, null).unregisterComponent(oname);
+                if (log.isDebugEnabled())
+                    log.debug(sm.getString(
+                            "applicationFilterConfig.jmxUnregister",
+                            getFilterClass(), getFilterName()));
+            } catch(Exception ex) {
+                log.error(sm.getString(
+                        "applicationFilterConfig.jmxUnregisterFail",
+                        getFilterClass(), getFilterName()), ex);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Release the Filter instance associated with this FilterConfig,
+     * if there is one.
+     */
+    void release() {
+
+        unregisterJMX();
+        
+        if (this.filter != null)
+        {
+            try {
+                if (Globals.IS_SECURITY_ENABLED) {
+                    try {
+                        SecurityUtil.doAsPrivilege("destroy", filter); 
+                    } finally {
+                        SecurityUtil.remove(filter);
+                    }
+                } else { 
+                    filter.destroy();
+                }
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                context.getLogger().error(sm.getString(
+                        "applicationFilterConfig.release",
+                        filterDef.getFilterName(),
+                        filterDef.getFilterClass()), t);
+            }
+            if (!context.getIgnoreAnnotations()) {
+                try {
+                    ((StandardContext)context).getAnnotationProcessor().preDestroy(this.filter);
+                } catch (Exception e) {
+                    context.getLogger().error("ApplicationFilterConfig.preDestroy", e);
+                }
+            }
+        }
+        this.filter = null;
+
+     }
+-----CSCI578-----
+
+    
+    // --------------------------------------------------- FilterConfig Methods
+
+
+    /**
+     * Return the name of the filter we are configuring.
+     */
+    public String getFilterName() {
+        return (filterDef.getFilterName());
+    }
+-----CSCI578-----
+
+
+    public String getFilterName() {
+        return (this.filterName);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the class of the filter we are configuring.
+     */
+    public String getFilterClass() {
+        return filterDef.getFilterClass();
+    }
+-----CSCI578-----
+
+
+    public String getFilterClass() {
+        return (this.filterClass);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a String representation of this object.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("ApplicationFilterConfig[");
+        sb.append("name=");
+        sb.append(filterDef.getFilterName());
+        sb.append(", filterClass=");
+        sb.append(filterDef.getFilterClass());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a filter definition to this Context.
+     *
+     * @param filterDef The filter definition to be added
+     */
+    public void addFilterDef(FilterDef filterDef) {
+
+        synchronized (filterDefs) {
+            filterDefs.put(filterDef.getFilterName(), filterDef);
+        }
+        fireContainerEvent("addFilterDef", filterDef);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified filter definition from this Context, if it exists;
+     * otherwise, no action is taken.
+     *
+     * @param filterDef Filter definition to be removed
+     */
+    public void removeFilterDef(FilterDef filterDef) {
+
+        synchronized (filterDefs) {
+            filterDefs.remove(filterDef.getFilterName());
+        }
+        fireContainerEvent("removeFilterDef", filterDef);
+
+    }

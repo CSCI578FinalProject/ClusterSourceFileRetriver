@@ -1,0 +1,67 @@
+4
+-----CSCI578-----
+
+    
+    public void close(MsgContext ep) throws IOException {
+        super.nativeDispatch( ep.getMsg(0), ep, CH_CLOSE, 1 );
+    }
+-----CSCI578-----
+
+
+    /** Process a single ajp connection.
+     */
+    void processConnection(MsgContext ep) {
+        if( log.isDebugEnabled() )
+            log.debug( "New ajp connection ");
+        try {
+            MsgAjp recv=new MsgAjp();
+            while( running ) {
+                int res=this.receive( recv, ep );
+                if( res<0 ) {
+                    // EOS
+                    break;
+                }
+                ep.setType(0);
+                log.debug( "Process msg ");
+                int status=next.invoke( recv, ep );
+            }
+            if( log.isDebugEnabled() )
+                log.debug( "Closing un channel");
+            try{
+                Request req = (Request)ep.getRequest();
+                if( req != null ) {
+                    ObjectName roname = (ObjectName)ep.getNote(JMXRequestNote);
+                    if( roname != null ) {
+                        Registry.getRegistry(null, null).unregisterComponent(roname);
+                    }
+                    req.getRequestProcessor().setGlobalProcessor(null);
+                }
+            } catch( Exception ee) {
+                log.error( "Error, releasing connection",ee);
+            }
+            this.close( ep );
+        } catch( Exception ex ) {
+            ex.printStackTrace();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public int receive( Msg msg, MsgContext ep )
+        throws IOException
+    {
+        int rc=super.nativeDispatch( msg, ep, CH_READ, 1 );
+
+        if( rc!=0 ) {
+            log.error("receive error:   " + rc, new Throwable());
+            return -1;
+        }
+        
+        msg.processHeader();
+        
+        if (log.isDebugEnabled())
+             log.debug("receive:  total read = " + msg.getLen());
+
+	return msg.getLen();
+    }

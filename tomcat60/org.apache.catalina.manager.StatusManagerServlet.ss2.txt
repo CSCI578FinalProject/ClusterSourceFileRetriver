@@ -1,0 +1,297 @@
+12
+
+
+    public static void writePageHeading(PrintWriter writer, Object[] args, 
+                                        int mode) {
+        if (mode == 0){
+            writer.print(MessageFormat.format
+                         (Constants.SERVER_HEADER_SECTION, args));
+        }
+    }
+
+
+    /**
+     * Filter the specified message string for characters that are sensitive
+     * in HTML.  This avoids potential attacks caused by including JavaScript
+     * codes in the request URL that is often reported in error messages.
+     *
+     * @param obj The message string to be filtered
+     */
+    public static String filter(Object obj) {
+
+        if (obj == null)
+            return ("?");
+        String message = obj.toString();
+
+        char content[] = new char[message.length()];
+        message.getChars(0, message.length(), content, 0);
+        StringBuffer result = new StringBuffer(content.length + 50);
+        for (int i = 0; i < content.length; i++) {
+            switch (content[i]) {
+            case '<':
+                result.append("&lt;");
+                break;
+            case '>':
+                result.append("&gt;");
+                break;
+            case '&':
+                result.append("&amp;");
+                break;
+            case '"':
+                result.append("&quot;");
+                break;
+            default:
+                result.append(content[i]);
+            }
+        }
+        return (result.toString());
+
+    }
+
+
+    public static void writeHeader(PrintWriter writer, int mode) {
+        if (mode == 0){
+            // HTML Header Section
+            writer.print(Constants.HTML_HEADER_SECTION);
+        } else if (mode == 1){
+            writer.write(Constants.XML_DECLARATION);
+            writer.write
+                (Constants.XML_STYLE);
+            writer.write("<status>");
+        }
+    }
+    
+    
+    /**
+     * Write the VM state. Mode 0 will generate HTML.
+     * Mode 1 will generate XML.
+     */
+    public static void writeVMState(PrintWriter writer, int mode)
+        throws Exception {
+
+        SortedMap<String, MemoryPoolMXBean> memoryPoolMBeans =
+                new TreeMap<String, MemoryPoolMXBean>();
+        for (MemoryPoolMXBean mbean: ManagementFactory.getMemoryPoolMXBeans()) {
+            String sortKey = mbean.getType() + ":" + mbean.getName();
+            memoryPoolMBeans.put(sortKey, mbean);
+        }
+
+        if (mode == 0){
+            writer.print("<h1>JVM</h1>");
+
+            writer.print("<p>");
+            writer.print(" Free memory: ");
+            writer.print(formatSize
+                         (new Long(Runtime.getRuntime().freeMemory()), true));
+            writer.print(" Total memory: ");
+            writer.print(formatSize
+                         (new Long(Runtime.getRuntime().totalMemory()), true));
+            writer.print(" Max memory: ");
+            writer.print(formatSize
+                         (new Long(Runtime.getRuntime().maxMemory()), true));
+            writer.print("</p>");
+
+            writer.write("<table border=\"0\"><thead><tr><th>Memory Pool</th><th>Type</th><th>Initial</th><th>Total</th><th>Maximum</th><th>Used</th></tr></thead><tbody>");
+            for (MemoryPoolMXBean memoryPoolMBean : memoryPoolMBeans.values()) {
+                MemoryUsage usage = memoryPoolMBean.getUsage();
+                writer.write("<tr><td>");
+                writer.print(memoryPoolMBean.getName());
+                writer.write("</td><td>");
+                writer.print(memoryPoolMBean.getType());
+                writer.write("</td><td>");
+                writer.print(formatSize(Long.valueOf(usage.getInit()), true));
+                writer.write("</td><td>");
+                writer.print(formatSize(Long.valueOf(usage.getCommitted()), true));
+                writer.write("</td><td>");
+                writer.print(formatSize(Long.valueOf(usage.getMax()), true));
+                writer.write("</td><td>");
+                writer.print(formatSize(Long.valueOf(usage.getUsed()), true));
+                if (usage.getMax() > 0) {
+                    writer.write(" ("
+                            + (usage.getUsed() * 100 / usage.getMax()) + "%)");
+                }
+                writer.write("</td></tr>");
+            }
+            writer.write("</tbody></table>");
+        } else if (mode == 1){
+            writer.write("<jvm>");
+
+            writer.write("<memory");
+            writer.write(" free='" + Runtime.getRuntime().freeMemory() + "'");
+            writer.write(" total='" + Runtime.getRuntime().totalMemory() + "'");
+            writer.write(" max='" + Runtime.getRuntime().maxMemory() + "'/>");
+
+            for (MemoryPoolMXBean memoryPoolMBean : memoryPoolMBeans.values()) {
+                MemoryUsage usage = memoryPoolMBean.getUsage();
+                writer.write("<memorypool");
+                writer.write(" name='" + memoryPoolMBean.getName() + "'");
+                writer.write(" type='" + memoryPoolMBean.getType() + "'");
+                writer.write(" usageInit='" + usage.getInit() + "'");
+                writer.write(" usageCommitted='" + usage.getCommitted() + "'");
+                writer.write(" usageMax='" + usage.getMax() + "'");
+                writer.write(" usageUsed='" + usage.getUsed() + "'/>");
+            }
+
+            writer.write("</jvm>");
+        }
+
+    }
+
+
+    /**
+     * Write the OS state. Mode 0 will generate HTML.
+     * Mode 1 will generate XML.
+     */
+    public static void writeOSState(PrintWriter writer, int mode) {
+        long[] result = new long[16];
+        boolean ok = false;
+        try {
+            String methodName = "info";
+            Class paramTypes[] = new Class[1];
+            paramTypes[0] = result.getClass();
+            Object paramValues[] = new Object[1];
+            paramValues[0] = result;
+            Method method = Class.forName("org.apache.tomcat.jni.OS")
+                .getMethod(methodName, paramTypes);
+            method.invoke(null, paramValues);
+            ok = true;
+        } catch (Throwable t) {
+            // Ignore
+        }
+        
+        if (ok) {
+            if (mode == 0){
+                writer.print("<h1>OS</h1>");
+
+                writer.print("<p>");
+                writer.print(" Physical memory: ");
+                writer.print(formatSize(new Long(result[0]), true));
+                writer.print(" Available memory: ");
+                writer.print(formatSize(new Long(result[1]), true));
+                writer.print(" Total page file: ");
+                writer.print(formatSize(new Long(result[2]), true));
+                writer.print(" Free page file: ");
+                writer.print(formatSize(new Long(result[3]), true));
+                writer.print(" Memory load: ");
+                writer.print(new Long(result[6]));
+                writer.print("<br>");
+                writer.print(" Process kernel time: ");
+                writer.print(formatTime(new Long(result[11] / 1000), true));
+                writer.print(" Process user time: ");
+                writer.print(formatTime(new Long(result[12] / 1000), true));
+                writer.print("</p>");
+            } else if (mode == 1){
+            }
+        }
+        
+    }
+
+
+    /**
+     * Display the given time in ms, either as ms or s.
+     *
+     * @param seconds true to display seconds, false for milliseconds
+     */
+    public static String formatTime(Object obj, boolean seconds) {
+
+        long time = -1L;
+
+        if (obj instanceof Long) {
+            time = ((Long) obj).longValue();
+        } else if (obj instanceof Integer) {
+            time = ((Integer) obj).intValue();
+        }
+
+        if (seconds) {
+            return ((((float) time ) / 1000) + " s");
+        } else {
+            return (time + " ms");
+        }
+    }
+
+
+    public static void writeServerInfo(PrintWriter writer, Object[] args, 
+                                       int mode){
+        if (mode == 0){
+            writer.print(MessageFormat.format(Constants.SERVER_ROW_SECTION, args));
+        }
+    }
+
+
+    /**
+     * Write the header body. XML output doesn't bother
+     * to output this stuff, since it's just title.
+     * 
+     * @param writer The output writer
+     * @param args What to write
+     * @param mode 0 means write 
+     */
+    public static void writeBody(PrintWriter writer, Object[] args, int mode) {
+        if (mode == 0){
+            writer.print(MessageFormat.format
+                         (Constants.BODY_HEADER_SECTION, args));
+        }
+    }
+
+
+    /**
+     * Display the given size in bytes, either as KB or MB.
+     *
+     * @param mb true to display megabytes, false for kilobytes
+     */
+    public static String formatSize(Object obj, boolean mb) {
+
+        long bytes = -1L;
+
+        if (obj instanceof Long) {
+            bytes = ((Long) obj).longValue();
+        } else if (obj instanceof Integer) {
+            bytes = ((Integer) obj).intValue();
+        }
+
+        if (mb) {
+            StringBuilder buff = new StringBuilder();
+            if (bytes < 0) {
+                buff.append('-');
+                bytes = -bytes;
+            }
+            long mbytes = bytes / (1024 * 1024);
+            long rest = 
+                ((bytes - (mbytes * (1024 * 1024))) * 100) / (1024 * 1024);
+            buff.append(mbytes).append('.');
+            if (rest < 10) {
+                buff.append('0');
+            }
+            buff.append(rest).append(" MB");
+            return buff.toString();
+        } else {
+            return ((bytes / 1024) + " KB");
+        }
+
+    }
+
+
+    /**
+     * 
+     */
+    public static void writeFooter(PrintWriter writer, int mode) {
+        if (mode == 0){
+            // HTML Tail Section
+            writer.print(Constants.HTML_TAIL_SECTION);
+        } else if (mode == 1){
+            writer.write("</status>");
+        }
+    }
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    public static void setContentType(HttpServletResponse response, 
+                                      int mode) {
+        if (mode == 0){
+            response.setContentType("text/html;charset="+Constants.CHARSET);
+        } else if (mode == 1){
+            response.setContentType("text/xml;charset="+Constants.CHARSET);
+        }
+    }

@@ -1,0 +1,35 @@
+4
+
+   /**
+    * Release lock for in/out messages election is completed
+    */
+   protected void release() {
+
+   }
+    
+    /**
+    * Block in/out messages while a election is going on
+    */
+   protected void halt() {
+
+   }
+
+    public void stop(int svc) throws ChannelException {
+        try {
+            halt();
+            synchronized (electionMutex) {
+                if (!started)return;
+                started = false;
+                fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_STOP, this, "Before stop"));
+                super.stop(startsvc);
+                this.view = null;
+                this.viewId = null;
+                this.suggestedView = null;
+                this.suggestedviewId = null;
+                this.membership.reset();
+                fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_STOP, this, "After stop"));
+            }
+        }finally {
+            release();
+        }
+    }

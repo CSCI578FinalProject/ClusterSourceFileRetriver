@@ -1,0 +1,104 @@
+12
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private static void checkNotNull(Object value) {
+        if (value == null) {
+            throw new NullPointerException();
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public V put(K key, V value) {
+        checkNotNull(value);
+        return map.put(createStoreKey(key), value);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public V putIfAbsent(K key, V value) {
+        checkNotNull(value);
+        Key storeKey = createStoreKey(key);
+        V oldValue = map.putIfAbsent(storeKey, value);
+        if (oldValue != null) { // ack that key has not been stored
+            storeKey.ackDeath();
+        }
+        return oldValue;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean replace(K key, V oldValue, V newValue) {
+        checkNotNull(newValue);
+        return map.replace(createLookupKey(key), oldValue, newValue);
+    }
+
+
+    @Override
+    public V replace(K key, V value) {
+        checkNotNull(value);
+        return map.replace(createLookupKey(key), value);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Creates Key instance to be used to store values in the map. It is
+     * registered with the ReferenceQueue.
+     */
+    private Key createStoreKey(Object key) {
+        return new Key(key, queue);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Creates Key instance to be used only to lookup values in the map. It is
+     * not registered with the ReferenceQueue.
+     */
+    private Key createLookupKey(Object key) {
+        return new Key(key, null);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean containsKey(Object key) {
+        if (key == null) {
+            return false;
+        }
+        return map.containsKey(createLookupKey(key));
+    }
+-----CSCI578-----
+
+
+    @Override
+    public V get(Object key) {
+        if (key == null) {
+            return null;
+        }
+        return map.get(createLookupKey(key));
+    }
+-----CSCI578-----
+
+
+    @Override
+    public V remove(Object key) {
+        return map.remove(createLookupKey(key));
+    }
+
+
+    @Override
+    public boolean remove(Object key, Object value) {
+        if (value == null) {
+            return false;
+        }
+        return map.remove(createLookupKey(key), value);
+    }

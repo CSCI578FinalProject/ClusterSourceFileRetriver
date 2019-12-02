@@ -1,0 +1,29 @@
+2
+
+    /*
+     * Parse a string in single or double quotes, allowing for escape sequences
+     * '\\', '\"' and "\'"
+     */
+    private Token parseQuotedChars(char quote) {
+        StringBuilder buf = new StringBuilder();
+        buf.append(quote);
+        while (hasNextChar()) {
+            char ch = nextChar();
+            if (ch == '\\') {
+                ch = nextChar();
+                if (ch == '\\' || ch == '\'' || ch == '\"') {
+                    buf.append(ch);
+                } else {
+                    throw new IllegalArgumentException(Localizer.getMessage(
+                            "org.apache.jasper.compiler.ELParser.invalidQuoting",
+                            expression));
+                }
+            } else if (ch == quote) {
+                buf.append(ch);
+                break;
+            } else {
+                buf.append(ch);
+            }
+        }
+        return new QuotedString(getAndResetWhiteSpace(), buf.toString());
+    }

@@ -1,0 +1,104 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private static void initializeSSL() throws Exception {
+
+        if ("off".equalsIgnoreCase(SSLEngine)) {
+            return;
+        }
+        if (sslInitialized) {
+             //only once per VM
+            return;
+        }
+
+        sslInitialized = true;
+
+        String methodName = "randSet";
+        Class<?> paramTypes[] = new Class[1];
+        paramTypes[0] = String.class;
+        Object paramValues[] = new Object[1];
+        paramValues[0] = SSLRandomSeed;
+        Class<?> clazz = Class.forName("org.apache.tomcat.jni.SSL");
+        Method method = clazz.getMethod(methodName, paramTypes);
+        method.invoke(null, paramValues);
+
+
+        methodName = "initialize";
+        paramValues[0] = "on".equalsIgnoreCase(SSLEngine)?null:SSLEngine;
+        method = clazz.getMethod(methodName, paramTypes);
+        method.invoke(null, paramValues);
+
+        if (!(null == FIPSMode || "off".equalsIgnoreCase(FIPSMode))) {
+
+            fipsModeActive = false;
+
+            final boolean enterFipsMode;
+            int fipsModeState = SSL.fipsModeGet();
+
+            if(log.isDebugEnabled()) {
+                log.debug(sm.getString("aprListener.currentFIPSMode",
+                                       Integer.valueOf(fipsModeState)));
+            }
+
+            if ("on".equalsIgnoreCase(FIPSMode)) {
+                if (fipsModeState == FIPS_ON) {
+                    log.info(sm.getString("aprListener.skipFIPSInitialization"));
+                    fipsModeActive = true;
+                    enterFipsMode = false;
+                } else {
+                    enterFipsMode = true;
+                }
+            } else if ("require".equalsIgnoreCase(FIPSMode)) {
+                if (fipsModeState == FIPS_ON) {
+                    fipsModeActive = true;
+                    enterFipsMode = false;
+                } else {
+                    throw new IllegalStateException(
+                            sm.getString("aprListener.requireNotInFIPSMode"));
+                }
+            } else if ("enter".equalsIgnoreCase(FIPSMode)) {
+                if (fipsModeState == FIPS_OFF) {
+                    enterFipsMode = true;
+                } else {
+                    throw new IllegalStateException(sm.getString(
+                            "aprListener.enterAlreadyInFIPSMode",
+                            Integer.valueOf(fipsModeState)));
+                }
+            } else {
+                throw new IllegalArgumentException(sm.getString(
+                        "aprListener.wrongFIPSMode", FIPSMode));
+            }
+
+            if (enterFipsMode) {
+                log.info(sm.getString("aprListener.initializingFIPS"));
+
+                fipsModeState = SSL.fipsModeSet(FIPS_ON);
+                if (fipsModeState != FIPS_ON) {
+                    // This case should be handled by the native method,
+                    // but we'll make absolutely sure, here.
+                    String message = sm.getString("aprListener.initializeFIPSFailed");
+                    log.error(message);
+                    throw new IllegalStateException(message);
+                }
+
+                fipsModeActive = true;
+                log.info(sm.getString("aprListener.initializeFIPSSuccess"));
+            }
+        }
+
+        log.info(sm.getString("aprListener.initializedOpenSSL", SSL.versionString()));
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get the status of FIPS Mode.
+     *
+     * @return FIPS_mode return code. It is <code>0</code> if OpenSSL is not
+     *  in FIPS mode, <code>1</code> if OpenSSL is in FIPS Mode.
+     * @throws Exception If tcnative was not compiled with FIPS Mode available.
+     * @see <a href="http://wiki.openssl.org/index.php/FIPS_mode%28%29">OpenSSL method FIPS_mode()</a>
+     */
+    public static native int fipsModeGet() throws Exception;

@@ -1,0 +1,33 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public void register(BackgroundProcess process) {
+        synchronized (processesLock) {
+            if (processes.size() == 0) {
+                wsBackgroundThread = new WsBackgroundThread(this);
+                wsBackgroundThread.setContextClassLoader(
+                        this.getClass().getClassLoader());
+                wsBackgroundThread.setDaemon(true);
+                wsBackgroundThread.start();
+            }
+            processes.add(process);
+        }
+    }
+
+
+
+    public void unregister(BackgroundProcess process) {
+        synchronized (processesLock) {
+            processes.remove(process);
+            if (wsBackgroundThread != null && processes.size() == 0) {
+                wsBackgroundThread.halt();
+                wsBackgroundThread = null;
+            }
+        }
+    }

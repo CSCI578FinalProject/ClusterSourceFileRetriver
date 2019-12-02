@@ -1,0 +1,149 @@
+12
+-----CSCI578-----
+
+
+    public void setReadListener(ReadListener listener) {
+        if (listener == null) {
+            throw new NullPointerException(
+                    sm.getString("request.nullReadListener"));
+        }
+        if (getReadListener() != null) {
+            throw new IllegalStateException(
+                    sm.getString("request.readListenerSet"));
+        }
+        // Note: This class is not used for HTTP upgrade so only need to test
+        //       for async
+        AtomicBoolean result = new AtomicBoolean(false);
+        action(ActionCode.ASYNC_IS_ASYNC, result);
+        if (!result.get()) {
+            throw new IllegalStateException(
+                    sm.getString("request.notAsync"));
+        }
+
+        this.listener = listener;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setReadListener(ReadListener listener) {
+        ib.setReadListener(listener);
+    }
+-----CSCI578-----
+
+
+
+    public void setReadListener(ReadListener listener) {
+        coyoteRequest.setReadListener(listener);
+
+        // The container is responsible for the first call to
+        // listener.onDataAvailable(). If isReady() returns true, the container
+        // needs to call listener.onDataAvailable() from a new thread. If
+        // isReady() returns false, the socket will be registered for read and
+        // the container will call listener.onDataAvailable() once data arrives.
+        // Must call isFinished() first as a call to isReady() if the request
+        // has been finished will register the socket for read interest and that
+        // is not required.
+        if (!coyoteRequest.isFinished() && isReady()) {
+            coyoteRequest.action(ActionCode.DISPATCH_READ, null);
+            if (!ContainerThreadMarker.isContainerThread()) {
+                // Not on a container thread so need to execute the dispatch
+                coyoteRequest.action(ActionCode.DISPATCH_EXECUTE, null);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public void action(ActionCode actionCode, Object param) {
+        if (hook != null) {
+            if (param == null) {
+                hook.action(actionCode, this);
+            } else {
+                hook.action(actionCode, param);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public ReadListener getReadListener() {
+        return listener;
+    }
+-----CSCI578-----
+
+
+
+    public boolean isReady() {
+        if (coyoteRequest.getReadListener() == null) {
+            throw new IllegalStateException(sm.getString("inputBuffer.requiresNonBlocking"));
+        }
+        if (isFinished()) {
+            // If this is a non-container thread, need to trigger a read
+            // which will eventually lead to a call to onAllDataRead() via a
+            // container thread.
+            if (!ContainerThreadMarker.isContainerThread()) {
+                coyoteRequest.action(ActionCode.DISPATCH_READ, null);
+                coyoteRequest.action(ActionCode.DISPATCH_EXECUTE, null);
+            }
+            return false;
+        }
+        boolean result = available() > 0;
+        if (!result) {
+            coyoteRequest.action(ActionCode.NB_READ_INTEREST, null);
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    public boolean isFinished() {
+        AtomicBoolean result = new AtomicBoolean(false);
+        action(ActionCode.REQUEST_BODY_FULLY_READ, result);
+        return result.get();
+    }
+-----CSCI578-----
+
+
+    public static boolean isContainerThread() {
+        Boolean flag = marker.get();
+        if (flag == null) {
+            return false;
+        } else {
+            return flag.booleanValue();
+        }
+    }
+-----CSCI578-----
+
+
+
+    public boolean isFinished() {
+        int available = 0;
+        if (state == BYTE_STATE) {
+            available = bb.getLength();
+        } else if (state == CHAR_STATE) {
+            available = cb.getLength();
+        }
+        if (available > 0) {
+            return false;
+        } else {
+            return coyoteRequest.isFinished();
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean isFinished() {
+        return ib.isFinished();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isReady() {
+        return ib.isReady();
+    }
+-----CSCI578-----

@@ -1,0 +1,47 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove an existing child Container from association with this parent
+     * Container.
+     *
+     * @param child Existing child Container to be removed
+     */
+    @Override
+    public void removeChild(Container child) {
+
+        if (child == null) {
+            return;
+        }
+
+        synchronized(children) {
+            if (children.get(child.getName()) == null)
+                return;
+            children.remove(child.getName());
+        }
+
+        try {
+            if (child.getState().isAvailable()) {
+                child.stop();
+            }
+        } catch (LifecycleException e) {
+            log.error("ContainerBase.removeChild: stop: ", e);
+        }
+
+        fireContainerEvent(REMOVE_CHILD_EVENT, child);
+
+        try {
+            // child.destroy() may have already been called which would have
+            // triggered this call. If that is the case, no need to destroy the
+            // child again.
+            if (!LifecycleState.DESTROYING.equals(child.getState())) {
+                child.destroy();
+            }
+        } catch (LifecycleException e) {
+            log.error("ContainerBase.removeChild: destroy: ", e);
+        }
+
+    }

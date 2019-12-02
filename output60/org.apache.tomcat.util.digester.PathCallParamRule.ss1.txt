@@ -1,0 +1,142 @@
+11
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the start of this element.
+     *
+     * @param namespace the namespace URI of the matching element, or an 
+     *   empty string if the parser is not namespace aware or the element has
+     *   no namespace
+     * @param name the local name if the parser is namespace aware, or just 
+     *   the element name otherwise
+     * @param attributes The attribute list for this element
+
+     */
+    public void begin(String namespace, String name, Attributes attributes) throws Exception {
+
+        String param = getDigester().getMatch();
+        
+        if(param != null) {
+            Object parameters[] = (Object[]) digester.peekParams();
+            parameters[paramIndex] = param;
+        }
+        
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Stack whose elements are List objects, each containing a list of
+     * Rule objects as returned from Rules.getMatch(). As each xml element
+     * in the input is entered, the matching rules are pushed onto this
+     * stack. After the end tag is reached, the matches are popped again.
+     * The depth of is stack is therefore exactly the same as the current
+     * "nesting" level of the input xml.
+     *
+     * @since 1.6
+     */
+    protected ArrayStack matches = new ArrayStack(10);
+
+
+    /**
+     * Return the current rule match path
+     */
+    public String getMatch() {
+
+        return match;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the top item off of this stack without removing it.
+     *
+     * @return the top item on the stack
+     * @throws EmptyStackException  if the stack is empty
+     */
+    public Object peek() throws EmptyStackException {
+        int n = size();
+        if (n <= 0) {
+            throw new EmptyStackException();
+        } else {
+            return get(n - 1);
+        }
+    }
+
+
+    /**
+     * Returns the n'th item down (zero-relative) from the top of this
+     * stack without removing it.
+     *
+     * @param n  the number of items down to go
+     * @return the n'th item on the stack, zero relative
+     * @throws EmptyStackException  if there are not enough items on the
+     *  stack to satisfy this request
+     */
+    public Object peek(int n) throws EmptyStackException {
+        int m = (size() - n) - 1;
+        if (m < 0) {
+            throw new EmptyStackException();
+        } else {
+            return get(m);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /**
+     * Process any body texts now.
+     */
+    public void end(String namespace, String name) {
+        if (bodyTextStack != null && !bodyTextStack.empty()) {
+            // what we do now is push one parameter onto the top set of parameters
+            Object parameters[] = (Object[]) digester.peekParams();
+            parameters[paramIndex] = bodyTextStack.pop();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return <code>true</code> if this stack is currently empty.
+     * <p>
+     * This method exists for compatibility with <code>java.util.Stack</code>.
+     * New users of this class should use <code>isEmpty</code> instead.
+     * 
+     * @return true if the stack is currently empty
+     */
+    public boolean empty() {
+        return isEmpty();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * <p>Is the stack with the given name empty?</p>
+     * <p><strong>Note:</strong> a stack is considered empty
+     * if no objects have been pushed onto it yet.</p>
+     * @param stackName the name of the stack whose emptiness
+     * should be evaluated
+     * @return true if the given stack if empty
+     *
+     * @since 1.6
+     */
+    public boolean isEmpty(String stackName) {
+        boolean result = true;
+        ArrayStack namedStack = (ArrayStack) stacksByName.get(stackName);
+        if (namedStack != null ) {
+            result = namedStack.isEmpty();
+        }
+        return result;
+    }

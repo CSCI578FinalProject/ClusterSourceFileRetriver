@@ -1,0 +1,77 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * @return the Charset used for string&lt;-&gt;byte conversions.
+     */
+    public Charset getCharset() {
+        return byteC.getCharset();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Copy the src into this MessageBytes, allocating more space if needed.
+     * @param src The source
+     * @throws IOException Writing overflow data to the output channel failed
+     */
+    public void duplicate( MessageBytes src ) throws IOException
+    {
+        switch( src.getType() ) {
+        case MessageBytes.T_BYTES:
+            type=T_BYTES;
+            ByteChunk bc=src.getByteChunk();
+            byteC.allocate( 2 * bc.getLength(), -1 );
+            byteC.append( bc );
+            break;
+        case MessageBytes.T_CHARS:
+            type=T_CHARS;
+            CharChunk cc=src.getCharChunk();
+            charC.allocate( 2 * cc.getLength(), -1 );
+            charC.append( cc );
+            break;
+        case MessageBytes.T_STR:
+            type=T_STR;
+            String sc=src.getString();
+            this.setString( sc );
+            break;
+        }
+        setCharset(src.getCharset());
+    }
+-----CSCI578-----
+
+
+    // -------------------- Setup --------------------
+
+    public void allocate( int initial, int limit  ) {
+        if( buff==null || buff.length < initial ) {
+            buff=new char[initial];
+        }
+        this.limit=limit;
+        start=0;
+        end=0;
+        isSet=true;
+        hasHashCode = false;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the Charset used for string&lt;-&gt;byte conversions.
+     * @param charset The charset
+     */
+    public void setCharset(Charset charset) {
+        byteC.setCharset(charset);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the string value.
+     * Valid only if T_STR or after a conversion was made.
+     * @return the string
+     */
+    public String getString() {
+        return strValue;
+    }

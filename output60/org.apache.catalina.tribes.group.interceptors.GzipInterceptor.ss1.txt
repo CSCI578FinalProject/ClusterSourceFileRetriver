@@ -1,0 +1,57 @@
+5
+-----CSCI578-----
+
+
+    public void messageReceived(ChannelMessage msg) {
+        try {
+            byte[] data = decompress(msg.getMessage().getBytes());
+            msg.getMessage().trim(msg.getMessage().getLength());
+            msg.getMessage().append(data,0,data.length);
+            getPrevious().messageReceived(msg);
+        } catch ( IOException x ) {
+            log.error("Unable to decompress byte contents",x);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /**
+     * the <code>messageReceived</code> is invoked when a message is received.
+     * <code>ChannelMessage.getAddress()</code> is the sender, or the reply-to address
+     * if it has been overwritten.
+     * @param data ChannelMessage
+     */
+    public void messageReceived(ChannelMessage data);
+-----CSCI578-----
+
+    
+    /**
+     * @param data  Data to decompress
+     * @return      Decompressed data
+     * @throws IOException
+     */
+    public static byte[] decompress(byte[] data) throws IOException {
+        ByteArrayOutputStream bout =
+            new ByteArrayOutputStream(DEFAULT_BUFFER_SIZE);
+        ByteArrayInputStream bin = new ByteArrayInputStream(data);
+        GZIPInputStream gin = new GZIPInputStream(bin);
+        byte[] tmp = new byte[DEFAULT_BUFFER_SIZE];
+        int length = gin.read(tmp);
+        while (length > -1) {
+            bout.write(tmp, 0, length);
+            length = gin.read(tmp);
+        }
+        return bout.toByteArray();
+    }
+-----CSCI578-----
+
+    
+    public static void main(String[] arg) throws Exception {
+        byte[] data = new byte[1024];
+        Arrays.fill(data,(byte)1);
+        byte[] compress = compress(data);
+        byte[] decompress = decompress(compress);
+        System.out.println("Debug test");
+        
+    }

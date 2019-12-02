@@ -1,0 +1,91 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Return a PreparedStatement configured to perform the SELECT required
+     * to retrieve user credentials for the specified username.
+     *
+     * @param dbConnection The database connection to be used
+     * @param username Username for which credentials should be retrieved
+     *
+     * @exception SQLException if a database error occurs
+     */
+    private PreparedStatement credentials(Connection dbConnection,
+                                            String username)
+        throws SQLException {
+
+        PreparedStatement credentials =
+            dbConnection.prepareStatement(preparedCredentials);
+
+        credentials.setString(1, username);
+        return (credentials);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the password associated with the given principal's user name.
+     */
+    protected String getPassword(String username) {
+
+        Connection dbConnection = null;
+
+        // Ensure that we have an open database connection
+        dbConnection = open();
+        if (dbConnection == null) {
+            return null;
+        }
+
+        try {
+        	return getPassword(dbConnection, username);        	
+        } finally {
+            close(dbConnection);
+        }
+    }
+
+    
+    /**
+     * Return the password associated with the given principal's user name.
+     * @param dbConnection The database connection to be used
+     * @param username Username for which password should be retrieved
+     */
+    protected String getPassword(Connection dbConnection, 
+								 String username) {
+
+        ResultSet rs = null;
+        PreparedStatement stmt = null;
+        String dbCredentials = null;
+
+        try {
+            stmt = credentials(dbConnection, username);
+            rs = stmt.executeQuery();
+            if (rs.next()) {
+                dbCredentials = rs.getString(1);
+            }
+
+            return (dbCredentials != null) ? dbCredentials.trim() : null;
+            
+        } catch(SQLException e) {
+            containerLog.error(
+                    sm.getString("dataSourceRealm.getPassword.exception",
+                                 username));
+        } finally {
+        	try {
+	            if (rs != null) {
+	                rs.close();
+	            }
+	            if (stmt != null) {
+	                stmt.close();
+	            }
+        	} catch (SQLException e) {
+                    containerLog.error(
+                        sm.getString("dataSourceRealm.getPassword.exception",
+        		             username));
+        		
+        	}
+        }
+        
+        return null;
+    }

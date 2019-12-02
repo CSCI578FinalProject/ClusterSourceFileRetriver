@@ -1,0 +1,64 @@
+8
+-----CSCI578-----
+
+
+    @Override
+    public boolean evict(EvictionConfig config, PooledObject<T> underTest,
+            int idleCount) {
+
+        if ((config.getIdleSoftEvictTime() < underTest.getIdleTimeMillis() &&
+                config.getMinIdle() < idleCount) ||
+                config.getIdleEvictTime() < underTest.getIdleTimeMillis()) {
+            return true;
+        }
+        return false;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Obtain the time in milliseconds that this object last spend in the the
+     * idle state (it may still be idle in which case subsequent calls will
+     * return an increased value).
+     *
+     * @return The time in milliseconds last spent in the idle state
+     */
+    long getIdleTimeMillis();
+-----CSCI578-----
+
+
+    /**
+     * Updates statistics after an object is borrowed from the pool.
+     * @param p object borrowed from the pool
+     * @param waitTime time (in milliseconds) that the borrowing thread had to wait
+     */
+    final void updateStatsBorrow(PooledObject<T> p, long waitTime) {
+        borrowedCount.incrementAndGet();
+        idleTimes.add(p.getIdleTimeMillis());
+        waitTimes.add(waitTime);
+
+        // lock-free optimistic-locking maximum
+        long currentMax;
+        do {
+            currentMax = maxBorrowWaitTimeMillis.get();
+            if (currentMax >= waitTime) {
+                break;
+            }
+        } while (!maxBorrowWaitTimeMillis.compareAndSet(currentMax, waitTime));
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Updates statistics after an object is returned to the pool.
+     * @param activeTime the amount of time (in milliseconds) that the returning
+     * object was checked out
+     */
+    final void updateStatsReturn(long activeTime) {
+        returnedCount.incrementAndGet();
+        activeTimes.add(activeTime);
+    }

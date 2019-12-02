@@ -1,0 +1,258 @@
+15
+-----CSCI578-----
+
+
+//============================================================================================================
+//              COORDINATION HANDLING
+//============================================================================================================
+
+    public void startElection(boolean force) throws ChannelException {
+        synchronized (electionMutex) {
+            Member local = getLocalMember(false);
+            Member[] others = membership.getMembers();
+            fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_START_ELECT,this,"Election initated"));
+            if ( others.length == 0 ) {
+                this.viewId = new UniqueId(UUIDGenerator.randomUUID(false));
+                this.view = new Membership(local,AbsoluteOrder.comp, true);
+                this.handleViewConf(createElectionMsg(local,others,local), view);
+                return; //the only member, no need for an election
+            }
+            if ( suggestedviewId != null ) {
+
+                if ( view != null && Arrays.diff(view,suggestedView,local).length == 0 &&  Arrays.diff(suggestedView,view,local).length == 0) {
+                    suggestedviewId = null;
+                    suggestedView = null;
+                    fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_ELECT_ABANDONED,this,"Election abandoned, running election matches view"));
+                } else {
+                    fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_ELECT_ABANDONED,this,"Election abandoned, election running"));
+                }
+                return; //election already running, I'm not allowed to have two of them
+            }
+            if ( view != null && Arrays.diff(view,membership,local).length == 0 &&  Arrays.diff(membership,view,local).length == 0) {
+                fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_ELECT_ABANDONED,this,"Election abandoned, view matches membership"));
+                return; //already have this view installed
+            }
+            int prio = AbsoluteOrder.comp.compare(local,others[0]);
+            Member leader = ( prio < 0 )?local:others[0];//am I the leader in my view?
+            if ( local.equals(leader) || force ) {
+                CoordinationMessage msg = createElectionMsg(local, others, leader);
+                suggestedviewId = msg.getId();
+                suggestedView = new Membership(local,AbsoluteOrder.comp,true);
+                Arrays.fill(suggestedView,msg.getMembers());
+                fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_PROCESS_ELECT,this,"Election, sending request"));
+                sendElectionMsg(local,others[0],msg);
+            } else {
+                try {
+                    coordMsgReceived.set(false);
+                    fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_WAIT_FOR_MSG,this,"Election, waiting for request"));
+                    electionMutex.wait(waitForCoordMsgTimeout);
+                } catch (InterruptedException x) {
+                    Thread.currentThread().interrupt();
+                }
+                String msg;
+                if (suggestedviewId == null && !coordMsgReceived.get()) {
+                    if (Thread.interrupted()) {
+                        msg = "Election abandoned, waiting interrupted.";
+                    } else {
+                        msg = "Election abandoned, waiting timed out.";
+                    }
+                } else {
+                    msg = "Election abandoned, received a message";
+                }
+                fireInterceptorEvent(new CoordinationEvent(
+                        CoordinationEvent.EVT_ELECT_ABANDONED, this, msg));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    private CoordinationMessage createElectionMsg(Member local, Member[] others, Member leader) {
+        Membership m = new Membership(local,AbsoluteOrder.comp,true);
+        Arrays.fill(m,others);
+        Member[] mbrs = m.getMembers();
+        m.reset();
+        CoordinationMessage msg = new CoordinationMessage(leader, local, mbrs,new UniqueId(UUIDGenerator.randomUUID(true)), COORD_REQUEST);
+        return msg;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Runs a refresh cycle and returns a list of members that has expired.
+     * This also removes the members from the membership, in such a way that
+     * getMembers() = getMembers() - expire()
+     * @param maxtime - the max time a member can remain unannounced before it is considered dead.
+     * @return the list of expired members
+     */
+    public Member[] expire(long maxtime) {
+        synchronized (membersLock) {
+            if (!hasMembers()) {
+               return EMPTY_MEMBERS;
+            }
+
+            ArrayList<Member> list = null;
+            Iterator<MbrEntry> i = map.values().iterator();
+            while (i.hasNext()) {
+                MbrEntry entry = i.next();
+                if (entry.hasExpired(maxtime)) {
+                    if (list == null) {
+                        // Only need a list when members are expired (smaller gc)
+                        list = new java.util.ArrayList<>();
+                    }
+                    list.add(entry.getMember());
+                }
+            }
+
+            if (list != null) {
+                Member[] result = new Member[list.size()];
+                list.toArray(result);
+                for (int j=0; j<result.length; j++) {
+                    removeMember(result[j]);
+                }
+                return result;
+            } else {
+                return EMPTY_MEMBERS ;
+            }
+        }
+    }
+
+
+    /**
+     * Returning a list of all the members in the membership.
+     * We not need a copy: add and remove generate new arrays.
+     *
+     * @return An array of the current members
+     */
+    public Member[] getMembers() {
+        return members;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the member that represents this node.
+     *
+     * @return Member
+     */
+    @Override
+    public Member getLocalMember(boolean incAlive) {
+        Member local = super.getLocalMember(incAlive);
+        if ( view == null && (local != null)) setupMembership();
+        return local;
+    }
+-----CSCI578-----
+
+
+    public static Member[] diff(Membership complete, Membership local, Member ignore) {
+        ArrayList<Member> result = new ArrayList<>();
+        Member[] comp = complete.getMembers();
+        for ( int i=0; i<comp.length; i++ ) {
+            if ( ignore!=null && ignore.equals(comp[i]) ) continue;
+            if ( local.getMember(comp[i]) == null ) result.add(comp[i]);
+        }
+        return result.toArray(new Member[result.size()]);
+    }
+-----CSCI578-----
+
+
+    public static void fill(Membership mbrship, Member[] m) {
+        for (int i=0; i<m.length; i++ ) mbrship.addMember(m[i]);
+    }
+-----CSCI578-----
+
+
+    protected void sendElectionMsg(Member local, Member next, CoordinationMessage msg) throws ChannelException {
+        fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_SEND_MSG,this,"Sending election message to("+next.getName()+")"));
+        super.sendMessage(new Member[] {next}, createData(msg, local), null);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Member[] getMembers() {
+        if ( membership == null ) setupMembership();
+        return membership.getMembers();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void heartbeat() {
+        try {
+            Member local = getLocalMember(false);
+            if ( view != null && (Arrays.diff(view,membership,local).length != 0 ||  Arrays.diff(membership,view,local).length != 0) ) {
+                if ( isHighest() ) {
+                    fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_START_ELECT, this,
+                            sm.getString("nonBlockingCoordinator.heartbeat.inconsistency")));
+                    startElection(true);
+                }
+            }
+        } catch ( Exception x  ){
+            log.error(sm.getString("nonBlockingCoordinator.heartbeat.failed"),x);
+        } finally {
+            super.heartbeat();
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Member[] getMembers() {
+        if ( membership == null ) setupMembership();
+        return membership.getMembers();
+    }
+-----CSCI578-----
+
+    @Override
+    public Member[] getMembers() {
+        if ( impl == null || impl.membership == null ) return EMPTY_MEMBERS;
+        return impl.membership.getMembers();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the member by name
+     */
+    @Override
+    public Member findMemberByName(String name) {
+        Member[] currentMembers = getMembers();
+        for (int i = 0; i < currentMembers.length; i++) {
+            if (name.equals(currentMembers[i].toString()))
+                return currentMembers[i];
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    public static UniqueId getUniqudId(ChannelMessage msg) {
+        return new UniqueId(msg.getUniqueId());
+    }
+
+
+    public static UniqueId getUniqudId(byte[] data) {
+        return new UniqueId(data);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return all the members by name
+     */
+    @Override
+    public String[] getMembersByName() {
+        Member[] currentMembers = getMembers();
+        String [] membernames ;
+        if(currentMembers != null) {
+            membernames = new String[currentMembers.length];
+            for (int i = 0; i < currentMembers.length; i++) {
+                membernames[i] = currentMembers[i].toString() ;
+            }
+        } else
+            membernames = new String[0] ;
+        return membernames ;
+    }

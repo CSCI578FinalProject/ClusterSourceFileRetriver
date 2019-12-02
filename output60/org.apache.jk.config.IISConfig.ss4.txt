@@ -1,0 +1,67 @@
+2
+-----CSCI578-----
+
+
+    protected void generateContextMappings(Context context, PrintWriter uri_worker )
+    {
+        String ctxPath  = context.getPath();
+	String nPath=("".equals(ctxPath)) ? "/" : ctxPath;
+
+        if( noRoot &&  "".equals(ctxPath) ) {
+            log.debug("Ignoring root context in forward-all mode  ");
+            return;
+        } 
+
+        // Static files will be served by IIS
+        uri_worker.println();
+        uri_worker.println("#########################################################");		    
+        uri_worker.println("# Auto configuration for the " + nPath + " context.");
+        uri_worker.println("#########################################################");		    
+        uri_worker.println();
+
+        // Static mappings are not set in uriworkermap, but must be set with IIS admin.
+
+	// InvokerInterceptor - it doesn't have a container,
+	// but it's implemented using a special module.
+
+	// XXX we need to better collect all mappings
+
+	if(context.getLoginConfig() != null) {
+	    String loginPage = context.getLoginConfig().getLoginPage();
+	    if(loginPage != null) {
+		int lpos = loginPage.lastIndexOf("/");
+		String jscurl = loginPage.substring(0,lpos+1) + "j_security_check";
+		addMapping( ctxPath, jscurl, uri_worker);
+	    }
+	}
+		String [] servletMaps=context.findServletMappings();
+	for( int ii=0; ii < servletMaps.length ; ii++) {
+	    addMapping( ctxPath , servletMaps[ii] , uri_worker );
+	}
+    }
+-----CSCI578-----
+
+
+    /** Add an IIS extension mapping.
+     */
+    protected boolean addMapping( String ctxPath, String ext,
+					 PrintWriter uri_worker )
+    {
+        if( log.isDebugEnabled() )
+            log.debug( "Adding extension map for " + ctxPath + "/*." + ext );
+	if(! ext.startsWith("/") )
+	    ext = "/" + ext;
+	if(ext.length() > 1)
+	    uri_worker.println(ctxPath + "/*." + ext + "=$(default.worker)");
+        return true;
+    }
+
+
+    /** Add a fulling specified IIS mapping.
+     */
+    protected boolean addMapping( String fullPath, PrintWriter uri_worker ) {
+        if( log.isDebugEnabled() )
+            log.debug( "Adding map for " + fullPath );
+        uri_worker.println(fullPath + "=$(default.worker)" );
+        return true;
+    }

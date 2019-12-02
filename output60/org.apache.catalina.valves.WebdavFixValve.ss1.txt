@@ -1,0 +1,325 @@
+21
+-----CSCI578-----
+
+
+    private String buildRedirect(Request request) {
+        StringBuffer location =
+            new StringBuffer(request.getRequestURL().length());
+        location.append(request.getScheme());
+        location.append("://");
+        location.append(request.getHost().getName());
+        location.append(':');
+        // If we include the port, even if it is 80, then MS clients will use
+        // a WebDAV client that works rather than the MiniRedir that has
+        // problems with BASIC authentication
+        location.append(request.getServerPort());
+        location.append(request.getRequestURI());
+        return location.toString();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Check for the broken MS WebDAV client and if detected issue a re-direct
+     * that hopefully will cause the non-broken client to be used.
+     */
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        String ua = request.getHeader("User-Agent");
+        if (ua != null && ua.contains("MiniRedir")) {
+            response.sendRedirect(buildRedirect(request));
+        } else {
+            getNext().invoke(request, response);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * <p>Perform request processing as required by this Valve.</p>
+     *
+     * <p>An individual Valve <b>MAY</b> perform the following actions, in
+     * the specified order:</p>
+     * <ul>
+     * <li>Examine and/or modify the properties of the specified Request and
+     *     Response.
+     * <li>Examine the properties of the specified Request, completely generate
+     *     the corresponding Response, and return control to the caller.
+     * <li>Examine the properties of the specified Request and Response, wrap
+     *     either or both of these objects to supplement their functionality,
+     *     and pass them on.
+     * <li>If the corresponding Response was not generated (and control was not
+     *     returned, call the next Valve in the pipeline (if there is one) by
+     *     executing <code>getNext().invoke()</code>.
+     * <li>Examine, but not modify, the properties of the resulting Response
+     *     (which was created by a subsequently invoked Valve or Container).
+     * </ul>
+     *
+     * <p>A Valve <b>MUST NOT</b> do any of the following things:</p>
+     * <ul>
+     * <li>Change request properties that have already been used to direct
+     *     the flow of processing control for this request (for instance,
+     *     trying to change the virtual host to which a Request should be
+     *     sent from a pipeline attached to a Host or Context in the
+     *     standard implementation).
+     * <li>Create a completed Response <strong>AND</strong> pass this
+     *     Request and Response on to the next Valve in the pipeline.
+     * <li>Consume bytes from the input stream associated with the Request,
+     *     unless it is completely generating the response, or wrapping the
+     *     request before passing it on.
+     * <li>Modify the HTTP headers included with the Response after the
+     *     <code>getNext().invoke()</code> method has returned.
+     * <li>Perform any actions on the output stream associated with the
+     *     specified Response after the <code>getNext().invoke()</code> method has
+     *     returned.
+     * </ul>
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be created
+     *
+     * @exception IOException if an input/output error occurs, or is thrown
+     *  by a subsequently invoked Valve, Filter, or Servlet
+     * @exception ServletException if a servlet error occurs, or is thrown
+     *  by a subsequently invoked Valve, Filter, or Servlet
+     */
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException;
+-----CSCI578-----
+
+
+
+    /**
+     * Return the request URI for this request.
+     */
+    public String getRequestURI() {
+        return coyoteRequest.requestURI().toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the first value of the specified header, if any; otherwise,
+     * return <code>null</code>
+     *
+     * @param name Name of the requested header
+     */
+    public String getHeader(String name) {
+        return coyoteRequest.getHeader(name);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the scheme used to make this Request.
+     */
+    public String getScheme() {
+        return (coyoteRequest.scheme().toString());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Send a temporary redirect to the specified redirect location URL.
+     *
+     * @param location Location URL to redirect to
+     *
+     * @exception IllegalStateException if this response has
+     *  already been committed
+     * @exception IOException if an input/output error occurs
+     */
+    public void sendRedirect(String location) 
+        throws IOException {
+
+        if (isCommitted())
+            throw new IllegalStateException
+                (sm.getString("coyoteResponse.sendRedirect.ise"));
+
+        // Ignore any call from an included servlet
+        if (included)
+            return; 
+
+        // Clear any data content that has been buffered
+        resetBuffer();
+
+        // Generate a temporary redirect to the specified location
+        try {
+            String absolute = toAbsolute(location);
+            setStatus(SC_FOUND);
+            setHeader("Location", absolute);
+        } catch (IllegalArgumentException e) {
+            setStatus(SC_NOT_FOUND);
+        }
+
+        // Cause the response to be finished (from the application perspective)
+        setSuspended(true);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Host within which this Request is being processed.
+     */
+    public Host getHost() {
+        if (getContext() == null)
+            return null;
+        return (Host) getContext().getParent();
+        //return ((Host) mappingData.host);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the server port responding to this Request.
+     */
+    public int getServerPort() {
+        return (coyoteRequest.getServerPort());
+    }
+-----CSCI578-----
+
+
+    public int getServerPort() {
+        return serverPort;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Reconstructs the URL the client used to make the request.
+     * The returned URL contains a protocol, server name, port
+     * number, and server path, but it does not include query
+     * string parameters.
+     * <p>
+     * Because this method returns a <code>StringBuffer</code>,
+     * not a <code>String</code>, you can modify the URL easily,
+     * for example, to append query parameters.
+     * <p>
+     * This method is useful for creating redirect messages and
+     * for reporting errors.
+     *
+     * @return A <code>StringBuffer</code> object containing the
+     *  reconstructed URL
+     */
+    public StringBuffer getRequestURL() {
+
+        StringBuffer url = new StringBuffer();
+        String scheme = getScheme();
+        int port = getServerPort();
+        if (port < 0)
+            port = 80; // Work around java.net.URL bug
+
+        url.append(scheme);
+        url.append("://");
+        url.append(getServerName());
+        if ((scheme.equals("http") && (port != 80))
+            || (scheme.equals("https") && (port != 443))) {
+            url.append(':');
+            url.append(port);
+        }
+        url.append(getRequestURI());
+
+        return (url);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process the specified Request, to produce the corresponding Response,
+     * by invoking the first Valve in our pipeline (if any), or the basic
+     * Valve otherwise.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     *
+     * @exception IllegalStateException if neither a pipeline or a basic
+     *  Valve have been configured for this Container
+     * @exception IOException if an input/output error occurred while
+     *  processing
+     * @exception ServletException if a ServletException was thrown
+     *  while processing this request
+     */
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        pipeline.getFirst().invoke(request, response);
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Select the appropriate child Host to process this request,
+     * based on the requested server name.  If no matching Host can
+     * be found, return an appropriate HTTP error.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     * @param valveContext Valve context used to forward to the next Valve
+     *
+     * @exception IOException if an input/output error occurred
+     * @exception ServletException if a servlet error occurred
+     */
+    public final void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        // Select the Host to be used for this Request
+        Host host = request.getHost();
+        if (host == null) {
+            response.sendError
+                (HttpServletResponse.SC_BAD_REQUEST,
+                 sm.getString("standardEngine.noHost", 
+                              request.getServerName()));
+            return;
+        }
+
+        // Ask this Host to process this request
+        host.getPipeline().getFirst().invoke(request, response);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process Comet event.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     * @param valveContext Valve context used to forward to the next Valve
+     *
+     * @exception IOException if an input/output error occurred
+     * @exception ServletException if a servlet error occurred
+     */
+    public final void event(Request request, Response response, CometEvent event)
+        throws IOException, ServletException {
+
+        // Ask this Host to process this request
+        request.getHost().getPipeline().getFirst().event(request, response, event);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public int getServerPort() {
+        return req.getServerPort();
+    }
+-----CSCI578-----

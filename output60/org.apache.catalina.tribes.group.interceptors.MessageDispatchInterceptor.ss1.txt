@@ -1,0 +1,87 @@
+7
+-----CSCI578-----
+
+
+    public Member[] getDestination() {
+        return destination;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Invoked if the message is dispatched asynch, and an error occurs
+     * @param x ChannelException - the error that happened
+     * @param id - the unique id for the message
+     * @see Channel#send(Member[], Serializable, int, ErrorHandler)
+     */
+    public void handleError(ChannelException x, UniqueId id);
+-----CSCI578-----
+
+
+    /**
+     * Get the next element.
+     * @return The next element.
+     */
+    public LinkObject next() {
+        return next;
+    }
+-----CSCI578-----
+
+    
+    public void run() {
+        while ( run ) {
+            LinkObject link = removeFromQueue();
+            if ( link == null ) continue; //should not happen unless we exceed wait time
+            while ( link != null && run ) {
+                link = sendAsyncData(link);
+            }//while
+        }//while
+    }
+-----CSCI578-----
+
+
+    /**
+     * Get the data object from the element.
+     * @return The data object from the element.
+     */
+    public ChannelMessage data() {
+        return msg;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Invoked when the message has been sent successfully.
+     * @param id - the unique id for the message
+     * @see Channel#send(Member[], Serializable, int, ErrorHandler)
+     */
+    public void handleCompletion(UniqueId id);
+-----CSCI578-----
+//run
+
+    protected LinkObject sendAsyncData(LinkObject link) {
+        ChannelMessage msg = link.data();
+        Member[] destination = link.getDestination();
+        try {
+            super.sendMessage(destination,msg,null);
+            try {
+                if ( link.getHandler() != null ) link.getHandler().handleCompletion(new UniqueId(msg.getUniqueId())); 
+            } catch ( Exception ex ) {
+                log.error("Unable to report back completed message.",ex);
+            }
+        } catch ( Exception x ) {
+            ChannelException cx = null;
+            if ( x instanceof ChannelException ) cx = (ChannelException)x;
+            else cx = new ChannelException(x);
+            if ( log.isDebugEnabled() ) log.debug("Error while processing async message.",x);
+            try {
+                if (link.getHandler() != null) link.getHandler().handleError(cx, new UniqueId(msg.getUniqueId()));
+            } catch ( Exception ex ) {
+                log.error("Unable to report back error message.",ex);
+            }
+        } finally {
+            addAndGetCurrentSize(-msg.getMessage().getLength());
+            link = link.next();
+        }//try
+        return link;
+    }

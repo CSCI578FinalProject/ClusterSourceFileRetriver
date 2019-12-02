@@ -1,0 +1,77 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Create a new User and return the corresponding MBean Name.
+     *
+     * @param username User name of the new user
+     * @param password Password for the new user
+     * @param fullName Full name for the new user
+     */
+    public String createUser(String username, String password,
+                             String fullName) {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        User user = database.createUser(username, password, fullName);
+        try {
+            MBeanUtils.createMBean(user);
+        } catch (Exception e) {
+            IllegalArgumentException iae = new IllegalArgumentException
+                ("Exception creating user [" + username + "] MBean");
+            iae.initCause(e);
+            throw iae;
+        }
+        return (findUser(username));
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the MBean Name for the specified user name (if any);
+     * otherwise return <code>null</code>.
+     *
+     * @param username User name to look up
+     */
+    public String findUser(String username) {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        User user = database.findUser(username);
+        if (user == null) {
+            return (null);
+        }
+        try {
+            ObjectName oname =
+                MBeanUtils.createObjectName(managedUser.getDomain(), user);
+            return (oname.toString());
+        } catch (MalformedObjectNameException e) {
+            IllegalArgumentException iae = new IllegalArgumentException
+                ("Cannot create object name for user [" + username + "]");
+            iae.initCause(e);
+            throw iae;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the MBean Names of all users defined in this database.
+     */
+    public String[] getUsers() {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        ArrayList results = new ArrayList();
+        Iterator users = database.getUsers();
+        while (users.hasNext()) {
+            User user = (User) users.next();
+            results.add(findUser(user.getUsername()));
+        }
+        return ((String[]) results.toArray(new String[results.size()]));
+
+    }

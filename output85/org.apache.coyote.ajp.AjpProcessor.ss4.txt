@@ -1,0 +1,89 @@
+2
+-----CSCI578-----
+
+
+    public static final int getResponseAjpIndex(String header)
+    {
+        Integer i = responseTransHash.get(header);
+        if (i == null)
+            return 0;
+        else
+            return i.intValue();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * When committing the response, we have to validate the set of headers, as
+     * well as setup the response filters.
+     */
+    private void prepareResponse() throws IOException {
+
+        response.setCommitted(true);
+
+        tmpMB.recycle();
+        responseMsgPos = -1;
+        responseMessage.reset();
+        responseMessage.appendByte(Constants.JK_AJP13_SEND_HEADERS);
+
+        // Responses with certain status codes are not permitted to include a
+        // response body.
+        int statusCode = response.getStatus();
+        if (statusCode < 200 || statusCode == 204 || statusCode == 205 ||
+                statusCode == 304) {
+            // No entity body
+            swallowResponse = true;
+        }
+
+        // Responses to HEAD requests are not permitted to include a response
+        // body.
+        MessageBytes methodMB = request.method();
+        if (methodMB.equals("HEAD")) {
+            // No entity body
+            swallowResponse = true;
+        }
+
+        // HTTP header contents
+        responseMessage.appendInt(statusCode);
+        // Reason phrase is optional but mod_jk + httpd 2.x fails with a null
+        // reason phrase - bug 45026
+        tmpMB.setString(Integer.toString(response.getStatus()));
+        responseMessage.appendBytes(tmpMB);
+
+        // Special headers
+        MimeHeaders headers = response.getMimeHeaders();
+        String contentType = response.getContentType();
+        if (contentType != null) {
+            headers.setValue("Content-Type").setString(contentType);
+        }
+        String contentLanguage = response.getContentLanguage();
+        if (contentLanguage != null) {
+            headers.setValue("Content-Language").setString(contentLanguage);
+        }
+        long contentLength = response.getContentLengthLong();
+        if (contentLength >= 0) {
+            headers.setValue("Content-Length").setLong(contentLength);
+        }
+
+        // Other headers
+        int numHeaders = headers.size();
+        responseMessage.appendInt(numHeaders);
+        for (int i = 0; i < numHeaders; i++) {
+            MessageBytes hN = headers.getName(i);
+            int hC = Constants.getResponseAjpIndex(hN.toString());
+            if (hC > 0) {
+                responseMessage.appendInt(hC);
+            }
+            else {
+                responseMessage.appendBytes(hN);
+            }
+            MessageBytes hV=headers.getValue(i);
+            responseMessage.appendBytes(hV);
+        }
+
+        // Write to buffer
+        responseMessage.end();
+        socketWrapper.write(true, responseMessage.getBuffer(), 0, responseMessage.getLen());
+        socketWrapper.flush(true);
+    }

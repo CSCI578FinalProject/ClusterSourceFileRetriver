@@ -1,0 +1,45 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Process pipelined HTTP requests using the specified input and output
+     * streams.
+     *
+     * @throws IOException error during an I/O operation
+     */
+    public SocketState event(SocketStatus status)
+        throws IOException {
+
+        RequestInfo rp = request.getRequestProcessor();
+
+        try {
+            rp.setStage(org.apache.coyote.Constants.STAGE_SERVICE);
+            error = !adapter.event(request, response, status);
+        } catch (InterruptedIOException e) {
+            error = true;
+        } catch (Throwable t) {
+            log.error(sm.getString("http11processor.request.process"), t);
+            // 500 - Internal Server Error
+            response.setStatus(500);
+            adapter.log(request, response, 0);
+            error = true;
+        }
+
+        rp.setStage(org.apache.coyote.Constants.STAGE_ENDED);
+
+        if (error) {
+            inputBuffer.nextRequest();
+            outputBuffer.nextRequest();
+            recycle();
+            return SocketState.CLOSED;
+        } else if (!comet) {
+            inputBuffer.nextRequest();
+            outputBuffer.nextRequest();
+            recycle();
+            return SocketState.OPEN;
+        } else {
+            return SocketState.LONG;
+        }
+    }

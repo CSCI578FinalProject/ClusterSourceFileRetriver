@@ -1,0 +1,54 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Recieve a message from the client.
+     * @param msg The place to recieve the data into.
+     * @param ep The connection point for this request.
+     */
+    public  int receive(Msg msg, MsgContext ep) throws IOException;
+-----CSCI578-----
+
+    
+    /** Receive a chunk of data. Called to implement the
+     *  'special' packet in ajp13 and to receive the data
+     *  after we send a GET_BODY packet
+     */
+    public boolean receive() throws IOException {
+        isFirst = false;
+        bodyMsg.reset();
+        int err = mc.getSource().receive(bodyMsg, mc);
+        if( log.isDebugEnabled() )
+            log.info( "Receiving: getting request body chunk " + err + " " + bodyMsg.getLen() );
+        
+        if(err < 0) {
+            throw new IOException();
+        }
+
+        // No data received.
+        if( bodyMsg.getLen() == 0 ) { // just the header
+            // Don't mark 'end of stream' for the first chunk.
+            // end_of_stream = true;
+            return false;
+        }
+        int blen = bodyMsg.peekInt();
+
+        if( blen == 0 ) {
+            return false;
+        }
+
+        if( log.isTraceEnabled() ) {
+            bodyMsg.dump("Body buffer");
+        }
+        
+        bodyMsg.getBytes(bodyBuff);
+        if( log.isTraceEnabled() )
+            log.trace( "Data:\n" + bodyBuff);
+        isEmpty = false;
+        return true;
+    }
+-----CSCI578-----
+
+
+    public abstract int peekInt();

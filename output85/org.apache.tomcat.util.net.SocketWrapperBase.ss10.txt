@@ -1,0 +1,119 @@
+7
+-----CSCI578-----
+
+
+
+    /**
+     * Writes as much data as possible from any that remains in the buffers.
+     *
+     * @param block <code>true</code> if a blocking write should be used,
+     *                  otherwise a non-blocking write will be used
+     *
+     * @return <code>true</code> if data remains to be flushed after this method
+     *         completes, otherwise <code>false</code>. In blocking mode
+     *         therefore, the return value should always be <code>false</code>
+     *
+     * @throws IOException If an IO error occurs during the write
+     */
+    public boolean flush(boolean block) throws IOException {
+        if (getSocket() == null) {
+            return false;
+        }
+
+        boolean result = false;
+        if (block) {
+            // A blocking flush will always empty the buffer.
+            flushBlocking();
+        } else {
+            result = flushNonBlocking();
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    protected boolean flushNonBlocking() throws IOException {
+        boolean dataLeft = !socketBufferHandler.isWriteBufferEmpty();
+
+        // Write to the socket, if there is anything to write
+        if (dataLeft) {
+            doWrite(false);
+        }
+
+        dataLeft = !socketBufferHandler.isWriteBufferEmpty();
+
+        if (!dataLeft && bufferedWrites.size() > 0) {
+            Iterator<ByteBufferHolder> bufIter = bufferedWrites.iterator();
+            while (socketBufferHandler.isWriteBufferEmpty() && bufIter.hasNext()) {
+                ByteBufferHolder buffer = bufIter.next();
+                buffer.flip();
+                while (socketBufferHandler.isWriteBufferEmpty() && buffer.getBuf().remaining() > 0) {
+                    socketBufferHandler.configureWriteBufferForWrite();
+                    transfer(buffer.getBuf(), socketBufferHandler.getWriteBuffer());
+                    if (buffer.getBuf().remaining() == 0) {
+                        bufIter.remove();
+                    }
+                    doWrite(false);
+                }
+            }
+        }
+
+        return !socketBufferHandler.isWriteBufferEmpty();
+    }
+-----CSCI578-----
+
+
+
+    public boolean flip() {
+        if (flipped.compareAndSet(false, true)) {
+            buf.flip();
+            return true;
+        } else {
+            return false;
+        }
+    }
+-----CSCI578-----
+
+
+
+    public ByteBuffer getBuf() {
+        return buf;
+    }
+-----CSCI578-----
+
+
+
+    protected void flushBlocking() throws IOException {
+        doWrite(true);
+
+        if (bufferedWrites.size() > 0) {
+            Iterator<ByteBufferHolder> bufIter = bufferedWrites.iterator();
+            while (socketBufferHandler.isWriteBufferEmpty() && bufIter.hasNext()) {
+                ByteBufferHolder buffer = bufIter.next();
+                buffer.flip();
+                while (socketBufferHandler.isWriteBufferEmpty() && buffer.getBuf().remaining()>0) {
+                    socketBufferHandler.configureWriteBufferForWrite();
+                    transfer(buffer.getBuf(), socketBufferHandler.getWriteBuffer());
+                    if (buffer.getBuf().remaining() == 0) {
+                        bufIter.remove();
+                    }
+                    doWrite(true);
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public boolean isWriteBufferEmpty() {
+        if (writeBufferConfiguredForWrite) {
+            return writeBuffer.position() == 0;
+        } else {
+            return writeBuffer.remaining() == 0;
+        }
+    }
+-----CSCI578-----

@@ -1,0 +1,170 @@
+10
+-----CSCI578-----
+
+
+
+    /**
+     * Load and initialize an instance of this servlet, if there is not already
+     * at least one initialized instance.  This can be used, for example, to
+     * load servlets that are marked in the deployment descriptor to be loaded
+     * at server startup time.
+     *
+     * @exception ServletException if the servlet init() method threw
+     *  an exception
+     * @exception ServletException if some other loading problem occurs
+     */
+    public void load() throws ServletException;
+
+
+
+    /**
+     * Unload all initialized instances of this servlet, after calling the
+     * <code>destroy()</code> method for each instance.  This can be used,
+     * for example, prior to shutting down the entire servlet engine, or
+     * prior to reloading all of the classes from the Loader associated with
+     * our Loader's repository.
+     *
+     * @exception ServletException if an unload error occurs
+     */
+    public void unload() throws ServletException;
+-----CSCI578-----
+
+
+
+    /**
+     * Return the load-on-startup order value (negative value means
+     * load on first call).
+     */
+    public int getLoadOnStartup();
+-----CSCI578-----
+
+
+
+    /**
+     * Load and initialize all servlets marked "load on startup" in the
+     * web application deployment descriptor.
+     *
+     * @param children Array of wrappers for all currently defined
+     *  servlets (including those not declared load on startup)
+     */
+    public void loadOnStartup(Container children[]) {
+
+        // Collect "load on startup" servlets that need to be initialized
+        TreeMap map = new TreeMap();
+        for (int i = 0; i < children.length; i++) {
+            Wrapper wrapper = (Wrapper) children[i];
+            int loadOnStartup = wrapper.getLoadOnStartup();
+            if (loadOnStartup < 0)
+                continue;
+            Integer key = Integer.valueOf(loadOnStartup);
+            ArrayList list = (ArrayList) map.get(key);
+            if (list == null) {
+                list = new ArrayList();
+                map.put(key, list);
+            }
+            list.add(wrapper);
+        }
+
+        // Load the collected "load on startup" servlets
+        Iterator keys = map.keySet().iterator();
+        while (keys.hasNext()) {
+            Integer key = (Integer) keys.next();
+            ArrayList list = (ArrayList) map.get(key);
+            Iterator wrappers = list.iterator();
+            while (wrappers.hasNext()) {
+                Wrapper wrapper = (Wrapper) wrappers.next();
+                try {
+                    wrapper.load();
+                } catch (ServletException e) {
+                    getLogger().error(sm.getString("standardWrapper.loadException",
+                                      getName()), StandardWrapper.getRootCause(e));
+                    // NOTE: load errors (including a servlet that throws
+                    // UnavailableException from tht init() method) are NOT
+                    // fatal to application startup
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Extract the root cause from a servlet exception.
+     * 
+     * @param e The servlet exception
+     */
+    public static Throwable getRootCause(ServletException e) {
+        Throwable rootCause = e;
+        Throwable rootCauseCheck = null;
+        // Extra aggressive rootCause finding
+        int loops = 0;
+        do {
+            loops++;
+            rootCauseCheck = rootCause.getCause();
+            if (rootCauseCheck != null)
+                rootCause = rootCauseCheck;
+        } while (rootCauseCheck != null && (loops < 20));
+        return rootCause;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public ObjectName createObjectName(String hostDomain, ObjectName parentName)
+            throws MalformedObjectNameException
+    {
+        String onameStr;
+        StandardHost hst=(StandardHost)getParent();
+
+        String pathName=getName();
+        String hostName=getParent().getName();
+        String name= "//" + ((hostName==null)? "DEFAULT" : hostName) +
+                (("".equals(pathName))?"/":pathName );
+
+        String suffix=",J2EEApplication=" +
+                getJ2EEApplication() + ",J2EEServer=" +
+                getJ2EEServer();
+
+        onameStr="j2eeType=WebModule,name=" + name + suffix;
+        if( log.isDebugEnabled())
+            log.debug("Registering " + onameStr + " for " + oname);
+
+        // default case - no domain explictely set.
+        if( getDomain() == null ) domain=hst.getDomain();
+
+        ObjectName oname=new ObjectName(getDomain() + ":" + onameStr);
+        return oname;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void preRegisterJMX() {
+        try {
+            StandardHost host = (StandardHost) getParent();
+            if ((oname == null)
+                || (oname.getKeyProperty("j2eeType") == null)) {
+                oname = createObjectName(host.getDomain(), host.getJmxName());
+                controller = oname;
+            }
+        } catch(Exception ex) {
+            if(log.isInfoEnabled())
+                log.info("Error registering ctx with jmx " + this + " " +
+                     oname + " " + ex.toString(), ex );
+        }
+    }
+-----CSCI578-----
+
+
+    public String getJ2EEApplication() {
+        return j2EEApplication;
+    }
+-----CSCI578-----
+
+
+    public String getJ2EEServer() {
+        return j2EEServer;
+    }

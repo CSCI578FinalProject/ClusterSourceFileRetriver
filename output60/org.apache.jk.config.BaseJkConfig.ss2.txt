@@ -1,0 +1,100 @@
+3
+-----CSCI578-----
+
+
+    // -------------------- General Utils --------------------
+
+    protected String getAbsoluteDocBase(Context context) {
+        // Calculate the absolute path of the document base
+        String docBase = context.getServletContext().getRealPath("/");
+        docBase = docBase.substring(0,docBase.length()-1);
+        if (!isAbsolute(docBase)){
+            docBase = tomcatHome + "/" + docBase;
+        }
+        docBase = patch(docBase);
+        return docBase;
+    }
+-----CSCI578-----
+
+
+    public static boolean isAbsolute( String path ) {
+        // normal file
+        if( path.startsWith("/" ) ) return true;
+
+        if( path.startsWith(File.separator ) ) return true;
+
+        // win c:
+        if (path.length() >= 3 &&
+            Character.isLetter(path.charAt(0)) &&
+            path.charAt(1) == ':')
+            return true;
+
+        // NetWare volume:
+        if (System.getProperty("os.name").startsWith("NetWare") &&
+            path.length() >=3 &&
+            path.indexOf(':') > 0)
+            return true;
+
+        return false;
+    }
+-----CSCI578-----
+
+
+    public static String patch(String path) {
+        String patchPath = path;
+
+        // Move drive spec to the front of the path
+        if (patchPath.length() >= 3 &&
+            patchPath.charAt(0) == '/'  &&
+            Character.isLetter(patchPath.charAt(1)) &&
+            patchPath.charAt(2) == ':') {
+            patchPath=patchPath.substring(1,3)+"/"+patchPath.substring(3);
+        }
+
+        // Eliminate consecutive slashes after the drive spec
+        if (patchPath.length() >= 2 &&
+            Character.isLetter(patchPath.charAt(0)) &&
+            patchPath.charAt(1) == ':') {
+            char[] ca = patchPath.replace('/', '\\').toCharArray();
+            char c;
+            StringBuffer sb = new StringBuffer();
+
+            for (int i = 0; i < ca.length; i++) {
+                if ((ca[i] != '\\') ||
+                    (ca[i] == '\\' &&
+                        i > 0 &&
+                        ca[i - 1] != '\\')) {
+                    if (i == 0 &&
+                        Character.isLetter(ca[i]) &&
+                        i < ca.length - 1 &&
+                        ca[i + 1] == ':') {
+                        c = Character.toUpperCase(ca[i]);
+                    } else {
+                        c = ca[i];
+                    }
+
+                    sb.append(c);
+                }
+            }
+
+            patchPath = sb.toString();
+        }
+
+        // fix path on NetWare - all '/' become '\\' and remove duplicate '\\'
+        if (System.getProperty("os.name").startsWith("NetWare") &&
+            path.length() >=3 &&
+            path.indexOf(':') > 0) {
+            char[] ca = patchPath.replace('/', '\\').toCharArray();
+            StringBuffer sb = new StringBuffer();
+
+            for (int i = 0; i < ca.length; i++) {
+                if ((ca[i] != '\\') ||
+                    (ca[i] == '\\' && i > 0 && ca[i - 1] != '\\')) {
+                    sb.append(ca[i]);
+                }
+            }
+            patchPath = sb.toString();
+        }
+
+        return patchPath;
+    }

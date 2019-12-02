@@ -1,0 +1,225 @@
+11
+-----CSCI578-----
+
+    
+    /**
+     * Given a context path, get the config file name.
+     */
+    protected String getConfigFile(String path) {
+        String basename = null;
+        if (path.equals("")) {
+            basename = "ROOT";
+        } else {
+            basename = path.substring(1).replace('/', '#');
+        }
+        return (basename);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Remove an existing web application, attached to the specified context
+     * path. If this application is successfully removed, a ContainerEvent of
+     * type <code>REMOVE_EVENT</code> will be sent to all registered
+     * listeners, with the removed <code>Context</code> as an argument.
+     * Deletes the web application war file and/or directory if they exist in
+     * the Host's appBase.
+     * 
+     * @param contextPath
+     *            The context path of the application to be removed
+     * @param undeploy
+     *            boolean flag to remove web application from server
+     * 
+     * @exception IllegalArgumentException
+     *                if the specified context path is malformed (it must be ""
+     *                or start with a slash)
+     * @exception IllegalArgumentException
+     *                if the specified context path does not identify a
+     *                currently installed web application
+     * @exception IOException
+     *                if an input/output error occurs during removal
+     */
+    public void remove(String contextPath, boolean undeploy) throws IOException {
+        if (log.isInfoEnabled())
+            log.info("Cluster wide remove of web app " + contextPath);
+        Member localMember = getCluster().getLocalMember();
+        UndeployMessage msg = new UndeployMessage(localMember, System
+                .currentTimeMillis(), "Undeploy:" + contextPath + ":"
+                + System.currentTimeMillis(), contextPath, undeploy);
+        if (log.isDebugEnabled())
+            log.debug("Send cluster wide undeployment from "
+                    + contextPath );
+        cluster.send(msg);
+        // remove locally
+        if (undeploy) {
+            try {
+                if (!isServiced(contextPath)) {
+                    addServiced(contextPath);
+                    try {
+                        remove(contextPath);
+                    } finally {
+                        removeServiced(contextPath);
+                    }
+                } else
+                    log.error("Local remove from " + contextPath
+                            + "failed, other manager has app in service!");
+
+            } catch (Exception ex) {
+                log.error("local remove from " + contextPath + " failed", ex);
+            }
+        }
+
+    }
+
+
+    /**
+     * Invoke the remove method on the deployer.
+     */
+    protected void remove(String path) throws Exception {
+        // TODO Handle remove also work dir content !
+        // Stop the context first to be nicer
+        Context context = (Context) host.findChild(path);
+        if (context != null) {
+            if(log.isDebugEnabled())
+                log.debug("Undeploy local context " +path );
+            ((Lifecycle) context).stop();
+            File war = new File(getAppBase(), getDocBase(path) + ".war");
+            File dir = new File(getAppBase(), getDocBase(path));
+            File xml = new File(configBase, getConfigFile(path) + ".xml");
+            if (war.exists()) {
+                war.delete();
+            } else if (dir.exists()) {
+                undeployDir(dir);
+            } else {
+                xml.delete();
+            }
+            // Perform new deployment and remove internal HostConfig state
+            check(path);
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return a File object representing the "application root" directory for
+     * our associated Host.
+     */
+    protected File getAppBase() {
+
+        if (appBase != null) {
+            return appBase;
+        }
+
+        File file = new File(host.getAppBase());
+        if (!file.isAbsolute())
+            file = new File(System.getProperty("catalina.base"), host
+                    .getAppBase());
+        try {
+            appBase = file.getCanonicalFile();
+        } catch (IOException e) {
+            appBase = file;
+        }
+        return (appBase);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Delete the specified directory, including all of its contents and
+     * subdirectories recursively.
+     * 
+     * @param dir
+     *            File object representing the directory to be deleted
+     */
+    protected void undeployDir(File dir) {
+
+        String files[] = dir.list();
+        if (files == null) {
+            files = new String[0];
+        }
+        for (int i = 0; i < files.length; i++) {
+            File file = new File(dir, files[i]);
+            if (file.isDirectory()) {
+                undeployDir(file);
+            } else {
+                file.delete();
+            }
+        }
+        dir.delete();
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Given a context path, get the config file name.
+     */
+    protected String getDocBase(String path) {
+        String basename = null;
+        if (path.equals("")) {
+            basename = "ROOT";
+        } else {
+            basename = path.substring(1);
+        }
+        return (basename);
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Return the member that represents this node.
+     *
+     * @return Member
+     */
+    public Member getLocalMember();
+-----CSCI578-----
+
+
+    /**
+     * Invoke the check method on the deployer.
+     */
+    protected boolean isServiced(String name) throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        Boolean result = (Boolean) mBeanServer.invoke(oname, "isServiced",
+                params, signature);
+        return result.booleanValue();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Invoke the check method on the deployer.
+     */
+    protected void addServiced(String name) throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "addServiced", params, signature);
+    }
+-----CSCI578-----
+
+
+    /*--Deployer Operations ------------------------------------*/
+
+    /**
+     * Invoke the check method on the deployer.
+     */
+    protected void check(String name) throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "check", params, signature);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Invoke the check method on the deployer.
+     */
+    protected void removeServiced(String name) throws Exception {
+        String[] params = { name };
+        String[] signature = { "java.lang.String" };
+        mBeanServer.invoke(oname, "removeServiced", params, signature);
+    }

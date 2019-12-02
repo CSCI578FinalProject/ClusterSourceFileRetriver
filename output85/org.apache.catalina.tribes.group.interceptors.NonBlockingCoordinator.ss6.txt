@@ -1,0 +1,52 @@
+3
+-----CSCI578-----
+
+
+    @Override
+    public boolean equals(Object other) {
+        boolean result = (other instanceof UniqueId);
+        if ( result ) {
+            UniqueId uid = (UniqueId)other;
+            if ( this.id == null && uid.id == null ) result = true;
+            else if ( this.id == null && uid.id != null ) result = false;
+            else if ( this.id != null && uid.id == null ) result = false;
+            else result = Arrays.equals(this.id,uid.id);
+        }//end if
+        return result;
+    }
+-----CSCI578-----
+
+
+    protected boolean hasHigherPriority(Member[] complete, Member[] local) {
+        if ( local == null || local.length == 0 ) return false;
+        if ( complete == null || complete.length == 0 ) return true;
+        AbsoluteOrder.absoluteOrder(complete);
+        AbsoluteOrder.absoluteOrder(local);
+        return (AbsoluteOrder.comp.compare(complete[0],local[0]) > 0);
+
+    }
+-----CSCI578-----
+
+
+    protected void handleViewConf(CoordinationMessage msg, Membership merged) throws ChannelException {
+        if ( viewId != null && msg.getId().equals(viewId) ) return;//we already have this view
+        view = new Membership(getLocalMember(false),AbsoluteOrder.comp,true);
+        Arrays.fill(view,msg.getMembers());
+        viewId = msg.getId();
+
+        if ( viewId.equals(suggestedviewId) ) {
+            suggestedView = null;
+            suggestedviewId = null;
+        }
+
+        if (suggestedView != null && AbsoluteOrder.comp.compare(suggestedView.getMembers()[0],merged.getMembers()[0])<0 ) {
+            suggestedView = null;
+            suggestedviewId = null;
+        }
+
+        fireInterceptorEvent(new CoordinationEvent(CoordinationEvent.EVT_CONF_RX,this,"Accepted View"));
+
+        if ( suggestedviewId == null && hasHigherPriority(merged.getMembers(),membership.getMembers()) ) {
+            startElection(false);
+        }
+    }

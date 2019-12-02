@@ -1,0 +1,176 @@
+15
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public boolean isValidateUri() {
+        return validateUri;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Authenticate the user making this request, based on the specified
+     * login configuration.  Return <code>true</code> if any specified
+     * constraint has been satisfied, or <code>false</code> if we have
+     * created a response challenge already.
+     *
+     * @param request Request we are processing
+     * @param response Response we are creating
+     * @param config    Login configuration describing how authentication
+     *              should be performed
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public boolean authenticate(Request request,
+                                Response response,
+                                LoginConfig config)
+        throws IOException {
+
+        // Have we already authenticated someone?
+        Principal principal = request.getUserPrincipal();
+        //String ssoId = (String) request.getNote(Constants.REQ_SSOID_NOTE);
+        if (principal != null) {
+            if (log.isDebugEnabled())
+                log.debug("Already authenticated '" + principal.getName() + "'");
+            // Associate the session with any existing SSO session in order
+            // to get coordinated session invalidation at logout
+            String ssoId = (String) request.getNote(Constants.REQ_SSOID_NOTE);
+            if (ssoId != null)
+                associate(ssoId, request.getSessionInternal(true));
+            return (true);
+        }
+
+        // NOTE: We don't try to reauthenticate using any existing SSO session,
+        // because that will only work if the original authentication was
+        // BASIC or FORM, which are less secure than the DIGEST auth-type
+        // specified for this webapp
+        //
+        // Uncomment below to allow previous FORM or BASIC authentications
+        // to authenticate users for this webapp
+        // TODO make this a configurable attribute (in SingleSignOn??)
+        /*
+        // Is there an SSO session against which we can try to reauthenticate?
+        if (ssoId != null) {
+            if (log.isDebugEnabled())
+                log.debug("SSO Id " + ssoId + " set; attempting " +
+                          "reauthentication");
+            // Try to reauthenticate using data cached by SSO.  If this fails,
+            // either the original SSO logon was of DIGEST or SSL (which
+            // we can't reauthenticate ourselves because there is no
+            // cached username and password), or the realm denied
+            // the user's reauthentication for some reason.
+            // In either case we have to prompt the user for a logon
+            if (reauthenticateFromSSO(ssoId, request))
+                return true;
+        }
+        */
+
+        // Validate any credentials already included with this request
+        String authorization = request.getHeader("authorization");
+        DigestInfo digestInfo = new DigestInfo(getOpaque(), getNonceValidity(),
+                getKey(), nonces, isValidateUri());
+        if (authorization != null) {
+            if (digestInfo.parse(request, authorization)) {
+                if (digestInfo.validate(request, config)) {
+                    principal = digestInfo.authenticate(context.getRealm());
+                }
+            
+                if (principal != null && !digestInfo.isNonceStale()) {
+                    register(request, response, principal,
+                            HttpServletRequest.DIGEST_AUTH,
+                            digestInfo.getUsername(), null);
+                    return true;
+                }
+            }
+        }
+
+        // Send an "unauthorized" response and an appropriate challenge
+
+        // Next, generate a nonce token (that is a token which is supposed
+        // to be unique).
+        String nonce = generateNonce(request);
+
+        setAuthenticateHeader(request, response, config, nonce,
+                principal != null && digestInfo.isNonceStale());
+        response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+        return false;
+
+    }
+-----CSCI578-----
+
+
+    public String getRealmName() {
+        return (this.realmName);
+    }
+-----CSCI578-----
+
+
+
+    public long getNonceValidity() {
+        return nonceValidity;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public String getOpaque() {
+        return opaque;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    /**
+     * Parse the username from the specified authorization string.  If none
+     * can be identified, return <code>null</code>
+     *
+     * @param authorization Authorization string to be parsed
+     *
+     * @deprecated  Unused. Will be removed in Tomcat 8.0.x
+     */
+    @Deprecated
+    protected String parseUsername(String authorization) {
+
+        // Validate the authorization credentials format
+        if (authorization == null)
+            return (null);
+        if (!authorization.startsWith("Digest "))
+            return (null);
+        authorization = authorization.substring(7).trim();
+
+        StringTokenizer commaTokenizer =
+            new StringTokenizer(authorization, ",");
+
+        while (commaTokenizer.hasMoreTokens()) {
+            String currentToken = commaTokenizer.nextToken();
+            int equalSign = currentToken.indexOf('=');
+            if (equalSign < 0)
+                return null;
+            String currentTokenName =
+                currentToken.substring(0, equalSign).trim();
+            String currentTokenValue =
+                currentToken.substring(equalSign + 1).trim();
+            if ("username".equals(currentTokenName))
+                return (removeQuotes(currentTokenValue));
+        }
+
+        return (null);
+
+    }

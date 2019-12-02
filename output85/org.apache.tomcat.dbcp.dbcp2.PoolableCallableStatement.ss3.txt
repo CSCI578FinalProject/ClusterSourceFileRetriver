@@ -1,0 +1,35 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Passivates to prepare for return to the pool.  Removes the trace associated with this CallableStatement
+     * from the Connection that created it.  Also closes any associated ResultSets.
+     */
+    @Override
+    protected void passivate() throws SQLException {
+        setClosedInternal(true);
+        if( getConnectionInternal() != null ) {
+            getConnectionInternal().removeTrace(this);
+        }
+
+        // The JDBC spec requires that a statement close any open
+        // ResultSet's when it is closed.
+        // FIXME The PreparedStatement we're wrapping should handle this for us.
+        // See DBCP-10 for what could happen when ResultSets are closed twice.
+        List<AbandonedTrace> resultSets = getTrace();
+        if(resultSets != null) {
+            ResultSet[] set = resultSets.toArray(new ResultSet[resultSets.size()]);
+            for (ResultSet element : set) {
+                element.close();
+            }
+            clearTrace();
+        }
+
+        super.passivate();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

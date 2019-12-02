@@ -1,0 +1,49 @@
+5
+-----CSCI578-----
+
+
+
+    @Override
+    protected synchronized void doNotifyAll() {
+        if (coyoteResponse.getWriteListener() == null) {
+            // Blocking IO so thread will be waiting. Release it.
+            // Use notifyAll() to be safe (should be unnecessary)
+            this.notifyAll();
+        } else {
+            if (outputBuffer.isRegisteredForWrite()) {
+                coyoteResponse.action(ActionCode.DISPATCH_WRITE, null);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public WriteListener getWriteListener() {
+        return listener;
+}
+-----CSCI578-----
+
+
+
+    // -------------------- Actions --------------------
+
+    public void action(ActionCode actionCode, Object param) {
+        if (hook != null) {
+            if (param == null) {
+                hook.action(actionCode, this);
+            } else {
+                hook.action(actionCode, param);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Send an action to the connector.
+     *
+     * @param actionCode Type of the action
+     * @param param Action parameter
+     */
+    public void action(ActionCode actionCode, Object param);

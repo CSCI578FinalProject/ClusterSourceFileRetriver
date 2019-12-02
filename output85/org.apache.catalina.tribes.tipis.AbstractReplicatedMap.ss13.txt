@@ -1,0 +1,153 @@
+7
+-----CSCI578-----
+
+
+    public long getRpcTimeout() {
+        return rpcTimeout;
+    }
+-----CSCI578-----
+
+
+    public Member[] getMapMembersExcl(Member[] exclude) {
+        synchronized (mapMembers) {
+            @SuppressWarnings("unchecked") // mapMembers has the correct type
+            HashMap<Member, Long> list = (HashMap<Member, Long>)mapMembers.clone();
+            for (int i=0; i<exclude.length;i++) list.remove(exclude[i]);
+            return getMapMembers(list);
+        }
+    }
+-----CSCI578-----
+
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public V get(Object key) {
+        MapEntry<K,V> entry = innerMap.get(key);
+        if (log.isTraceEnabled()) log.trace("Requesting id:"+key+" entry:"+entry);
+        if ( entry == null ) return null;
+        if ( !entry.isPrimary() ) {
+            //if the message is not primary, we need to retrieve the latest value
+            try {
+                Member[] backup = null;
+                MapMessage msg = null;
+                if (entry.isBackup()) {
+                    //select a new backup node
+                    backup = publishEntryInfo(key, entry.getValue());
+                } else if ( entry.isProxy() ) {
+                    //make sure we don't retrieve from ourselves
+                    msg = new MapMessage(getMapContextName(), MapMessage.MSG_RETRIEVE_BACKUP, false,
+                                         (Serializable) key, null, null, null,null);
+                    Response[] resp = getRpcChannel().send(entry.getBackupNodes(),msg, RpcChannel.FIRST_REPLY, Channel.SEND_OPTIONS_DEFAULT, getRpcTimeout());
+                    if (resp == null || resp.length == 0) {
+                        //no responses
+                        log.warn(sm.getString("abstractReplicatedMap.unable.retrieve", key));
+                        return null;
+                    }
+                    msg = (MapMessage) resp[0].getMessage();
+                    msg.deserialize(getExternalLoaders());
+                    backup = entry.getBackupNodes();
+                    if ( msg.getValue()!=null ) entry.setValue((V) msg.getValue());
+
+                    // notify member
+                    msg = new MapMessage(getMapContextName(), MapMessage.MSG_NOTIFY_MAPMEMBER,false,
+                            (Serializable)entry.getKey(), null, null, channel.getLocalMember(false), backup);
+                    if ( backup != null && backup.length > 0) {
+                        getChannel().send(backup, msg, getChannelSendOptions());
+                    }
+
+                    //invalidate the previous primary
+                    msg = new MapMessage(getMapContextName(),MapMessage.MSG_PROXY,false,(Serializable)key,null,null,channel.getLocalMember(false),backup);
+                    Member[] dest = getMapMembersExcl(backup);
+                    if ( dest!=null && dest.length >0) {
+                        getChannel().send(dest, msg, getChannelSendOptions());
+                    }
+                    if (entry.getValue() instanceof ReplicatedMapEntry) {
+                        ReplicatedMapEntry val = (ReplicatedMapEntry)entry.getValue();
+                        val.setOwner(getMapOwner());
+                    }
+                } else if ( entry.isCopy() ) {
+                    backup = getMapMembers();
+                    if (backup.length > 0) {
+                        msg = new MapMessage(getMapContextName(), MapMessage.MSG_NOTIFY_MAPMEMBER,false,
+                                (Serializable)key,null,null,channel.getLocalMember(false),backup);
+                        getChannel().send(backup, msg, getChannelSendOptions());
+                    }
+                }
+                entry.setPrimary(channel.getLocalMember(false));
+                entry.setBackupNodes(backup);
+                entry.setBackup(false);
+                entry.setProxy(false);
+                entry.setCopy(false);
+                if ( getMapOwner()!=null ) getMapOwner().objectMadePrimary(key, entry.getValue());
+
+            } catch (Exception x) {
+                log.error(sm.getString("abstractReplicatedMap.unable.get"), x);
+                return null;
+            }
+        }
+        if (log.isTraceEnabled()) log.trace("Requesting id:"+key+" result:"+entry.getValue());
+        return entry.getValue();
+    }
+
+
+    /**
+     * Returns true if the key has an entry in the map.
+     * The entry can be a proxy or a backup entry, invoking <code>get(key)</code>
+     * will make this entry primary for the group
+     * @param key Object
+     * @return boolean
+     */
+    @Override
+    public boolean containsKey(Object key) {
+        return innerMap.containsKey(key);
+    }
+-----CSCI578-----
+
+
+    public RpcChannel getRpcChannel() {
+        return rpcChannel;
+    }
+-----CSCI578-----
+
+
+//------------------------------------------------------------------------------
+//              GROUP COM INTERFACES
+//------------------------------------------------------------------------------
+    public Member[] getMapMembers(HashMap<Member, Long> members) {
+        synchronized (members) {
+            Member[] result = new Member[members.size()];
+            members.keySet().toArray(result);
+            return result;
+        }
+    }
+
+    public Member[] getMapMembers() {
+        return getMapMembers(this.mapMembers);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    protected void printMap(String header) {
+        try {
+            System.out.println("\nDEBUG MAP:"+header);
+            System.out.println("Map[" +
+                    new String(mapContextName, StandardCharsets.ISO_8859_1) +
+                    ", Map Size:" + innerMap.size());
+            Member[] mbrs = getMapMembers();
+            for ( int i=0; i<mbrs.length;i++ ) {
+                System.out.println("Mbr["+(i+1)+"="+mbrs[i].getName());
+            }
+            Iterator<Map.Entry<K,MapEntry<K,V>>> i = innerMap.entrySet().iterator();
+            int cnt = 0;
+
+            while (i.hasNext()) {
+                Map.Entry<?,?> e = i.next();
+                System.out.println( (++cnt) + ". " + innerMap.get(e.getKey()));
+            }
+            System.out.println("EndMap]\n\n");
+        }catch ( Exception ignore) {
+            ignore.printStackTrace();
+        }
+    }

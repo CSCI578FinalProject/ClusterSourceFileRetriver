@@ -1,0 +1,69 @@
+10
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified Connector from the set associated from this
+     * Service.  The removed Connector will also be disassociated from our
+     * Container.
+     *
+     * @param connector The Connector to be removed
+     */
+    @Override
+    public void removeConnector(Connector connector) {
+
+        synchronized (connectorsLock) {
+            int j = -1;
+            for (int i = 0; i < connectors.length; i++) {
+                if (connector == connectors[i]) {
+                    j = i;
+                    break;
+                }
+            }
+            if (j < 0)
+                return;
+            if (connectors[j].getState().isAvailable()) {
+                try {
+                    connectors[j].stop();
+                } catch (LifecycleException e) {
+                    log.error(sm.getString(
+                            "standardService.connector.stopFailed",
+                            connectors[j]), e);
+                }
+            }
+            connector.setService(null);
+            int k = 0;
+            Connector results[] = new Connector[connectors.length - 1];
+            for (int i = 0; i < connectors.length; i++) {
+                if (i != j)
+                    results[k++] = connectors[i];
+            }
+            connectors = results;
+
+            // Report this property change to interested listeners
+            support.firePropertyChange("connector", connector, null);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the <code>Service</code> with which we are associated (if any).
+     *
+     * @param service The service that owns this Engine
+     */
+    public void setService(Service service) {
+
+        this.service = service;
+
+    }

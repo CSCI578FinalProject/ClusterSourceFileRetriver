@@ -1,0 +1,120 @@
+4
+-----CSCI578-----
+
+
+    /** Destroy needs to clean up the context completely.
+     *
+     * The problem is that undoing all the config in start() and restoring
+     * a 'fresh' state is impossible. After stop()/destroy()/init()/start()
+     * we should have the same state as if a fresh start was done - i.e
+     * read modified web.xml, etc. This can only be done by completely
+     * removing the context object and remapping a new one, or by cleaning
+     * up everything.
+     *
+     * XXX Should this be done in stop() ?
+     *
+     */
+    @Override
+    protected void destroyInternal() throws LifecycleException {
+
+        // If in state NEW when destroy is called, the object name will never
+        // have been set so the notification can't be created
+        if (getObjectName() != null) {
+            // Send j2ee.object.deleted notification
+            Notification notification =
+                new Notification("j2ee.object.deleted", this.getObjectName(),
+                                 sequenceNumber.getAndIncrement());
+            broadcaster.sendNotification(notification);
+        }
+
+        if (namingResources != null) {
+            namingResources.destroy();
+        }
+
+        Loader loader = getLoader();
+        if (loader instanceof Lifecycle) {
+            ((Lifecycle) loader).destroy();
+        }
+
+        Manager manager = getManager();
+        if (manager instanceof Lifecycle) {
+            ((Lifecycle) manager).destroy();
+        }
+
+        if (resources != null) {
+            resources.destroy();
+        }
+
+        super.destroyInternal();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove an existing Context.
+     *
+     * @param contextName MBean Name of the component to remove
+     *
+     * @exception Exception if a component cannot be removed
+     */
+    public void removeContext(String contextName) throws Exception {
+
+        // Acquire a reference to the component to be removed
+        ObjectName oname = new ObjectName(contextName);
+        String domain = oname.getDomain();
+        StandardService service = (StandardService) getService(oname);
+
+        Engine engine = service.getContainer();
+        String name = oname.getKeyProperty("name");
+        name = name.substring(2);
+        int i = name.indexOf('/');
+        String hostName = name.substring(0,i);
+        String path = name.substring(i);
+        ObjectName deployer = new ObjectName(domain+":type=Deployer,host="+
+                                             hostName);
+        String pathStr = getPathStr(path);
+        if(mserver.isRegistered(deployer)) {
+            mserver.invoke(deployer,"addServiced",
+                           new Object[]{pathStr},
+                           new String[] {"java.lang.String"});
+            mserver.invoke(deployer,"unmanageApp",
+                           new Object[] {pathStr},
+                           new String[] {"java.lang.String"});
+            mserver.invoke(deployer,"removeServiced",
+                           new Object[] {pathStr},
+                           new String[] {"java.lang.String"});
+        } else {
+            log.warn("Deployer not found for "+hostName);
+            Host host = (Host) engine.findChild(hostName);
+            Context context = (Context) host.findChild(pathStr);
+            // Remove this component from its parent component
+            host.removeChild(context);
+            if(context instanceof StandardContext)
+            try {
+                ((StandardContext)context).destroy();
+            } catch (Exception e) {
+                log.warn("Error during context [" + context.getName() + "] destroy ", e);
+           }
+
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Little convenience method to remove redundant code
+     * when retrieving the path string
+     *
+     * @param t path string
+     * @return empty string if t==null || t.equals("/")
+     */
+    private final String getPathStr(String t) {
+        if (t == null || t.equals("/")) {
+            return "";
+        }
+        return t;
+    }

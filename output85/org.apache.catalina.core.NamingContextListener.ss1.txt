@@ -1,0 +1,329 @@
+13
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Process a property change on the naming resources, by making the
+     * corresponding addition or removal to the associated JNDI context.
+     *
+     * @param name Property name of the change to be processed
+     * @param oldValue The old value (or <code>null</code> if adding)
+     * @param newValue The new value (or <code>null</code> if removing)
+     */
+    private void processGlobalResourcesChange(String name,
+                                              Object oldValue,
+                                              Object newValue) {
+
+        if (name.equals("ejb")) {
+            if (oldValue != null) {
+                ContextEjb ejb = (ContextEjb) oldValue;
+                if (ejb.getName() != null) {
+                    removeEjb(ejb.getName());
+                }
+            }
+            if (newValue != null) {
+                ContextEjb ejb = (ContextEjb) newValue;
+                if (ejb.getName() != null) {
+                    addEjb(ejb);
+                }
+            }
+        } else if (name.equals("environment")) {
+            if (oldValue != null) {
+                ContextEnvironment env = (ContextEnvironment) oldValue;
+                if (env.getName() != null) {
+                    removeEnvironment(env.getName());
+                }
+            }
+            if (newValue != null) {
+                ContextEnvironment env = (ContextEnvironment) newValue;
+                if (env.getName() != null) {
+                    addEnvironment(env);
+                }
+            }
+        } else if (name.equals("localEjb")) {
+            if (oldValue != null) {
+                ContextLocalEjb ejb = (ContextLocalEjb) oldValue;
+                if (ejb.getName() != null) {
+                    removeLocalEjb(ejb.getName());
+                }
+            }
+            if (newValue != null) {
+                ContextLocalEjb ejb = (ContextLocalEjb) newValue;
+                if (ejb.getName() != null) {
+                    addLocalEjb(ejb);
+                }
+            }
+        } else if (name.equals("resource")) {
+            if (oldValue != null) {
+                ContextResource resource = (ContextResource) oldValue;
+                if (resource.getName() != null) {
+                    removeResource(resource.getName());
+                }
+            }
+            if (newValue != null) {
+                ContextResource resource = (ContextResource) newValue;
+                if (resource.getName() != null) {
+                    addResource(resource);
+                }
+            }
+        } else if (name.equals("resourceEnvRef")) {
+            if (oldValue != null) {
+                ContextResourceEnvRef resourceEnvRef =
+                    (ContextResourceEnvRef) oldValue;
+                if (resourceEnvRef.getName() != null) {
+                    removeResourceEnvRef(resourceEnvRef.getName());
+                }
+            }
+            if (newValue != null) {
+                ContextResourceEnvRef resourceEnvRef =
+                    (ContextResourceEnvRef) newValue;
+                if (resourceEnvRef.getName() != null) {
+                    addResourceEnvRef(resourceEnvRef);
+                }
+            }
+        } else if (name.equals("resourceLink")) {
+            if (oldValue != null) {
+                ContextResourceLink rl = (ContextResourceLink) oldValue;
+                if (rl.getName() != null) {
+                    removeResourceLink(rl.getName());
+                }
+            }
+            if (newValue != null) {
+                ContextResourceLink rl = (ContextResourceLink) newValue;
+                if (rl.getName() != null) {
+                    addResourceLink(rl);
+                }
+            }
+        } else if (name.equals("service")) {
+            if (oldValue != null) {
+                ContextService service = (ContextService) oldValue;
+                if (service.getName() != null) {
+                    removeService(service.getName());
+                }
+            }
+            if (newValue != null) {
+                ContextService service = (ContextService) newValue;
+                if (service.getName() != null) {
+                    addService(service);
+                }
+            }
+        }
+
+
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------- PropertyChangeListener Methods
+
+
+    /**
+     * Process property change events.
+     *
+     * @param event The property change event that has occurred
+     */
+    @Override
+    public void propertyChange(PropertyChangeEvent event) {
+
+        if (!initialized)
+            return;
+
+        Object source = event.getSource();
+        if (source == namingResources) {
+
+            // Setting the context in read/write mode
+            ContextAccessController.setWritable(getName(), token);
+
+            processGlobalResourcesChange(event.getPropertyName(),
+                                         event.getOldValue(),
+                                         event.getNewValue());
+
+            // Setting the context in read only mode
+            ContextAccessController.setReadOnly(getName());
+
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the "name" property.
+     */
+    public String getName() {
+        return (this.name);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Allow writing to a context.
+     *
+     * @param name Name of the context
+     * @param token Security token
+     */
+    public static void setWritable(Object name, Object token) {
+        if (checkSecurityToken(name, token))
+            readOnlyContexts.remove(name);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set whether or not a context is writable.
+     *
+     * @param name Name of the context
+     */
+    public static void setReadOnly(Object name) {
+        readOnlyContexts.put(name, name);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the specified local EJBs in the naming context.
+     *
+     * @param localEjb the EJB descriptor (unused)
+     */
+    public void addLocalEjb(ContextLocalEjb localEjb) {
+        // NO-OP
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified EJBs in the naming context.
+     *
+     * @param name the name of the EJB which should be removed
+     */
+    public void removeEjb(String name) {
+
+        try {
+            envCtx.unbind(name);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.unbindFailed", e));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified environment entries in the naming context.
+     *
+     * @param name the name of the environment entry which should be removed
+     */
+    public void removeEnvironment(String name) {
+
+        try {
+            envCtx.unbind(name);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.unbindFailed", e));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified local EJBs in the naming context.
+     *
+     * @param name the name of the EJB which should be removed
+     */
+    public void removeLocalEjb(String name) {
+
+        try {
+            envCtx.unbind(name);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.unbindFailed", e));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified resources in the naming context.
+     *
+     * @param name the name of the resource which should be removed
+     */
+    public void removeResource(String name) {
+
+        try {
+            envCtx.unbind(name);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.unbindFailed", e));
+        }
+
+        ObjectName on = objectNames.get(name);
+        if (on != null) {
+            Registry.getRegistry(null, null).unregisterComponent(on);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified resources in the naming context.
+     *
+     * @param name the name of the resource link which should be removed
+     */
+    public void removeResourceLink(String name) {
+
+        try {
+            envCtx.unbind(name);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.unbindFailed", e));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified resources in the naming context.
+     *
+     * @param name the name of the resource reference which should be removed
+     */
+    public void removeResourceEnvRef(String name) {
+
+        try {
+            envCtx.unbind(name);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.unbindFailed", e));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified web services in the naming context.
+     *
+     * @param name the name of the web service which should be removed
+     */
+    public void removeService(String name) {
+
+        try {
+            envCtx.unbind(name);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.unbindFailed", e));
+        }
+
+    }

@@ -1,0 +1,69 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Increment the error count value used when monitoring.
+     */
+    public void incrementErrorCount();
+-----CSCI578-----
+
+
+    /**
+     * With the introduction of async processing and the possibility of
+     * non-container threads calling sendError() tracking the current error
+     * state and ensuring that the correct error page is called becomes more
+     * complicated. This state attribute helps by tracking the current error
+     * state and informing callers that attempt to change state if the change
+     * was successful or if another thread got there first.
+     *
+     * <pre>
+     * The state machine is very simple:
+     *
+     * 0 - NONE
+     * 1 - NOT_REPORTED
+     * 2 - REPORTED
+     *
+     *
+     *   -->---->-- >NONE
+     *   |   |        |
+     *   |   |        | setError()
+     *   ^   ^        |
+     *   |   |       \|/
+     *   |   |-<-NOT_REPORTED
+     *   |            |
+     *   ^            | report()
+     *   |            |
+     *   |           \|/
+     *   |----<----REPORTED
+     * </pre>
+     */
+    private final AtomicInteger errorState = new AtomicInteger(0);
+
+
+
+    /**
+     * Set the error flag.
+     *
+     * @return <code>false</code> if the error flag was already set
+     */
+    public boolean setError() {
+        boolean result = errorState.compareAndSet(0, 1);
+        if (result) {
+            Wrapper wrapper = getRequest().getWrapper();
+            if (wrapper != null) {
+                wrapper.incrementErrorCount();
+            }
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the Request with which this Response is associated.
+     */
+    public org.apache.catalina.connector.Request getRequest() {
+        return (this.request);
+    }

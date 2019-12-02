@@ -1,0 +1,295 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public static String unquote(String input) {
+        if (input == null || input.length() < 2 || input.charAt(0) != '"') {
+            return input;
+        }
+
+        StringBuilder result = new StringBuilder();
+        for (int i = 1 ; i < (input.length() - 1); i++) {
+            char c = input.charAt(i);
+            if (input.charAt(i) == '\\') {
+                i++;
+                result.append(input.charAt(i));
+            } else {
+                result.append(c);
+            }
+        }
+        return result.toString();
+    }
+
+
+    public static boolean isToken(int c) {
+        // Fast for correct values, slower for incorrect ones
+        try {
+            return IS_TOKEN[c];
+        } catch (ArrayIndexOutOfBoundsException ex) {
+            return false;
+        }
+    }
+
+
+    public static boolean isHex(int c) {
+        // Fast for correct values, slower for some incorrect ones
+        try {
+            return IS_HEX[c];
+        } catch (ArrayIndexOutOfBoundsException ex) {
+            return false;
+        }
+    }
+
+
+    public static boolean isNotRequestTarget(int c) {
+        // Fast for valid request target characters, slower for some incorrect
+        // ones
+        try {
+            return IS_NOT_REQUEST_TARGET[c];
+        } catch (ArrayIndexOutOfBoundsException ex) {
+            return true;
+        }
+    }
+
+
+    public static boolean isHttpProtocol(int c) {
+        // Fast for valid HTTP protocol characters, slower for some incorrect
+        // ones
+        try {
+            return IS_HTTP_PROTOCOL[c];
+        } catch (ArrayIndexOutOfBoundsException ex) {
+            return false;
+        }
+    }
+
+
+    // Skip any LWS and return the next char
+    private static int skipLws(StringReader input, boolean withReset)
+            throws IOException {
+
+        if (withReset) {
+            input.mark(1);
+        }
+        int c = input.read();
+
+        while (c == 32 || c == 9 || c == 10 || c == 13) {
+            if (withReset) {
+                input.mark(1);
+            }
+            c = input.read();
+        }
+
+        if (withReset) {
+            input.reset();
+        }
+        return c;
+    }
+
+    private static SkipConstantResult skipConstant(StringReader input,
+            String constant) throws IOException {
+        int len = constant.length();
+
+        int c = skipLws(input, false);
+
+        for (int i = 0; i < len; i++) {
+            if (i == 0 && c == -1) {
+                return SkipConstantResult.EOF;
+            }
+            if (c != constant.charAt(i)) {
+                input.skip(-(i + 1));
+                return SkipConstantResult.NOT_FOUND;
+            }
+            if (i != (len - 1)) {
+                c = input.read();
+            }
+        }
+        return SkipConstantResult.FOUND;
+    }
+
+    /**
+     * @return  the token if one was found, the empty string if no data was
+     *          available to read or <code>null</code> if data other than a
+     *          token was found
+     */
+    private static String readToken(StringReader input) throws IOException {
+        StringBuilder result = new StringBuilder();
+
+        int c = skipLws(input, false);
+
+        while (c != -1 && isToken(c)) {
+            result.append((char) c);
+            c = input.read();
+        }
+        // Skip back so non-token character is available for next read
+        input.skip(-1);
+
+        if (c != -1 && result.length() == 0) {
+            return null;
+        } else {
+            return result.toString();
+        }
+    }
+
+    /**
+     * @return the quoted string if one was found, null if data other than a
+     *         quoted string was found or null if the end of data was reached
+     *         before the quoted string was terminated
+     */
+    private static String readQuotedString(StringReader input,
+            boolean returnQuoted) throws IOException {
+
+        int c = skipLws(input, false);
+
+        if (c != '"') {
+            return null;
+        }
+
+        StringBuilder result = new StringBuilder();
+        if (returnQuoted) {
+            result.append('\"');
+        }
+        c = input.read();
+
+        while (c != '"') {
+            if (c == -1) {
+                return null;
+            } else if (c == '\\') {
+                c = input.read();
+                if (returnQuoted) {
+                    result.append('\\');
+                }
+                result.append(c);
+            } else {
+                result.append((char) c);
+            }
+            c = input.read();
+        }
+        if (returnQuoted) {
+            result.append('\"');
+        }
+
+        return result.toString();
+    }
+
+    private static String readTokenOrQuotedString(StringReader input,
+            boolean returnQuoted) throws IOException {
+
+        // Go back so first non-LWS character is available to be read again
+        int c = skipLws(input, true);
+
+        if (c == '"') {
+            return readQuotedString(input, returnQuoted);
+        } else {
+            return readToken(input);
+        }
+    }
+
+    /**
+     * Token can be read unambiguously with or without surrounding quotes so
+     * this parsing method for token permits optional surrounding double quotes.
+     * This is not defined in any RFC. It is a special case to handle data from
+     * buggy clients (known buggy clients for DIGEST auth include Microsoft IE 8
+     * &amp; 9, Apple Safari for OSX and iOS) that add quotes to values that
+     * should be tokens.
+     *
+     * @return the token if one was found, null if data other than a token or
+     *         quoted token was found or null if the end of data was reached
+     *         before a quoted token was terminated
+     */
+    private static String readQuotedToken(StringReader input)
+            throws IOException {
+
+        StringBuilder result = new StringBuilder();
+        boolean quoted = false;
+
+        int c = skipLws(input, false);
+
+        if (c == '"') {
+            quoted = true;
+        } else if (c == -1 || !isToken(c)) {
+            return null;
+        } else {
+            result.append((char) c);
+        }
+        c = input.read();
+
+        while (c != -1 && isToken(c)) {
+            result.append((char) c);
+            c = input.read();
+        }
+
+        if (quoted) {
+            if (c != '"') {
+                return null;
+            }
+        } else {
+            // Skip back so non-token character is available for next read
+            input.skip(-1);
+        }
+
+        if (c != -1 && result.length() == 0) {
+            return null;
+        } else {
+            return result.toString();
+        }
+    }
+
+    /**
+     * LHEX can be read unambiguously with or without surrounding quotes so this
+     * parsing method for LHEX permits optional surrounding double quotes. Some
+     * buggy clients (libwww-perl for DIGEST auth) are known to send quoted LHEX
+     * when the specification requires just LHEX.
+     *
+     * <p>
+     * LHEX are, literally, lower-case hexadecimal digits. This implementation
+     * allows for upper-case digits as well, converting the returned value to
+     * lower-case.
+     *
+     * @return  the sequence of LHEX (minus any surrounding quotes) if any was
+     *          found, or <code>null</code> if data other LHEX was found
+     */
+    private static String readLhex(StringReader input)
+            throws IOException {
+
+        StringBuilder result = new StringBuilder();
+        boolean quoted = false;
+
+        int c = skipLws(input, false);
+
+        if (c == '"') {
+            quoted = true;
+        } else if (c == -1 || !isHex(c)) {
+            return null;
+        } else {
+            if ('A' <= c && c <= 'F') {
+                c -= ('A' - 'a');
+            }
+            result.append((char) c);
+        }
+        c = input.read();
+
+        while (c != -1 && isHex(c)) {
+            if ('A' <= c && c <= 'F') {
+                c -= ('A' - 'a');
+            }
+            result.append((char) c);
+            c = input.read();
+        }
+
+        if (quoted) {
+            if (c != '"') {
+                return null;
+            }
+        } else {
+            // Skip back so non-hex character is available for next read
+            input.skip(-1);
+        }
+
+        if (c != -1 && result.length() == 0) {
+            return null;
+        } else {
+            return result.toString();
+        }
+    }

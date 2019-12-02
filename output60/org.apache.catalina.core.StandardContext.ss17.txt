@@ -1,0 +1,135 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Binds a naming context to a thread.
+     * 
+     * @param name Name of the context
+     */
+    public static void bindThread(Object name) 
+        throws NamingException {
+        bindThread(name, null);
+    }
+
+
+
+    /**
+     * Binds a naming context to a thread.
+     * 
+     * @param name Name of the context
+     * @param token Security token
+     */
+    public static void bindThread(Object name, Object token) 
+        throws NamingException {
+        if (ContextAccessController.checkSecurityToken(name, token)) {
+            Context context = (Context) contextNameBindings.get(name);
+            if (context == null)
+                throw new NamingException
+                    (sm.getString("contextBindings.unknownContext", name));
+            threadBindings.put(Thread.currentThread(), context);
+            threadNameBindings.put(Thread.currentThread(), name);
+        }
+    }
+
+
+
+    /**
+     * Unbinds a naming context to a thread.
+     * 
+     * @param name Name of the context
+     */
+    public static void unbindThread(Object name) {
+        unbindThread(name, null);
+    }
+
+
+
+    /**
+     * Unbinds a naming context to a thread.
+     * 
+     * @param name Name of the context
+     * @param token Security token
+     */
+    public static void unbindThread(Object name, Object token) {
+        if (ContextAccessController.checkSecurityToken(name, token)) {
+            threadBindings.remove(Thread.currentThread());
+            threadNameBindings.remove(Thread.currentThread());
+        }
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Binds a directory context to a thread.
+     */
+    public static void bindThread(DirContext dirContext) {
+        threadBindings.put(Thread.currentThread(), dirContext);
+    }
+
+    
+    
+    /**
+     * Unbinds a directory context to a thread.
+     */
+    public static void unbindThread() {
+        threadBindings.remove(Thread.currentThread());
+    }
+-----CSCI578-----
+
+
+
+    // -------------------------------------------------------- Private Methods
+
+
+    /**
+     * Bind current thread, both for CL purposes and for JNDI ENC support
+     * during : startup, shutdown and realoading of the context.
+     *
+     * @return the previous context class loader
+     */
+    private ClassLoader bindThread() {
+
+        ClassLoader oldContextClassLoader =
+            Thread.currentThread().getContextClassLoader();
+
+        if (getResources() == null)
+            return oldContextClassLoader;
+
+        if (getLoader().getClassLoader() != null) {
+            Thread.currentThread().setContextClassLoader
+                (getLoader().getClassLoader());
+        }
+
+        DirContextURLStreamHandler.bindThread(getResources());
+
+        if (isUseNaming()) {
+            try {
+                ContextBindings.bindThread(this, this);
+            } catch (NamingException e) {
+                // Silent catch, as this is a normal case during the early
+                // startup stages
+            }
+        }
+
+        return oldContextClassLoader;
+
+    }
+
+
+
+    /**
+     * Unbind thread.
+     */
+    private void unbindThread(ClassLoader oldContextClassLoader) {
+
+        if (isUseNaming()) {
+            ContextBindings.unbindThread(this, this);
+        }
+
+        DirContextURLStreamHandler.unbindThread();
+
+        Thread.currentThread().setContextClassLoader(oldContextClassLoader);
+    }

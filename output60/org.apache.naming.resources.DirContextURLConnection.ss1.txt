@@ -1,0 +1,106 @@
+4
+-----CSCI578-----
+
+    
+    
+    /**
+     * Return the content type value.
+     */
+    public String getContentType() {
+        return getHeaderField(ResourceAttributes.CONTENT_TYPE);
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Returns the name of the specified header field.
+     */
+    public String getHeaderField(String name) {
+
+        if (!connected) {
+            // Try to connect (silently)
+            try {
+                connect();
+            } catch (IOException e) {
+            }
+        }
+        
+        if (attributes == null)
+            return (null);
+
+        NamingEnumeration attributeEnum = attributes.getIDs();
+        try {
+            while (attributeEnum.hasMore()) {
+                String attributeID = (String)attributeEnum.next();
+                if (attributeID.equalsIgnoreCase(name)) {
+                    Attribute attribute = attributes.get(attributeID);
+                    if (attribute == null) return null;
+                    Object attrValue = attribute.get(attribute.size()-1);
+                    return getHeaderValueAsString(attrValue);
+                }
+            }
+        } catch (NamingException ne) {
+            // Shouldn't happen
+        }
+
+        return (null);
+        
+    }
+-----CSCI578-----
+
+    
+
+    protected String getHeaderValueAsString(Object headerValue) {
+        if (headerValue == null) return null;
+        if (headerValue instanceof Date) {
+            // return date strings (ie Last-Modified) in HTTP format, rather
+            // than Java format
+            return FastHttpDateFormat.formatDate(
+                    ((Date)headerValue).getTime(), null);
+        }
+        return headerValue.toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Returns an unmodifiable Map of the header fields.
+     */
+    public Map getHeaderFields() {
+
+      if (!connected) {
+          // Try to connect (silently)
+          try {
+              connect();
+          } catch (IOException e) {
+          }
+      }
+
+      if (attributes == null)
+          return (Collections.EMPTY_MAP);
+
+      HashMap headerFields = new HashMap(attributes.size());
+      NamingEnumeration attributeEnum = attributes.getIDs();
+      try {
+          while (attributeEnum.hasMore()) {
+              String attributeID = (String)attributeEnum.next();
+              Attribute attribute = attributes.get(attributeID);
+              if (attribute == null) continue;
+              ArrayList attributeValueList = new ArrayList(attribute.size());
+              NamingEnumeration attributeValues = attribute.getAll();
+              while (attributeValues.hasMore()) {
+                  Object attrValue = attributeValues.next();
+                  attributeValueList.add(getHeaderValueAsString(attrValue));
+              }
+              attributeValueList.trimToSize(); // should be a no-op if attribute.size() didn't lie
+              headerFields.put(attributeID, Collections.unmodifiableList(attributeValueList));
+          }
+      } catch (NamingException ne) {
+            // Shouldn't happen
+      }
+
+      return Collections.unmodifiableMap(headerFields);
+
+    }

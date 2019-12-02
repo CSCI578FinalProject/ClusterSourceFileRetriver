@@ -1,0 +1,82 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called before any of the public
+     * methods of this component are utilized.  It should also send a
+     * LifecycleEvent of type START_EVENT to any registered listeners.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    @Override
+    public void start() throws LifecycleException {
+        // Start 'sub-realms' then this one
+    	Iterator<Realm> iter = realms.iterator();
+        
+        while (iter.hasNext()) {
+            Realm realm = iter.next();
+            if (realm instanceof Lifecycle) {
+                try {
+                    ((Lifecycle) realm).start();
+                } catch (LifecycleException e) {
+                    // If realm doesn't start can't authenticate against it
+                    iter.remove();
+                    log.error(sm.getString("combinedRealm.realmStartFail",
+                            realm.getInfo()), e);
+                }
+            }
+        }
+        super.start();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Prepare for the beginning of active use of the public methods of this
+     * component.  This method should be called before any of the public
+     * methods of this component are utilized.  It should also send a
+     * LifecycleEvent of type START_EVENT to any registered listeners.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents this component from being used
+     */
+    public void start() throws LifecycleException {
+        // Configure the list of failed users to delete the oldest entry once it
+        // exceeds the specified size
+        failedUsers = new LinkedHashMap<String, LockRecord>(cacheSize, 0.75f,
+                true) {
+            protected boolean removeEldestEntry(
+                    Map.Entry<String, LockRecord> eldest) {
+                if (size() > cacheSize) {
+                    // Check to see if this element has been removed too quickly
+                    long timeInCache = (System.currentTimeMillis() -
+                            eldest.getValue().getLastFailureTime())/1000;
+                    
+                    if (timeInCache < cacheRemovalWarningTime) {
+                        log.warn(sm.getString("lockOutRealm.removeWarning",
+                                eldest.getKey(), Long.valueOf(timeInCache)));
+                    }
+                    return true;
+                }
+                return false;
+            }
+        };
+
+        super.start();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return descriptive information about this Realm implementation and
+     * the corresponding version number, in the format
+     * <code>&lt;description&gt;/&lt;version&gt;</code>.
+     */
+    public String getInfo();

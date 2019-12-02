@@ -1,0 +1,134 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Finish AJP response.
+     */
+    protected void finish()
+        throws IOException {
+
+        if (!response.isCommitted()) {
+            // Validate and write response headers
+            try {
+                prepareResponse();
+            } catch (IOException e) {
+                // Set error flag
+                error = true;
+            }
+        }
+
+        if (finished)
+            return;
+
+        finished = true;
+
+        // Swallow the unread body packet if present
+        if (first && request.getContentLengthLong() > 0) {
+            receive();
+        }
+
+        // Add the end message
+        output.write(endMessageArray);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /** Receive a chunk of data. Called to implement the
+     *  'special' packet in ajp13 and to receive the data
+     *  after we send a GET_BODY packet
+     */
+    public boolean receive() throws IOException {
+
+        first = false;
+        bodyMessage.reset();
+        readMessage(bodyMessage);
+
+        // No data received.
+        if (bodyMessage.getLen() == 0) {
+            // just the header
+            // Don't mark 'end of stream' for the first chunk.
+            return false;
+        }
+        int blen = bodyMessage.peekInt();
+        if (blen == 0) {
+            return false;
+        }
+
+        bodyMessage.getBodyBytes(bodyBytes);
+        empty = false;
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * When committing the response, we have to validate the set of headers, as
+     * well as setup the response filters.
+     */
+    protected void prepareResponse()
+        throws IOException {
+
+        response.setCommitted(true);
+
+        responseHeaderMessage.reset();
+        responseHeaderMessage.appendByte(Constants.JK_AJP13_SEND_HEADERS);
+
+        // HTTP header contents
+        responseHeaderMessage.appendInt(response.getStatus());
+        String message = null;
+        if (org.apache.coyote.Constants.USE_CUSTOM_STATUS_MSG_IN_HEADER &&
+                HttpMessages.isSafeInHttpHeader(response.getMessage())) {
+            message = response.getMessage();
+        }
+        if (message == null){
+            message = HttpMessages.getMessage(response.getStatus());
+        }
+        if (message == null) {
+            // mod_jk + httpd 2.x fails with a null status message - bug 45026
+            message = Integer.toString(response.getStatus());
+        }
+        tmpMB.setString(message);
+        responseHeaderMessage.appendBytes(tmpMB);
+
+        // Special headers
+        MimeHeaders headers = response.getMimeHeaders();
+        String contentType = response.getContentType();
+        if (contentType != null) {
+            headers.setValue("Content-Type").setString(contentType);
+        }
+        String contentLanguage = response.getContentLanguage();
+        if (contentLanguage != null) {
+            headers.setValue("Content-Language").setString(contentLanguage);
+        }
+        long contentLength = response.getContentLengthLong();
+        if (contentLength >= 0) {
+            headers.setValue("Content-Length").setLong(contentLength);
+        }
+
+        // Other headers
+        int numHeaders = headers.size();
+        responseHeaderMessage.appendInt(numHeaders);
+        for (int i = 0; i < numHeaders; i++) {
+            MessageBytes hN = headers.getName(i);
+            int hC = Constants.getResponseAjpIndex(hN.toString());
+            if (hC > 0) {
+                responseHeaderMessage.appendInt(hC);
+            }
+            else {
+                responseHeaderMessage.appendBytes(hN);
+            }
+            MessageBytes hV=headers.getValue(i);
+            responseHeaderMessage.appendBytes(hV);
+        }
+
+        // Write to buffer
+        responseHeaderMessage.end();
+        output.write(responseHeaderMessage.getBuffer(), 0, responseHeaderMessage.getLen());
+
+    }

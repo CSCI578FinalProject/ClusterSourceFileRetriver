@@ -1,0 +1,33 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified resources in the naming context.
+     */
+    public void addResourceEnvRef(ContextResourceEnvRef resourceEnvRef) {
+
+        // Create a reference to the resource env.
+        Reference ref = new ResourceEnvRef(resourceEnvRef.getType());
+        // Adding the additional parameters, if any
+        Iterator params = resourceEnvRef.listProperties();
+        while (params.hasNext()) {
+            String paramName = (String) params.next();
+            String paramValue = (String) resourceEnvRef.getProperty(paramName);
+            StringRefAddr refAddr = new StringRefAddr(paramName, paramValue);
+            ref.add(refAddr);
+        }
+        try {
+            if (logger.isDebugEnabled())
+                log.debug("  Adding resource env ref " + resourceEnvRef.getName());
+            createSubcontexts(envCtx, resourceEnvRef.getName());
+            envCtx.bind(resourceEnvRef.getName(), ref);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.bindFailed", e));
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----

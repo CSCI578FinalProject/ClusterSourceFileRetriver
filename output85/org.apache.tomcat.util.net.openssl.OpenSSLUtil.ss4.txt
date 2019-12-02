@@ -1,0 +1,139 @@
+12
+-----CSCI578-----
+
+
+
+    public String getKeyManagerAlgorithm() {
+        return keyManagerAlgorithm;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public KeyManager[] getKeyManagers() throws Exception {
+        if (jsseUtil != null) {
+            return jsseUtil.getKeyManagers();
+        } else {
+            // Return something although it is not actually used
+            KeyManager[] managers = {
+                    new OpenSSLKeyManager(SSLHostConfig.adjustRelativePath(certificate.getCertificateFile()),
+                            SSLHostConfig.adjustRelativePath(certificate.getCertificateKeyFile()))
+            };
+            return managers;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public KeyManager[] getKeyManagers() throws Exception {
+        String keystoreType = certificate.getCertificateKeystoreType();
+        String keystoreProvider = certificate.getCertificateKeystoreProvider();
+        String keystoreFile = certificate.getCertificateKeystoreFile();
+        String keystorePass = certificate.getCertificateKeystorePassword();
+        String keyAlias = certificate.getCertificateKeyAlias();
+        String algorithm = sslHostConfig.getKeyManagerAlgorithm();
+        String keyPass = certificate.getCertificateKeyPassword();
+        // This has to be here as it can't be moved to SSLHostConfig since the
+        // defaults vary between JSSE and OpenSSL.
+        if (keyPass == null) {
+            keyPass = certificate.getCertificateKeystorePassword();
+        }
+
+        KeyManager[] kms = null;
+
+        KeyStore ks = getStore(keystoreType, keystoreProvider, keystoreFile, keystorePass);
+        if (keyAlias != null && !ks.isKeyEntry(keyAlias)) {
+            throw new IOException(sm.getString("jsse.alias_no_key_entry", keyAlias));
+        }
+
+        KeyManagerFactory kmf = KeyManagerFactory.getInstance(algorithm);
+        kmf.init(ks, keyPass.toCharArray());
+
+        kms = kmf.getKeyManagers();
+        if (kms == null) {
+            return kms;
+        }
+
+        if (keyAlias != null) {
+            String alias = keyAlias;
+            // JKS keystores always convert the alias name to lower case
+            if ("JKS".equals(keystoreType)) {
+                alias = alias.toLowerCase(Locale.ENGLISH);
+            }
+            for(int i = 0; i < kms.length; i++) {
+                kms[i] = new JSSEKeyManager((X509KeyManager)kms[i], alias);
+            }
+        }
+
+        return kms;
+    }
+-----CSCI578-----
+
+
+
+    public String getCertificateKeystoreFile() {
+        return certificateKeystoreFile;
+    }
+-----CSCI578-----
+
+
+
+    public String getCertificateKeystorePassword() {
+        return certificateKeystorePassword;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public String getCertificateFile() {
+        return certificateFile;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Support methods
+
+    public static String adjustRelativePath(String path) {
+        // Empty or null path can't point to anything useful. The assumption is
+        // that the value is deliberately empty / null so leave it that way.
+        if (path == null || path.length() == 0) {
+            return path;
+        }
+        String newPath = path;
+        File f = new File(newPath);
+        if ( !f.isAbsolute()) {
+            newPath = System.getProperty(Constants.CATALINA_BASE_PROP) + File.separator + newPath;
+            f = new File(newPath);
+        }
+        if (!f.exists()) {
+            // TODO i18n, sm
+            log.warn("configured file:["+newPath+"] does not exist.");
+        }
+        return newPath;
+    }
+-----CSCI578-----
+
+
+
+    public String getCertificateKeyFile() {
+        return certificateKeyFile;
+    }
+-----CSCI578-----
+
+
+
+    public String getCertificateKeystoreProvider() {
+        return certificateKeystoreProvider;
+    }
+-----CSCI578-----
+
+
+
+    public String getCertificateKeystoreType() {
+        return certificateKeystoreType;
+    }

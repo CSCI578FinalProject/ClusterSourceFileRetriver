@@ -1,0 +1,114 @@
+9
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void messageReceived(Serializable msg, Member sender) {
+        RpcMessage rmsg = (RpcMessage)msg;
+        RpcCollectorKey key = new RpcCollectorKey(rmsg.uuid);
+        if ( rmsg.reply ) {
+            RpcCollector collector = responseMap.get(key);
+            if (collector == null) {
+                callback.leftOver(rmsg.message, sender);
+            } else {
+                synchronized (collector) {
+                    //make sure it hasn't been removed
+                    if ( responseMap.containsKey(key) ) {
+                        if ( (rmsg instanceof RpcMessage.NoRpcChannelReply) )
+                            collector.destcnt--;
+                        else
+                            collector.addResponse(rmsg.message, sender);
+                        if (collector.isComplete()) collector.notifyAll();
+                    } else {
+                        if (! (rmsg instanceof RpcMessage.NoRpcChannelReply) )
+                            callback.leftOver(rmsg.message, sender);
+                    }
+                }//synchronized
+            }//end if
+        } else{
+            boolean finished = false;
+            final ExtendedRpcCallback excallback = (callback instanceof ExtendedRpcCallback)?((ExtendedRpcCallback)callback) : null;
+            boolean asyncReply = ((replyMessageOptions & Channel.SEND_OPTIONS_ASYNCHRONOUS) == Channel.SEND_OPTIONS_ASYNCHRONOUS);
+            Serializable reply = callback.replyRequest(rmsg.message,sender);
+            ErrorHandler handler = null;
+            final Serializable request = msg;
+            final Serializable response = reply;
+            final Member fsender = sender;
+            if (excallback!=null && asyncReply) {
+                handler = new ErrorHandler() {
+                    @Override
+                    public void handleError(ChannelException x, UniqueId id) {
+                        excallback.replyFailed(request, response, fsender, x);
+                    }
+                    @Override
+                    public void handleCompletion(UniqueId id) {
+                        excallback.replySucceeded(request, response, fsender);
+                    }
+                };
+            }
+            rmsg.reply = true;
+            rmsg.message = reply;
+            try {
+                if (handler!=null) {
+                    channel.send(new Member[] {sender}, rmsg,replyMessageOptions & ~Channel.SEND_OPTIONS_SYNCHRONIZED_ACK, handler);
+                } else {
+                    channel.send(new Member[] {sender}, rmsg,replyMessageOptions & ~Channel.SEND_OPTIONS_SYNCHRONIZED_ACK);
+                }
+                finished = true;
+            }catch ( Exception x )  {
+                if (excallback != null && !asyncReply) {
+                    excallback.replyFailed(rmsg.message, reply, sender, x);
+                } else {
+                    log.error(sm.getString("rpcChannel.replyFailed"),x);
+                }
+            }
+            if (finished && excallback != null && !asyncReply) {
+                excallback.replySucceeded(rmsg.message, reply, sender);
+            }
+        }//end if
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * If the reply has already been sent to the requesting thread,
+     * the rpc callback can handle any data that comes in after the fact.
+     * @param msg The message
+     * @param sender Member
+     */
+    public void leftOver(Serializable msg, Member sender);
+-----CSCI578-----
+
+
+    /**
+     * Allows sending a response to a recieved message.
+     * @param msg The message
+     * @param sender Member
+     * @return Serializable object, <code>null</code> if no reply should be sent
+     */
+    public Serializable replyRequest(Serializable msg, Member sender);
+-----CSCI578-----
+
+
+    /**
+     * The reply failed.
+     * @param request - the original message that requested the reply
+     * @param response - the reply message to the original message
+     * @param sender - the sender requested that reply
+     * @param reason - the reason the reply failed
+     */
+    public void replyFailed(Serializable request, Serializable response, Member sender, Exception reason);
+-----CSCI578-----
+
+
+    /**
+     * The reply succeeded
+     * @param request - the original message that requested the reply
+     * @param response - the reply message to the original message
+     * @param sender - the sender requested that reply
+     */
+    public void replySucceeded(Serializable request, Serializable response, Member sender);
+-----CSCI578-----
+-----CSCI578-----

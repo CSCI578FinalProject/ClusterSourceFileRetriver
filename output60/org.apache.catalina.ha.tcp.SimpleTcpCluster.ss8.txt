@@ -1,0 +1,94 @@
+7
+-----CSCI578-----
+
+    public long getTimestamp();
+-----CSCI578-----
+
+
+    //--Logic---------------------------------------------------
+
+    public final void messageReceived(Serializable msg, Member member) {
+        if ( msg instanceof ClusterMessage ) messageReceived((ClusterMessage)msg);
+    }
+
+
+
+
+    /**
+     * Callback from the cluster, when a message is received, The cluster will
+     * broadcast it invoking the messageReceived on the receiver.
+     * 
+     * @param msg
+     *            ClusterMessage - the message received from the cluster
+     */
+    public abstract void messageReceived(ClusterMessage msg) ;
+-----CSCI578-----
+
+    
+    
+    public void messageReceived(Serializable message, Member sender) {
+        ClusterMessage fwd = (ClusterMessage)message;
+        fwd.setAddress(sender);
+        messageReceived(fwd);
+    }
+
+
+    public void messageReceived(ClusterMessage message) {
+
+        long start = 0;
+        if (log.isDebugEnabled() && message != null)
+            log.debug("Assuming clocks are synched: Replication for "
+                    + message.getUniqueId() + " took="
+                    + (System.currentTimeMillis() - (message).getTimestamp())
+                    + " ms.");
+
+        //invoke all the listeners
+        boolean accepted = false;
+        if (message != null) {
+            for (Iterator iter = clusterListeners.iterator(); iter.hasNext();) {
+                ClusterListener listener = (ClusterListener) iter.next();
+                if (listener.accept(message)) {
+                    accepted = true;
+                    listener.messageReceived(message);
+                }
+            }
+        }
+        if (!accepted && log.isDebugEnabled()) {
+            if (notifyLifecycleListenerOnFailure) {
+                Member dest = message.getAddress();
+                // Notify our interested LifecycleListeners
+                lifecycle.fireLifecycleEvent(RECEIVE_MESSAGE_FAILURE_EVENT,
+                        new SendMessageData(message, dest, null));
+            }
+            log.debug("Message " + message.toString() + " from type "
+                    + message.getClass().getName()
+                    + " transfered but no listener registered");
+        }
+        return;
+    }
+-----CSCI578-----
+
+    public String getUniqueId();
+-----CSCI578-----
+
+    public final boolean accept(Serializable msg, Member member) {
+        if ( msg instanceof ClusterMessage ) return true;
+        return false;
+    }
+
+    
+
+    /**
+     * Accept only SessionIDMessages
+     * 
+     * @param msg
+     *            ClusterMessage
+     * @return boolean - returns true to indicate that messageReceived should be
+     *         invoked. If false is returned, the messageReceived method will
+     *         not be invoked.
+     */
+    public abstract boolean accept(ClusterMessage msg) ;
+-----CSCI578-----
+-----CSCI578-----
+
+    public Member getAddress();

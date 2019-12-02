@@ -1,0 +1,55 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public Object findAttribute(final String name) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return AccessController.doPrivileged(
+                    new PrivilegedAction<Object>() {
+                @Override
+                public Object run() {
+                    if (name == null) {
+                        throw new NullPointerException(Localizer
+                                .getMessage("jsp.error.attribute.null_name"));
+                    }
+
+                    return doFindAttribute(name);
+                }
+            });
+        } else {
+            if (name == null) {
+                throw new NullPointerException(Localizer
+                        .getMessage("jsp.error.attribute.null_name"));
+            }
+
+            return doFindAttribute(name);
+        }
+    }
+-----CSCI578-----
+
+
+    private Object doFindAttribute(String name) {
+
+        Object o = attributes.get(name);
+        if (o != null)
+            return o;
+
+        o = request.getAttribute(name);
+        if (o != null)
+            return o;
+
+        if (session != null) {
+            try {
+                o = session.getAttribute(name);
+            } catch(IllegalStateException ise) {
+                // Session has been invalidated.
+                // Ignore and fall through to application scope.
+            }
+            if (o != null)
+                return o;
+        }
+
+        return context.getAttribute(name);
+    }

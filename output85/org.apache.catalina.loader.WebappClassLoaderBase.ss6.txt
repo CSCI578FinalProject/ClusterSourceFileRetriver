@@ -1,0 +1,5675 @@
+297
+-----CSCI578-----
+
+
+    private void checkThreadLocalsForLeaks() {
+        Thread[] threads = getThreads();
+
+        try {
+            // Make the fields in the Thread class that store ThreadLocals
+            // accessible
+            Field threadLocalsField =
+                Thread.class.getDeclaredField("threadLocals");
+            threadLocalsField.setAccessible(true);
+            Field inheritableThreadLocalsField =
+                Thread.class.getDeclaredField("inheritableThreadLocals");
+            inheritableThreadLocalsField.setAccessible(true);
+            // Make the underlying array of ThreadLoad.ThreadLocalMap.Entry objects
+            // accessible
+            Class<?> tlmClass = Class.forName("java.lang.ThreadLocal$ThreadLocalMap");
+            Field tableField = tlmClass.getDeclaredField("table");
+            tableField.setAccessible(true);
+            Method expungeStaleEntriesMethod = tlmClass.getDeclaredMethod("expungeStaleEntries");
+            expungeStaleEntriesMethod.setAccessible(true);
+
+            for (int i = 0; i < threads.length; i++) {
+                Object threadLocalMap;
+                if (threads[i] != null) {
+
+                    // Clear the first map
+                    threadLocalMap = threadLocalsField.get(threads[i]);
+                    if (null != threadLocalMap){
+                        expungeStaleEntriesMethod.invoke(threadLocalMap);
+                        checkThreadLocalMapForLeaks(threadLocalMap, tableField);
+                    }
+
+                    // Clear the second map
+                    threadLocalMap =inheritableThreadLocalsField.get(threads[i]);
+                    if (null != threadLocalMap){
+                        expungeStaleEntriesMethod.invoke(threadLocalMap);
+                        checkThreadLocalMapForLeaks(threadLocalMap, tableField);
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            log.warn(sm.getString(
+                    "webappClassLoader.checkThreadLocalsForLeaksFail",
+                    getContextName()), t);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * This depends on the internals of the Sun JVM so it does everything by
+     * reflection.
+     */
+    private void clearReferencesRmiTargets() {
+        try {
+            // Need access to the ccl field of sun.rmi.transport.Target
+            Class<?> objectTargetClass =
+                Class.forName("sun.rmi.transport.Target");
+            Field cclField = objectTargetClass.getDeclaredField("ccl");
+            cclField.setAccessible(true);
+
+            // Clear the objTable map
+            Class<?> objectTableClass =
+                Class.forName("sun.rmi.transport.ObjectTable");
+            Field objTableField = objectTableClass.getDeclaredField("objTable");
+            objTableField.setAccessible(true);
+            Object objTable = objTableField.get(null);
+            if (objTable == null) {
+                return;
+            }
+
+            // Iterate over the values in the table
+            if (objTable instanceof Map<?,?>) {
+                Iterator<?> iter = ((Map<?,?>) objTable).values().iterator();
+                while (iter.hasNext()) {
+                    Object obj = iter.next();
+                    Object cclObject = cclField.get(obj);
+                    if (this == cclObject) {
+                        iter.remove();
+                    }
+                }
+            }
+
+            // Clear the implTable map
+            Field implTableField = objectTableClass.getDeclaredField("implTable");
+            implTableField.setAccessible(true);
+            Object implTable = implTableField.get(null);
+            if (implTable == null) {
+                return;
+            }
+
+            // Iterate over the values in the table
+            if (implTable instanceof Map<?,?>) {
+                Iterator<?> iter = ((Map<?,?>) implTable).values().iterator();
+                while (iter.hasNext()) {
+                    Object obj = iter.next();
+                    Object cclObject = cclField.get(obj);
+                    if (this == cclObject) {
+                        iter.remove();
+                    }
+                }
+            }
+        } catch (ClassNotFoundException e) {
+            log.info(sm.getString("webappClassLoader.clearRmiInfo",
+                    getContextName()), e);
+        } catch (SecurityException e) {
+            log.warn(sm.getString("webappClassLoader.clearRmiFail",
+                    getContextName()), e);
+        } catch (NoSuchFieldException e) {
+            log.warn(sm.getString("webappClassLoader.clearRmiFail",
+                    getContextName()), e);
+        } catch (IllegalArgumentException e) {
+            log.warn(sm.getString("webappClassLoader.clearRmiFail",
+                    getContextName()), e);
+        } catch (IllegalAccessException e) {
+            log.warn(sm.getString("webappClassLoader.clearRmiFail",
+                    getContextName()), e);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Should Tomcat attempt to terminate threads that have been started by the
+     * web application? Stopping threads is performed via the deprecated (for
+     * good reason) <code>Thread.stop()</code> method and is likely to result in
+     * instability. As such, enabling this should be viewed as an option of last
+     * resort in a development environment and is not recommended in a
+     * production environment. If not specified, the default value of
+     * <code>false</code> will be used.
+     */
+    private boolean clearReferencesStopThreads = false;
+
+
+
+    /**
+     * Stop the class loader.
+     *
+     * @exception LifecycleException if a lifecycle error occurs
+     */
+    @Override
+    public void stop() throws LifecycleException {
+
+        state = LifecycleState.STOPPING_PREP;
+
+        // Clearing references should be done before setting started to
+        // false, due to possible side effects
+        clearReferences();
+
+        state = LifecycleState.STOPPING;
+
+        resourceEntries.clear();
+        jarModificationTimes.clear();
+        resources = null;
+
+        permissionList.clear();
+        loaderPC.clear();
+
+        state = LifecycleState.STOPPED;
+    }
+
+
+
+    @SuppressWarnings("deprecation") // thread.stop()
+    private void clearReferencesThreads() {
+        Thread[] threads = getThreads();
+        List<Thread> executorThreadsToStop = new ArrayList<>();
+
+        // Iterate over the set of threads
+        for (Thread thread : threads) {
+            if (thread != null) {
+                ClassLoader ccl = thread.getContextClassLoader();
+                if (ccl == this) {
+                    // Don't warn about this thread
+                    if (thread == Thread.currentThread()) {
+                        continue;
+                    }
+
+                    final String threadName = thread.getName();
+
+                    // JVM controlled threads
+                    ThreadGroup tg = thread.getThreadGroup();
+                    if (tg != null &&
+                            JVM_THREAD_GROUP_NAMES.contains(tg.getName())) {
+
+                        // HttpClient keep-alive threads
+                        if (clearReferencesHttpClientKeepAliveThread &&
+                                threadName.equals("Keep-Alive-Timer")) {
+                            thread.setContextClassLoader(parent);
+                            log.debug(sm.getString(
+                                    "webappClassLoader.checkThreadsHttpClient"));
+                        }
+
+                        // Don't warn about remaining JVM controlled threads
+                        continue;
+                    }
+
+                    // Skip threads that have already died
+                    if (!thread.isAlive()) {
+                        continue;
+                    }
+
+                    // TimerThread can be stopped safely so treat separately
+                    // "java.util.TimerThread" in Sun/Oracle JDK
+                    // "java.util.Timer$TimerImpl" in Apache Harmony and in IBM JDK
+                    if (thread.getClass().getName().startsWith("java.util.Timer") &&
+                            clearReferencesStopTimerThreads) {
+                        clearReferencesStopTimerThread(thread);
+                        continue;
+                    }
+
+                    if (isRequestThread(thread)) {
+                        log.warn(sm.getString("webappClassLoader.stackTraceRequestThread",
+                                getContextName(), threadName, getStackTrace(thread)));
+                    } else {
+                        log.warn(sm.getString("webappClassLoader.stackTrace",
+                                getContextName(), threadName, getStackTrace(thread)));
+                    }
+
+                    // Don't try an stop the threads unless explicitly
+                    // configured to do so
+                    if (!clearReferencesStopThreads) {
+                        continue;
+                    }
+
+                    // If the thread has been started via an executor, try
+                    // shutting down the executor
+                    boolean usingExecutor = false;
+                    try {
+
+                        // Runnable wrapped by Thread
+                        // "target" in Sun/Oracle JDK
+                        // "runnable" in IBM JDK
+                        // "action" in Apache Harmony
+                        Object target = null;
+                        for (String fieldName : new String[] { "target",
+                                "runnable", "action" }) {
+                            try {
+                                Field targetField = thread.getClass()
+                                        .getDeclaredField(fieldName);
+                                targetField.setAccessible(true);
+                                target = targetField.get(thread);
+                                break;
+                            } catch (NoSuchFieldException nfe) {
+                                continue;
+                            }
+                        }
+
+                        // "java.util.concurrent" code is in public domain,
+                        // so all implementations are similar
+                        if (target != null &&
+                                target.getClass().getCanonicalName() != null
+                                && target.getClass().getCanonicalName().equals(
+                                "java.util.concurrent.ThreadPoolExecutor.Worker")) {
+                            Field executorField =
+                                target.getClass().getDeclaredField("this$0");
+                            executorField.setAccessible(true);
+                            Object executor = executorField.get(target);
+                            if (executor instanceof ThreadPoolExecutor) {
+                                ((ThreadPoolExecutor) executor).shutdownNow();
+                                usingExecutor = true;
+                            }
+                        }
+                    } catch (SecurityException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), getContextName()), e);
+                    } catch (NoSuchFieldException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), getContextName()), e);
+                    } catch (IllegalArgumentException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), getContextName()), e);
+                    } catch (IllegalAccessException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), getContextName()), e);
+                    }
+
+                    if (usingExecutor) {
+                        // Executor may take a short time to stop all the
+                        // threads. Make a note of threads that should be
+                        // stopped and check them at the end of the method.
+                        executorThreadsToStop.add(thread);
+                    } else {
+                        // This method is deprecated and for good reason. This
+                        // is very risky code but is the only option at this
+                        // point. A *very* good reason for apps to do this
+                        // clean-up themselves.
+                        thread.stop();
+                    }
+                }
+            }
+        }
+
+        // If thread stopping is enabled, executor threads should have been
+        // stopped above when the executor was shut down but that depends on the
+        // thread correctly handling the interrupt. Give all the executor
+        // threads a few seconds shutdown and if they are still running
+        // Give threads up to 2 seconds to shutdown
+        int count = 0;
+        for (Thread t : executorThreadsToStop) {
+            while (t.isAlive() && count < 100) {
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException e) {
+                    // Quit the while loop
+                    break;
+                }
+                count++;
+            }
+            if (t.isAlive()) {
+                // This method is deprecated and for good reason. This is
+                // very risky code but is the only option at this point.
+                // A *very* good reason for apps to do this clean-up
+                // themselves.
+                t.stop();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    // -------------------- other utils --------------------
+    public static void clear() {
+        objectMethods.clear();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Analyzes the given thread local map object. Also pass in the field that
+     * points to the internal table to save re-calculating it on every
+     * call to this method.
+     */
+    private void checkThreadLocalMapForLeaks(Object map,
+            Field internalTableField) throws IllegalAccessException,
+            NoSuchFieldException {
+        if (map != null) {
+            Object[] table = (Object[]) internalTableField.get(map);
+            if (table != null) {
+                for (int j =0; j < table.length; j++) {
+                    Object obj = table[j];
+                    if (obj != null) {
+                        boolean keyLoadedByWebapp = false;
+                        boolean valueLoadedByWebapp = false;
+                        // Check the key
+                        Object key = ((Reference<?>) obj).get();
+                        if (this.equals(key) || loadedByThisOrChild(key)) {
+                            keyLoadedByWebapp = true;
+                        }
+                        // Check the value
+                        Field valueField =
+                                obj.getClass().getDeclaredField("value");
+                        valueField.setAccessible(true);
+                        Object value = valueField.get(obj);
+                        if (this.equals(value) || loadedByThisOrChild(value)) {
+                            valueLoadedByWebapp = true;
+                        }
+                        if (keyLoadedByWebapp || valueLoadedByWebapp) {
+                            Object[] args = new Object[5];
+                            args[0] = getContextName();
+                            if (key != null) {
+                                args[1] = getPrettyClassName(key.getClass());
+                                try {
+                                    args[2] = key.toString();
+                                } catch (Exception e) {
+                                    log.warn(sm.getString(
+                                            "webappClassLoader.checkThreadLocalsForLeaks.badKey",
+                                            args[1]), e);
+                                    args[2] = sm.getString(
+                                            "webappClassLoader.checkThreadLocalsForLeaks.unknown");
+                                }
+                            }
+                            if (value != null) {
+                                args[3] = getPrettyClassName(value.getClass());
+                                try {
+                                    args[4] = value.toString();
+                                } catch (Exception e) {
+                                    log.warn(sm.getString(
+                                            "webappClassLoader.checkThreadLocalsForLeaks.badValue",
+                                            args[3]), e);
+                                    args[4] = sm.getString(
+                                    "webappClassLoader.checkThreadLocalsForLeaks.unknown");
+                                }
+                            }
+                            if (valueLoadedByWebapp) {
+                                log.error(sm.getString(
+                                        "webappClassLoader.checkThreadLocalsForLeaks",
+                                        args));
+                            } else if (value == null) {
+                                if (log.isDebugEnabled()) {
+                                    log.debug(sm.getString(
+                                            "webappClassLoader.checkThreadLocalsForLeaksNull",
+                                            args));
+                                }
+                            } else {
+                                if (log.isDebugEnabled()) {
+                                    log.debug(sm.getString(
+                                            "webappClassLoader.checkThreadLocalsForLeaksNone",
+                                            args));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Deregister any JDBC drivers registered by the webapp that the webapp
+     * forgot. This is made unnecessary complex because a) DriverManager
+     * checks the class loader of the calling class (it would be much easier
+     * if it checked the context class loader) b) using reflection would
+     * create a dependency on the DriverManager implementation which can,
+     * and has, changed.
+     *
+     * We can't just create an instance of JdbcLeakPrevention as it will be
+     * loaded by the common class loader (since it's .class file is in the
+     * $CATALINA_HOME/lib directory). This would fail DriverManager's check
+     * on the class loader of the calling class. So, we load the bytes via
+     * our parent class loader but define the class with this class loader
+     * so the JdbcLeakPrevention looks like a webapp class to the
+     * DriverManager.
+     *
+     * If only apps cleaned up after themselves...
+     */
+    private final void clearReferencesJdbc() {
+        // We know roughly how big the class will be (~ 1K) so allow 2k as a
+        // starting point
+        byte[] classBytes = new byte[2048];
+        int offset = 0;
+        try (InputStream is = getResourceAsStream(
+                "org/apache/catalina/loader/JdbcLeakPrevention.class")) {
+            int read = is.read(classBytes, offset, classBytes.length-offset);
+            while (read > -1) {
+                offset += read;
+                if (offset == classBytes.length) {
+                    // Buffer full - double size
+                    byte[] tmp = new byte[classBytes.length * 2];
+                    System.arraycopy(classBytes, 0, tmp, 0, classBytes.length);
+                    classBytes = tmp;
+                }
+                read = is.read(classBytes, offset, classBytes.length-offset);
+            }
+            Class<?> lpClass =
+                defineClass("org.apache.catalina.loader.JdbcLeakPrevention",
+                    classBytes, 0, offset, this.getClass().getProtectionDomain());
+            Object obj = lpClass.newInstance();
+            @SuppressWarnings("unchecked")
+            List<String> driverNames = (List<String>) obj.getClass().getMethod(
+                    "clearJdbcDriverRegistrations").invoke(obj);
+            for (String name : driverNames) {
+                log.warn(sm.getString("webappClassLoader.clearJdbc",
+                        getContextName(), name));
+            }
+        } catch (Exception e) {
+            // So many things to go wrong above...
+            Throwable t = ExceptionUtils.unwrapInvocationTargetException(e);
+            ExceptionUtils.handleThrowable(t);
+            log.warn(sm.getString(
+                    "webappClassLoader.jdbcRemoveFailed", getContextName()), t);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * @param o object to test, may be null
+     * @return <code>true</code> if o has been loaded by the current classloader
+     * or one of its descendants.
+     */
+    private boolean loadedByThisOrChild(Object o) {
+        if (o == null) {
+            return false;
+        }
+
+        Class<?> clazz;
+        if (o instanceof Class) {
+            clazz = (Class<?>) o;
+        } else {
+            clazz = o.getClass();
+        }
+
+        ClassLoader cl = clazz.getClassLoader();
+        while (cl != null) {
+            if (cl == this) {
+                return true;
+            }
+            cl = cl.getParent();
+        }
+
+        if (o instanceof Collection<?>) {
+            Iterator<?> iter = ((Collection<?>) o).iterator();
+            try {
+                while (iter.hasNext()) {
+                    Object entry = iter.next();
+                    if (loadedByThisOrChild(entry)) {
+                        return true;
+                    }
+                }
+            } catch (ConcurrentModificationException e) {
+                log.warn(sm.getString(
+                        "webappClassLoader.loadedByThisOrChildFail", clazz.getName(), getContextName()),
+                        e);
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    private final void clearReferencesStaticFinal() {
+
+        Collection<ResourceEntry> values = resourceEntries.values();
+        Iterator<ResourceEntry> loadedClasses = values.iterator();
+        //
+        // walk through all loaded class to trigger initialization for
+        //    any uninitialized classes, otherwise initialization of
+        //    one class may call a previously cleared class.
+        while(loadedClasses.hasNext()) {
+            ResourceEntry entry = loadedClasses.next();
+            if (entry.loadedClass != null) {
+                Class<?> clazz = entry.loadedClass;
+                try {
+                    Field[] fields = clazz.getDeclaredFields();
+                    for (int i = 0; i < fields.length; i++) {
+                        if(Modifier.isStatic(fields[i].getModifiers())) {
+                            fields[i].get(null);
+                            break;
+                        }
+                    }
+                } catch(Throwable t) {
+                    // Ignore
+                }
+            }
+        }
+        loadedClasses = values.iterator();
+        while (loadedClasses.hasNext()) {
+            ResourceEntry entry = loadedClasses.next();
+            if (entry.loadedClass != null) {
+                Class<?> clazz = entry.loadedClass;
+                try {
+                    Field[] fields = clazz.getDeclaredFields();
+                    for (int i = 0; i < fields.length; i++) {
+                        Field field = fields[i];
+                        int mods = field.getModifiers();
+                        if (field.getType().isPrimitive()
+                                || (field.getName().indexOf('$') != -1)) {
+                            continue;
+                        }
+                        if (Modifier.isStatic(mods)) {
+                            try {
+                                field.setAccessible(true);
+                                if (Modifier.isFinal(mods)) {
+                                    if (!((field.getType().getName().startsWith("java."))
+                                            || (field.getType().getName().startsWith("javax.")))) {
+                                        nullInstance(field.get(null));
+                                    }
+                                } else {
+                                    field.set(null, null);
+                                    if (log.isDebugEnabled()) {
+                                        log.debug("Set field " + field.getName()
+                                                + " to null in class " + clazz.getName());
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                ExceptionUtils.handleThrowable(t);
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Could not set field " + field.getName()
+                                            + " to null in class " + clazz.getName(), t);
+                                }
+                            }
+                        }
+                    }
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Could not clean fields for class " + clazz.getName(), t);
+                    }
+                }
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Find the resource with the given name, and return an input stream
+     * that can be used for reading it.  The search order is as described
+     * for <code>getResource()</code>, after checking to see if the resource
+     * data has been previously cached.  If the resource cannot be found,
+     * return <code>null</code>.
+     *
+     * @param name Name of the resource to return an input stream for
+     */
+    @Override
+    public InputStream getResourceAsStream(String name) {
+
+        if (log.isDebugEnabled())
+            log.debug("getResourceAsStream(" + name + ")");
+
+        checkStateForResourceLoading(name);
+
+        InputStream stream = null;
+
+        boolean delegateFirst = delegate || filter(name, false);
+
+        // (1) Delegate to parent if requested
+        if (delegateFirst) {
+            if (log.isDebugEnabled())
+                log.debug("  Delegating to parent classloader " + parent);
+            stream = parent.getResourceAsStream(name);
+            if (stream != null) {
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning stream from parent");
+                return stream;
+            }
+        }
+
+        // (2) Search local repositories
+        if (log.isDebugEnabled())
+            log.debug("  Searching local repositories");
+        String path = nameToPath(name);
+        WebResource resource = resources.getClassLoaderResource(path);
+        if (resource.exists()) {
+            stream = resource.getInputStream();
+            trackLastModified(path, resource);
+        }
+        try {
+            if (hasExternalRepositories && stream == null) {
+                URL url = super.findResource(name);
+                stream = url.openStream();
+            }
+        } catch (IOException e) {
+            // Ignore
+        }
+        if (stream != null) {
+            if (log.isDebugEnabled())
+                log.debug("  --> Returning stream from local");
+            return stream;
+        }
+
+        // (3) Delegate to parent unconditionally
+        if (!delegateFirst) {
+            if (log.isDebugEnabled())
+                log.debug("  Delegating to parent classloader unconditionally " + parent);
+            stream = parent.getResourceAsStream(name);
+            if (stream != null) {
+                if (log.isDebugEnabled())
+                    log.debug("  --> Returning stream from parent");
+                return stream;
+            }
+        }
+
+        // (4) Resource was not found
+        if (log.isDebugEnabled())
+            log.debug("  --> Resource not found, returning null");
+        return null;
+    }
+-----CSCI578-----
+
+
+    private String getPrettyClassName(Class<?> clazz) {
+        String name = clazz.getCanonicalName();
+        if (name==null){
+            name = clazz.getName();
+        }
+        return name;
+    }
+-----CSCI578-----
+
+
+
+    private void clearReferencesStopTimerThread(Thread thread) {
+
+        // Need to get references to:
+        // in Sun/Oracle JDK:
+        // - newTasksMayBeScheduled field (in java.util.TimerThread)
+        // - queue field
+        // - queue.clear()
+        // in IBM JDK, Apache Harmony:
+        // - cancel() method (in java.util.Timer$TimerImpl)
+
+        try {
+
+            try {
+                Field newTasksMayBeScheduledField =
+                    thread.getClass().getDeclaredField("newTasksMayBeScheduled");
+                newTasksMayBeScheduledField.setAccessible(true);
+                Field queueField = thread.getClass().getDeclaredField("queue");
+                queueField.setAccessible(true);
+
+                Object queue = queueField.get(thread);
+
+                Method clearMethod = queue.getClass().getDeclaredMethod("clear");
+                clearMethod.setAccessible(true);
+
+                synchronized(queue) {
+                    newTasksMayBeScheduledField.setBoolean(thread, false);
+                    clearMethod.invoke(queue);
+                    queue.notify();  // In case queue was already empty.
+                }
+
+            }catch (NoSuchFieldException nfe){
+                Method cancelMethod = thread.getClass().getDeclaredMethod("cancel");
+                synchronized(thread) {
+                    cancelMethod.setAccessible(true);
+                    cancelMethod.invoke(thread);
+                }
+            }
+
+            log.warn(sm.getString("webappClassLoader.warnTimerThread",
+                    getContextName(), thread.getName()));
+
+        } catch (Exception e) {
+            // So many things to go wrong above...
+            Throwable t = ExceptionUtils.unwrapInvocationTargetException(e);
+            ExceptionUtils.handleThrowable(t);
+            log.warn(sm.getString(
+                    "webappClassLoader.stopTimerThreadFail",
+                    thread.getName(), getContextName()), t);
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void nullInstance(Object instance) {
+        if (instance == null) {
+            return;
+        }
+        Field[] fields = instance.getClass().getDeclaredFields();
+        for (int i = 0; i < fields.length; i++) {
+            Field field = fields[i];
+            int mods = field.getModifiers();
+            if (field.getType().isPrimitive()
+                    || (field.getName().indexOf('$') != -1)) {
+                continue;
+            }
+            try {
+                field.setAccessible(true);
+                if (Modifier.isStatic(mods) && Modifier.isFinal(mods)) {
+                    // Doing something recursively is too risky
+                    continue;
+                }
+                Object value = field.get(instance);
+                if (null != value) {
+                    Class<? extends Object> valueClass = value.getClass();
+                    if (!loadedByThisOrChild(valueClass)) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Not setting field " + field.getName() +
+                                    " to null in object of class " +
+                                    instance.getClass().getName() +
+                                    " because the referenced object was of type " +
+                                    valueClass.getName() +
+                                    " which was not loaded by this web application class loader.");
+                        }
+                    } else {
+                        field.set(instance, null);
+                        if (log.isDebugEnabled()) {
+                            log.debug("Set field " + field.getName()
+                                    + " to null in class " + instance.getClass().getName());
+                        }
+                    }
+                }
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                if (log.isDebugEnabled()) {
+                    log.debug("Could not set field " + field.getName()
+                            + " to null in object instance of class "
+                            + instance.getClass().getName(), t);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Clear references.
+     */
+    protected void clearReferences() {
+
+        // De-register any remaining JDBC drivers
+        clearReferencesJdbc();
+
+        // Stop any threads the web application started
+        clearReferencesThreads();
+
+        // Check for leaks triggered by ThreadLocals loaded by this class loader
+        checkThreadLocalsForLeaks();
+
+        // Clear RMI Targets loaded by this class loader
+        clearReferencesRmiTargets();
+
+        // Null out any static or final fields from loaded classes,
+        // as a workaround for apparent garbage collection bugs
+        if (clearReferencesStatic) {
+            clearReferencesStaticFinal();
+        }
+
+         // Clear the IntrospectionUtils cache.
+        IntrospectionUtils.clear();
+
+        // Clear the classloader reference in common-logging
+        if (clearReferencesLogFactoryRelease) {
+            org.apache.juli.logging.LogFactory.release(this);
+        }
+
+        // Clear the resource bundle cache
+        // This shouldn't be necessary, the cache uses weak references but
+        // it has caused leaks. Oddly, using the leak detection code in
+        // standard host allows the class loader to be GC'd. This has been seen
+        // on Sun but not IBM JREs. Maybe a bug in Sun's GC impl?
+        clearReferencesResourceBundles();
+
+        // Clear the classloader reference in the VM's bean introspector
+        java.beans.Introspector.flushCaches();
+
+        // Clear any custom URLStreamHandlers
+        TomcatURLStreamHandlerFactory.release(this);
+    }
+-----CSCI578-----
+
+
+
+    @SuppressWarnings("deprecation") // thread.stop()
+    private void clearReferencesThreads() {
+        Thread[] threads = getThreads();
+        List<Thread> executorThreadsToStop = new ArrayList<>();
+
+        // Iterate over the set of threads
+        for (Thread thread : threads) {
+            if (thread != null) {
+                ClassLoader ccl = thread.getContextClassLoader();
+                if (ccl == this) {
+                    // Don't warn about this thread
+                    if (thread == Thread.currentThread()) {
+                        continue;
+                    }
+
+                    final String threadName = thread.getName();
+
+                    // JVM controlled threads
+                    ThreadGroup tg = thread.getThreadGroup();
+                    if (tg != null &&
+                            JVM_THREAD_GROUP_NAMES.contains(tg.getName())) {
+
+                        // HttpClient keep-alive threads
+                        if (clearReferencesHttpClientKeepAliveThread &&
+                                threadName.equals("Keep-Alive-Timer")) {
+                            thread.setContextClassLoader(parent);
+                            log.debug(sm.getString(
+                                    "webappClassLoader.checkThreadsHttpClient"));
+                        }
+
+                        // Don't warn about remaining JVM controlled threads
+                        continue;
+                    }
+
+                    // Skip threads that have already died
+                    if (!thread.isAlive()) {
+                        continue;
+                    }
+
+                    // TimerThread can be stopped safely so treat separately
+                    // "java.util.TimerThread" in Sun/Oracle JDK
+                    // "java.util.Timer$TimerImpl" in Apache Harmony and in IBM JDK
+                    if (thread.getClass().getName().startsWith("java.util.Timer") &&
+                            clearReferencesStopTimerThreads) {
+                        clearReferencesStopTimerThread(thread);
+                        continue;
+                    }
+
+                    if (isRequestThread(thread)) {
+                        log.warn(sm.getString("webappClassLoader.stackTraceRequestThread",
+                                getContextName(), threadName, getStackTrace(thread)));
+                    } else {
+                        log.warn(sm.getString("webappClassLoader.stackTrace",
+                                getContextName(), threadName, getStackTrace(thread)));
+                    }
+
+                    // Don't try an stop the threads unless explicitly
+                    // configured to do so
+                    if (!clearReferencesStopThreads) {
+                        continue;
+                    }
+
+                    // If the thread has been started via an executor, try
+                    // shutting down the executor
+                    boolean usingExecutor = false;
+                    try {
+
+                        // Runnable wrapped by Thread
+                        // "target" in Sun/Oracle JDK
+                        // "runnable" in IBM JDK
+                        // "action" in Apache Harmony
+                        Object target = null;
+                        for (String fieldName : new String[] { "target",
+                                "runnable", "action" }) {
+                            try {
+                                Field targetField = thread.getClass()
+                                        .getDeclaredField(fieldName);
+                                targetField.setAccessible(true);
+                                target = targetField.get(thread);
+                                break;
+                            } catch (NoSuchFieldException nfe) {
+                                continue;
+                            }
+                        }
+
+                        // "java.util.concurrent" code is in public domain,
+                        // so all implementations are similar
+                        if (target != null &&
+                                target.getClass().getCanonicalName() != null
+                                && target.getClass().getCanonicalName().equals(
+                                "java.util.concurrent.ThreadPoolExecutor.Worker")) {
+                            Field executorField =
+                                target.getClass().getDeclaredField("this$0");
+                            executorField.setAccessible(true);
+                            Object executor = executorField.get(target);
+                            if (executor instanceof ThreadPoolExecutor) {
+                                ((ThreadPoolExecutor) executor).shutdownNow();
+                                usingExecutor = true;
+                            }
+                        }
+                    } catch (SecurityException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), getContextName()), e);
+                    } catch (NoSuchFieldException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), getContextName()), e);
+                    } catch (IllegalArgumentException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), getContextName()), e);
+                    } catch (IllegalAccessException e) {
+                        log.warn(sm.getString(
+                                "webappClassLoader.stopThreadFail",
+                                thread.getName(), getContextName()), e);
+                    }
+
+                    if (usingExecutor) {
+                        // Executor may take a short time to stop all the
+                        // threads. Make a note of threads that should be
+                        // stopped and check them at the end of the method.
+                        executorThreadsToStop.add(thread);
+                    } else {
+                        // This method is deprecated and for good reason. This
+                        // is very risky code but is the only option at this
+                        // point. A *very* good reason for apps to do this
+                        // clean-up themselves.
+                        thread.stop();
+                    }
+                }
+            }
+        }
+
+        // If thread stopping is enabled, executor threads should have been
+        // stopped above when the executor was shut down but that depends on the
+        // thread correctly handling the interrupt. Give all the executor
+        // threads a few seconds shutdown and if they are still running
+        // Give threads up to 2 seconds to shutdown
+        int count = 0;
+        for (Thread t : executorThreadsToStop) {
+            while (t.isAlive() && count < 100) {
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException e) {
+                    // Quit the while loop
+                    break;
+                }
+                count++;
+            }
+            if (t.isAlive()) {
+                // This method is deprecated and for good reason. This is
+                // very risky code but is the only option at this point.
+                // A *very* good reason for apps to do this clean-up
+                // themselves.
+                t.stop();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /*
+     * Get the set of current threads as an array.
+     */
+    private Thread[] getThreads() {
+        // Get the current thread group
+        ThreadGroup tg = Thread.currentThread().getThreadGroup();
+        // Find the root thread group
+        try {
+            while (tg.getParent() != null) {
+                tg = tg.getParent();
+            }
+        } catch (SecurityException se) {
+            String msg = sm.getString(
+                    "webappClassLoader.getThreadGroupError", tg.getName());
+            if (log.isDebugEnabled()) {
+                log.debug(msg, se);
+            } else {
+                log.warn(msg);
+            }
+        }
+
+        int threadCountGuess = tg.activeCount() + 50;
+        Thread[] threads = new Thread[threadCountGuess];
+        int threadCountActual = tg.enumerate(threads);
+        // Make sure we don't miss any threads
+        while (threadCountActual == threadCountGuess) {
+            threadCountGuess *=2;
+            threads = new Thread[threadCountGuess];
+            // Note tg.enumerate(Thread[]) silently ignores any threads that
+            // can't fit into the array
+            threadCountActual = tg.enumerate(threads);
+        }
+
+        return threads;
+    }
+-----CSCI578-----
+
+
+    private String getStackTrace(Thread thread) {
+        StringBuilder builder = new StringBuilder();
+        for (StackTraceElement ste : thread.getStackTrace()) {
+            builder.append("\n ").append(ste);
+        }
+        return builder.toString();
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * Look at a threads stack trace to see if it is a request thread or not. It
+     * isn't perfect, but it should be good-enough for most cases.
+     */
+    private boolean isRequestThread(Thread thread) {
+
+        StackTraceElement[] elements = thread.getStackTrace();
+
+        if (elements == null || elements.length == 0) {
+            // Must have stopped already. Too late to ignore it. Assume not a
+            // request processing thread.
+            return false;
+        }
+
+        // Step through the methods in reverse order looking for calls to any
+        // CoyoteAdapter method. All request threads will have this unless
+        // Tomcat has been heavily modified - in which case there isn't much we
+        // can do.
+        for (int i = 0; i < elements.length; i++) {
+            StackTraceElement element = elements[elements.length - (i+1)];
+            if ("org.apache.catalina.connector.CoyoteAdapter".equals(
+                    element.getClassName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Release references to any user provided factories that have been loaded
+     * using the provided class loader. Called during web application stop to
+     * prevent memory leaks.
+     *
+     * @param classLoader The class loader to release
+     */
+    public static void release(ClassLoader classLoader) {
+        if (instance == null) {
+            return;
+        }
+        List<URLStreamHandlerFactory> factories = instance.userFactories;
+        for (URLStreamHandlerFactory factory : factories) {
+            ClassLoader factoryLoader = factory.getClass().getClassLoader();
+            while (factoryLoader != null) {
+                if (classLoader.equals(factoryLoader)) {
+                    // Implementation note: userFactories is a
+                    // CopyOnWriteArrayList, so items are removed with
+                    // List.remove() instead of usual Iterator.remove()
+                    factories.remove(factory);
+                    break;
+                }
+                factoryLoader = factoryLoader.getParent();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- Logging Properties
+
+
+    /**
+     * <p> Is debug logging currently enabled? </p>
+     *
+     * <p> Call this method to prevent having to perform expensive operations
+     * (for example, <code>String</code> concatenation)
+     * when the log level is more than debug. </p>
+     *
+     * @return <code>true</code> if debug level logging is enabled, otherwise
+     *         <code>false</code>
+     */
+    public boolean isDebugEnabled();
+-----CSCI578-----
+
+
+
+    /**
+     * <p> Log a message with debug log level. </p>
+     *
+     * @param message log this message
+     */
+    public void debug(Object message);
+
+
+
+    /**
+     * <p> Log an error with debug log level. </p>
+     *
+     * @param message log this message
+     * @param t log this cause
+     */
+    public void debug(Object message, Throwable t);
+-----CSCI578-----
+
+
+
+    /**
+     * <p> Log a message with warn log level. </p>
+     *
+     * @param message log this message
+     */
+    public void warn(Object message);
+
+
+
+    /**
+     * <p> Log an error with warn log level. </p>
+     *
+     * @param message log this message
+     * @param t log this cause
+     */
+    public void warn(Object message, Throwable t);
+-----CSCI578-----
+
+
+    /**
+     * Checks whether the supplied Throwable is one that needs to be
+     * rethrown and swallows all others.
+     * @param t the Throwable to check
+     */
+    public static void handleThrowable(Throwable t) {
+        if (t instanceof ThreadDeath) {
+            throw (ThreadDeath) t;
+        }
+        if (t instanceof StackOverflowError) {
+            // Swallow silently - it should be recoverable
+            return;
+        }
+        if (t instanceof VirtualMachineError) {
+            throw (VirtualMachineError) t;
+        }
+        // All other instances of Throwable will be silently swallowed
+    }
+-----CSCI578-----
+
+
+    /**
+     * Checks whether the supplied Throwable is an instance of
+     * <code>InvocationTargetException</code> and returns the throwable that is
+     * wrapped by it, if there is any.
+     *
+     * @param t the Throwable to check
+     * @return <code>t</code> or <code>t.getCause()</code>
+     */
+    public static Throwable unwrapInvocationTargetException(Throwable t) {
+        if (t instanceof InvocationTargetException && t.getCause() != null) {
+            return t.getCause();
+        }
+        return t;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get a string from the underlying resource bundle or return null if the
+     * String is not found.
+     *
+     * @param key to desired resource String
+     *
+     * @return resource String matching <i>key</i> from underlying bundle or
+     *         null if not found.
+     *
+     * @throws IllegalArgumentException if <i>key</i> is null
+     */
+    public String getString(String key) {
+        if (key == null){
+            String msg = "key may not have a null value";
+            throw new IllegalArgumentException(msg);
+        }
+
+        String str = null;
+
+        try {
+            // Avoid NPE if bundle is null and treat it like an MRE
+            if (bundle != null) {
+                str = bundle.getString(key);
+            }
+        } catch (MissingResourceException mre) {
+            //bad: shouldn't mask an exception the following way:
+            //   str = "[cannot find message associated with key '" + key +
+            //         "' due to " + mre + "]";
+            //     because it hides the fact that the String was missing
+            //     from the calling code.
+            //good: could just throw the exception (or wrap it in another)
+            //      but that would probably cause much havoc on existing
+            //      code.
+            //better: consistent with container pattern to
+            //      simply return null.  Calling code can then do
+            //      a null check.
+            str = null;
+        }
+
+        return str;
+    }
+
+
+
+    /**
+     * Get a string from the underlying resource bundle and format
+     * it with the given set of arguments.
+     *
+     * @param key  The key for the required message
+     * @param args The values to insert into the message
+     *
+     * @return The request string formatted with the provided arguments or the
+     *         key if the key was not found.
+     */
+    public String getString(final String key, final Object... args) {
+        String value = getString(key);
+        if (value == null) {
+            value = key;
+        }
+
+        MessageFormat mf = new MessageFormat(value);
+        mf.setLocale(locale);
+        return mf.format(args, new StringBuffer(), null).toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the context name for this class loader.
+     */
+    public String getContextName() {
+        if (resources == null) {
+            return "Unknown";
+        } else {
+            return resources.getContext().getBaseName();
+        }
+    }
+-----CSCI578-----
+
+
+
+    private String nameToPath(String name) {
+        if (name.startsWith("/")) {
+            return name;
+        }
+        StringBuilder path = new StringBuilder(
+                1 + name.length());
+        path.append('/');
+        path.append(name);
+        return path.toString();
+    }
+-----CSCI578-----
+
+
+
+    private void trackLastModified(String path, WebResource resource) {
+        if (resourceEntries.containsKey(path)) {
+            return;
+        }
+        ResourceEntry entry = new ResourceEntry();
+        entry.lastModified = resource.getLastModified();
+        synchronized(resourceEntries) {
+            if (!resourceEntries.containsKey(path)) {
+                resourceEntries.put(path, entry);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Expire all find sessions.
+     */
+    public void expireAllLocalSessions()
+    {
+        long timeNow = System.currentTimeMillis();
+        Session sessions[] = findSessions();
+        int expireDirect  = 0 ;
+        int expireIndirect = 0 ;
+
+        if(log.isDebugEnabled()) {
+            log.debug("Start expire all sessions " + getName() + " at " + timeNow +
+                    " sessioncount " + sessions.length);
+        }
+        for (int i = 0; i < sessions.length; i++) {
+            if (sessions[i] instanceof DeltaSession) {
+                DeltaSession session = (DeltaSession) sessions[i];
+                if (session.isPrimarySession()) {
+                    if (session.isValid()) {
+                        session.expire();
+                        expireDirect++;
+                    } else {
+                        expireIndirect++;
+                    }//end if
+                }//end if
+            }//end if
+        }//for
+        long timeEnd = System.currentTimeMillis();
+        if(log.isDebugEnabled()) {
+            log.debug("End expire sessions " + getName() +
+                    " expire processingTime " + (timeEnd - timeNow) +
+                    " expired direct sessions: " + expireDirect +
+                    " expired direct sessions: " + expireIndirect);
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * compile filter string to regular expression
+     * @see Pattern#compile(java.lang.String)
+     * @param filter
+     *            The filter to set.
+     */
+    public void setFilter(String filter) {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("ReplicationValve.filter.loading", filter));
+        }
+
+        if (filter == null || filter.length() == 0) {
+            this.filter = null;
+        } else {
+            try {
+                this.filter = Pattern.compile(filter);
+            } catch (PatternSyntaxException pse) {
+                log.error(sm.getString("ReplicationValve.filter.failure",
+                        filter), pse);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void registerManager(Manager manager) {
+
+        if (! (manager instanceof ClusterManager)) {
+            log.warn(sm.getString("simpleTcpCluster.clustermanager.notImplement", manager));
+            return;
+        }
+        ClusterManager cmanager = (ClusterManager) manager;
+        // Notify our interested LifecycleListeners
+        fireLifecycleEvent(BEFORE_MANAGERREGISTER_EVENT, manager);
+        String clusterName = getManagerName(cmanager.getName(), manager);
+        cmanager.setName(clusterName);
+        cmanager.setCluster(this);
+
+        managers.put(clusterName, cmanager);
+        // Notify our interested LifecycleListeners
+        fireLifecycleEvent(AFTER_MANAGERREGISTER_EVENT, manager);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Register a new description.
+     *
+     * @param desc New description
+     */
+    public void registerDescription(StoreDescription desc) {
+        String key = desc.getId();
+        if (key == null || "".equals(key))
+            key = desc.getTagClass();
+        descriptors.put(key, desc);
+        if (log.isDebugEnabled())
+            log.debug("register store descriptor " + key + "#" + desc.getTag()
+                    + "#" + desc.getTagClass());
+    }
+
+
+    /**
+     * Unregister a description.
+     *
+     * @param desc The description
+     * @return the description, or <code>null</code> if it was not registered
+     */
+    public StoreDescription unregisterDescription(StoreDescription desc) {
+        String key = desc.getId();
+        if (key == null || "".equals(key))
+            key = desc.getTagClass();
+        return descriptors.remove(key);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void messageReceived(ChannelMessage msg) {
+        if (Arrays.equals(domain, msg.getAddress().getDomain())) {
+            super.messageReceived(msg);
+        } else {
+            if (log.isWarnEnabled())
+                log.warn(sm.getString("domainFilterInterceptor.message.refused", msg.getAddress()));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void stop() {
+        setListen(false);
+        try {
+            this.serverSocket.close();
+        } catch (Exception x) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("bioReceiver.socket.closeFailed"), x);
+            }
+        }
+        super.stop();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void finalize() throws Throwable {
+        try {disconnect(); }catch ( Exception e){/*Ignore*/}
+        try {
+            selector.close();
+        }catch (Exception e) {
+            if (log.isDebugEnabled()) {
+                log.debug("Failed to close selector", e);
+            }
+        }
+        super.finalize();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the Container to which this Valve is attached.
+     *
+     * @param container
+     *            The container to which we are attached
+     */
+    @Override
+    public void setContainer(Container container) {
+
+        if (container != null && !(container instanceof Context)) {
+            throw new IllegalArgumentException(sm.getString("authenticator.notContext"));
+        }
+
+        super.setContainer(container);
+        this.context = (Context) container;
+
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setRequestMessage(Object request) {
+        if (!(request instanceof HttpServletRequest)) {
+            throw new IllegalArgumentException(sm.getString("authenticator.jaspic.badRequestType",
+                    request.getClass().getName()));
+        }
+        this.request = (HttpServletRequest) request;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setResponseMessage(Object response) {
+        if (!(response instanceof HttpServletResponse)) {
+            throw new IllegalArgumentException(sm.getString("authenticator.jaspic.badResponseType",
+                    response.getClass().getName()));
+        }
+        this.response = (HttpServletResponse) response;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------- ServletRequest Methods
+
+
+    @Override
+    public Object getAttribute(String name) {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getAttribute(name);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setCharacterEncoding(String env)
+            throws java.io.UnsupportedEncodingException {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        request.setCharacterEncoding(env);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public int getContentLength() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getContentLength();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getContentType() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getContentType();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public ServletInputStream getInputStream() throws IOException {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getInputStream();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getProtocol() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getProtocol();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getScheme() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getScheme();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getServerName() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getServerName();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public int getServerPort() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getServerPort();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getRemoteAddr() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getRemoteAddr();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getRemoteHost() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getRemoteHost();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setAttribute(String name, Object o) {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        request.setAttribute(name, o);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void removeAttribute(String name) {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        request.removeAttribute(name);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isSecure() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.isSecure();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getAuthType() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getAuthType();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getHeader(String name) {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getHeader(name);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getMethod() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getMethod();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getPathInfo() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getPathInfo();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getPathTranslated() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getPathTranslated();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getContextPath() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getContextPath();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getQueryString() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getQueryString();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getRemoteUser() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getRemoteUser();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public java.security.Principal getUserPrincipal() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getUserPrincipal();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getRequestedSessionId() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getRequestedSessionId();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getRequestURI() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getRequestURI();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public StringBuffer getRequestURL() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getRequestURL();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getServletPath() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getServletPath();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String changeSessionId() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.changeSessionId();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean isRequestedSessionIdValid() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.isRequestedSessionIdValid();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isRequestedSessionIdFromCookie() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.isRequestedSessionIdFromCookie();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isRequestedSessionIdFromURL() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.isRequestedSessionIdFromURL();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean isRequestedSessionIdFromUrl() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.isRequestedSessionIdFromURL();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getLocalAddr() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getLocalAddr();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getLocalName() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getLocalName();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public int getLocalPort() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getLocalPort();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public int getRemotePort() {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getRemotePort();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public ServletContext getServletContext() {
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getServletContext();
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------ ServletResponse Methods
+
+
+    @Override
+    public String getCharacterEncoding() {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        return response.getCharacterEncoding();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void resetBuffer() {
+
+        if (isCommitted()) {
+            throw new IllegalStateException
+                (sm.getString("coyoteResponse.resetBuffer.ise"));
+        }
+
+        response.resetBuffer();
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void reset() {
+
+        if (isCommitted()) {
+            throw new IllegalStateException
+                (sm.getString("coyoteResponse.reset.ise"));
+        }
+
+        response.reset();
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String encodeURL(String url) {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        return response.encodeURL(url);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String encodeRedirectURL(String url) {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        return response.encodeRedirectURL(url);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String encodeUrl(String url) {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        return response.encodeURL(url);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String encodeRedirectUrl(String url) {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        return response.encodeRedirectURL(url);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void sendError(int sc, String msg)
+        throws IOException {
+
+        if (isCommitted()) {
+            throw new IllegalStateException
+                (sm.getString("coyoteResponse.sendError.ise"));
+        }
+
+        response.setAppCommitted(true);
+
+        response.sendError(sc, msg);
+
+    }
+
+
+
+    @Override
+    public void sendError(int sc)
+        throws IOException {
+
+        if (isCommitted()) {
+            throw new IllegalStateException
+                (sm.getString("coyoteResponse.sendError.ise"));
+        }
+
+        response.setAppCommitted(true);
+
+        response.sendError(sc);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void sendRedirect(String location)
+        throws IOException {
+
+        if (isCommitted()) {
+            throw new IllegalStateException
+                (sm.getString("coyoteResponse.sendRedirect.ise"));
+        }
+
+        response.setAppCommitted(true);
+
+        response.sendRedirect(location);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setCharacterEncoding(String arg0) {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        response.setCharacterEncoding(arg0);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public <T extends EventListener> T createListener(Class<T> c)
+            throws ServletException {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                return (T) invokeMethod(context, "createListener",
+                                              new Object[]{c});
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                if (t instanceof ServletException) {
+                    throw (ServletException) t;
+                }
+                return null;
+            }
+        } else {
+            return context.createListener(c);
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setComment(String comment) {
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            throw new IllegalStateException(sm.getString(
+                    "applicationSessionCookieConfig.ise", "comment",
+                    context.getPath()));
+        }
+        this.comment = comment;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setDomain(String domain) {
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            throw new IllegalStateException(sm.getString(
+                    "applicationSessionCookieConfig.ise", "domain name",
+                    context.getPath()));
+        }
+        this.domain = domain;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setHttpOnly(boolean httpOnly) {
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            throw new IllegalStateException(sm.getString(
+                    "applicationSessionCookieConfig.ise", "HttpOnly",
+                    context.getPath()));
+        }
+        this.httpOnly = httpOnly;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setMaxAge(int maxAge) {
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            throw new IllegalStateException(sm.getString(
+                    "applicationSessionCookieConfig.ise", "max age",
+                    context.getPath()));
+        }
+        this.maxAge = maxAge;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setName(String name) {
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            throw new IllegalStateException(sm.getString(
+                    "applicationSessionCookieConfig.ise", "name",
+                    context.getPath()));
+        }
+        this.name = name;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setPath(String path) {
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            throw new IllegalStateException(sm.getString(
+                    "applicationSessionCookieConfig.ise", "path",
+                    context.getPath()));
+        }
+        this.path = path;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setSecure(boolean secure) {
+        if (!context.getState().equals(LifecycleState.STARTING_PREP)) {
+            throw new IllegalStateException(sm.getString(
+                    "applicationSessionCookieConfig.ise", "secure",
+                    context.getPath()));
+        }
+        this.secure = secure;
+    }
+-----CSCI578-----
+
+
+    public void setSSLEngine(String SSLEngine) {
+        if (!SSLEngine.equals(AprLifecycleListener.SSLEngine)) {
+            // Ensure that the SSLEngine is consistent with that used for SSL init
+            if (sslInitialized) {
+                throw new IllegalStateException(
+                        sm.getString("aprListener.tooLateForSSLEngine"));
+            }
+
+            AprLifecycleListener.SSLEngine = SSLEngine;
+        }
+    }
+-----CSCI578-----
+
+
+    public void setSSLRandomSeed(String SSLRandomSeed) {
+        if (!SSLRandomSeed.equals(AprLifecycleListener.SSLRandomSeed)) {
+            // Ensure that the random seed is consistent with that used for SSL init
+            if (sslInitialized) {
+                throw new IllegalStateException(
+                        sm.getString("aprListener.tooLateForSSLRandomSeed"));
+            }
+
+            AprLifecycleListener.SSLRandomSeed = SSLRandomSeed;
+        }
+    }
+-----CSCI578-----
+
+
+    public void setFIPSMode(String FIPSMode) {
+        if (!FIPSMode.equals(AprLifecycleListener.FIPSMode)) {
+            // Ensure that the FIPS mode is consistent with that used for SSL init
+            if (sslInitialized) {
+                throw new IllegalStateException(
+                        sm.getString("aprListener.tooLateForFIPSMode"));
+            }
+
+            AprLifecycleListener.FIPSMode = FIPSMode;
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void fireOnComplete() {
+        // Fire the listeners
+        doFireOnComplete();
+
+        // The application doesn't know it has to stop read and/or writing until
+        // it receives the complete event so the request and response have to be
+        // closed after firing the event.
+        try {
+            // First of all ensure that any data written to the response is
+            // written to the I/O layer.
+            request.getResponse().finishResponse();
+            // Close the request and the response.
+            request.getCoyoteRequest().action(ActionCode.END_REQUEST, null);
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            // Catch this here and allow async context complete to continue
+            // normally so a dispatch takes place which ensures that  the
+            // request and response objects are correctly recycled.
+            log.debug(sm.getString("asyncContextImpl.finishResponseError"), t);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void setCookieProcessor(CookieProcessor cookieProcessor) {
+        if (cookieProcessor == null) {
+            throw new IllegalArgumentException(
+                    sm.getString("standardContext.cookieProcessor.null"));
+        }
+        this.cookieProcessor = cookieProcessor;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the login configuration descriptor for this web application.
+     *
+     * @param config The new login configuration
+     */
+    @Override
+    public void setLoginConfig(LoginConfig config) {
+
+        // Validate the incoming property value
+        if (config == null)
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.loginConfig.required"));
+        String loginPage = config.getLoginPage();
+        if ((loginPage != null) && !loginPage.startsWith("/")) {
+            if (isServlet22()) {
+                if(log.isDebugEnabled())
+                    log.debug(sm.getString("standardContext.loginConfig.loginWarning",
+                                 loginPage));
+                config.setLoginPage("/" + loginPage);
+            } else {
+                throw new IllegalArgumentException
+                    (sm.getString("standardContext.loginConfig.loginPage",
+                                  loginPage));
+            }
+        }
+        String errorPage = config.getErrorPage();
+        if ((errorPage != null) && !errorPage.startsWith("/")) {
+            if (isServlet22()) {
+                if(log.isDebugEnabled())
+                    log.debug(sm.getString("standardContext.loginConfig.errorWarning",
+                                 errorPage));
+                config.setErrorPage("/" + errorPage);
+            } else {
+                throw new IllegalArgumentException
+                    (sm.getString("standardContext.loginConfig.errorPage",
+                                  errorPage));
+            }
+        }
+
+        // Process the property setting change
+        LoginConfig oldLoginConfig = this.loginConfig;
+        this.loginConfig = config;
+        support.firePropertyChange("loginConfig",
+                                   oldLoginConfig, this.loginConfig);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the public identifier of the deployment descriptor DTD that is
+     * currently being parsed.
+     *
+     * @param publicId The public identifier
+     */
+    @Override
+    public void setPublicId(String publicId) {
+
+        if (log.isDebugEnabled())
+            log.debug("Setting deployment descriptor public ID to '" +
+                publicId + "'");
+
+        String oldPublicId = this.publicId;
+        this.publicId = publicId;
+        support.firePropertyChange("publicId", oldPublicId, publicId);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Java class name of the Wrapper implementation used
+     * for servlets registered in this Context.
+     *
+     * @param wrapperClassName The new wrapper class name
+     *
+     * @throws IllegalArgumentException if the specified wrapper class
+     * cannot be found or is not a subclass of StandardWrapper
+     */
+    @Override
+    public void setWrapperClass(String wrapperClassName) {
+
+        this.wrapperClassName = wrapperClassName;
+
+        try {
+            wrapperClass = Class.forName(wrapperClassName);
+            if (!StandardWrapper.class.isAssignableFrom(wrapperClass)) {
+                throw new IllegalArgumentException(
+                    sm.getString("standardContext.invalidWrapperClass",
+                                 wrapperClassName));
+            }
+        } catch (ClassNotFoundException cnfe) {
+            throw new IllegalArgumentException(cnfe.getMessage());
+        }
+    }
+-----CSCI578-----
+
+
+    // -------------------------------------------------------- Context Methods
+
+    /**
+     * Add a new Listener class name to the set of Listeners
+     * configured for this application.
+     *
+     * @param listener Java class name of a listener class
+     */
+    @Override
+    public void addApplicationListener(String listener) {
+
+        synchronized (applicationListenersLock) {
+            String results[] = new String[applicationListeners.length + 1];
+            for (int i = 0; i < applicationListeners.length; i++) {
+                if (listener.equals(applicationListeners[i])) {
+                    log.info(sm.getString("standardContext.duplicateListener",listener));
+                    return;
+                }
+                results[i] = applicationListeners[i];
+            }
+            results[applicationListeners.length] = listener;
+            applicationListeners = results;
+        }
+        fireContainerEvent("addApplicationListener", listener);
+
+        // FIXME - add instance if already started?
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a new context initialization parameter.
+     *
+     * @param name Name of the new parameter
+     * @param value Value of the new  parameter
+     *
+     * @exception IllegalArgumentException if the name or value is missing,
+     *  or if this context initialization parameter has already been
+     *  registered
+     */
+    @Override
+    public void addParameter(String name, String value) {
+        // Validate the proposed context initialization parameter
+        if ((name == null) || (value == null)) {
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.parameter.required"));
+        }
+
+        // Add this parameter to our defined set if not already present
+        String oldValue = parameters.putIfAbsent(name, value);
+
+        if (oldValue != null) {
+            throw new IllegalArgumentException(
+                    sm.getString("standardContext.parameter.duplicate", name));
+        }
+
+        fireContainerEvent("addParameter", name);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void addPostConstructMethod(String clazz, String method) {
+        if (clazz == null || method == null)
+            throw new IllegalArgumentException(
+                    sm.getString("standardContext.postconstruct.required"));
+        if (postConstructMethods.get(clazz) != null)
+            throw new IllegalArgumentException(sm.getString(
+                    "standardContext.postconstruct.duplicate", clazz));
+
+        postConstructMethods.put(clazz, method);
+        fireContainerEvent("addPostConstructMethod", clazz);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void addPreDestroyMethod(String clazz, String method) {
+        if (clazz == null || method == null)
+            throw new IllegalArgumentException(
+                    sm.getString("standardContext.predestroy.required"));
+        if (preDestroyMethods.get(clazz) != null)
+            throw new IllegalArgumentException(sm.getString(
+                    "standardContext.predestroy.duplicate", clazz));
+
+        preDestroyMethods.put(clazz, method);
+        fireContainerEvent("addPreDestroyMethod", clazz);
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add a child Container, only if the proposed child is an implementation
+     * of Host.
+     *
+     * @param child Child container to be added
+     */
+    @Override
+    public void addChild(Container child) {
+
+        if (!(child instanceof Host))
+            throw new IllegalArgumentException
+                (sm.getString("standardEngine.notHost"));
+        super.addChild(child);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Disallow any attempt to set a parent for this Container, since an
+     * Engine is supposed to be at the top of the Container hierarchy.
+     *
+     * @param container Proposed parent Container
+     */
+    @Override
+    public void setParent(Container container) {
+
+        throw new IllegalArgumentException
+            (sm.getString("standardEngine.notParent"));
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Thread that currently is inside our await() method.
+     */
+    private volatile Thread awaitThread = null;
+
+
+    /**
+     * Wait until a proper shutdown command is received, then return.
+     * This keeps the main thread alive - the thread pool listening for http
+     * connections is daemon threads.
+     */
+    @Override
+    public void await() {
+        // Negative values - don't wait on port - tomcat is embedded or we just don't like ports
+        if( port == -2 ) {
+            // undocumented yet - for embedding apps that are around, alive.
+            return;
+        }
+        if( port==-1 ) {
+            try {
+                awaitThread = Thread.currentThread();
+                while(!stopAwait) {
+                    try {
+                        Thread.sleep( 10000 );
+                    } catch( InterruptedException ex ) {
+                        // continue and check the flag
+                    }
+                }
+            } finally {
+                awaitThread = null;
+            }
+            return;
+        }
+
+        // Set up a server socket to wait on
+        try {
+            awaitSocket = new ServerSocket(port, 1,
+                    InetAddress.getByName(address));
+        } catch (IOException e) {
+            log.error("StandardServer.await: create[" + address
+                               + ":" + port
+                               + "]: ", e);
+            return;
+        }
+
+        try {
+            awaitThread = Thread.currentThread();
+
+            // Loop waiting for a connection and a valid command
+            while (!stopAwait) {
+                ServerSocket serverSocket = awaitSocket;
+                if (serverSocket == null) {
+                    break;
+                }
+
+                // Wait for the next connection
+                Socket socket = null;
+                StringBuilder command = new StringBuilder();
+                try {
+                    InputStream stream;
+                    long acceptStartTime = System.currentTimeMillis();
+                    try {
+                        socket = serverSocket.accept();
+                        socket.setSoTimeout(10 * 1000);  // Ten seconds
+                        stream = socket.getInputStream();
+                    } catch (SocketTimeoutException ste) {
+                        // This should never happen but bug 56684 suggests that
+                        // it does.
+                        log.warn(sm.getString("standardServer.accept.timeout",
+                                Long.valueOf(System.currentTimeMillis() - acceptStartTime)), ste);
+                        continue;
+                    } catch (AccessControlException ace) {
+                        log.warn("StandardServer.accept security exception: "
+                                + ace.getMessage(), ace);
+                        continue;
+                    } catch (IOException e) {
+                        if (stopAwait) {
+                            // Wait was aborted with socket.close()
+                            break;
+                        }
+                        log.error("StandardServer.await: accept: ", e);
+                        break;
+                    }
+
+                    // Read a set of characters from the socket
+                    int expected = 1024; // Cut off to avoid DoS attack
+                    while (expected < shutdown.length()) {
+                        if (random == null)
+                            random = new Random();
+                        expected += (random.nextInt() % 1024);
+                    }
+                    while (expected > 0) {
+                        int ch = -1;
+                        try {
+                            ch = stream.read();
+                        } catch (IOException e) {
+                            log.warn("StandardServer.await: read: ", e);
+                            ch = -1;
+                        }
+                        if (ch < 32)  // Control character or EOF terminates loop
+                            break;
+                        command.append((char) ch);
+                        expected--;
+                    }
+                } finally {
+                    // Close the socket now that we are done with it
+                    try {
+                        if (socket != null) {
+                            socket.close();
+                        }
+                    } catch (IOException e) {
+                        // Ignore
+                    }
+                }
+
+                // Match against our command string
+                boolean match = command.toString().equals(shutdown);
+                if (match) {
+                    log.info(sm.getString("standardServer.shutdownViaPort"));
+                    break;
+                } else
+                    log.warn("StandardServer.await: Invalid command '"
+                            + command.toString() + "' received");
+            }
+        } finally {
+            ServerSocket serverSocket = awaitSocket;
+            awaitThread = null;
+            awaitSocket = null;
+
+            // Close the server socket and return
+            if (serverSocket != null) {
+                try {
+                    serverSocket.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write the configuration information for this entire <code>Server</code>
+     * out to the server.xml configuration file.
+     *
+     * @exception InstanceNotFoundException
+     *            if the managed resource object cannot be found
+     * @exception MBeanException
+     *            if the initializer of the object throws an exception, or
+     *            persistence is not supported
+     * @exception javax.management.RuntimeOperationsException
+     *            if an exception is reported by the persistence mechanism
+     */
+    public synchronized void storeConfig() throws InstanceNotFoundException, MBeanException {
+        try {
+            // Note: Hard-coded domain used since this object is per Server/JVM
+            ObjectName sname = new ObjectName("Catalina:type=StoreConfig");
+            if (mserver.isRegistered(sname)) {
+                mserver.invoke(sname, "storeConfig", null, null);
+            } else {
+                log.error(sm.getString("standardServer.storeConfig.notAvailable", sname));
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            log.error(t);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write the configuration information for <code>Context</code>
+     * out to the specified configuration file.
+     *
+     * @param context the context which should save its configuration
+     * @exception InstanceNotFoundException
+     *            if the managed resource object cannot be found
+     * @exception MBeanException
+     *            if the initializer of the object throws an exception
+     *            or persistence is not supported
+     * @exception javax.management.RuntimeOperationsException
+     *            if an exception is reported by the persistence mechanism
+     */
+    public synchronized void storeContext(Context context) throws InstanceNotFoundException, MBeanException {
+        try {
+            // Note: Hard-coded domain used since this object is per Server/JVM
+            ObjectName sname = new ObjectName("Catalina:type=StoreConfig");
+            if (mserver.isRegistered(sname)) {
+                mserver.invoke(sname, "store",
+                    new Object[] {context},
+                    new String [] { "java.lang.String"});
+            } else {
+                log.error(sm.getString("standardServer.storeConfig.notAvailable", sname));
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            log.error(t);
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Add a new Connector to the set of defined Connectors, and associate it
+     * with this Service's Container.
+     *
+     * @param connector The Connector to be added
+     */
+    @Override
+    public void addConnector(Connector connector) {
+
+        synchronized (connectorsLock) {
+            connector.setService(this);
+            Connector results[] = new Connector[connectors.length + 1];
+            System.arraycopy(connectors, 0, results, 0, connectors.length);
+            results[connectors.length] = connector;
+            connectors = results;
+
+            if (getState().isAvailable()) {
+                try {
+                    connector.start();
+                } catch (LifecycleException e) {
+                    log.error(sm.getString(
+                            "standardService.connector.startFailed",
+                            connector), e);
+                }
+            }
+
+            // Report this property change to interested listeners
+            support.firePropertyChange("connector", null, connector);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Refuse to add a child Container, because Wrappers are the lowest level
+     * of the Container hierarchy.
+     *
+     * @param child Child container to be added
+     */
+    @Override
+    public void addChild(Container child) {
+
+        throw new IllegalStateException
+            (sm.getString("standardWrapper.notChild"));
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------- Lifecycle methods
+
+    @Override
+    protected void initInternal() throws LifecycleException {
+        super.initInternal();
+
+        // Set this before we register currently known naming resources to avoid
+        // timing issues. Duplication registration is not an issue.
+        resourceRequireExplicitRegistration = true;
+
+        for (ContextResource cr : resources.values()) {
+            try {
+                MBeanUtils.createMBean(cr);
+            } catch (Exception e) {
+                log.warn(sm.getString(
+                        "namingResources.mbeanCreateFail", cr.getName()), e);
+            }
+        }
+
+        for (ContextEnvironment ce : envs.values()) {
+            try {
+                MBeanUtils.createMBean(ce);
+            } catch (Exception e) {
+                log.warn(sm.getString(
+                        "namingResources.mbeanCreateFail", ce.getName()), e);
+            }
+        }
+
+        for (ContextResourceLink crl : resourceLinks.values()) {
+            try {
+                MBeanUtils.createMBean(crl);
+            } catch (Exception e) {
+                log.warn(sm.getString(
+                        "namingResources.mbeanCreateFail", crl.getName()), e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    protected void destroyInternal() throws LifecycleException {
+
+        // Set this before we de-register currently known naming resources to
+        // avoid timing issues. Duplication de-registration is not an issue.
+        resourceRequireExplicitRegistration = false;
+
+        // Destroy in reverse order to create, although it should not matter
+        for (ContextResourceLink crl : resourceLinks.values()) {
+            try {
+                MBeanUtils.destroyMBean(crl);
+            } catch (Exception e) {
+                log.warn(sm.getString(
+                        "namingResources.mbeanDestroyFail", crl.getName()), e);
+            }
+        }
+
+        for (ContextEnvironment ce : envs.values()) {
+            try {
+                MBeanUtils.destroyMBean(ce);
+            } catch (Exception e) {
+                log.warn(sm.getString(
+                        "namingResources.mbeanDestroyFail", ce.getName()), e);
+            }
+        }
+
+        for (ContextResource cr : resources.values()) {
+            try {
+                MBeanUtils.destroyMBean(cr);
+            } catch (Exception e) {
+                log.warn(sm.getString(
+                        "namingResources.mbeanDestroyFail", cr.getName()), e);
+            }
+        }
+
+        super.destroyInternal();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void init(FilterConfig filterConfig) throws ServletException {
+        super.init(filterConfig);
+        if (encoding == null || encoding.length() == 0 ||
+                encoding.equalsIgnoreCase("default")) {
+            encoding = DEFAULT_ENCODING;
+        } else if (encoding.equalsIgnoreCase("system")) {
+            encoding = Charset.defaultCharset().name();
+        } else if (!Charset.isSupported(encoding)) {
+            throw new IllegalArgumentException(sm.getString(
+                    "addDefaultCharset.unsupportedCharset", encoding));
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void init(FilterConfig filterConfig) throws ServletException {
+        // Set the parameters
+        super.init(filterConfig);
+
+        try {
+            Class<?> clazz = Class.forName(randomClass);
+            randomSource = (Random) clazz.newInstance();
+        } catch (ClassNotFoundException | InstantiationException | IllegalAccessException e) {
+            ServletException se = new ServletException(sm.getString(
+                    "csrfPrevention.invalidRandomClass", randomClass), e);
+            throw se;
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response,
+            FilterChain chain) throws IOException, ServletException {
+
+        if (response instanceof HttpServletResponse) {
+            HttpServletResponse httpResponse = (HttpServletResponse) response;
+
+            if (response.isCommitted()) {
+                throw new ServletException(sm.getString("httpHeaderSecurityFilter.committed"));
+            }
+
+            // HSTS
+            if (hstsEnabled && request.isSecure()) {
+                httpResponse.setHeader(HSTS_HEADER_NAME, hstsHeaderValue);
+            }
+
+            // anti click-jacking
+            if (antiClickJackingEnabled) {
+                httpResponse.setHeader(ANTI_CLICK_JACKING_HEADER_NAME, antiClickJackingHeaderValue);
+            }
+
+            // Block content type sniffing
+            if (blockContentTypeSniffingEnabled) {
+                httpResponse.setHeader(BLOCK_CONTENT_TYPE_SNIFFING_HEADER_NAME,
+                        BLOCK_CONTENT_TYPE_SNIFFING_HEADER_VALUE);
+            }
+
+            // cross-site scripting filter protection
+            if (xssProtectionEnabled) {
+                httpResponse.setHeader(XSS_PROTECTION_HEADER_NAME, XSS_PROTECTION_HEADER_VALUE);
+            }
+        }
+
+        chain.doFilter(request, response);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------- Reloader Methods
+
+    /**
+     * Adds the specified class file transformer to this class loader. The
+     * transformer will then be able to modify the bytecode of any classes
+     * loaded by this class loader after the invocation of this method.
+     *
+     * @param transformer The transformer to add to the class loader
+     */
+    @Override
+    public void addTransformer(ClassFileTransformer transformer) {
+
+        if (transformer == null) {
+            throw new IllegalArgumentException(sm.getString(
+                    "webappClassLoader.addTransformer.illegalArgument", getContextName()));
+        }
+
+        if (this.transformers.contains(transformer)) {
+            // if the same instance of this transformer was already added, bail out
+            log.warn(sm.getString("webappClassLoader.addTransformer.duplicate",
+                    transformer, getContextName()));
+            return;
+        }
+        this.transformers.add(transformer);
+
+        log.info(sm.getString("webappClassLoader.addTransformer", transformer, getContextName()));
+    }
+-----CSCI578-----
+
+
+    /**
+     * Removes the specified class file transformer from this class loader.
+     * It will no longer be able to modify the byte code of any classes
+     * loaded by the class loader after the invocation of this method.
+     * However, any classes already modified by this transformer will
+     * remain transformed.
+     *
+     * @param transformer The transformer to remove
+     */
+    @Override
+    public void removeTransformer(ClassFileTransformer transformer) {
+
+        if (transformer == null) {
+            return;
+        }
+
+        if (this.transformers.remove(transformer)) {
+            log.info(sm.getString("webappClassLoader.removeTransformer",
+                    transformer, getContextName()));
+            return;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String toString() {
+
+        StringBuilder sb = new StringBuilder(this.getClass().getSimpleName());
+        sb.append("\r\n  context: ");
+        sb.append(getContextName());
+        sb.append("\r\n  delegate: ");
+        sb.append(delegate);
+        sb.append("\r\n");
+        if (this.parent != null) {
+            sb.append("----------> Parent Classloader:\r\n");
+            sb.append(this.parent.toString());
+            sb.append("\r\n");
+        }
+        if (this.transformers.size() > 0) {
+            sb.append("----------> Class file transformers:\r\n");
+            for (ClassFileTransformer transformer : this.transformers) {
+                sb.append(transformer).append("\r\n");
+            }
+        }
+        return (sb.toString());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return an enumeration of <code>URLs</code> representing all of the
+     * resources with the given name.  If no resources with this name are
+     * found, return an empty enumeration.
+     *
+     * @param name Name of the resources to be found
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public Enumeration<URL> findResources(String name) throws IOException {
+
+        if (log.isDebugEnabled())
+            log.debug("    findResources(" + name + ")");
+
+        checkStateForResourceLoading(name);
+
+        LinkedHashSet<URL> result = new LinkedHashSet<>();
+
+        String path = nameToPath(name);
+
+        WebResource[] webResources = resources.getClassLoaderResources(path);
+        for (WebResource webResource : webResources) {
+            if (webResource.exists()) {
+                result.add(webResource.getURL());
+            }
+        }
+
+        // Adding the results of a call to the superclass
+        if (hasExternalRepositories) {
+            Enumeration<URL> otherResourcePaths = super.findResources(name);
+            while (otherResourcePaths.hasMoreElements()) {
+                result.add(otherResourcePaths.nextElement());
+            }
+        }
+
+        return Collections.enumeration(result);
+    }
+-----CSCI578-----
+
+
+    protected void setJavaseClassLoader(ClassLoader classLoader) {
+        if (classLoader == null) {
+            throw new IllegalArgumentException(
+                    sm.getString("webappClassLoader.javaseClassLoaderNull"));
+        }
+        javaseClassLoader = classLoader;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String getWebappName() {
+        return getContextName();
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------- PropertyChangeListener Methods
+
+
+    /**
+     * Process property change events from our associated Context.
+     *
+     * @param event The property change event that has occurred
+     */
+    @Override
+    public void propertyChange(PropertyChangeEvent event) {
+
+        // Validate the source of this event
+        if (!(event.getSource() instanceof Context))
+            return;
+
+        // Process a relevant property change
+        if (event.getPropertyName().equals("reloadable")) {
+            try {
+                setReloadable
+                    ( ((Boolean) event.getNewValue()).booleanValue() );
+            } catch (NumberFormatException e) {
+                log.error(sm.getString("webappLoader.reloadable",
+                                 event.getNewValue().toString()));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Wrapper with which we are associated.
+     *
+     * @param wrapper The new wrapper
+     */
+    @Override
+    public void setWrapper(Wrapper wrapper) {
+
+        this.wrapper = wrapper;
+        if (wrapper == null) {
+            context = null;
+            host = null;
+            oname = null;
+        } else {
+            context = (Context) wrapper.getParent();
+            host = (Host) context.getParent();
+            Engine engine = (Engine) host.getParent();
+            String name = engine.getName() + ":type=Deployer,host=" +
+                    host.getName();
+            try {
+                oname = new ObjectName(name);
+            } catch (Exception e) {
+                log(sm.getString("managerServlet.objectNameFail", name), e);
+            }
+        }
+
+        // Retrieve the MBean server
+        mBeanServer = Registry.getRegistry(null, null).getMBeanServer();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process a PUT request for the specified resource.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    @Override
+    public void doPut(HttpServletRequest request,
+                      HttpServletResponse response)
+        throws IOException, ServletException {
+
+        StringManager smClient = StringManager.getManager(
+                Constants.Package, request.getLocales());
+
+        // Identify the request parameters that we need
+        String command = request.getPathInfo();
+        if (command == null)
+            command = request.getServletPath();
+        String path = request.getParameter("path");
+        ContextName cn = null;
+        if (path != null) {
+            cn = new ContextName(path, request.getParameter("version"));
+        }
+        String tag = request.getParameter("tag");
+        boolean update = false;
+        if ((request.getParameter("update") != null)
+            && (request.getParameter("update").equals("true"))) {
+            update = true;
+        }
+
+        // Prepare our output writer to generate the response message
+        response.setContentType("text/plain;charset="+Constants.CHARSET);
+        PrintWriter writer = response.getWriter();
+
+        // Process the requested command
+        if (command == null) {
+            writer.println(smClient.getString("managerServlet.noCommand"));
+        } else if (command.equals("/deploy")) {
+            deploy(writer, cn, tag, update, request, smClient);
+        } else {
+            writer.println(smClient.getString("managerServlet.unknownCommand",
+                    command));
+        }
+
+        // Finish up the response
+        writer.flush();
+        writer.close();
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Add a realm to the list of realms that will be used to authenticate
+     * users.
+     * @param theRealm realm which should be wrapped by the combined realm
+     */
+    public void addRealm(Realm theRealm) {
+        realms.add(theRealm);
+
+        if (log.isDebugEnabled()) {
+            sm.getString("combinedRealm.addRealm",
+                    theRealm.getClass().getName(),
+                    Integer.toString(realms.size()));
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    protected String getPassword(String username) {
+        // This method should never be called
+        // Stack trace will show where this was called from
+        UnsupportedOperationException uoe =
+            new UnsupportedOperationException(
+                    sm.getString("combinedRealm.getPassword"));
+        log.error(sm.getString("combinedRealm.unexpectedMethod"), uoe);
+        throw uoe;
+    }
+-----CSCI578-----
+
+
+    @Override
+    protected Principal getPrincipal(String username) {
+        // This method should never be called
+        // Stack trace will show where this was called from
+        UnsupportedOperationException uoe =
+            new UnsupportedOperationException(
+                    sm.getString("combinedRealm.getPrincipal"));
+        log.error(sm.getString("combinedRealm.unexpectedMethod"), uoe);
+        throw uoe;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Has our own <code>commit()</code> returned successfully?
+     */
+    protected boolean committed = false;
+
+
+
+    /**
+     * Phase 2 of authenticating a <code>Subject</code> when Phase 1
+     * was successful.  This method is called if the <code>LoginContext</code>
+     * succeeded in the overall authentication chain.
+     *
+     * @return <code>true</code> if the authentication succeeded, or
+     *  <code>false</code> if this <code>LoginModule</code> should be
+     *  ignored
+     *
+     * @exception LoginException if the commit fails
+     */
+    @Override
+    public boolean commit() throws LoginException {
+        if (log.isDebugEnabled()) {
+            log.debug("commit " + principal);
+        }
+
+        // If authentication was not successful, just return false
+        if (principal == null) {
+            return false;
+        }
+
+        // Add our Principal to the Subject if needed
+        if (!subject.getPrincipals().contains(principal)) {
+            subject.getPrincipals().add(principal);
+            // Add the roles as additional subjects as per the contract with the
+            // JAASRealm
+            if (principal instanceof GenericPrincipal) {
+                String roles[] = ((GenericPrincipal) principal).getRoles();
+                for (int i = 0; i < roles.length; i++) {
+                    subject.getPrincipals().add(new GenericPrincipal(roles[i], null, null));
+                }
+
+            }
+        }
+
+        committed = true;
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public void setEncoding(String encodingName) {
+        if (encodingName == null) {
+            encoding = StandardCharsets.UTF_8;
+        } else {
+            try {
+                this.encoding = B2CConverter.getCharset(encodingName);
+            } catch (UnsupportedEncodingException e) {
+                log.warn(sm.getString("mdCredentialHandler.unknownEncoding",
+                        encodingName, encoding.name()));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public String[] getRoles(Principal principal) {
+        if (principal instanceof GenericPrincipal) {
+            return ((GenericPrincipal) principal).getRoles();
+        }
+
+        String className = principal.getClass().getSimpleName();
+        throw new IllegalStateException(sm.getString("realmBase.cannotGetRoles", className));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Save the specified Session into this Store.  Any previously saved
+     * information for the associated session identifier is replaced.
+     *
+     * @param session Session to be saved
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public void save(Session session) throws IOException {
+        // Open an output stream to the specified pathname, if any
+        File file = file(session.getIdInternal());
+        if (file == null) {
+            return;
+        }
+        if (manager.getContext().getLogger().isDebugEnabled()) {
+            manager.getContext().getLogger().debug(sm.getString(getStoreName() + ".saving",
+                             session.getIdInternal(), file.getAbsolutePath()));
+        }
+
+        try (FileOutputStream fos = new FileOutputStream(file.getAbsolutePath());
+                ObjectOutputStream oos = new ObjectOutputStream(new BufferedOutputStream(fos))) {
+            ((StandardSession)session).writeObjectData(oos);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the JNDI name of a DataSource-factory to use for db access
+     *
+     * @param dataSourceName The JNDI name of the DataSource-factory
+     */
+    public void setDataSourceName(String dataSourceName) {
+        if (dataSourceName == null || "".equals(dataSourceName.trim())) {
+            manager.getContext().getLogger().warn(
+                    sm.getString(getStoreName() + ".missingDataSourceName"));
+            return;
+        }
+        this.dataSourceName = dataSourceName;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected void initInternal() throws LifecycleException {
+        super.initInternal();
+
+        if (context == null) {
+            throw new LifecycleException(sm.getString("managerBase.contextNull"));
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Set<String> getSessionIdsFull() {
+        Set<String> sessionIds = new HashSet<>();
+        // In memory session ID list
+        sessionIds.addAll(sessions.keySet());
+        // Store session ID list
+        String[] storeKeys;
+        try {
+            storeKeys = getStore().keys();
+            for (String storeKey : storeKeys) {
+                sessionIds.add(storeKey);
+            }
+        } catch (IOException e) {
+            log.warn(sm.getString("persistentManager.storeKeysException"));
+        }
+        return sessionIds;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the last time the client sent a request associated with this
+     * session, as the number of milliseconds since midnight, January 1, 1970
+     * GMT.  Actions that your application takes, such as getting or setting
+     * a value associated with the session, do not affect the access time.
+     * This one gets updated whenever a request finishes.
+     */
+    @Override
+    public long getLastAccessedTime() {
+
+        if (!isValidInternal()) {
+            throw new IllegalStateException
+                (sm.getString("standardSession.getLastAccessedTime.ise"));
+        }
+
+        return (this.lastAccessedTime);
+    }
+
+
+    /**
+     * Return the last client access time without invalidation check
+     * @see #getLastAccessedTime()
+     */
+    @Override
+    public long getLastAccessedTimeInternal() {
+        return (this.lastAccessedTime);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the idle time (in milliseconds) from last client access time.
+     */
+    @Override
+    public long getIdleTime() {
+
+        if (!isValidInternal()) {
+            throw new IllegalStateException
+                (sm.getString("standardSession.getIdleTime.ise"));
+        }
+
+        return getIdleTimeInternal();
+    }
+
+
+    /**
+     * Return the idle time from last client access time without invalidation check
+     * @see #getIdleTime()
+     */
+    @Override
+    public long getIdleTimeInternal() {
+        long timeNow = System.currentTimeMillis();
+        long timeIdle;
+        if (LAST_ACCESS_AT_START) {
+            timeIdle = timeNow - lastAccessedTime;
+        } else {
+            timeIdle = timeNow - thisAccessedTime;
+        }
+        return timeIdle;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------- HttpSession Properties
+
+
+    /**
+     * Return the time when this session was created, in milliseconds since
+     * midnight, January 1, 1970 GMT.
+     *
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     */
+    @Override
+    public long getCreationTime() {
+
+        if (!isValidInternal())
+            throw new IllegalStateException
+                (sm.getString("standardSession.getCreationTime.ise"));
+
+        return (this.creationTime);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return an <code>Enumeration</code> of <code>String</code> objects
+     * containing the names of the objects bound to this session.
+     *
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     */
+    @Override
+    public Enumeration<String> getAttributeNames() {
+
+        if (!isValidInternal())
+            throw new IllegalStateException
+                (sm.getString("standardSession.getAttributeNames.ise"));
+
+        Set<String> names = new HashSet<>();
+        names.addAll(attributes.keySet());
+        return Collections.enumeration(names);
+    }
+
+
+
+    /**
+     * Return the set of names of objects bound to this session.  If there
+     * are no such objects, a zero-length array is returned.
+     *
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     *
+     * @deprecated As of Version 2.2, this method is replaced by
+     *  <code>getAttributeNames()</code>
+     */
+    @Override
+    @Deprecated
+    public String[] getValueNames() {
+
+        if (!isValidInternal())
+            throw new IllegalStateException
+                (sm.getString("standardSession.getValueNames.ise"));
+
+        return (keys());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of names of objects bound to this session.  If there
+     * are no such objects, a zero-length array is returned.
+     *
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     *
+     * @deprecated As of Version 2.2, this method is replaced by
+     *  <code>getAttributeNames()</code>
+     */
+    @Override
+    @Deprecated
+    public String[] getValueNames() {
+
+        if (!isValidInternal())
+            throw new IllegalStateException
+                (sm.getString("standardSession.getValueNames.ise"));
+
+        return (keys());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Invalidates this session and unbinds any objects bound to it.
+     *
+     * @exception IllegalStateException if this method is called on
+     *  an invalidated session
+     */
+    @Override
+    public void invalidate() {
+
+        if (!isValidInternal())
+            throw new IllegalStateException
+                (sm.getString("standardSession.invalidate.ise"));
+
+        // Cause this session to expire
+        expire();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return <code>true</code> if the client does not yet know about the
+     * session, or if the client chooses not to join the session.  For
+     * example, if the server used only cookie-based sessions, and the client
+     * has disabled the use of cookies, then a session would be new on each
+     * request.
+     *
+     * @exception IllegalStateException if this method is called on an
+     *  invalidated session
+     */
+    @Override
+    public boolean isNew() {
+
+        if (!isValidInternal())
+            throw new IllegalStateException
+                (sm.getString("standardSession.isNew.ise"));
+
+        return (this.isNew);
+
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void addHeader(String name, String value) {
+        super.addHeader(name, value);
+        String lname = name.toLowerCase(Locale.ENGLISH);
+        if (lname.equals(LAST_MODIFIED)) {
+            try {
+                synchronized(RFC1123_FORMAT) {
+                    lastModified = RFC1123_FORMAT.parse(value).getTime();
+                }
+            } catch (Throwable ignore) {
+                ExceptionUtils.handleThrowable(ignore);
+            }
+        } else if (lname.equals(CONTENT_TYPE)) {
+            contentType = value;
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setHeader(String name, String value) {
+        super.setHeader(name, value);
+        String lname = name.toLowerCase(Locale.ENGLISH);
+        if (lname.equals(LAST_MODIFIED)) {
+            try {
+                synchronized(RFC1123_FORMAT) {
+                    lastModified = RFC1123_FORMAT.parse(value).getTime();
+                }
+            } catch (Throwable ignore) {
+                ExceptionUtils.handleThrowable(ignore);
+            }
+        }
+        else if (lname.equals(CONTENT_TYPE))
+        {
+            contentType = value;
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Handle the beginning of an XML element.
+     *
+     * @param attributes The attributes of this element
+     *
+     * @exception Exception if a processing error occurs
+     */
+    @Override
+    public void begin(String namespace, String name, Attributes attributes)
+        throws Exception {
+
+        if (digester.getLogger().isDebugEnabled())
+            digester.getLogger().debug("Copying parent class loader");
+        Container child = (Container) digester.peek(0);
+        Object parent = digester.peek(1);
+        Method method =
+            parent.getClass().getMethod("getParentClassLoader", new Class[0]);
+        ClassLoader classLoader =
+            (ClassLoader) method.invoke(parent, new Object[0]);
+        child.setParentClassLoader(classLoader);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected void startInternal() throws LifecycleException {
+        throw new LifecycleException(
+                sm.getString("failedContext.start", getName()));
+    }
+-----CSCI578-----
+
+
+    public static Object callMethod1(Object target, String methodN,
+            Object param1, String typeParam1, ClassLoader cl) throws Exception {
+        if (target == null || param1 == null) {
+            throw new IllegalArgumentException(
+                    "IntrospectionUtils: Assert: Illegal params " +
+                    target + " " + param1);
+        }
+        if (log.isDebugEnabled())
+            log.debug("IntrospectionUtils: callMethod1 " +
+                    target.getClass().getName() + " " +
+                    param1.getClass().getName() + " " + typeParam1);
+
+        Class<?> params[] = new Class[1];
+        if (typeParam1 == null)
+            params[0] = param1.getClass();
+        else
+            params[0] = cl.loadClass(typeParam1);
+        Method m = findMethod(target.getClass(), methodN, params);
+        if (m == null)
+            throw new NoSuchMethodException(target.getClass().getName() + " "
+                    + methodN);
+        try {
+            return m.invoke(target, new Object[] { param1 });
+        } catch (InvocationTargetException ie) {
+            ExceptionUtils.handleThrowable(ie.getCause());
+            throw ie;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Load the local class equivalent of the specified stream class
+     * description, by using the class loader assigned to this Context.
+     *
+     * @param classDesc Class description from the input stream
+     *
+     * @exception ClassNotFoundException if this class cannot be found
+     * @exception IOException if an input/output error occurs
+     */
+    @Override
+    public Class<?> resolveClass(ObjectStreamClass classDesc)
+        throws ClassNotFoundException, IOException {
+
+        String name = classDesc.getName();
+        if (allowedClassNamePattern != null) {
+            boolean allowed = allowedClassNamePattern.matcher(name).matches();
+            if (!allowed) {
+                boolean doLog = warnOnFailure && reportedClasses.add(name);
+                String msg = sm.getString("customObjectInputStream.nomatch", name, allowedClassNameFilter);
+                if (doLog) {
+                    log.warn(msg);
+                } else if (log.isDebugEnabled()) {
+                    log.debug(msg);
+                }
+                throw new InvalidClassException(msg);
+            }
+        }
+
+        try {
+            return Class.forName(name, false, classLoader);
+        } catch (ClassNotFoundException e) {
+            try {
+                // Try also the superclass because of primitive types
+                return super.resolveClass(classDesc);
+            } catch (ClassNotFoundException e2) {
+                // Rethrow original exception, as it can have more information
+                // about why the class was not found. BZ 48007
+                throw e;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the mapping for this key from the map if present.
+     *
+     * @param key Key whose mapping is to be removed from the map
+     *
+     * @return The previous value associated with the specified key, or
+     *  <code>null</code> if there was no mapping for that key
+     *
+     * @exception IllegalStateException if this map is currently locked
+     */
+    @Override
+    public V remove(Object key) {
+
+        if (locked)
+            throw new IllegalStateException
+                (sm.getString("parameterMap.locked"));
+        return (super.remove(key));
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Add the specified element to this set if it is not already present.
+     * Return <code>true</code> if the element was added.
+     *
+     * @param o The object to be added
+     *
+     * @exception IllegalStateException if this ResourceSet is locked
+     */
+    @Override
+    public boolean add(T o) {
+
+        if (locked)
+            throw new IllegalStateException
+              (sm.getString("resourceSet.locked"));
+        return (super.add(o));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove all of the elements from this set.
+     *
+     * @exception IllegalStateException if this ResourceSet is locked
+     */
+    @Override
+    public void clear() {
+
+        if (locked)
+            throw new IllegalStateException
+              (sm.getString("resourceSet.locked"));
+        super.clear();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the given element from this set if it is present.
+     * Return <code>true</code> if the element was removed.
+     *
+     * @param o The object to be removed
+     *
+     * @exception IllegalStateException if this ResourceSet is locked
+     */
+    @Override
+    public boolean remove(Object o) {
+
+        if (locked)
+            throw new IllegalStateException
+              (sm.getString("resourceSet.locked"));
+        return (super.remove(o));
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+
+    @Override
+    protected void initInternal() throws LifecycleException {
+        super.initInternal();
+        if (!allowValid || !denyValid) {
+            throw new LifecycleException(
+                    sm.getString("requestFilterValve.configInvalid"));
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected synchronized void startInternal() throws LifecycleException {
+        if (!allowValid || !denyValid) {
+            throw new LifecycleException(
+                    sm.getString("requestFilterValve.configInvalid"));
+        }
+        super.startInternal();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected void initInternal() throws LifecycleException {
+        super.initInternal();
+
+        if (log.isDebugEnabled()) {
+            log.debug("Monitoring stuck threads with threshold = "
+                    + threshold
+                    + " sec");
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public URL getURL() {
+        String url = baseUrl + "!/" + resource.getName();
+        try {
+            return new URL(url);
+        } catch (MalformedURLException e) {
+            if (getLog().isDebugEnabled()) {
+                getLog().debug(sm.getString("fileResource.getUrlFail", url), e);
+            }
+            return null;
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public URL getCodeBase() {
+        try {
+            return new URL(codeBaseUrl);
+        } catch (MalformedURLException e) {
+            if (getLog().isDebugEnabled()) {
+                getLog().debug(sm.getString("fileResource.getUrlFail", codeBaseUrl), e);
+            }
+            return null;
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public final boolean write(String path, InputStream is, boolean overwrite) {
+        checkPath(path);
+
+        if (is == null) {
+            throw new NullPointerException(
+                    sm.getString("dirResourceSet.writeNpe"));
+        }
+
+        return false;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setReadOnly(boolean readOnly) {
+        if (readOnly) {
+            // This is the hard-coded default - ignore the call
+            return;
+        }
+
+        throw new IllegalArgumentException(
+                sm.getString("abstractArchiveResourceSet.setReadOnlyFalse"));
+    }
+-----CSCI578-----
+
+
+
+    protected final void checkPath(String path) {
+        if (path == null || path.length() == 0 || path.charAt(0) != '/') {
+            throw new IllegalArgumentException(
+                    sm.getString("abstractResourceSet.checkPath", path));
+        }
+    }
+-----CSCI578-----
+
+
+    public final void setInternalPath(String internalPath) {
+        checkPath(internalPath);
+        // Optimise internal processing
+        if (internalPath.equals("/")) {
+            this.internalPath = "";
+        } else {
+            this.internalPath = internalPath;
+        }
+    }
+-----CSCI578-----
+
+
+    public final void setWebAppMount(String webAppMount) {
+        checkPath(webAppMount);
+        // Optimise internal processing
+        if (webAppMount.equals("/")) {
+            this.webAppMount = "";
+        } else {
+            this.webAppMount = webAppMount;
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected URLConnection openConnection(URL u) throws IOException {
+        String path = u.getPath();
+
+        // Thread context class loader first
+        URL classpathUrl = Thread.currentThread().getContextClassLoader().getResource(path);
+        if (classpathUrl == null) {
+            // This class's class loader if no joy with the tccl
+            classpathUrl = ClasspathURLStreamHandler.class.getResource(path);
+        }
+
+        if (classpathUrl == null) {
+            throw new FileNotFoundException(sm.getString("classpathUrlStreamHandler.notFound", u));
+        }
+
+        return classpathUrl.openConnection();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String getCanonicalPath() {
+        try {
+            return resource.getCanonicalPath();
+        } catch (IOException ioe) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("fileResource.getCanonicalPathFail",
+                        resource.getPath()), ioe);
+            }
+            return null;
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public long getCreation() {
+        try {
+            BasicFileAttributes attrs = Files.readAttributes(resource.toPath(),
+                    BasicFileAttributes.class);
+            return attrs.creationTime().toMillis();
+        } catch (IOException e) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("fileResource.getCreationFail",
+                        resource.getPath()), e);
+            }
+            return 0;
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public URL getURL() {
+        String url = baseUrl + "!/";
+        try {
+            return new URL(url);
+        } catch (MalformedURLException e) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("fileResource.getUrlFail", url), e);
+            }
+            return null;
+        }
+    }
+-----CSCI578-----
+ // <init>(InputStream,int,short)
+
+    //
+    // Reader methods
+    //
+
+    /**
+     * Read a single character.  This method will block until a character is
+     * available, an I/O error occurs, or the end of the stream is reached.
+     *
+     * <p> Subclasses that intend to support efficient single-character input
+     * should override this method.
+     *
+     * @return     The character read, as an integer in the range 0 to 127
+     *             (<tt>0x00-0x7f</tt>), or -1 if the end of the stream has
+     *             been reached
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    @Override
+    public int read() throws IOException {
+        int b0 = fInputStream.read() & 0xff;
+        if (b0 == 0xff)
+            return -1;
+        int b1 = fInputStream.read() & 0xff;
+        if (b1 == 0xff)
+            return -1;
+        if(fEncoding >=4) {
+            int b2 = fInputStream.read() & 0xff;
+            if (b2 == 0xff)
+                return -1;
+            int b3 = fInputStream.read() & 0xff;
+            if (b3 == 0xff)
+                return -1;
+            if (log.isDebugEnabled())
+                log.debug("b0 is " + (b0 & 0xff) + " b1 " + (b1 & 0xff) + " b2 " + (b2 & 0xff) + " b3 " + (b3 & 0xff));
+            if (fEncoding == UCS4BE)
+                return (b0<<24)+(b1<<16)+(b2<<8)+b3;
+            else
+                return (b3<<24)+(b2<<16)+(b1<<8)+b0;
+        } else { // UCS-2
+            if (fEncoding == UCS2BE)
+                return (b0<<8)+b1;
+            else
+                return (b1<<8)+b0;
+        }
+    }
+ // read():int
+
+    /**
+     * Read characters into a portion of an array.  This method will block
+     * until some input is available, an I/O error occurs, or the end of the
+     * stream is reached.
+     *
+     * @param      ch     Destination buffer
+     * @param      offset Offset at which to start storing characters
+     * @param      length Maximum number of characters to read
+     *
+     * @return     The number of characters read, or -1 if the end of the
+     *             stream has been reached
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    @Override
+    public int read(char ch[], int offset, int length) throws IOException {
+        int byteLength = length << ((fEncoding >= 4)?2:1);
+        if (byteLength > fBuffer.length) {
+            byteLength = fBuffer.length;
+        }
+        int count = fInputStream.read(fBuffer, 0, byteLength);
+        if(count == -1) return -1;
+        // try and make count be a multiple of the number of bytes we're looking for
+        if(fEncoding >= 4) { // BigEndian
+            // this looks ugly, but it avoids an if at any rate...
+            int numToRead = (4 - (count & 3) & 3);
+            for(int i=0; i<numToRead; i++) {
+                int charRead = fInputStream.read();
+                if(charRead == -1) { // end of input; something likely went wrong!A  Pad buffer with nulls.
+                    for (int j = i;j<numToRead; j++)
+                        fBuffer[count+j] = 0;
+                    break;
+                } else {
+                    fBuffer[count+i] = (byte)charRead;
+                }
+            }
+            count += numToRead;
+        } else {
+            int numToRead = count & 1;
+            if(numToRead != 0) {
+                count++;
+                int charRead = fInputStream.read();
+                if(charRead == -1) { // end of input; something likely went wrong!A  Pad buffer with nulls.
+                    fBuffer[count] = 0;
+                } else {
+                    fBuffer[count] = (byte)charRead;
+                }
+            }
+        }
+
+        // now count is a multiple of the right number of bytes
+        int numChars = count >> ((fEncoding >= 4)?2:1);
+        int curPos = 0;
+        for (int i = 0; i < numChars; i++) {
+            int b0 = fBuffer[curPos++] & 0xff;
+            int b1 = fBuffer[curPos++] & 0xff;
+            if(fEncoding >=4) {
+                int b2 = fBuffer[curPos++] & 0xff;
+                int b3 = fBuffer[curPos++] & 0xff;
+                if (fEncoding == UCS4BE)
+                    ch[offset+i] = (char)((b0<<24)+(b1<<16)+(b2<<8)+b3);
+                else
+                    ch[offset+i] = (char)((b3<<24)+(b2<<16)+(b1<<8)+b0);
+            } else { // UCS-2
+                if (fEncoding == UCS2BE)
+                    ch[offset+i] = (char)((b0<<8)+b1);
+                else
+                    ch[offset+i] = (char)((b1<<8)+b0);
+            }
+        }
+        return numChars;
+    }
+ // read(char[],int,int)
+
+    /**
+     * Skip characters.  This method will block until some characters are
+     * available, an I/O error occurs, or the end of the stream is reached.
+     *
+     * @param  n  The number of characters to skip
+     *
+     * @return    The number of characters actually skipped
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    @Override
+    public long skip(long n) throws IOException {
+        // charWidth will represent the number of bits to move
+        // n leftward to get num of bytes to skip, and then move the result rightward
+        // to get num of chars effectively skipped.
+        // The trick with &'ing, as with elsewhere in this dcode, is
+        // intended to avoid an expensive use of / that might not be optimized
+        // away.
+        int charWidth = (fEncoding >=4)?2:1;
+        long bytesSkipped = fInputStream.skip(n<<charWidth);
+        if((bytesSkipped & (charWidth | 1)) == 0) return bytesSkipped >> charWidth;
+        return (bytesSkipped >> charWidth) + 1;
+    }
+ // skip(long):long
+
+    /**
+     * Tell whether this stream is ready to be read.
+     *
+     * @return True if the next read() is guaranteed not to block for input,
+     * false otherwise.  Note that returning false does not guarantee that the
+     * next read will block.
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+    @Override
+    public boolean ready() throws IOException {
+        return false;
+    }
+ // reset()
+
+    /**
+     * Close the stream.  Once a stream has been closed, further read(),
+     * ready(), mark(), or reset() invocations will throw an IOException.
+     * Closing a previously-closed stream, however, has no effect.
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+     @Override
+    public void close() throws IOException {
+         fInputStream.close();
+     }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------- SSL is not supported in AJP
+
+    @Override
+    public void addSslHostConfig(SSLHostConfig sslHostConfig) {
+        getLog().warn(sm.getString("ajpprotocol.noSSL", sslHostConfig.getHostName()));
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void addUpgradeProtocol(UpgradeProtocol upgradeProtocol) {
+        getLog().warn(sm.getString("ajpprotocol.noUpgrade", upgradeProtocol.getClass().getName()));
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected Processor createUpgradeProcessor(SocketWrapperBase<?> socket,
+            ByteBuffer leftoverInput, UpgradeToken upgradeToken) {
+        throw new IllegalStateException(sm.getString("ajpprotocol.noUpgradeHandler",
+                upgradeToken.getHttpUpgradeHandler().getClass().getName()));
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public UpgradeToken getUpgradeToken() {
+        // Should never reach this code but in case we do...
+        throw new IllegalStateException(
+                sm.getString("ajpprocessor.httpupgrade.notsupported"));
+    }
+-----CSCI578-----
+
+
+
+    public void setHonorCipherOrder(boolean honorCipherOrder) {
+        try {
+            SSLParameters.class.getMethod("setUseCipherSuitesOrder", Boolean.TYPE);
+        } catch (NoSuchMethodException | SecurityException e) {
+            throw new UnsupportedOperationException(sm.getString("endpoint.jsse.cannotHonorServerCipherOrder"), e);
+        }
+        this.honorCipherOrder = honorCipherOrder;
+    }
+-----CSCI578-----
+
+    public void setSSLHonorCipherOrder(boolean honorCipherOrder) {
+        registerDefaultSSLHostConfig();
+        defaultSSLHostConfig.setHonorCipherOrder(honorCipherOrder);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public long end() throws IOException {
+
+        final boolean maxSwallowSizeExceeded = (maxSwallowSize > -1 && remaining > maxSwallowSize);
+        long swallowed = 0;
+
+        // Consume extra bytes.
+        while (remaining > 0) {
+
+            int nread = buffer.doRead(endChunk);
+            if (nread > 0 ) {
+                swallowed += nread;
+                remaining = remaining - nread;
+                if (maxSwallowSizeExceeded && swallowed > maxSwallowSize) {
+                    // Note: We do not fail early so the client has a chance to
+                    // read the response before the connection is closed. See:
+                    // http://httpd.apache.org/docs/2.0/misc/fin_wait_2.html#appendix
+                    throw new IOException(sm.getString("inputFilter.maxSwallow"));
+                }
+            } else { // errors are handled higher up.
+                remaining = 0;
+            }
+        }
+
+        // If too many bytes were read, return the amount.
+        return -remaining;
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public final boolean isFinished() {
+        if (listener == null) {
+            throw new IllegalStateException(
+                    sm.getString("upgrade.sis.isFinished.ise"));
+        }
+        return eof;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public final boolean isReady() {
+        if (listener == null) {
+            throw new IllegalStateException(
+                    sm.getString("upgrade.sis.isReady.ise"));
+        }
+
+        if (eof || closed) {
+            return false;
+        }
+
+        // If we already know the current state, return it.
+        if (ready != null) {
+            return ready.booleanValue();
+        }
+
+        try {
+            ready = Boolean.valueOf(socketWrapper.isReadyForRead());
+        } catch (IOException e) {
+            onError(e);
+        }
+        return ready.booleanValue();
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public final void setReadListener(ReadListener listener) {
+        if (listener == null) {
+            throw new IllegalArgumentException(
+                    sm.getString("upgrade.sis.readListener.null"));
+        }
+        if (this.listener != null) {
+            throw new IllegalArgumentException(
+                    sm.getString("upgrade.sis.readListener.set"));
+        }
+        if (closed) {
+            throw new IllegalStateException(sm.getString("upgrade.sis.read.closed"));
+        }
+
+        // Container is responsible for first call to onDataAvailable().
+        if (ContainerThreadMarker.isContainerThread()) {
+            processor.addDispatch(DispatchType.NON_BLOCKING_READ);
+        } else {
+            socketWrapper.registerReadInterest();
+        }
+
+        this.listener = listener;
+        // Switching to non-blocking. Don't know if data is available.
+        ready = null;
+    }
+-----CSCI578-----
+
+
+
+    private void preReadChecks() {
+        if (listener != null && (ready == null || !ready.booleanValue())) {
+            throw new IllegalStateException(sm.getString("upgrade.sis.read.ise"));
+        }
+        if (closed) {
+            throw new IllegalStateException(sm.getString("upgrade.sis.read.closed"));
+        }
+        // No longer know if data is available
+        ready = null;
+    }
+-----CSCI578-----
+
+
+    // Used to ensure that isReady() and onWritePossible() have a consistent
+    // view of buffer and registered.
+    private final Object registeredLock = new Object();
+
+
+
+    @Override
+    public final boolean isReady() {
+        if (listener == null) {
+            throw new IllegalStateException(
+                    sm.getString("upgrade.sos.canWrite.ise"));
+        }
+        if (closed) {
+            return false;
+        }
+
+        // Make sure isReady() and onWritePossible() have a consistent view of
+        // fireListener when determining if the listener should fire
+        synchronized (registeredLock) {
+            if (flushing) {
+                // Since flushing is true the socket must already be registered
+                // for write and multiple registrations will cause problems.
+                registered = true;
+                return false;
+            } else if (registered){
+                // The socket is already registered for write and multiple
+                // registrations will cause problems.
+                return false;
+            } else {
+                boolean result = socketWrapper.isReadyForWrite();
+                registered = !result;
+                return result;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public final void setWriteListener(WriteListener listener) {
+        if (listener == null) {
+            throw new IllegalArgumentException(
+                    sm.getString("upgrade.sos.writeListener.null"));
+        }
+        if (this.listener != null) {
+            throw new IllegalArgumentException(
+                    sm.getString("upgrade.sos.writeListener.set"));
+        }
+        if (closed) {
+            throw new IllegalStateException(sm.getString("upgrade.sos.write.closed"));
+        }
+        // Container is responsible for first call to onWritePossible().
+        synchronized (registeredLock) {
+            registered = true;
+            // Container is responsible for first call to onDataAvailable().
+            if (ContainerThreadMarker.isContainerThread()) {
+                processor.addDispatch(DispatchType.NON_BLOCKING_WRITE);
+            } else {
+                socketWrapper.registerWriteInterest();
+            }
+        }
+
+        this.listener = listener;
+    }
+-----CSCI578-----
+
+
+
+    protected synchronized void decrementWindowSize(int decrement) {
+        // No need for overflow protection here. Decrement can never be larger
+        // the Integer.MAX_VALUE and once windowSize goes negative no further
+        // decrements are permitted
+        windowSize -= decrement;
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("abstractStream.windowSizeDec", getConnectionId(),
+                    getIdentifier(), Integer.toString(decrement), Long.toString(windowSize)));
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void pause() {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("upgradeHandler.pause.entry", connectionId));
+        }
+
+        if (connectionState.compareAndSet(ConnectionState.CONNECTED, ConnectionState.PAUSING)) {
+            pausedNanoTime = System.nanoTime();
+
+            try {
+                writeGoAwayFrame((1 << 31) - 1, Http2Error.NO_ERROR.getCode(), null);
+            } catch (IOException ioe) {
+                // This is fatal for the connection. Ignore it here. There will be
+                // further attempts at I/O in upgradeDispatch() and it can better
+                // handle the IO errors.
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setting(Setting setting, long value) throws ConnectionException {
+        // Special handling required
+        if (setting == Setting.INITIAL_WINDOW_SIZE) {
+            long oldValue = remoteSettings.getInitialWindowSize();
+            // Do this first in case new value is invalid
+            remoteSettings.set(setting, value);
+            int diff = (int) (value - oldValue);
+            for (Stream stream : streams.values()) {
+                try {
+                    stream.incrementWindowSize(diff);
+                } catch (Http2Exception h2e) {
+                    try {
+                        resetStream(new StreamException(sm.getString(
+                                "upgradeHandler.windowSizeTooBig", connectionId,
+                                stream.getIdentifier()),
+                                h2e.getError(), stream.getIdentifier().intValue()));
+                    } catch (IOException ioe) {
+                        if (log.isDebugEnabled()) {
+                            log.debug(sm.getString("upgradeHandler.socketCloseFailed"), ioe);
+                        }
+                    }
+                }
+            }
+        } else {
+            remoteSettings.set(setting, value);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void goaway(int lastStreamId, long errorCode, String debugData) {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("upgradeHandler.goaway.debug", connectionId,
+                    Integer.toString(lastStreamId), Long.toHexString(errorCode), debugData));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public UpgradeToken getUpgradeToken() {
+        // Should never happen
+        throw new IllegalStateException(sm.getString("streamProcessor.httpupgrade.notsupported"));
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public ByteBuffer getLeftoverInput() {
+        // Should never happen
+        throw new IllegalStateException(sm.getString("streamProcessor.httpupgrade.notsupported"));
+    }
+-----CSCI578-----
+
+
+
+    // ---------------------------------------- NotificationBroadcaster Methods
+
+
+    /**
+     * Add a notification event listener to this MBean.
+     *
+     * @param listener Listener that will receive event notifications
+     * @param filter Filter object used to filter event notifications
+     *  actually delivered, or <code>null</code> for no filtering
+     * @param handback Handback object to be sent along with event
+     *  notifications
+     *
+     * @exception IllegalArgumentException if the listener parameter is null
+     */
+    @Override
+    public void addNotificationListener(NotificationListener listener,
+                                        NotificationFilter filter,
+                                        Object handback)
+        throws IllegalArgumentException {
+
+        if (listener == null)
+            throw new IllegalArgumentException("Listener is null");
+
+        if( log.isDebugEnabled() ) log.debug("addNotificationListener " + listener);
+
+        if (generalBroadcaster == null)
+            generalBroadcaster = new BaseNotificationBroadcaster();
+        generalBroadcaster.addNotificationListener
+            (listener, filter, handback);
+
+        // We'll send the attribute change notifications to all listeners ( who care )
+        // The normal filtering can be used.
+        // The problem is that there is no other way to add attribute change listeners
+        // to a model mbean ( AFAIK ). I suppose the spec should be fixed.
+        if (attributeBroadcaster == null)
+            attributeBroadcaster = new BaseNotificationBroadcaster();
+
+        if( log.isDebugEnabled() )
+            log.debug("addAttributeNotificationListener " + listener);
+
+        attributeBroadcaster.addNotificationListener
+                (listener, filter, handback);
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- Registration  --------------------
+    // XXX We can add some method patterns here- like setName() and
+    // setDomain() for code that doesn't implement the Registration
+
+    @Override
+    public ObjectName preRegister(MBeanServer server,
+                                  ObjectName name)
+            throws Exception
+    {
+        if( log.isDebugEnabled())
+            log.debug("preRegister " + resource + " " + name );
+        oname=name;
+        if( resource instanceof MBeanRegistration ) {
+            oname = ((MBeanRegistration)resource).preRegister(server, name );
+        }
+        return oname;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public void addCertificate(SSLHostConfigCertificate certificate) {
+        // Need to make sure that if there is more than one certificate, none of
+        // them have a type of undefined.
+        if (certificates.size() == 0) {
+            certificates.add(certificate);
+            return;
+        }
+
+        if (certificates.size() == 1 &&
+                certificates.iterator().next().getType() == SSLHostConfigCertificate.Type.UNDEFINED ||
+                        certificate.getType() == SSLHostConfigCertificate.Type.UNDEFINED) {
+            // Invalid config
+            throw new IllegalArgumentException(sm.getString("sslHostConfig.certificate.notype"));
+        }
+
+        certificates.add(certificate);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public java.security.cert.X509Certificate[] getPeerCertificateChain() throws IOException {
+        // Look up the current SSLSession
+        if (session == null)
+            return null;
+
+        Certificate [] certs=null;
+        try {
+            certs = session.getPeerCertificates();
+        } catch( Throwable t ) {
+            log.debug(sm.getString("jsseSupport.clientCertError"), t);
+            return null;
+        }
+        if( certs==null ) return null;
+
+        java.security.cert.X509Certificate [] x509Certs =
+            new java.security.cert.X509Certificate[certs.length];
+        for(int i=0; i < certs.length; i++) {
+            if (certs[i] instanceof java.security.cert.X509Certificate ) {
+                // always currently true with the JSSE 1.1.x
+                x509Certs[i] = (java.security.cert.X509Certificate) certs[i];
+            } else {
+                try {
+                    byte [] buffer = certs[i].getEncoded();
+                    CertificateFactory cf =
+                        CertificateFactory.getInstance("X.509");
+                    ByteArrayInputStream stream =
+                        new ByteArrayInputStream(buffer);
+                    x509Certs[i] = (java.security.cert.X509Certificate)
+                            cf.generateCertificate(stream);
+                } catch(Exception ex) {
+                    log.info(sm.getString(
+                            "jseeSupport.certTranslationError", certs[i]), ex);
+                    return null;
+                }
+            }
+            if(log.isTraceEnabled())
+                log.trace("Cert #" + i + " = " + x509Certs[i]);
+        }
+        if(x509Certs.length < 1)
+            return null;
+        return x509Certs;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public boolean validateObject(PooledObject<PoolableConnection> p) {
+        try {
+            validateLifetime(p);
+
+            validateConnection(p.getObject());
+            return true;
+        } catch (Exception e) {
+            if (log.isDebugEnabled()) {
+                log.debug(Utils.getMessage(
+                        "poolableConnectionFactory.validateObject.fail"), e);
+            }
+            return false;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    public void setPublicId(String publicId) {
+        // Update major and minor version
+        if (publicId == null) {
+            return;
+        }
+        switch (publicId) {
+            case XmlIdentifiers.WEB_22_PUBLIC:
+                majorVersion = 2;
+                minorVersion = 2;
+                this.publicId = publicId;
+                break;
+            case XmlIdentifiers.WEB_23_PUBLIC:
+                majorVersion = 2;
+                minorVersion = 3;
+                this.publicId = publicId;
+                break;
+            default:
+                log.warn(sm.getString("webXml.unrecognisedPublicId", publicId));
+                break;
+        }
+    }
+-----CSCI578-----
+
+    public void addTaglib(String uri, String location) {
+        if (taglibs.containsKey(uri)) {
+            // Taglib URIs must be unique within a web(-fragment).xml
+            throw new IllegalArgumentException(
+                    sm.getString("webXml.duplicateTaglibUri", uri));
+        }
+        taglibs.put(uri, location);
+    }
+-----CSCI578-----
+
+    public void addEnvEntry(ContextEnvironment envEntry) {
+        if (envEntries.containsKey(envEntry.getName())) {
+            // env-entry names must be unique within a web(-fragment).xml
+            throw new IllegalArgumentException(
+                    sm.getString("webXml.duplicateEnvEntry",
+                            envEntry.getName()));
+        }
+        envEntries.put(envEntry.getName(),envEntry);
+    }
+-----CSCI578-----
+
+    public void addResourceRef(ContextResource resourceRef) {
+        if (resourceRefs.containsKey(resourceRef.getName())) {
+            // resource-ref names must be unique within a web(-fragment).xml
+            throw new IllegalArgumentException(
+                    sm.getString("webXml.duplicateResourceRef",
+                            resourceRef.getName()));
+        }
+        resourceRefs.put(resourceRef.getName(), resourceRef);
+    }
+-----CSCI578-----
+
+    public void addResourceEnvRef(ContextResourceEnvRef resourceEnvRef) {
+        if (resourceEnvRefs.containsKey(resourceEnvRef.getName())) {
+            // resource-env-ref names must be unique within a web(-fragment).xml
+            throw new IllegalArgumentException(
+                    sm.getString("webXml.duplicateResourceEnvRef",
+                            resourceEnvRef.getName()));
+        }
+        resourceEnvRefs.put(resourceEnvRef.getName(), resourceEnvRef);
+    }
+-----CSCI578-----
+
+    public void addMessageDestinationRef(
+            MessageDestinationRef messageDestinationRef) {
+        if (messageDestinationRefs.containsKey(
+                messageDestinationRef.getName())) {
+            // message-destination-ref names must be unique within a
+            // web(-fragment).xml
+            throw new IllegalArgumentException(sm.getString(
+                    "webXml.duplicateMessageDestinationRef",
+                    messageDestinationRef.getName()));
+        }
+        messageDestinationRefs.put(messageDestinationRef.getName(),
+                messageDestinationRef);
+    }
+-----CSCI578-----
+
+    public void addMessageDestination(
+            MessageDestination messageDestination) {
+        if (messageDestinations.containsKey(
+                messageDestination.getName())) {
+            // message-destination names must be unique within a
+            // web(-fragment).xml
+            throw new IllegalArgumentException(
+                    sm.getString("webXml.duplicateMessageDestination",
+                            messageDestination.getName()));
+        }
+        messageDestinations.put(messageDestination.getName(),
+                messageDestination);
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the start of this element.
+     *
+     * @param namespace the namespace URI of the matching element, or an
+     *   empty string if the parser is not namespace aware or the element has
+     *   no namespace
+     * @param name the local name if the parser is namespace aware, or just
+     *   the element name otherwise
+     * @param attributes The attribute list for this element
+     */
+    @Override
+    public void begin(String namespace, String name, Attributes attributes)
+            throws Exception {
+
+        Object param = null;
+
+        if (attributeName != null) {
+
+            param = attributes.getValue(attributeName);
+
+        } else if(fromStack) {
+
+            param = digester.peek(stackIndex);
+
+            if (digester.log.isDebugEnabled()) {
+
+                StringBuilder sb = new StringBuilder("[CallParamRule]{");
+                sb.append(digester.match);
+                sb.append("} Save from stack; from stack?").append(fromStack);
+                sb.append("; object=").append(param);
+                digester.log.debug(sb.toString());
+            }
+        }
+
+        // Have to save the param object to the param stack frame here.
+        // Can't wait until end(). Otherwise, the object will be lost.
+        // We can't save the object as instance variables, as
+        // the instance variables will be overwritten
+        // if this CallParamRule is reused in subsequent nesting.
+
+        if(param != null) {
+            Object parameters[] = (Object[]) digester.peekParams();
+            parameters[paramIndex] = param;
+        }
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------- ContentHandler Methods
+
+
+    /**
+     * Process notification of character data received from the body of
+     * an XML element.
+     *
+     * @param buffer The characters from the XML document
+     * @param start Starting offset into the buffer
+     * @param length Number of characters from the buffer
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    @Override
+    public void characters(char buffer[], int start, int length)
+            throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("characters(" + new String(buffer, start, length) + ")");
+        }
+
+        bodyText.append(buffer, start, length);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification that a namespace prefix is going out of scope.
+     *
+     * @param prefix Prefix that is going out of scope
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    @Override
+    public void endPrefixMapping(String prefix) throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("endPrefixMapping(" + prefix + ")");
+        }
+
+        // Deregister this prefix mapping
+        ArrayStack<String> stack = namespaces.get(prefix);
+        if (stack == null) {
+            return;
+        }
+        try {
+            stack.pop();
+            if (stack.empty())
+                namespaces.remove(prefix);
+        } catch (EmptyStackException e) {
+            throw createSAXException("endPrefixMapping popped too many times");
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification of ignorable whitespace received from the body of
+     * an XML element.
+     *
+     * @param buffer The characters from the XML document
+     * @param start Starting offset into the buffer
+     * @param len Number of characters from the buffer
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    @Override
+    public void ignorableWhitespace(char buffer[], int start, int len)
+            throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("ignorableWhitespace(" +
+                    new String(buffer, start, len) + ")");
+        }
+
+        // No processing required
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification of a processing instruction that was encountered.
+     *
+     * @param target The processing instruction target
+     * @param data The processing instruction data (if any)
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    @Override
+    public void processingInstruction(String target, String data)
+            throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("processingInstruction('" + target + "','" + data + "')");
+        }
+
+        // No processing is required
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Sets the document locator associated with our parser.
+     *
+     * @param locator The new locator
+     */
+    @Override
+    public void setDocumentLocator(Locator locator) {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("setDocumentLocator(" + locator + ")");
+        }
+
+        this.locator = locator;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification of a skipped entity.
+     *
+     * @param name Name of the skipped entity
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    @Override
+    public void skippedEntity(String name) throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("skippedEntity(" + name + ")");
+        }
+
+        // No processing required
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification of the beginning of the document being reached.
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    @Override
+    public void startDocument() throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("startDocument()");
+        }
+
+        // ensure that the digester is properly configured, as
+        // the digester could be used as a SAX ContentHandler
+        // rather than via the parse() methods.
+        configure();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process notification that a namespace prefix is coming in to scope.
+     *
+     * @param prefix Prefix that is being declared
+     * @param namespaceURI Corresponding namespace URI being mapped to
+     *
+     * @exception SAXException if a parsing error is to be reported
+     */
+    @Override
+    public void startPrefixMapping(String prefix, String namespaceURI)
+            throws SAXException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("startPrefixMapping(" + prefix + "," + namespaceURI + ")");
+        }
+
+        // Register this prefix mapping
+        ArrayStack<String> stack = namespaces.get(prefix);
+        if (stack == null) {
+            stack = new ArrayStack<>();
+            namespaces.put(prefix, stack);
+        }
+        stack.push(namespaceURI);
+
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- DTDHandler Methods
+
+
+    /**
+     * Receive notification of a notation declaration event.
+     *
+     * @param name The notation name
+     * @param publicId The public identifier (if any)
+     * @param systemId The system identifier (if any)
+     */
+    @Override
+    public void notationDecl(String name, String publicId, String systemId) {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("notationDecl(" + name + "," + publicId + "," +
+                    systemId + ")");
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Receive notification of an unparsed entity declaration event.
+     *
+     * @param name The unparsed entity name
+     * @param publicId The public identifier (if any)
+     * @param systemId The system identifier (if any)
+     * @param notation The name of the associated notation
+     */
+    @Override
+    public void unparsedEntityDecl(String name, String publicId,
+                                   String systemId, String notation) {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("unparsedEntityDecl(" + name + "," + publicId + "," +
+                    systemId + "," + notation + ")");
+        }
+
+    }
+-----CSCI578-----
+
+
+    @Override
+    public InputSource resolveEntity(String name, String publicId,
+            String baseURI, String systemId) throws SAXException, IOException {
+
+        if (saxLog.isDebugEnabled()) {
+            saxLog.debug("resolveEntity('" + publicId + "', '" + systemId +
+                    "', '" + baseURI + "')");
+        }
+
+        // Has this system identifier been registered?
+        String entityURL = null;
+        if (publicId != null) {
+            entityURL = entityValidator.get(publicId);
+        }
+
+        if (entityURL == null) {
+            if (systemId == null) {
+                // cannot resolve
+                if (log.isDebugEnabled()) {
+                    log.debug(" Cannot resolve entity: '" + publicId + "'");
+                }
+                return (null);
+
+            } else {
+                // try to resolve using system ID
+                if (log.isDebugEnabled()) {
+                    log.debug(" Trying to resolve using system ID '" +
+                            systemId + "'");
+                }
+                entityURL = systemId;
+                // resolve systemId against baseURI if it is not absolute
+                if (baseURI != null) {
+                    try {
+                        URI uri = new URI(systemId);
+                        if (!uri.isAbsolute()) {
+                            entityURL = new URI(baseURI).resolve(uri).toString();
+                        }
+                    } catch (URISyntaxException e) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Invalid URI '" + baseURI + "' or '" +
+                                    systemId + "'");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Return an input source to our alternative URL
+        if (log.isDebugEnabled()) {
+            log.debug(" Resolving to alternate DTD '" + entityURL + "'");
+        }
+
+        try {
+            return (new InputSource(entityURL));
+        } catch (Exception e) {
+            throw createSAXException(e);
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process the beginning of this element.
+     *
+     * @param namespace the namespace URI of the matching element, or an
+     *   empty string if the parser is not namespace aware or the element has
+     *   no namespace
+     * @param name the local name if the parser is namespace aware, or just
+     *   the element name otherwise
+     * @param attributes The attribute list for this element
+     */
+    @Override
+    public void begin(String namespace, String name, Attributes attributes)
+            throws Exception {
+
+        // Identify the name of the class to instantiate
+        String realClassName = className;
+        if (attributeName != null) {
+            String value = attributes.getValue(attributeName);
+            if (value != null) {
+                realClassName = value;
+            }
+        }
+        if (digester.log.isDebugEnabled()) {
+            digester.log.debug("[ObjectCreateRule]{" + digester.match +
+                    "}New " + realClassName);
+        }
+
+        if (realClassName == null) {
+            throw new NullPointerException("No class name specified for " +
+                    namespace + " " + name);
+        }
+
+        // Instantiate the new object and push it on the context stack
+        Class<?> clazz = digester.getClassLoader().loadClass(realClassName);
+        Object instance = clazz.newInstance();
+        digester.push(instance);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Process the end of this element.
+     *
+     * @param namespace the namespace URI of the matching element, or an
+     *   empty string if the parser is not namespace aware or the element has
+     *   no namespace
+     * @param name the local name if the parser is namespace aware, or just
+     *   the element name otherwise
+     */
+    @Override
+    public void end(String namespace, String name) throws Exception {
+
+        Object top = digester.pop();
+        if (digester.log.isDebugEnabled()) {
+            digester.log.debug("[ObjectCreateRule]{" + digester.match +
+                    "} Pop " + top.getClass().getName());
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Process the end of this element.
+     *
+     * @param namespace the namespace URI of the matching element, or an
+     *   empty string if the parser is not namespace aware or the element has
+     *   no namespace
+     * @param name the local name if the parser is namespace aware, or just
+     *   the element name otherwise
+     */
+    @Override
+    public void end(String namespace, String name) throws Exception {
+
+        // Identify the objects to be used
+        Object child = digester.peek(0);
+        Object parent = digester.peek(1);
+        if (digester.log.isDebugEnabled()) {
+            if (parent == null) {
+                digester.log.debug("[SetNextRule]{" + digester.match +
+                        "} Call [NULL PARENT]." +
+                        methodName + "(" + child + ")");
+            } else {
+                digester.log.debug("[SetNextRule]{" + digester.match +
+                        "} Call " + parent.getClass().getName() + "." +
+                        methodName + "(" + child + ")");
+            }
+        }
+
+        // Call the specified method
+        IntrospectionUtils.callMethod1(parent, methodName,
+                child, paramType, digester.getClassLoader());
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public V put(String key, V value) {
+        Key caseInsensitiveKey = Key.getInstance(key);
+        if (caseInsensitiveKey == null) {
+            throw new NullPointerException(sm.getString("caseInsensitiveKeyMap.nullKey"));
+        }
+        return map.put(caseInsensitiveKey, value);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void close() {
+        try {
+            socketChannel.close();
+        } catch (IOException e) {
+            log.info(sm.getString("asyncChannelWrapperSecure.closeFail"));
+        }
+        executor.shutdownNow();
+    }
+-----CSCI578-----
+
+
+
+    protected final void handlePojoMethodException(Throwable t) {
+        t = ExceptionUtils.unwrapInvocationTargetException(t);
+        ExceptionUtils.handleThrowable(t);
+        if (t instanceof RuntimeException) {
+            throw (RuntimeException) t;
+        } else {
+            throw new RuntimeException(t.getMessage(), t);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected Object decode(ByteBuffer message) throws DecodeException {
+        for (Decoder decoder : decoders) {
+            if (decoder instanceof Binary) {
+                if (((Binary<?>) decoder).willDecode(message)) {
+                    return ((Binary<?>) decoder).decode(message);
+                }
+            } else {
+                byte[] array = new byte[message.limit() - message.position()];
+                message.get(array);
+                ByteArrayInputStream bais = new ByteArrayInputStream(array);
+                try {
+                    return ((BinaryStream<?>) decoder).decode(bais);
+                } catch (IOException ioe) {
+                    throw new DecodeException(message, sm.getString(
+                            "pojoMessageHandlerWhole.decodeIoFail"), ioe);
+                }
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void destroy() {
+        if (connection != null) {
+            try {
+                connection.close();
+            } catch (Exception e) {
+                log.error(sm.getString("wsHttpUpgradeHandler.destroyFailed"), e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the real id or TagClass
+     *
+     * @return Returns the id.
+     */
+    public String getId() {
+        if (id != null)
+            return id;
+        else
+            return getTagClass();
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the tagClass.
+     */
+    public String getTagClass() {
+        return tagClass;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Domain for this cluster
+     * @return byte[]
+     */
+    public byte[] getDomain();
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Container with which this Valve is associated, if any.
+     *
+     * @param container The new associated container
+     */
+    @Override
+    public void setContainer(Container container) {
+        this.container = container;
+    }
+-----CSCI578-----
+
+
+    public String[] getRoles() {
+        return this.roles;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    @Override
+    public String getName() { return name; }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the class loader to be used for instantiating application objects
+     * when required.  This is determined based upon the following rules:
+     * <ul>
+     * <li>The class loader set by <code>setClassLoader()</code>, if any</li>
+     * <li>The thread context class loader, if it exists and the
+     *     <code>useContextClassLoader</code> property is set to true</li>
+     * <li>The class loader used to load the Digester class itself.
+     * </ul>
+     * @return the classloader
+     */
+    public ClassLoader getClassLoader() {
+
+        if (this.classLoader != null) {
+            return (this.classLoader);
+        }
+        if (this.useContextClassLoader) {
+            ClassLoader classLoader =
+                    Thread.currentThread().getContextClassLoader();
+            if (classLoader != null) {
+                return (classLoader);
+            }
+        }
+        return (this.getClass().getClassLoader());
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Return the IP address (in numeric address string format) in
+     * an APR socket address.  APR will allocate storage for the IP address
+     * string from the pool of the apr_sockaddr_t.
+     * @param sa The socket address to reference.
+     * @return The IP address.
+     */
+    public static native String getip(long sa);
+-----CSCI578-----
+
+    /**
+     * Look up the host name from an apr_sockaddr_t.
+     * @param sa The apr_sockaddr_t.
+     * @param flags Special processing flags.
+     * @return The hostname.
+     */
+    public static native String getnameinfo(long sa, int flags);
+-----CSCI578-----
+
+
+    public AsynchronousSocketChannel getIOChannel() {
+        return sc;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    public void createAbsoluteOrdering() {
+        if (absoluteOrdering == null) {
+            absoluteOrdering = new LinkedHashSet<>();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Unregister a description.
+     *
+     * @param desc The description
+     * @return the description, or <code>null</code> if it was not registered
+     */
+    public StoreDescription unregisterDescription(StoreDescription desc) {
+        String key = desc.getId();
+        if (key == null || "".equals(key))
+            key = desc.getTagClass();
+        return descriptors.remove(key);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Cast to a StandardContext right away, as it will be needed later.
+     *
+     * @see org.apache.catalina.Contained#setContainer(org.apache.catalina.Container)
+     */
+    @Override
+    public void setContainer(Container container) {
+        super.setContainer(container);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String toString() {
+        return getName();
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    @Override
+    public void setContainer(Container container) {
+        super.setContainer(container);
+        if (container instanceof Engine || container instanceof Host) {
+            clBindRequired = true;
+        } else {
+            clBindRequired = false;
+        }
+    }
+-----CSCI578-----
+
+    public void addAbsoluteOrdering(String fragmentName) {
+        createAbsoluteOrdering();
+        absoluteOrdering.add(fragmentName);
+    }
+-----CSCI578-----
+
+    public void addAbsoluteOrderingOthers() {
+        createAbsoluteOrdering();
+        absoluteOrdering.add(ORDER_OTHERS);
+    }

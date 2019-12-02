@@ -1,0 +1,52 @@
+4
+-----CSCI578-----
+
+
+    public String getDefaultWebXml() {
+        return defaultWebXml;
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+    /**
+     * Obtain the location of the default deployment descriptor.
+     *
+     * @return The path to the default web.xml. If not absolute, it is relative
+     *         to CATALINA_BASE.
+     */
+    public String getDefaultWebXml() {
+        if (defaultWebXml == null) {
+            defaultWebXml = Constants.DefaultWebXml;
+        }
+        return defaultWebXml;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Identify the default web.xml to be used and obtain an input source for
+     * it.
+     * @return an input source to the default web.xml
+     */
+    protected InputSource getGlobalWebXmlSource() {
+        // Is a default web.xml specified for the Context?
+        if (defaultWebXml == null && context instanceof StandardContext) {
+            defaultWebXml = ((StandardContext) context).getDefaultWebXml();
+        }
+        // Set the default if we don't have any overrides
+        if (defaultWebXml == null) {
+            getDefaultWebXml();
+        }
+
+        // Is it explicitly suppressed, e.g. in embedded environment?
+        if (Constants.NoDefaultWebXml.equals(defaultWebXml)) {
+            return null;
+        }
+        return getWebXmlSource(defaultWebXml,
+                context.getCatalinaBase().getPath());
+    }
+-----CSCI578-----

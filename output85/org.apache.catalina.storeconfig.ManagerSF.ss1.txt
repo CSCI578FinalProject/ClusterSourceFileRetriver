@@ -1,0 +1,55 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * Store the only the Manager elements
+     *
+     * @see NamingResourcesSF#storeChildren(PrintWriter, int, Object, StoreDescription)
+     */
+    @Override
+    public void store(PrintWriter aWriter, int indent, Object aElement)
+            throws Exception {
+        StoreDescription elementDesc = getRegistry().findDescription(
+                aElement.getClass());
+        if (elementDesc != null) {
+            if (aElement instanceof StandardManager) {
+                StandardManager manager = (StandardManager) aElement;
+                if (!isDefaultManager(manager)) {
+                    if (log.isDebugEnabled())
+                        log.debug(sm.getString("factory.storeTag", elementDesc
+                                .getTag(), aElement));
+                    super.store(aWriter, indent, aElement);
+                }
+            } else {
+                super.store(aWriter, indent, aElement);
+            }
+        } else {
+            if (log.isWarnEnabled())
+                log.warn(sm.getString("factory.storeNoDescriptor", aElement
+                        .getClass()));
+        }
+    }
+
+
+    @Override
+    public void storeChildren(PrintWriter aWriter, int indent, Object aManager,
+            StoreDescription parentDesc) throws Exception {
+        if (aManager instanceof Manager) {
+            Manager manager = (Manager) aManager;
+            // Store nested <SessionIdGenerator> element;
+            SessionIdGenerator sessionIdGenerator = manager.getSessionIdGenerator();
+            if (sessionIdGenerator != null) {
+                storeElement(aWriter, indent, sessionIdGenerator);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the session id generator
+     */
+    public SessionIdGenerator getSessionIdGenerator();
+-----CSCI578-----

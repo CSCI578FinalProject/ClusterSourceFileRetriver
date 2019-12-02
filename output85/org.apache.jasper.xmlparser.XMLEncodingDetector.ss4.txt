@@ -1,0 +1,599 @@
+13
+-----CSCI578-----
+
+
+    /**
+     * Returns whether the given character is a low surrogate
+     *
+     * @param c The character to check.
+     * @return <code>true</code> if the character is a surrogate
+     */
+    public static boolean isLowSurrogate(int c) {
+        return (0xDC00 <= c && c <= 0xDFFF);
+    }
+-----CSCI578-----
+-----CSCI578-----
+ // <clinit>()
+
+    //
+    // Public static methods
+    //
+
+    /**
+     * Returns the supplemental character corresponding to the given
+     * surrogates.
+     *
+     * @param h The high surrogate.
+     * @param l The low surrogate.
+     * @return the supplemental character
+     */
+    public static int supplemental(char h, char l) {
+        return (h - 0xD800) * 0x400 + (l - 0xDC00) + 0x10000;
+    }
+-----CSCI578-----
+
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLEntityManager.EntityScanner.skipSpaces
+    /**
+     * Skips space characters appearing immediately on the input.
+     * <p>
+     * <strong>Note:</strong> The characters are consumed only if they are
+     * space characters.
+     *
+     * @return <code>true</code> if at least one space character was skipped.
+     *
+     * @throws IOException  Thrown if i/o error occurs.
+     * @throws EOFException Thrown on end of file.
+     *
+     * @see XMLChar#isSpace
+     */
+    public boolean skipSpaces() throws IOException {
+
+        // load more characters, if needed
+        if (fCurrentEntity.position == fCurrentEntity.count) {
+            load(0, true);
+        }
+
+        // skip spaces
+        int c = fCurrentEntity.ch[fCurrentEntity.position];
+        if (XMLChar.isSpace(c)) {
+            boolean external = fCurrentEntity.isExternal();
+            do {
+                boolean entityChanged = false;
+                // handle newlines
+                if (c == '\n' || (external && c == '\r')) {
+                    if (fCurrentEntity.position == fCurrentEntity.count - 1) {
+                        fCurrentEntity.ch[0] = (char)c;
+                        entityChanged = load(1, true);
+                        if (!entityChanged)
+                                // the load change the position to be 1,
+                                // need to restore it when entity not changed
+                            fCurrentEntity.position = 0;
+                    }
+                    if (c == '\r' && external) {
+                        // REVISIT: Does this need to be updated to fix the
+                        //          #x0D ^#x0A newline normalization problem? -Ac
+                        if (fCurrentEntity.ch[++fCurrentEntity.position] != '\n') {
+                            fCurrentEntity.position--;
+                        }
+                    }
+                    /*** NEWLINE NORMALIZATION ***
+                         else {
+                         if (fCurrentEntity.ch[fCurrentEntity.position + 1] == '\r'
+                         && external) {
+                         fCurrentEntity.position++;
+                         }
+                         }
+                         /***/
+                }
+                // load more characters, if needed
+                if (!entityChanged)
+                    fCurrentEntity.position++;
+                if (fCurrentEntity.position == fCurrentEntity.count) {
+                    load(0, true);
+                }
+            } while (XMLChar.isSpace(c = fCurrentEntity.ch[fCurrentEntity.position]));
+            return true;
+        }
+
+        // no spaces were found
+        return false;
+
+    }
+-----CSCI578-----
+ // isContent(int):boolean
+
+    /**
+     * Returns true if the specified character is a space character
+     * as defined by production [3] in the XML 1.0 specification.
+     *
+     * @param c The character to check.
+     * @return <code>true</code> if the character is space
+     */
+    public static boolean isSpace(int c) {
+        return c <= 0x20 && (CHARS[c] & MASK_SPACE) != 0;
+    }
+ // isSpace(int):boolean
+
+    /**
+     * Returns true if the specified character is a valid name start
+     * character as defined by production [5] in the XML 1.0
+     * specification.
+     *
+     * @param c The character to check.
+     * @return <code>true</code> if the character is a valid start name
+     */
+    public static boolean isNameStart(int c) {
+        return c < 0x10000 && (CHARS[c] & MASK_NAME_START) != 0;
+    }
+-----CSCI578-----
+ // equals(String):boolean
+
+    //
+    // Object methods
+    //
+
+    @Override
+    public String toString() {
+        return length > 0 ? new String(ch, offset, length) : "";
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLDocumentFragmentScannerImpl.scanXMLDeclOrTextDecl
+    /**
+     * Scans an XML or text declaration.
+     * <p>
+     * <pre>
+     * [23] XMLDecl ::= '&lt;?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'
+     * [24] VersionInfo ::= S 'version' Eq (' VersionNum ' | " VersionNum ")
+     * [80] EncodingDecl ::= S 'encoding' Eq ('"' EncName '"' |  "'" EncName "'" )
+     * [81] EncName ::= [A-Za-z] ([A-Za-z0-9._] | '-')*
+     * [32] SDDecl ::= S 'standalone' Eq (("'" ('yes' | 'no') "'")
+     *                 | ('"' ('yes' | 'no') '"'))
+     *
+     * [77] TextDecl ::= '&lt;?xml' VersionInfo? EncodingDecl S? '?>'
+     * </pre>
+     *
+     * @param scanningTextDecl True if a text declaration is to
+     *                         be scanned instead of an XML
+     *                         declaration.
+     * @throws IOException Error reading data
+     * @throws JasperException Other error
+     */
+    private void scanXMLDeclOrTextDecl(boolean scanningTextDecl)
+        throws IOException, JasperException {
+
+        // scan decl
+        scanXMLDeclOrTextDecl(scanningTextDecl, fStrings);
+
+        // pseudo-attribute values
+        String encodingPseudoAttr = fStrings[1];
+
+        // set encoding on reader
+        if (encodingPseudoAttr != null) {
+            isEncodingSetInProlog = true;
+            encoding = encodingPseudoAttr;
+        }
+    }
+
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLScanner.scanXMLDeclOrTextDecl
+    /**
+     * Scans an XML or text declaration.
+     * <p>
+     * <pre>
+     * [23] XMLDecl ::= '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'
+     * [24] VersionInfo ::= S 'version' Eq (' VersionNum ' | " VersionNum ")
+     * [80] EncodingDecl ::= S 'encoding' Eq ('"' EncName '"' |  "'" EncName "'" )
+     * [81] EncName ::= [A-Za-z] ([A-Za-z0-9._] | '-')*
+     * [32] SDDecl ::= S 'standalone' Eq (("'" ('yes' | 'no') "'")
+     *                 | ('"' ('yes' | 'no') '"'))
+     *
+     * [77] TextDecl ::= '<?xml' VersionInfo? EncodingDecl S? '?>'
+     * </pre>
+     *
+     * <strong>Note:</strong> This method uses fString, anything in it
+     * at the time of calling is lost.
+     * @param scanningTextDecl True if a text declaration is to
+     *                         be scanned instead of an XML
+     *                         declaration.
+     * @param pseudoAttributeValues An array of size 3 to return the version,
+     *                         encoding and standalone pseudo attribute values
+     *                         (in that order).
+     *
+     * @throws IOException Error reading data
+     * @throws JasperException Other error
+     */
+    private void scanXMLDeclOrTextDecl(boolean scanningTextDecl,
+                                       String[] pseudoAttributeValues)
+                throws IOException, JasperException {
+
+        // pseudo-attribute values
+        String version = null;
+        String encoding = null;
+        String standalone = null;
+
+        // scan pseudo-attributes
+        final int STATE_VERSION = 0;
+        final int STATE_ENCODING = 1;
+        final int STATE_STANDALONE = 2;
+        final int STATE_DONE = 3;
+        int state = STATE_VERSION;
+
+        boolean dataFoundForTarget = false;
+        boolean sawSpace = skipSpaces();
+        while (peekChar() != '?') {
+            dataFoundForTarget = true;
+            String name = scanPseudoAttribute(scanningTextDecl, fString);
+            switch (state) {
+                case STATE_VERSION: {
+                    if (name == fVersionSymbol) {
+                        if (!sawSpace) {
+                            reportFatalError(scanningTextDecl
+                                       ? "jsp.error.xml.spaceRequiredBeforeVersionInTextDecl"
+                                       : "jsp.error.xml.spaceRequiredBeforeVersionInXMLDecl",
+                                             null);
+                        }
+                        version = fString.toString();
+                        state = STATE_ENCODING;
+                        if (!version.equals("1.0")) {
+                            // REVISIT: XML REC says we should throw an error
+                            // in such cases.
+                            // some may object the throwing of fatalError.
+                            err.jspError("jsp.error.xml.versionNotSupported",
+                                         version);
+                        }
+                    } else if (name == fEncodingSymbol) {
+                        if (!scanningTextDecl) {
+                            err.jspError("jsp.error.xml.versionInfoRequired");
+                        }
+                        if (!sawSpace) {
+                            reportFatalError(scanningTextDecl
+                                      ? "jsp.error.xml.spaceRequiredBeforeEncodingInTextDecl"
+                                      : "jsp.error.xml.spaceRequiredBeforeEncodingInXMLDecl",
+                                             null);
+                        }
+                        encoding = fString.toString();
+                        state = scanningTextDecl ? STATE_DONE : STATE_STANDALONE;
+                    } else {
+                        if (scanningTextDecl) {
+                            err.jspError("jsp.error.xml.encodingDeclRequired");
+                        }
+                        else {
+                            err.jspError("jsp.error.xml.versionInfoRequired");
+                        }
+                    }
+                    break;
+                }
+                case STATE_ENCODING: {
+                    if (name == fEncodingSymbol) {
+                        if (!sawSpace) {
+                            reportFatalError(scanningTextDecl
+                                      ? "jsp.error.xml.spaceRequiredBeforeEncodingInTextDecl"
+                                      : "jsp.error.xml.spaceRequiredBeforeEncodingInXMLDecl",
+                                             null);
+                        }
+                        encoding = fString.toString();
+                        state = scanningTextDecl ? STATE_DONE : STATE_STANDALONE;
+                        // TODO: check encoding name; set encoding on
+                        //       entity scanner
+                    } else if (!scanningTextDecl && name == fStandaloneSymbol) {
+                        if (!sawSpace) {
+                            err.jspError("jsp.error.xml.spaceRequiredBeforeStandalone");
+                        }
+                        standalone = fString.toString();
+                        state = STATE_DONE;
+                        if (!standalone.equals("yes") && !standalone.equals("no")) {
+                            err.jspError("jsp.error.xml.sdDeclInvalid");
+                        }
+                    } else {
+                        err.jspError("jsp.error.xml.encodingDeclRequired");
+                    }
+                    break;
+                }
+                case STATE_STANDALONE: {
+                    if (name == fStandaloneSymbol) {
+                        if (!sawSpace) {
+                            err.jspError("jsp.error.xml.spaceRequiredBeforeStandalone");
+                        }
+                        standalone = fString.toString();
+                        state = STATE_DONE;
+                        if (!standalone.equals("yes") && !standalone.equals("no")) {
+                            err.jspError("jsp.error.xml.sdDeclInvalid");
+                        }
+                    } else {
+                        err.jspError("jsp.error.xml.encodingDeclRequired");
+                    }
+                    break;
+                }
+                default: {
+                    err.jspError("jsp.error.xml.noMorePseudoAttributes");
+                }
+            }
+            sawSpace = skipSpaces();
+        }
+        // REVISIT: should we remove this error reporting?
+        if (scanningTextDecl && state != STATE_DONE) {
+            err.jspError("jsp.error.xml.morePseudoAttributes");
+        }
+
+        // If there is no data in the xml or text decl then we fail to report
+        // error for version or encoding info above.
+        if (scanningTextDecl) {
+            if (!dataFoundForTarget && encoding == null) {
+                err.jspError("jsp.error.xml.encodingDeclRequired");
+            }
+        } else {
+            if (!dataFoundForTarget && version == null) {
+                err.jspError("jsp.error.xml.versionInfoRequired");
+            }
+        }
+
+        // end
+        if (!skipChar('?')) {
+            err.jspError("jsp.error.xml.xmlDeclUnterminated");
+        }
+        if (!skipChar('>')) {
+            err.jspError("jsp.error.xml.xmlDeclUnterminated");
+
+        }
+
+        // fill in return array
+        pseudoAttributeValues[0] = version;
+        pseudoAttributeValues[1] = encoding;
+        pseudoAttributeValues[2] = standalone;
+    }
+-----CSCI578-----
+
+
+    // Adapted from:
+    // org.apache.xerces.impl.XMLEntityManager.EntityScanner.skipChar
+    /**
+     * Skips a character appearing immediately on the input.
+     * <p>
+     * <strong>Note:</strong> The character is consumed only if it matches
+     * the specified character.
+     *
+     * @param c The character to skip.
+     *
+     * @return <code>true</code> if the character was skipped.
+     *
+     * @throws IOException  Thrown if i/o error occurs.
+     * @throws EOFException Thrown on end of file.
+     */
+    public boolean skipChar(int c) throws IOException {
+
+        // load more characters, if needed
+        if (fCurrentEntity.position == fCurrentEntity.count) {
+            load(0, true);
+        }
+
+        // skip character
+        int cc = fCurrentEntity.ch[fCurrentEntity.position];
+        if (cc == c) {
+            fCurrentEntity.position++;
+            return true;
+        } else if (c == '\n' && cc == '\r' && fCurrentEntity.isExternal()) {
+            // handle newlines
+            if (fCurrentEntity.position == fCurrentEntity.count) {
+                fCurrentEntity.ch[0] = (char)cc;
+                load(1, false);
+            }
+            fCurrentEntity.position++;
+            if (fCurrentEntity.ch[fCurrentEntity.position] == '\n') {
+                fCurrentEntity.position++;
+            }
+            return true;
+        }
+
+        // character was not skipped
+        return false;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+ // setValues(XMLString)
+
+    /**
+     * Resets all of the values to their defaults.
+     */
+    public void clear() {
+        this.ch = null;
+        this.offset = 0;
+        this.length = -1;
+    }
+ // clear()
+
+
+    /**
+     * Returns true if the contents of this XMLString structure and
+     * the specified string are equal.
+     *
+     * @param s The string to compare.
+     * @return <code>true</code> if equal
+     */
+    public boolean equals(String s) {
+        if (s == null) {
+            return false;
+        }
+        if ( length != s.length() ) {
+            return false;
+        }
+
+        // is this faster than call s.toCharArray first and compare the
+        // two arrays directly, which will possibly involve creating a
+        // new char array object.
+        for (int i=0; i<length; i++) {
+            if (ch[offset+i] != s.charAt(i)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Scans a range of character data up to the specified delimiter,
+     * setting the fields of the XMLString structure, appropriately.
+     * <p>
+     * <strong>Note:</strong> The characters are consumed.
+     * <p>
+     * <strong>Note:</strong> This assumes that the internal buffer is
+     * at least the same size, or bigger, than the length of the delimiter
+     * and that the delimiter contains at least one character.
+     * <p>
+     * <strong>Note:</strong> This method does not guarantee to return
+     * the longest run of character data. This method may return before
+     * the delimiter due to reaching the end of the input buffer or any
+     * other reason.
+     * <p>
+     * <strong>Note:</strong> The fields contained in the XMLString
+     * structure are not guaranteed to remain valid upon subsequent calls
+     * to the entity scanner. Therefore, the caller is responsible for
+     * immediately using the returned character data or making a copy of
+     * the character data.
+     *
+     * @param delimiter The string that signifies the end of the character
+     *                  data to be scanned.
+     * @param buffer    The data structure to fill.
+     *
+     * @return <code>true</code> if there is more data to scan,
+     *  <code>false</code> otherwise.
+     *
+     * @throws IOException  Thrown if i/o error occurs.
+     * @throws EOFException Thrown on end of file.
+     */
+    public boolean scanData(String delimiter, XMLStringBuffer buffer)
+        throws IOException {
+
+        boolean done = false;
+        int delimLen = delimiter.length();
+        char charAt0 = delimiter.charAt(0);
+        boolean external = fCurrentEntity.isExternal();
+        do {
+
+            // load more characters, if needed
+
+            if (fCurrentEntity.position == fCurrentEntity.count) {
+                load(0, true);
+            }
+            else if (fCurrentEntity.position >= fCurrentEntity.count - delimLen) {
+                System.arraycopy(fCurrentEntity.ch, fCurrentEntity.position,
+                                 fCurrentEntity.ch, 0, fCurrentEntity.count - fCurrentEntity.position);
+                load(fCurrentEntity.count - fCurrentEntity.position, false);
+                fCurrentEntity.position = 0;
+            }
+            if (fCurrentEntity.position >= fCurrentEntity.count - delimLen) {
+                // something must be wrong with the input: e.g., file ends an
+                // unterminated comment
+                int length = fCurrentEntity.count - fCurrentEntity.position;
+                buffer.append (fCurrentEntity.ch, fCurrentEntity.position,
+                               length);
+                fCurrentEntity.position = fCurrentEntity.count;
+                load(0,true);
+                return false;
+            }
+
+            // normalize newlines
+            int offset = fCurrentEntity.position;
+            int c = fCurrentEntity.ch[offset];
+            int newlines = 0;
+            if (c == '\n' || (c == '\r' && external)) {
+                do {
+                    c = fCurrentEntity.ch[fCurrentEntity.position++];
+                    if (c == '\r' && external) {
+                        newlines++;
+                        if (fCurrentEntity.position == fCurrentEntity.count) {
+                            offset = 0;
+                            fCurrentEntity.position = newlines;
+                            if (load(newlines, false)) {
+                                break;
+                            }
+                        }
+                        if (fCurrentEntity.ch[fCurrentEntity.position] == '\n') {
+                            fCurrentEntity.position++;
+                            offset++;
+                        }
+                        /*** NEWLINE NORMALIZATION ***/
+                        else {
+                            newlines++;
+                        }
+                    }
+                    else if (c == '\n') {
+                        newlines++;
+                        if (fCurrentEntity.position == fCurrentEntity.count) {
+                            offset = 0;
+                            fCurrentEntity.position = newlines;
+                            fCurrentEntity.count = newlines;
+                            if (load(newlines, false)) {
+                                break;
+                            }
+                        }
+                    }
+                    else {
+                        fCurrentEntity.position--;
+                        break;
+                    }
+                } while (fCurrentEntity.position < fCurrentEntity.count - 1);
+                for (int i = offset; i < fCurrentEntity.position; i++) {
+                    fCurrentEntity.ch[i] = '\n';
+                }
+                int length = fCurrentEntity.position - offset;
+                if (fCurrentEntity.position == fCurrentEntity.count - 1) {
+                    buffer.append(fCurrentEntity.ch, offset, length);
+                    return true;
+                }
+            }
+
+            // iterate over buffer looking for delimiter
+        OUTER: while (fCurrentEntity.position < fCurrentEntity.count) {
+            c = fCurrentEntity.ch[fCurrentEntity.position++];
+            if (c == charAt0) {
+                // looks like we just hit the delimiter
+                int delimOffset = fCurrentEntity.position - 1;
+                for (int i = 1; i < delimLen; i++) {
+                    if (fCurrentEntity.position == fCurrentEntity.count) {
+                        fCurrentEntity.position -= i;
+                        break OUTER;
+                    }
+                    c = fCurrentEntity.ch[fCurrentEntity.position++];
+                    if (delimiter.charAt(i) != c) {
+                        fCurrentEntity.position--;
+                        break;
+                    }
+                }
+                if (fCurrentEntity.position == delimOffset + delimLen) {
+                    done = true;
+                    break;
+                }
+            }
+            else if (c == '\n' || (external && c == '\r')) {
+                fCurrentEntity.position--;
+                break;
+            }
+            else if (XMLChar.isInvalid(c)) {
+                fCurrentEntity.position--;
+                int length = fCurrentEntity.position - offset;
+                buffer.append(fCurrentEntity.ch, offset, length);
+                return true;
+            }
+        }
+            int length = fCurrentEntity.position - offset;
+            if (done) {
+                length -= delimLen;
+            }
+            buffer.append (fCurrentEntity.ch, offset, length);
+
+            // return true if string was skipped
+        } while (!done);
+        return !done;
+
+    }

@@ -1,0 +1,369 @@
+14
+-----CSCI578-----
+
+
+    // --------------------------------------------- Container Listener methods
+
+    @Override
+    public void containerEvent(ContainerEvent event) {
+
+        if (Container.ADD_CHILD_EVENT.equals(event.getType())) {
+            Container child = (Container) event.getData();
+            addListeners(child);
+            // If child is started then it is too late for life-cycle listener
+            // to register the child so register it here
+            if (child.getState().isAvailable()) {
+                if (child instanceof Host) {
+                    registerHost((Host) child);
+                } else if (child instanceof Context) {
+                    registerContext((Context) child);
+                } else if (child instanceof Wrapper) {
+                    // Only if the Context has started. If it has not, then it
+                    // will have its own "after_start" life-cycle event later.
+                    if (child.getParent().getState().isAvailable()) {
+                        registerWrapper((Wrapper) child);
+                    }
+                }
+            }
+        } else if (Container.REMOVE_CHILD_EVENT.equals(event.getType())) {
+            Container child = (Container) event.getData();
+            removeListeners(child);
+            // No need to unregister - life-cycle listener will handle this when
+            // the child stops
+        } else if (Host.ADD_ALIAS_EVENT.equals(event.getType())) {
+            // Handle dynamically adding host aliases
+            mapper.addHostAlias(((Host) event.getSource()).getName(),
+                    event.getData().toString());
+        } else if (Host.REMOVE_ALIAS_EVENT.equals(event.getType())) {
+            // Handle dynamically removing host aliases
+            mapper.removeHostAlias(event.getData().toString());
+        } else if (Wrapper.ADD_MAPPING_EVENT.equals(event.getType())) {
+            // Handle dynamically adding wrappers
+            Wrapper wrapper = (Wrapper) event.getSource();
+            Context context = (Context) wrapper.getParent();
+            String contextPath = context.getPath();
+            if ("/".equals(contextPath)) {
+                contextPath = "";
+            }
+            String version = context.getWebappVersion();
+            String hostName = context.getParent().getName();
+            String wrapperName = wrapper.getName();
+            String mapping = (String) event.getData();
+            boolean jspWildCard = ("jsp".equals(wrapperName)
+                    && mapping.endsWith("/*"));
+            mapper.addWrapper(hostName, contextPath, version, mapping, wrapper,
+                    jspWildCard, context.isResourceOnlyServlet(wrapperName));
+        } else if (Wrapper.REMOVE_MAPPING_EVENT.equals(event.getType())) {
+            // Handle dynamically removing wrappers
+            Wrapper wrapper = (Wrapper) event.getSource();
+
+            Context context = (Context) wrapper.getParent();
+            String contextPath = context.getPath();
+            if ("/".equals(contextPath)) {
+                contextPath = "";
+            }
+            String version = context.getWebappVersion();
+            String hostName = context.getParent().getName();
+
+            String mapping = (String) event.getData();
+
+            mapper.removeWrapper(hostName, contextPath, version, mapping);
+        } else if (Context.ADD_WELCOME_FILE_EVENT.equals(event.getType())) {
+            // Handle dynamically adding welcome files
+            Context context = (Context) event.getSource();
+
+            String hostName = context.getParent().getName();
+
+            String contextPath = context.getPath();
+            if ("/".equals(contextPath)) {
+                contextPath = "";
+            }
+
+            String welcomeFile = (String) event.getData();
+
+            mapper.addWelcomeFile(hostName, contextPath,
+                    context.getWebappVersion(), welcomeFile);
+        } else if (Context.REMOVE_WELCOME_FILE_EVENT.equals(event.getType())) {
+            // Handle dynamically removing welcome files
+            Context context = (Context) event.getSource();
+
+            String hostName = context.getParent().getName();
+
+            String contextPath = context.getPath();
+            if ("/".equals(contextPath)) {
+                contextPath = "";
+            }
+
+            String welcomeFile = (String) event.getData();
+
+            mapper.removeWelcomeFile(hostName, contextPath,
+                    context.getWebappVersion(), welcomeFile);
+        } else if (Context.CLEAR_WELCOME_FILES_EVENT.equals(event.getType())) {
+            // Handle dynamically clearing welcome files
+            Context context = (Context) event.getSource();
+
+            String hostName = context.getParent().getName();
+
+            String contextPath = context.getPath();
+            if ("/".equals(contextPath)) {
+                contextPath = "";
+            }
+
+            mapper.clearWelcomeFiles(hostName, contextPath,
+                    context.getWebappVersion());
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Add a welcome file to the given context.
+     *
+     * @param hostName    The host where the given context can be found
+     * @param contextPath The path of the given context
+     * @param version     The version of the given context
+     * @param welcomeFile The welcome file to add
+     */
+    public void addWelcomeFile(String hostName, String contextPath, String version,
+            String welcomeFile) {
+        ContextVersion contextVersion = findContextVersion(hostName, contextPath, version, false);
+        if (contextVersion == null) {
+            return;
+        }
+        int len = contextVersion.welcomeResources.length + 1;
+        String[] newWelcomeResources = new String[len];
+        System.arraycopy(contextVersion.welcomeResources, 0, newWelcomeResources, 0, len - 1);
+        newWelcomeResources[len - 1] = welcomeFile;
+        contextVersion.welcomeResources = newWelcomeResources;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Clear the welcome files for the given context.
+     *
+     * @param hostName    The host where the context to be cleared can be found
+     * @param contextPath The path of the context to be cleared
+     * @param version     The version of the context to be cleared
+     */
+    public void clearWelcomeFiles(String hostName, String contextPath, String version) {
+        ContextVersion contextVersion = findContextVersion(hostName, contextPath, version, false);
+        if (contextVersion == null) {
+            return;
+        }
+        contextVersion.welcomeResources = new String[0];
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a welcome file from the given context.
+     *
+     * @param hostName    The host where the given context can be found
+     * @param contextPath The path of the given context
+     * @param version     The version of the given context
+     * @param welcomeFile The welcome file to remove
+     */
+    public void removeWelcomeFile(String hostName, String contextPath,
+            String version, String welcomeFile) {
+        ContextVersion contextVersion = findContextVersion(hostName, contextPath, version, false);
+        if (contextVersion == null || contextVersion.isPaused()) {
+            return;
+        }
+        int match = -1;
+        for (int i = 0; i < contextVersion.welcomeResources.length; i++) {
+            if (welcomeFile.equals(contextVersion.welcomeResources[i])) {
+                match = i;
+                break;
+            }
+        }
+        if (match > -1) {
+            int len = contextVersion.welcomeResources.length - 1;
+            String[] newWelcomeResources = new String[len];
+            System.arraycopy(contextVersion.welcomeResources, 0, newWelcomeResources, 0, match);
+            if (match < len) {
+                System.arraycopy(contextVersion.welcomeResources, match + 1,
+                        newWelcomeResources, match, len - match);
+            }
+            contextVersion.welcomeResources = newWelcomeResources;
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the event type of this event.
+     *
+     * @return The event type of this event. Although this is a String, it is
+     *         safe to rely on the value returned by this method remaining
+     *         consistent between point releases.
+     */
+    public String getType() {
+        return this.type;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the event data of this event.
+     *
+     * @return The data, if any, associated with this event.
+     */
+    public Object getData() {
+        return this.data;
+    }
+-----CSCI578-----
+
+
+
+    private ContextVersion findContextVersion(String hostName,
+            String contextPath, String version, boolean silent) {
+        MappedHost host = exactFind(hosts, hostName);
+        if (host == null || host.isAlias()) {
+            if (!silent) {
+                log.error("No host found: " + hostName);
+            }
+            return null;
+        }
+        MappedContext context = exactFind(host.contextList.contexts,
+                contextPath);
+        if (context == null) {
+            if (!silent) {
+                log.error("No context found: " + contextPath);
+            }
+            return null;
+        }
+        ContextVersion contextVersion = exactFind(context.versions, version);
+        if (contextVersion == null) {
+            if (!silent) {
+                log.error("No context version found: " + contextPath + " "
+                        + version);
+            }
+            return null;
+        }
+        return contextVersion;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove a wrapper from an existing context.
+     *
+     * @param hostName    Virtual host name this wrapper belongs to
+     * @param contextPath Context path this wrapper belongs to
+     * @param version     Context version this wrapper belongs to
+     * @param path        Wrapper mapping
+     */
+    public void removeWrapper(String hostName, String contextPath,
+            String version, String path) {
+        ContextVersion contextVersion = findContextVersion(hostName,
+                contextPath, version, true);
+        if (contextVersion == null || contextVersion.isPaused()) {
+            return;
+        }
+        removeWrapper(contextVersion, path);
+    }
+
+
+    protected void removeWrapper(ContextVersion context, String path) {
+
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("mapper.removeWrapper", context.name, path));
+        }
+
+        synchronized (context) {
+            if (path.endsWith("/*")) {
+                // Wildcard wrapper
+                String name = path.substring(0, path.length() - 2);
+                MappedWrapper[] oldWrappers = context.wildcardWrappers;
+                if (oldWrappers.length == 0) {
+                    return;
+                }
+                MappedWrapper[] newWrappers =
+                    new MappedWrapper[oldWrappers.length - 1];
+                if (removeMap(oldWrappers, newWrappers, name)) {
+                    // Recalculate nesting
+                    context.nesting = 0;
+                    for (int i = 0; i < newWrappers.length; i++) {
+                        int slashCount = slashCount(newWrappers[i].name);
+                        if (slashCount > context.nesting) {
+                            context.nesting = slashCount;
+                        }
+                    }
+                    context.wildcardWrappers = newWrappers;
+                }
+            } else if (path.startsWith("*.")) {
+                // Extension wrapper
+                String name = path.substring(2);
+                MappedWrapper[] oldWrappers = context.extensionWrappers;
+                if (oldWrappers.length == 0) {
+                    return;
+                }
+                MappedWrapper[] newWrappers =
+                    new MappedWrapper[oldWrappers.length - 1];
+                if (removeMap(oldWrappers, newWrappers, name)) {
+                    context.extensionWrappers = newWrappers;
+                }
+            } else if (path.equals("/")) {
+                // Default wrapper
+                context.defaultWrapper = null;
+            } else {
+                // Exact wrapper
+                String name;
+                if (path.length() == 0) {
+                    // Special case for the Context Root mapping which is
+                    // treated as an exact match
+                    name = "/";
+                } else {
+                    name = path;
+                }
+                MappedWrapper[] oldWrappers = context.exactWrappers;
+                if (oldWrappers.length == 0) {
+                    return;
+                }
+                MappedWrapper[] newWrappers =
+                    new MappedWrapper[oldWrappers.length - 1];
+                if (removeMap(oldWrappers, newWrappers, name)) {
+                    context.exactWrappers = newWrappers;
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove this mapper from the container and all child containers
+     *
+     * @param container
+     */
+    private void removeListeners(Container container) {
+        container.removeContainerListener(this);
+        container.removeLifecycleListener(this);
+        for (Container child : container.findChildren()) {
+            removeListeners(child);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return a string representation of this event.
+     */
+    @Override
+    public String toString() {
+        return ("ContainerEvent['" + getContainer() + "','" +
+                getType() + "','" + getData() + "']");
+    }
+-----CSCI578-----

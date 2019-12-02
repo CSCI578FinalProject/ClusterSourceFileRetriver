@@ -1,0 +1,31 @@
+3
+
+    public byte[] getPayload() {
+        return payload;
+    }
+    
+    /**
+     * Sets the local member properties for broadcasting
+     */
+    public void setLocalMemberProperties(String listenHost, int listenPort) {
+        properties.setProperty("tcpListenHost",listenHost);
+        properties.setProperty("tcpListenPort",String.valueOf(listenPort));
+        try {
+            if (localMember != null) {
+                localMember.setHostname(listenHost);
+                localMember.setPort(listenPort);
+            } else {
+                localMember = new MemberImpl(listenHost, listenPort, 0);
+                localMember.setUniqueId(UUIDGenerator.randomUUID(true));
+                localMember.setPayload(getPayload());
+                localMember.setDomain(getDomain());
+            }
+            localMember.getData(true, true);
+        }catch ( IOException x ) {
+            throw new IllegalArgumentException(x);
+        }
+    }
+    
+    public byte[] getDomain() {
+        return domain;
+    }

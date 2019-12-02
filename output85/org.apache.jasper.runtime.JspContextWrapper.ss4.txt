@@ -1,0 +1,105 @@
+4
+-----CSCI578-----
+
+
+    @Override
+    public void setAttribute(String name, Object value) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        if (value != null) {
+            pageAttributes.put(name, value);
+        } else {
+            removeAttribute(name, PAGE_SCOPE);
+        }
+    }
+
+
+    @Override
+    public void setAttribute(String name, Object value, int scope) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        if (scope == PAGE_SCOPE) {
+            if (value != null) {
+                pageAttributes.put(name, value);
+            } else {
+                removeAttribute(name, PAGE_SCOPE);
+            }
+        } else {
+            rootJspCtxt.setAttribute(name, value, scope);
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void removeAttribute(String name) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        pageAttributes.remove(name);
+        rootJspCtxt.removeAttribute(name, REQUEST_SCOPE);
+        if (getSession() != null) {
+            rootJspCtxt.removeAttribute(name, SESSION_SCOPE);
+        }
+        rootJspCtxt.removeAttribute(name, APPLICATION_SCOPE);
+    }
+
+
+    @Override
+    public void removeAttribute(String name, int scope) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        if (scope == PAGE_SCOPE) {
+            pageAttributes.remove(name);
+        } else {
+            rootJspCtxt.removeAttribute(name, scope);
+        }
+    }
+-----CSCI578-----
+
+
+    @Override
+    public HttpSession getSession() {
+        return rootJspCtxt.getSession();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object findAttribute(String name) {
+
+        if (name == null) {
+            throw new NullPointerException(Localizer
+                    .getMessage("jsp.error.attribute.null_name"));
+        }
+
+        Object o = pageAttributes.get(name);
+        if (o == null) {
+            o = rootJspCtxt.getAttribute(name, REQUEST_SCOPE);
+            if (o == null) {
+                if (getSession() != null) {
+                    o = rootJspCtxt.getAttribute(name, SESSION_SCOPE);
+                }
+                if (o == null) {
+                    o = rootJspCtxt.getAttribute(name, APPLICATION_SCOPE);
+                }
+            }
+        }
+
+        return o;
+    }

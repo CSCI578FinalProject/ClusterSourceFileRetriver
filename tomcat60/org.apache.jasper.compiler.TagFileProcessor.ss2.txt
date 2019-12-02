@@ -1,0 +1,139 @@
+13
+
+    public int incTripCount() {
+	return tripCount++;
+    }
+
+    /**
+     * Compile and load a prototype for the Tag file.  This is needed
+     * when compiling tag files with circular dependencies.  A prototpe
+     * (skeleton) with no dependencies on other other tag files is
+     * generated and compiled.
+     */
+    public Class loadTagFilePrototype() throws JasperException {
+
+	ctxt.setPrototypeMode(true);
+	try {
+	    return loadTagFile();
+	} finally {
+	    ctxt.setPrototypeMode(false);
+	}
+    }
+
+    /**
+     * Compile (if needed) and load a tag file
+     */
+    public Class loadTagFile() throws JasperException {
+
+        try {
+            if (ctxt.isRemoved()) {
+                throw new FileNotFoundException(jspUri);
+            }
+            if (options.getDevelopment() || firstTime ) {
+                synchronized (this) {
+                    firstTime = false;
+                    ctxt.compile();
+                }
+            } else {
+                if (compileException != null) {
+                    throw compileException;
+                }
+            }
+
+            if (reload) {
+                tagHandlerClass = ctxt.load();
+                reload = false;
+            }
+        } catch (FileNotFoundException ex) {
+            throw new JasperException(ex);
+	}
+
+	return tagHandlerClass;
+    }
+
+    /**
+     * Compile and load a prototype for the Tag file.  This is needed
+     * when compiling tag files with circular dependencies.  A prototpe
+     * (skeleton) with no dependencies on other other tag files is
+     * generated and compiled.
+     */
+    public Class loadTagFilePrototype() throws JasperException {
+
+	ctxt.setPrototypeMode(true);
+	try {
+	    return loadTagFile();
+	} finally {
+	    ctxt.setPrototypeMode(false);
+	}
+    }
+
+    public int decTripCount() {
+	return tripCount--;
+    }
+
+    public void setTagInfo(TagInfo tagi) {
+        tagInfo = tagi;
+    }
+
+    public void setPrototypeMode(boolean pm) {
+        protoTypeMode = pm;
+    }
+
+    public void setClassLoader(URLClassLoader loader) {
+        this.loader = loader;
+    }
+
+    /**
+     * The classpath that is passed off to the Java compiler. 
+     */
+    public void setClassPath(String classPath) {
+        this.classPath = classPath;
+    }
+
+    /* ==================== Methods to override ==================== */
+    
+    /** ---------- Class path and loader ---------- */
+
+    /**
+     * The classpath that is passed off to the Java compiler. 
+     */
+    public String getClassPath() {
+        if( classPath != null )
+            return classPath;
+        return rctxt.getClassPath();
+    }
+    protected URLClassLoader loader;
+
+    public void setClassLoader(URLClassLoader loader) {
+        this.loader = loader;
+    }
+
+    // ==================== Manipulating the class ====================
+
+    public Class load() 
+        throws JasperException, FileNotFoundException
+    {
+        try {
+            getJspLoader();
+            
+            String name;
+            if (isTagFile()) {
+                name = tagInfo.getTagClassName();
+            } else {
+                name = getServletPackageName() + "." + getServletClassName();
+            }
+            servletClass = jspLoader.loadClass(name);
+        } catch (ClassNotFoundException cex) {
+            throw new JasperException(Localizer.getMessage("jsp.error.unable.load"),
+                                      cex);
+        } catch (Exception ex) {
+            throw new JasperException(Localizer.getMessage("jsp.error.unable.compile"),
+                                      ex);
+        }
+        removed = 0;
+        return servletClass;
+    }
+
+    public JspCompilationContext getJspEngineContext() {
+        return ctxt;
+    }

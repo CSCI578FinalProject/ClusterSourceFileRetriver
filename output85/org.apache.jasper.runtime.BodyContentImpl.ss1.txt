@@ -1,0 +1,194 @@
+6
+-----CSCI578-----
+
+
+    /**
+     * Terminate the current line by writing the line separator string.  The
+     * line separator string is defined by the system property
+     * <code>line.separator</code>, and is not necessarily a single newline
+     * character (<code>'\n'</code>).
+     *
+     * @throws IOException Error writing to wrapped writer
+     */
+    @Override
+    public void println() throws IOException {
+        newLine();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Write a single character.
+     * @param c The char to write
+     * @throws IOException Error writing to wrapped writer
+     */
+    @Override
+    public void write(int c) throws IOException {
+        if (writer != null) {
+            writer.write(c);
+        } else {
+            ensureOpen();
+            if (nextChar >= bufferSize) {
+                reAllocBuff (1);
+            }
+            cb[nextChar++] = (char) c;
+        }
+    }
+
+
+    /**
+     * Write a portion of an array of characters.
+     *
+     * <p> Ordinarily this method stores characters from the given array into
+     * this stream's buffer, flushing the buffer to the underlying stream as
+     * needed.  If the requested length is at least as large as the buffer,
+     * however, then this method will flush the buffer and write the characters
+     * directly to the underlying stream.  Thus redundant
+     * <code>DiscardableBufferedWriter</code>s will not copy data
+     * unnecessarily.
+     *
+     * @param cbuf A character array
+     * @param off Offset from which to start reading characters
+     * @param len Number of characters to write
+     * @throws IOException Error writing to wrapped writer
+     */
+    @Override
+    public void write(char[] cbuf, int off, int len) throws IOException {
+        if (writer != null) {
+            writer.write(cbuf, off, len);
+        } else {
+            ensureOpen();
+
+            if ((off < 0) || (off > cbuf.length) || (len < 0) ||
+                    ((off + len) > cbuf.length) || ((off + len) < 0)) {
+                throw new IndexOutOfBoundsException();
+            } else if (len == 0) {
+                return;
+            }
+
+            if (len >= bufferSize - nextChar)
+                reAllocBuff (len);
+
+            System.arraycopy(cbuf, off, cb, nextChar, len);
+            nextChar+=len;
+        }
+    }
+
+
+    /**
+     * Write an array of characters.  This method cannot be inherited from the
+     * Writer class because it must suppress I/O exceptions.
+     * @param buf Content to write
+     * @throws IOException Error writing to wrapped writer
+     */
+    @Override
+    public void write(char[] buf) throws IOException {
+        if (writer != null) {
+            writer.write(buf);
+        } else {
+            write(buf, 0, buf.length);
+        }
+    }
+
+
+    /**
+     * Write a portion of a String.
+     *
+     * @param s String to be written
+     * @param off Offset from which to start reading characters
+     * @param len Number of characters to be written
+     * @throws IOException Error writing to wrapped writer
+     */
+    @Override
+    public void write(String s, int off, int len) throws IOException {
+        if (writer != null) {
+            writer.write(s, off, len);
+        } else {
+            ensureOpen();
+            if (len >= bufferSize - nextChar)
+                reAllocBuff(len);
+
+            s.getChars(off, off + len, cb, nextChar);
+            nextChar += len;
+        }
+    }
+
+
+    /**
+     * Write a string.  This method cannot be inherited from the Writer class
+     * because it must suppress I/O exceptions.
+     * @param s String to be written
+     * @throws IOException Error writing to wrapped writer
+     */
+    @Override
+    public void write(String s) throws IOException {
+        if (writer != null) {
+            writer.write(s);
+        } else {
+            write(s, 0, s.length());
+        }
+    }
+
+
+    /**
+     * Close the stream, flushing it first.  Once a stream has been closed,
+     * further write() or flush() invocations will cause an IOException to be
+     * thrown.  Closing a previously-closed stream, however, has no effect.
+     *
+     * @throws IOException Error writing to wrapped writer
+     */
+    @Override
+    public void close() throws IOException {
+        if (writer != null) {
+            writer.close();
+        } else {
+            closed = true;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Reallocates buffer since the spec requires it to be unbounded.
+     */
+    private void reAllocBuff(int len) {
+
+        if (bufferSize + len <= cb.length) {
+            bufferSize = cb.length;
+            return;
+        }
+
+        if (len < cb.length) {
+            len = cb.length;
+        }
+
+        char[] tmp = new char[cb.length + len];
+        System.arraycopy(cb, 0, tmp, 0, cb.length);
+        cb = tmp;
+        bufferSize = cb.length;
+    }
+-----CSCI578-----
+
+
+    private void ensureOpen() throws IOException {
+        if (closed) throw new IOException("Stream closed");
+    }
+-----CSCI578-----
+
+
+    /**
+     * Write a line separator.  The line separator string is defined by the
+     * system property <tt>line.separator</tt>, and is not necessarily a single
+     * newline ('\n') character.
+     *
+     * @throws IOException Error writing to wrapped writer
+     */
+    @Override
+    public void newLine() throws IOException {
+        if (writer != null) {
+            writer.write(System.lineSeparator());
+        } else {
+            write(System.lineSeparator());
+        }
+    }

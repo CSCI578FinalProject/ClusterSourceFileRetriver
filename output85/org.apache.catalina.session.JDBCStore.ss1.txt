@@ -1,0 +1,80 @@
+2
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    @Override
+    public String[] expiredKeys() throws IOException {
+        return keys(true);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public String[] keys() throws IOException {
+        return keys(false);
+    }
+
+
+    /**
+     * Return an array containing the session identifiers of all Sessions
+     * currently saved in this Store.  If there are no such Sessions, a
+     * zero-length array is returned.
+     *
+     * @param expiredOnly flag, whether only keys of expired sessions should
+     *        be returned
+     * @return array containing the list of session IDs
+     *
+     * @exception IOException if an input/output error occurred
+     */
+    private String[] keys(boolean expiredOnly) throws IOException {
+        String keys[] = null;
+        synchronized (this) {
+            int numberOfTries = 2;
+            while (numberOfTries > 0) {
+
+                Connection _conn = getConnection();
+                if (_conn == null) {
+                    return new String[0];
+                }
+                try {
+
+                    String keysSql = "SELECT " + sessionIdCol + " FROM "
+                            + sessionTable + " WHERE " + sessionAppCol + " = ?";
+                    if (expiredOnly) {
+                        keysSql += " AND (" + sessionLastAccessedCol + " + "
+                                + sessionMaxInactiveCol + " * 1000 < ?)";
+                    }
+                    try (PreparedStatement preparedKeysSql = _conn.prepareStatement(keysSql)) {
+                        preparedKeysSql.setString(1, getName());
+                        if (expiredOnly) {
+                            preparedKeysSql.setLong(2, System.currentTimeMillis());
+                        }
+                        try (ResultSet rst = preparedKeysSql.executeQuery()) {
+                            ArrayList<String> tmpkeys = new ArrayList<>();
+                            if (rst != null) {
+                                while (rst.next()) {
+                                    tmpkeys.add(rst.getString(1));
+                                }
+                            }
+                            keys = tmpkeys.toArray(new String[tmpkeys.size()]);
+                            // Break out after the finally block
+                            numberOfTries = 0;
+                        }
+                    }
+                } catch (SQLException e) {
+                    manager.getContext().getLogger().error(sm.getString(getStoreName() + ".SQLException", e));
+                    keys = new String[0];
+                    // Close the connection so that it gets reopened next time
+                    if (dbConnection != null)
+                        close(dbConnection);
+                } finally {
+                    release(_conn);
+                }
+                numberOfTries--;
+            }
+        }
+        return keys;
+    }

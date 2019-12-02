@@ -1,0 +1,52 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getLifecycleEvent() {
+        return lifecycleEvent;
+    }
+-----CSCI578-----
+
+
+    private synchronized void setStateInternal(LifecycleState state,
+            Object data, boolean check) throws LifecycleException {
+
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("lifecycleBase.setState", this, state));
+        }
+
+        if (check) {
+            // Must have been triggered by one of the abstract methods (assume
+            // code in this class is correct)
+            // null is never a valid state
+            if (state == null) {
+                invalidTransition("null");
+                // Unreachable code - here to stop eclipse complaining about
+                // a possible NPE further down the method
+                return;
+            }
+
+            // Any method can transition to failed
+            // startInternal() permits STARTING_PREP to STARTING
+            // stopInternal() permits STOPPING_PREP to STOPPING and FAILED to
+            // STOPPING
+            if (!(state == LifecycleState.FAILED ||
+                    (this.state == LifecycleState.STARTING_PREP &&
+                            state == LifecycleState.STARTING) ||
+                    (this.state == LifecycleState.STOPPING_PREP &&
+                            state == LifecycleState.STOPPING) ||
+                    (this.state == LifecycleState.FAILED &&
+                            state == LifecycleState.STOPPING))) {
+                // No other transition permitted
+                invalidTransition(state.name());
+            }
+        }
+
+        this.state = state;
+        String lifecycleEvent = state.getLifecycleEvent();
+        if (lifecycleEvent != null) {
+            fireLifecycleEvent(lifecycleEvent, data);
+        }
+    }
+-----CSCI578-----

@@ -1,0 +1,624 @@
+56
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return an array of all the header names set for this response, or
+     * a zero-length array if no headers have been set.
+     */
+    public String[] getHeaderNames() {
+
+        MimeHeaders headers = coyoteResponse.getMimeHeaders();
+        int n = headers.size();
+        String[] result = new String[n];
+        for (int i = 0; i < n; i++) {
+            result[i] = headers.getName(i).toString();
+        }
+        return result;
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Log the interesting request parameters, invoke the next Valve in the
+     * sequence, and log the interesting response parameters.
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be created
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet error occurs
+     */
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        Log log = container.getLogger();
+        
+        // Log pre-service information
+        log.info("REQUEST URI       =" + request.getRequestURI());
+        log.info("          authType=" + request.getAuthType());
+        log.info(" characterEncoding=" + request.getCharacterEncoding());
+        log.info("     contentLength=" + request.getContentLength());
+        log.info("       contentType=" + request.getContentType());
+        log.info("       contextPath=" + request.getContextPath());
+        Cookie cookies[] = request.getCookies();
+        if (cookies != null) {
+            for (int i = 0; i < cookies.length; i++)
+                log.info("            cookie=" + cookies[i].getName() + "=" +
+                    cookies[i].getValue());
+        }
+        Enumeration hnames = request.getHeaderNames();
+        while (hnames.hasMoreElements()) {
+            String hname = (String) hnames.nextElement();
+            Enumeration hvalues = request.getHeaders(hname);
+            while (hvalues.hasMoreElements()) {
+                String hvalue = (String) hvalues.nextElement();
+                log.info("            header=" + hname + "=" + hvalue);
+            }
+        }
+        log.info("            locale=" + request.getLocale());
+        log.info("            method=" + request.getMethod());
+        Enumeration pnames = request.getParameterNames();
+        while (pnames.hasMoreElements()) {
+            String pname = (String) pnames.nextElement();
+            String pvalues[] = request.getParameterValues(pname);
+            StringBuffer result = new StringBuffer(pname);
+            result.append('=');
+            for (int i = 0; i < pvalues.length; i++) {
+                if (i > 0)
+                    result.append(", ");
+                result.append(pvalues[i]);
+            }
+            log.info("         parameter=" + result.toString());
+        }
+        log.info("          pathInfo=" + request.getPathInfo());
+        log.info("          protocol=" + request.getProtocol());
+        log.info("       queryString=" + request.getQueryString());
+        log.info("        remoteAddr=" + request.getRemoteAddr());
+        log.info("        remoteHost=" + request.getRemoteHost());
+        log.info("        remoteUser=" + request.getRemoteUser());
+        log.info("requestedSessionId=" + request.getRequestedSessionId());
+        log.info("            scheme=" + request.getScheme());
+        log.info("        serverName=" + request.getServerName());
+        log.info("        serverPort=" + request.getServerPort());
+        log.info("       servletPath=" + request.getServletPath());
+        log.info("          isSecure=" + request.isSecure());
+        log.info("---------------------------------------------------------------");
+
+        // Perform the request
+        getNext().invoke(request, response);
+
+        // Log post-service information
+        log.info("---------------------------------------------------------------");
+        log.info("          authType=" + request.getAuthType());
+        log.info("     contentLength=" + response.getContentLength());
+        log.info("       contentType=" + response.getContentType());
+        Cookie rcookies[] = response.getCookies();
+        for (int i = 0; i < rcookies.length; i++) {
+            log.info("            cookie=" + rcookies[i].getName() + "=" +
+                rcookies[i].getValue() + "; domain=" +
+                rcookies[i].getDomain() + "; path=" + rcookies[i].getPath());
+        }
+        String rhnames[] = response.getHeaderNames();
+        for (int i = 0; i < rhnames.length; i++) {
+            String rhvalues[] = response.getHeaderValues(rhnames[i]);
+            for (int j = 0; j < rhvalues.length; j++)
+                log.info("            header=" + rhnames[i] + "=" + rhvalues[j]);
+        }
+        log.info("           message=" + response.getMessage());
+        log.info("        remoteUser=" + request.getRemoteUser());
+        log.info("            status=" + response.getStatus());
+        log.info("===============================================================");
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------- HttpResponse Methods
+
+
+    /**
+     * Return an array of all cookies set for this response, or
+     * a zero-length array if no cookies have been set.
+     */
+    public Cookie[] getCookies() {
+        return cookies.toArray(new Cookie[cookies.size()]);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the session identifier included in this request, if any.
+     */
+    public String getRequestedSessionId() {
+        return (requestedSessionId);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the value to be returned by <code>isSecure()</code>
+     * for this Request.
+     *
+     * @param secure The new isSecure value
+     */
+    public void setSecure(boolean secure) {
+        this.secure = secure;
+    }
+
+
+
+    /**
+     * Was this request received on a secure connection?
+     */
+    public boolean isSecure() {
+        return (secure);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the HTTP request method used in this Request.
+     */
+    public String getMethod() {
+        return coyoteRequest.method().toString();
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------- HttpServletRequest Methods
+
+
+    /**
+     * Return the authentication type used for this Request.
+     */
+    public String getAuthType() {
+        return (authType);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the remote IP address making this Request.
+     */
+    public String getRemoteAddr() {
+        if (remoteAddr == null) {
+            coyoteRequest.action
+                (ActionCode.ACTION_REQ_HOST_ADDR_ATTRIBUTE, coyoteRequest);
+            remoteAddr = coyoteRequest.remoteAddr().toString();
+        }
+        return remoteAddr;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Context within which this Request is being processed.  This
+     * must be called as soon as the appropriate Context is identified, because
+     * it identifies the value to be returned by <code>getContextPath()</code>,
+     * and thus enables parsing of the request URI.
+     *
+     * @param context The newly associated Context
+     */
+    public void setContext(Context context) {
+        this.context = context;
+    }
+
+
+
+    /**
+     * Return the portion of the request URI used to select the Context
+     * of the Request.
+     */
+    public String getContextPath() {
+        return (mappingData.contextPath.toString());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the portion of the request URI used to select the servlet
+     * that will process this request.
+     */
+    public String getServletPath() {
+        return (mappingData.wrapperPath.toString());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the path information associated with this Request.
+     */
+    public String getPathInfo() {
+        return (mappingData.pathInfo.toString());
+    }
+-----CSCI578-----
+
+
+    // -------------------- Conversion and getters --------------------
+
+    /** Compute the string value
+     */
+    public String toString() {
+        if( hasStrValue ) return strValue;
+
+        switch (type) {
+        case T_CHARS:
+            strValue=charC.toString();
+            hasStrValue=true;
+            return strValue;
+        case T_BYTES:
+            strValue=byteC.toString();
+            hasStrValue=true;
+            return strValue;
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of Cookies received with this Request.
+     */
+    public Cookie[] getCookies() {
+
+        if (!cookiesParsed)
+            parseCookies();
+
+        return cookies;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the names of all headers received with this request.
+     */
+    public Enumeration getHeaderNames() {
+        return coyoteRequest.getMimeHeaders().names();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return all of the values of the specified header, if any; otherwise,
+     * return an empty enumeration.
+     *
+     * @param name Name of the requested header
+     */
+    public Enumeration getHeaders(String name) {
+        return coyoteRequest.getMimeHeaders().values(name);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the content type for this Request.
+     */
+    public String getContentType() {
+        return (coyoteRequest.getContentType());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the content length for this Request.
+     */
+    public int getContentLength() {
+        return (coyoteRequest.getContentLength());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the character encoding for this Request.
+     */
+    public String getCharacterEncoding() {
+      return (coyoteRequest.getCharacterEncoding());
+    }
+-----CSCI578-----
+
+
+
+    public int getContentLength() {
+        long length = getContentLengthLong();
+
+        if (length < Integer.MAX_VALUE) {
+            return (int) length;
+        }
+        return -1;
+    }
+-----CSCI578-----
+
+
+    public String getContentType() {
+        contentType();
+        if ((contentTypeMB == null) || contentTypeMB.isNull()) 
+            return null;
+        return contentTypeMB.toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the preferred Locale that the client will accept content in,
+     * based on the value for the first <code>Accept-Language</code> header
+     * that was encountered.  If the request did not specify a preferred
+     * language, the server's default Locale is returned.
+     */
+    public Locale getLocale() {
+
+        if (!localesParsed)
+            parseLocales();
+
+        if (locales.size() > 0) {
+            return ((Locale) locales.get(0));
+        } else {
+            return (defaultLocale);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the names of all defined request parameters for this request.
+     */
+    public Enumeration getParameterNames() {
+
+        if (!parametersParsed)
+            parseParameters();
+
+        return coyoteRequest.getParameters().getParameterNames();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the defined values for the specified request parameter, if any;
+     * otherwise, return <code>null</code>.
+     *
+     * @param name Name of the desired request parameter
+     */
+    public String[] getParameterValues(String name) {
+
+        if (!parametersParsed)
+            parseParameters();
+
+        return coyoteRequest.getParameters().getParameterValues(name);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the protocol and version used to make this Request.
+     */
+    public String getProtocol() {
+        return coyoteRequest.protocol().toString();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the server name responding to this Request.
+     */
+    public String getServerName() {
+        return (coyoteRequest.serverName().toString());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Principal who has been authenticated for this Request.  This
+     * value is also used to calculate the value to be returned by the
+     * <code>getRemoteUser()</code> method.
+     *
+     * @param principal The user Principal
+     */
+    public void setUserPrincipal(Principal principal) {
+
+        if (Globals.IS_SECURITY_ENABLED){
+            HttpSession session = getSession(false);
+            if ( (subject != null) &&
+                 (!subject.getPrincipals().contains(principal)) ){
+                subject.getPrincipals().add(principal);
+            } else if (session != null &&
+                        session.getAttribute(Globals.SUBJECT_ATTR) == null) {
+                subject = new Subject();
+                subject.getPrincipals().add(principal);
+            }
+            if (session != null){
+                session.setAttribute(Globals.SUBJECT_ATTR, subject);
+            }
+        }
+
+        this.userPrincipal = principal;
+    }
+
+
+
+    /**
+     * Return the name of the remote user that has been authenticated
+     * for this Request.
+     */
+    public String getRemoteUser() {
+
+        if (userPrincipal != null) {
+            return (userPrincipal.getName());
+        } else {
+            return (null);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the content length that was set or calculated for this Response.
+     */
+    public int getContentLength() {
+        return (coyoteResponse.getContentLength());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the content type that was set or calculated for this response,
+     * or <code>null</code> if no content type was set.
+     */
+    public String getContentType() {
+        return (coyoteResponse.getContentType());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the value for the specified header, or <code>null</code> if this
+     * header has not been set.  If more than one value was added for this
+     * name, only the first is returned; use getHeaderValues() to retrieve all
+     * of them.
+     *
+     * @param name Header name to look up
+     */
+    public String getHeader(String name) {
+        return coyoteResponse.getMimeHeaders().getHeader(name);
+    }
+
+
+
+    /**
+     * Return an array of all the header values associated with the
+     * specified header name, or an zero-length array if there are no such
+     * header values.
+     *
+     * @param name Header name to look up
+     */
+    public String[] getHeaderValues(String name) {
+
+        Enumeration enumeration = coyoteResponse.getMimeHeaders().values(name);
+        Vector result = new Vector();
+        while (enumeration.hasMoreElements()) {
+            result.addElement(enumeration.nextElement());
+        }
+        String[] resultArray = new String[result.size()];
+        result.copyInto(resultArray);
+        return resultArray;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the error message that was set with <code>sendError()</code>
+     * for this Response.
+     */
+    public String getMessage() {
+        return coyoteResponse.getMessage();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the HTTP status code associated with this Response.
+     */
+    public int getStatus() {
+        return coyoteResponse.getStatus();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    // -------------------- Information about the current request  -----------
+    // This is usefull for long-running requests only
+
+    public String getMethod() {
+        return req.method().toString();
+    }
+-----CSCI578-----
+
+
+    public String getCurrentUri() {
+        return req.requestURI().toString();
+    }
+-----CSCI578-----
+
+
+    public String getCurrentQueryString() {
+        return req.queryString().toString();
+    }
+-----CSCI578-----
+
+
+    public String getProtocol() {
+        return req.protocol().toString();
+    }
+-----CSCI578-----
+
+
+    public String getVirtualHost() {
+        return req.serverName().toString();
+    }
+-----CSCI578-----
+
+
+    public String getRemoteAddr() {
+        req.action(ActionCode.ACTION_REQ_HOST_ADDR_ATTRIBUTE, null);
+        return req.remoteAddr().toString();
+    }
+-----CSCI578-----
+
+
+    public int getContentLength() {
+        return req.getContentLength();
+    }

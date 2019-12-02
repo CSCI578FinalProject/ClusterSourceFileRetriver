@@ -1,0 +1,106 @@
+6
+-----CSCI578-----
+
+
+    @Override
+    public synchronized void closeOutbound() {
+        if (isOutboundDone) {
+            return;
+        }
+
+        isOutboundDone = true;
+        engineClosed = true;
+
+        if (accepted != 0 && !destroyed) {
+            int mode = SSL.getShutdown(ssl);
+            if ((mode & SSL.SSL_SENT_SHUTDOWN) != SSL.SSL_SENT_SHUTDOWN) {
+                SSL.shutdownSSL(ssl);
+            }
+        } else {
+            // engine closing before initial handshake
+            shutdown();
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * SSL_shutdown
+     * @param ssl the SSL instance (SSL *)
+     * @return the operation status
+     */
+    public static native int shutdownSSL(long ssl);
+-----CSCI578-----
+
+
+    /**
+     * SSL_pending.
+     * @param ssl SSL pointer (SSL *)
+     * @return the pending bytes count
+     */
+    public static native int pendingReadableBytesInSSL(long ssl);
+-----CSCI578-----
+
+
+    private int pendingReadableBytesInSSL()
+            throws SSLException {
+        // NOTE: Calling a fake read is necessary before calling pendingReadableBytesInSSL because
+        // SSL_pending will return 0 if OpenSSL has not started the current TLS record
+        // See https://www.openssl.org/docs/manmaster/ssl/SSL_pending.html
+        int lastPrimingReadResult = SSL.readFromSSL(ssl, EMPTY_ADDR, 0); // priming read
+        // check if SSL_read returned <= 0. In this case we need to check the error and see if it was something
+        // fatal.
+        if (lastPrimingReadResult <= 0) {
+            checkLastError();
+        }
+        return SSL.pendingReadableBytesInSSL(ssl);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Write encrypted data to the OpenSSL network BIO.
+     */
+    private int writeEncryptedData(final ByteBuffer src) {
+        final int pos = src.position();
+        final int len = src.remaining();
+        if (src.isDirect()) {
+            final long addr = Buffer.address(src) + pos;
+            final int netWrote = SSL.writeToBIO(networkBIO, addr, len);
+            if (netWrote >= 0) {
+                src.position(pos + netWrote);
+                return netWrote;
+            }
+        } else {
+            ByteBuffer buf = ByteBuffer.allocateDirect(len);
+            try {
+                final long addr = memoryAddress(buf);
+
+                buf.put(src);
+
+                final int netWrote = SSL.writeToBIO(networkBIO, addr, len);
+                if (netWrote >= 0) {
+                    src.position(pos + netWrote);
+                    return netWrote;
+                } else {
+                    src.position(pos);
+                }
+            } finally {
+                buf.clear();
+                ByteBufferUtils.cleanDirectBuffer(buf);
+            }
+        }
+
+        return -1;
+    }
+-----CSCI578-----
+
+
+    /**
+     * BIO_write.
+     * @param bio BIO pointer
+     * @param wbuf Buffer pointer
+     * @param wlen Write length
+     * @return the bytes count written
+     */
+    public static native int writeToBIO(long bio, long wbuf, int wlen);

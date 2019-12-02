@@ -1,0 +1,37 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * If the current thread was started before the last time when a context was
+     * stopped, an exception is thrown so that the current thread is stopped.
+     */
+    protected void stopCurrentThreadIfNeeded() {
+        if (currentThreadShouldBeStopped()) {
+            long lastTime = lastTimeThreadKilledItself.longValue();
+            if (lastTime + threadRenewalDelay < System.currentTimeMillis()) {
+                if (lastTimeThreadKilledItself.compareAndSet(lastTime,
+                        System.currentTimeMillis() + 1)) {
+                    // OK, it's really time to dispose of this thread
+
+                    final String msg = sm.getString(
+                                    "threadPoolExecutor.threadStoppedToAvoidPotentialLeak",
+                                    Thread.currentThread().getName());
+
+                    throw new StopPooledThreadException(msg);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    protected void afterExecute(Runnable r, Throwable t) {
+        submittedCount.decrementAndGet();
+
+        if (t == null) {
+            stopCurrentThreadIfNeeded();
+        }
+    }

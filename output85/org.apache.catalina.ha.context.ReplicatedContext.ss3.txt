@@ -1,0 +1,137 @@
+12
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void setAttribute(String name, Object value) {
+        // Name cannot be null
+        if (name == null)
+            throw new IllegalArgumentException
+                (sm.getString("applicationContext.setAttribute.namenull"));
+
+        // Null value is the same as removeAttribute()
+        if (value == null) {
+            removeAttribute(name);
+            return;
+        }
+
+        // Add or replace the specified attribute
+        // Check for read only attribute
+        if (readOnlyAttributes.containsKey(name))
+            return;
+
+        Object oldValue = attributes.put(name, value);
+        boolean replaced = oldValue != null;
+
+        // Notify interested application event listeners
+        Object listeners[] = context.getApplicationEventListeners();
+        if ((listeners == null) || (listeners.length == 0))
+            return;
+        ServletContextAttributeEvent event = null;
+        if (replaced)
+            event =
+                new ServletContextAttributeEvent(context.getServletContext(),
+                                                 name, oldValue);
+        else
+            event =
+                new ServletContextAttributeEvent(context.getServletContext(),
+                                                 name, value);
+
+        for (int i = 0; i < listeners.length; i++) {
+            if (!(listeners[i] instanceof ServletContextAttributeListener))
+                continue;
+            ServletContextAttributeListener listener =
+                (ServletContextAttributeListener) listeners[i];
+            try {
+                if (replaced) {
+                    context.fireContainerEvent
+                        ("beforeContextAttributeReplaced", listener);
+                    listener.attributeReplaced(event);
+                    context.fireContainerEvent("afterContextAttributeReplaced",
+                                               listener);
+                } else {
+                    context.fireContainerEvent("beforeContextAttributeAdded",
+                                               listener);
+                    listener.attributeAdded(event);
+                    context.fireContainerEvent("afterContextAttributeAdded",
+                                               listener);
+                }
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                if (replaced)
+                    context.fireContainerEvent("afterContextAttributeReplaced",
+                                               listener);
+                else
+                    context.fireContainerEvent("afterContextAttributeAdded",
+                                               listener);
+                // FIXME - should we do anything besides log these?
+                log(sm.getString("applicationContext.attributeEvent"), t);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the servlet context for which this Context is a facade.
+     */
+    @Override
+    public ServletContext getServletContext() {
+
+        if (context == null) {
+            context = new ApplicationContext(this);
+            if (altDDName != null)
+                context.setAttribute(Globals.ALT_DD_ATTR,altDDName);
+        }
+        return (context.getFacade());
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void log(String message) {
+        context.getLogger().info(message);
+    }
+
+
+
+    @Override
+    @Deprecated
+    public void log(Exception exception, String message) {
+        context.getLogger().error(message, exception);
+    }
+
+
+
+    @Override
+    public void log(String message, Throwable throwable) {
+        context.getLogger().error(message, throwable);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set an alternate Deployment Descriptor name.
+     *
+     * @param altDDName The new name
+     */
+    @Override
+    public void setAltDDName(String altDDName) {
+        this.altDDName = altDDName;
+        if (context != null) {
+            context.setAttribute(Globals.ALT_DD_ATTR,altDDName);
+        }
+    }

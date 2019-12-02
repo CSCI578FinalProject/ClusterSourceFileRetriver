@@ -1,0 +1,93 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Get more request body data from the web server and store it in the
+     * internal buffer.
+     *
+     * @return true if there is more data, false if not.
+     */
+    private boolean refillReadBuffer() throws IOException {
+        // If the server returns an empty packet, assume that that end of
+        // the stream has been reached (yuck -- fix protocol??).
+        // FORM support
+        if (replay) {
+            endOfStream = true; // we've read everything there is
+        }
+        if (endOfStream) {
+            return false;
+        }
+
+        // Request more data immediately
+        Socket.sendb(socket, getBodyMessageBuffer, 0,
+                getBodyMessageBuffer.position());
+
+        boolean moreData = receive();
+        if( !moreData ) {
+            endOfStream = true;
+        }
+        return moreData;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /** Receive a chunk of data. Called to implement the
+     *  'special' packet in ajp13 and to receive the data
+     *  after we send a GET_BODY packet
+     */
+    public boolean receive() throws IOException {
+
+        first = false;
+        bodyMessage.reset();
+        readMessage(bodyMessage, false, false);
+
+        // No data received.
+        if (bodyMessage.getLen() == 0) {
+            // just the header
+            // Don't mark 'end of stream' for the first chunk.
+            return false;
+        }
+        int blen = bodyMessage.peekInt();
+        if (blen == 0) {
+            return false;
+        }
+
+        bodyMessage.getBodyBytes(bodyBytes);
+        empty = false;
+        return true;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Send data over a network.
+     * <PRE>
+     * This functions acts like a blocking write by default.  To change
+     * this behavior, use apr_socket_timeout_set() or the APR_SO_NONBLOCK
+     * socket option.
+     *
+     * It is possible for both bytes to be sent and an error to be returned.
+     *
+     * APR_EINTR is never returned.
+     * </PRE>
+     * @param sock The socket to send the data over.
+     * @param buf The Byte buffer which contains the data to be sent.
+     * @param offset The offset within the buffer array of the first buffer from
+     *               which bytes are to be retrieved; must be non-negative
+     *               and no larger than buf.length
+     * @param len The maximum number of buffers to be accessed; must be non-negative
+     *            and no larger than buf.length - offset
+     * @return The number of bytes send.
+     *
+     */
+    public static native int sendb(long sock, ByteBuffer buf,
+                                   int offset, int len);
+-----CSCI578-----
+
+    
+    public void getBodyBytes(MessageBytes mb) {
+        doGetBytes(mb, false);
+    }

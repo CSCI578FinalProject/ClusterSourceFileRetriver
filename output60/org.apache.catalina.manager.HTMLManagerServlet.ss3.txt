@@ -1,0 +1,204 @@
+14
+-----CSCI578-----
+
+
+    /**
+     * Process a POST request for the specified resource.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    public void doPost(HttpServletRequest request,
+                      HttpServletResponse response)
+        throws IOException, ServletException {
+
+        // Identify the request parameters that we need
+        String command = request.getPathInfo();
+
+        if (command == null || !command.equals("/upload")) {
+            doGet(request,response);
+            return;
+        }
+
+        // Prepare our output writer to generate the response message
+        response.setContentType("text/html; charset=" + Constants.CHARSET);
+
+        String message = "";
+
+        // Create a new file upload handler
+        DiskFileUpload upload = new DiskFileUpload();
+
+        // Get the tempdir
+        File tempdir = (File) getServletContext().getAttribute
+            ("javax.servlet.context.tempdir");
+        // Set upload parameters
+        upload.setSizeMax(-1);
+        upload.setRepositoryPath(tempdir.getCanonicalPath());
+    
+        // Parse the request
+        String basename = null;
+        String war = null;
+        FileItem warUpload = null;
+        try {
+            List items = upload.parseRequest(request);
+        
+            // Process the uploaded fields
+            Iterator iter = items.iterator();
+            while (iter.hasNext()) {
+                FileItem item = (FileItem) iter.next();
+        
+                if (!item.isFormField()) {
+                    if (item.getFieldName().equals("deployWar") &&
+                        warUpload == null) {
+                        warUpload = item;
+                    } else {
+                        item.delete();
+                    }
+                }
+            }
+            while (true) {
+                if (warUpload == null) {
+                    message = sm.getString
+                        ("htmlManagerServlet.deployUploadNoFile");
+                    break;
+                }
+                war = warUpload.getName();
+                if (!war.toLowerCase().endsWith(".war")) {
+                    message = sm.getString
+                        ("htmlManagerServlet.deployUploadNotWar",war);
+                    break;
+                }
+                // Get the filename if uploaded name includes a path
+                if (war.lastIndexOf('\\') >= 0) {
+                    war = war.substring(war.lastIndexOf('\\') + 1);
+                }
+                if (war.lastIndexOf('/') >= 0) {
+                    war = war.substring(war.lastIndexOf('/') + 1);
+                }
+                // Identify the appBase of the owning Host of this Context
+                // (if any)
+                basename = war.substring(0, war.toLowerCase().indexOf(".war"));
+                File file = new File(getAppBase(), war);
+                if (file.exists()) {
+                    message = sm.getString
+                        ("htmlManagerServlet.deployUploadWarExists",war);
+                    break;
+                }
+                String path = null;
+                if (basename.equals("ROOT")) {
+                    path = "";
+                } else {
+                    path = "/" + basename.replace('#', '/');
+                }
+
+                if ((host.findChild(path) != null) && !isDeployed(path)) {
+                    message = sm.getString
+                        ("htmlManagerServlet.deployUploadInServerXml", war);
+                    break;
+                }
+
+                if (!isServiced(path)) {
+                    addServiced(path);
+                    try {
+                        warUpload.write(file);
+                        // Perform new deployment
+                        check(path);
+                    } finally {
+                        removeServiced(path);
+                    }
+                }
+                break;
+            }
+        } catch(Exception e) {
+            message = sm.getString
+                ("htmlManagerServlet.deployUploadFail", e.getMessage());
+            log(message, e);
+        } finally {
+            if (warUpload != null) {
+                warUpload.delete();
+            }
+            warUpload = null;
+        }
+
+        list(request, response, message);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Returns the name of the field in the multipart form corresponding to
+     * this file item.
+     *
+     * @return The name of the form field.
+     */
+    String getFieldName();
+-----CSCI578-----
+
+
+
+    /**
+     * Deletes the underlying storage for a file item, including deleting any
+     * associated temporary disk file. Although this storage will be deleted
+     * automatically when the <code>FileItem</code> instance is garbage
+     * collected, this method can be used to ensure that this is done at an
+     * earlier time, thus preserving system resources.
+     */
+    void delete();
+-----CSCI578-----
+
+
+
+    /**
+     * Determines whether or not a <code>FileItem</code> instance represents
+     * a simple form field.
+     *
+     * @return <code>true</code> if the instance represents a simple form
+     *         field; <code>false</code> if it represents an uploaded file.
+     */
+    boolean isFormField();
+-----CSCI578-----
+
+
+
+    /**
+     * Returns the original filename in the client's filesystem, as provided by
+     * the browser (or other client software). In most cases, this will be the
+     * base file name, without path information. However, some clients, such as
+     * the Opera browser, do include path information.
+     *
+     * @return The original filename in the client's filesystem.
+     */
+    String getName();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * A convenience method to write an uploaded item to disk. The client code
+     * is not concerned with whether or not the item is stored in memory, or on
+     * disk in a temporary location. They just want to write the uploaded item
+     * to a file.
+     * <p>
+     * This method is not guaranteed to succeed if called more than once for
+     * the same item. This allows a particular implementation to use, for
+     * example, file renaming, where possible, rather than copying all of the
+     * underlying data, thus gaining a significant performance benefit.
+     *
+     * @param file The <code>File</code> into which the uploaded item should
+     *             be stored.
+     *
+     * @exception Exception if an error occurs.
+     */
+    void write(File file) throws Exception;
+-----CSCI578-----

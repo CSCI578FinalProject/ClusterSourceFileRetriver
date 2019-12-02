@@ -1,0 +1,125 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified Engine from the set of defined Engines, along with
+     * all of its related Hosts and Contexts.  All associated Connectors are
+     * also removed.
+     *
+     * @param engine The Engine to be removed
+     */
+    public synchronized void removeEngine(Engine engine) {
+
+        if( log.isDebugEnabled() )
+            log.debug("Removing engine (" + engine.getInfo() + ")");
+
+        // Is the specified Engine actually defined?
+        int j = -1;
+        for (int i = 0; i < engines.length; i++) {
+            if (engine == engines[i]) {
+                j = i;
+                break;
+            }
+        }
+        if (j < 0)
+            return;
+
+        // Remove any Connector that is using this Engine
+        if( log.isDebugEnabled() )
+            log.debug(" Removing related Containers");
+        while (true) {
+            int n = -1;
+            for (int i = 0; i < connectors.length; i++) {
+                if (connectors[i].getContainer() == (Container) engine) {
+                    n = i;
+                    break;
+                }
+            }
+            if (n < 0)
+                break;
+            removeConnector(connectors[n]);
+        }
+
+        // Stop this Engine if necessary
+        if (engine instanceof Lifecycle) {
+            if( log.isDebugEnabled() )
+                log.debug(" Stopping this Engine");
+            try {
+                ((Lifecycle) engine).stop();
+            } catch (LifecycleException e) {
+                log.error("Engine.stop", e);
+            }
+        }
+
+        // Remove this Engine from our set of defined Engines
+        if( log.isDebugEnabled() )
+            log.debug(" Removing this Engine");
+        int k = 0;
+        Engine results[] = new Engine[engines.length - 1];
+        for (int i = 0; i < engines.length; i++) {
+            if (i != j)
+                results[k++] = engines[i];
+        }
+        engines = results;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Container used for processing requests received by this
+     * Connector.
+     */
+    public Container getContainer() {
+        if( container==null ) {
+            // Lazy - maybe it was added later
+            findContainer();
+        }
+        return (container);
+
+    }
+-----CSCI578-----
+
+
+    protected void findContainer() {
+        try {
+            // Register to the service
+            ObjectName parentName=new ObjectName( domain + ":" +
+                    "type=Service");
+
+            if(log.isDebugEnabled())
+                log.debug("Adding to " + parentName );
+            if( mserver.isRegistered(parentName )) {
+                mserver.invoke(parentName, "addConnector", new Object[] { this },
+                        new String[] {"org.apache.catalina.connector.Connector"});
+                // As a side effect we'll get the container field set
+                // Also initialize will be called
+                //return;
+            }
+            // XXX Go directly to the Engine
+            // initialize(); - is called by addConnector
+            ObjectName engName=new ObjectName( domain + ":" + "type=Engine");
+            if( mserver.isRegistered(engName )) {
+                Object obj=mserver.getAttribute(engName, "managedResource");
+                if(log.isDebugEnabled())
+                      log.debug("Found engine " + obj + " " + obj.getClass());
+                container=(Container)obj;
+
+                // Internal initialize - we now have the Engine
+                initialize();
+
+                if(log.isDebugEnabled())
+                    log.debug("Initialized");
+                // As a side effect we'll get the container field set
+                // Also initialize will be called
+                return;
+            }
+        } catch( Exception ex ) {
+            log.error( "Error finding container " + ex);
+        }
+    }
+-----CSCI578-----

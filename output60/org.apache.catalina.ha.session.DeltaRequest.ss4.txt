@@ -1,0 +1,68 @@
+9
+-----CSCI578-----
+
+    
+    public void execute(DeltaSession session) {
+        execute(session,true);
+    }
+
+
+    public void execute(DeltaSession session, boolean notifyListeners) {
+        if ( !this.sessionId.equals( session.getId() ) )
+            throw new java.lang.IllegalArgumentException("Session id mismatch, not executing the delta request");
+        session.access();
+        for ( int i=0; i<actions.size(); i++ ) {
+            AttributeInfo info = (AttributeInfo)actions.get(i);
+            switch ( info.getType() ) {
+                case TYPE_ATTRIBUTE: {
+                    if ( info.getAction() == ACTION_SET ) {
+                        if ( log.isTraceEnabled() ) log.trace("Session.setAttribute('"+info.getName()+"', '"+info.getValue()+"')");
+                        session.setAttribute(info.getName(), info.getValue(),notifyListeners,false);
+                    }  else {
+                        if ( log.isTraceEnabled() ) log.trace("Session.removeAttribute('"+info.getName()+"')");
+                        session.removeAttribute(info.getName(),notifyListeners,false);
+                    }
+                        
+                    break;
+                }//case
+                case TYPE_ISNEW: {
+                if ( log.isTraceEnabled() ) log.trace("Session.setNew('"+info.getValue()+"')");
+                    session.setNew(((Boolean)info.getValue()).booleanValue(),false);
+                    break;
+                }//case
+                case TYPE_MAXINTERVAL: {
+                    if ( log.isTraceEnabled() ) log.trace("Session.setMaxInactiveInterval('"+info.getValue()+"')");
+                    session.setMaxInactiveInterval(((Integer)info.getValue()).intValue(),false);
+                    break;
+                }//case
+                case TYPE_PRINCIPAL: {
+                    Principal p = null;
+                    if ( info.getAction() == ACTION_SET ) {
+                        SerializablePrincipal sp = (SerializablePrincipal)info.getValue();
+                        p = (Principal)sp.getPrincipal(session.getManager().getContainer().getRealm());
+                    }
+                    session.setPrincipal(p,false);
+                    break;
+                }//case
+                case TYPE_AUTHTYPE: {
+                    String authType = null;
+                    if ( info.getAction() == ACTION_SET ) {
+                        authType = (String)info.getValue();
+                    }
+                    session.setAuthType(authType,false);
+                    break;
+                }//case
+                default : throw new java.lang.IllegalArgumentException("Invalid attribute info type="+info);
+            }//switch
+        }//for
+        session.endAccess();
+        reset();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

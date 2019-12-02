@@ -1,0 +1,135 @@
+8
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Configure and initialize the set of filters for this Context.
+     * Return <code>true</code> if all filter initialization completed
+     * successfully, or <code>false</code> otherwise.
+     */
+    public boolean filterStart() {
+
+        if (getLogger().isDebugEnabled())
+            getLogger().debug("Starting filters");
+        // Instantiate and record a FilterConfig for each defined filter
+        boolean ok = true;
+        synchronized (filterConfigs) {
+            filterConfigs.clear();
+            Iterator names = filterDefs.keySet().iterator();
+            while (names.hasNext()) {
+                String name = (String) names.next();
+                if (getLogger().isDebugEnabled())
+                    getLogger().debug(" Starting filter '" + name + "'");
+                ApplicationFilterConfig filterConfig = null;
+                try {
+                    filterConfig = new ApplicationFilterConfig
+                      (this, (FilterDef) filterDefs.get(name));
+                    filterConfigs.put(name, filterConfig);
+                } catch (Throwable t) {
+                    getLogger().error
+                        (sm.getString("standardContext.filterStart", name), t);
+                    ok = false;
+                }
+            }
+        }
+
+        return (ok);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the resources DirContext object with which this Container is
+     * associated.
+     *
+     * @param resources The newly associated DirContext
+     */
+    public synchronized void setResources(DirContext resources) {
+
+        if (started) {
+            throw new IllegalStateException
+                (sm.getString("standardContext.resources.started"));
+        }
+
+        DirContext oldResources = this.webappResources;
+        if (oldResources == resources)
+            return;
+
+        if (resources instanceof BaseDirContext) {
+            ((BaseDirContext) resources).setCached(isCachingAllowed());
+            ((BaseDirContext) resources).setCacheTTL(getCacheTTL());
+            ((BaseDirContext) resources).setCacheMaxSize(getCacheMaxSize());
+            ((BaseDirContext) resources).setCacheObjectMaxSize(
+                    getCacheObjectMaxSize());
+        }
+        if (resources instanceof FileDirContext) {
+            filesystemBased = true;
+            ((FileDirContext) resources).setCaseSensitive(isCaseSensitive());
+            ((FileDirContext) resources).setAllowLinking(isAllowLinking());
+        }
+        this.webappResources = resources;
+
+        // The proxied resources will be refreshed on start
+        this.resources = null;
+
+        support.firePropertyChange("resources", oldResources,
+                                   this.webappResources);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the maximum size of objects to be cached in KB.
+     */
+    public int getCacheObjectMaxSize() {
+        return cacheObjectMaxSize;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the maximum size of objects to be placed the cache in KB.
+     */
+    public void setCacheObjectMaxSize(int cacheObjectMaxSize) {
+        this.cacheObjectMaxSize = cacheObjectMaxSize;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Is caching allowed ?
+     */
+    public boolean isCachingAllowed() {
+        return cachingAllowed;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set case sensitivity.
+     */
+    public void setCaseSensitive(boolean caseSensitive) {
+        this.caseSensitive = caseSensitive;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set allow linking.
+     */
+    public void setAllowLinking(boolean allowLinking) {
+        this.allowLinking = allowLinking;
+    }

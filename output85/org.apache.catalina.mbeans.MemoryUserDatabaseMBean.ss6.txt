@@ -1,0 +1,77 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Create a new Role and return the corresponding MBean Name.
+     *
+     * @param rolename Group name of the new group
+     * @param description Description of the new group
+     * @return the new role object name
+     */
+    public String createRole(String rolename, String description) {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        Role role = database.createRole(rolename, description);
+        try {
+            MBeanUtils.createMBean(role);
+        } catch (Exception e) {
+            IllegalArgumentException iae = new IllegalArgumentException
+                ("Exception creating role [" + rolename + "] MBean");
+            iae.initCause(e);
+            throw iae;
+        }
+        return (findRole(rolename));
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the MBean Name for the specified role name (if any);
+     * otherwise return <code>null</code>.
+     *
+     * @param rolename Role name to look up
+     * @return the role object name
+     */
+    public String findRole(String rolename) {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        Role role = database.findRole(rolename);
+        if (role == null) {
+            return (null);
+        }
+        try {
+            ObjectName oname =
+                MBeanUtils.createObjectName(managedRole.getDomain(), role);
+            return (oname.toString());
+        } catch (MalformedObjectNameException e) {
+            IllegalArgumentException iae = new IllegalArgumentException
+                ("Cannot create object name for role [" + rolename + "]");
+            iae.initCause(e);
+            throw iae;
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the MBean Names of all roles defined in this database.
+     */
+    public String[] getRoles() {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        ArrayList<String> results = new ArrayList<>();
+        Iterator<Role> roles = database.getRoles();
+        while (roles.hasNext()) {
+            Role role = roles.next();
+            results.add(findRole(role.getRolename()));
+        }
+        return results.toArray(new String[results.size()]);
+
+    }

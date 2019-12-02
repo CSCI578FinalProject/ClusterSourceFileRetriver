@@ -1,0 +1,714 @@
+50
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    void writeHeaders() throws IOException {
+        // TODO: Is 1k the optimal value?
+        handler.writeHeaders(this, coyoteResponse, 1024);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    void writeAck() throws IOException {
+        // TODO: Is 64 too big? Just the status header with compression
+        handler.writeHeaders(this, ACK_RESPONSE, 64);
+    }
+-----CSCI578-----
+
+
+    public void setResult(boolean result) {
+        this.result.set(result);
+    }
+-----CSCI578-----
+
+
+
+
+    void flushData() throws IOException {
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("stream.write", getConnectionId(), getIdentifier()));
+        }
+        outputBuffer.flush(true);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void action(ActionCode actionCode, Object param) {
+        switch (actionCode) {
+        // 'Normal' servlet support
+        case COMMIT: {
+            if (!response.isCommitted()) {
+                try {
+                    response.setCommitted(true);
+                    stream.writeHeaders();
+                } catch (IOException ioe) {
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
+                }
+            }
+            break;
+        }
+        case CLOSE: {
+            action(ActionCode.COMMIT, null);
+            try {
+                stream.getOutputBuffer().close();
+            } catch (IOException ioe) {
+                setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
+            }
+            break;
+        }
+        case ACK: {
+            if (!response.isCommitted() && request.hasExpectation()) {
+                try {
+                    stream.writeAck();
+                } catch (IOException ioe) {
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
+                }
+            }
+            break;
+        }
+        case CLIENT_FLUSH: {
+            action(ActionCode.COMMIT, null);
+            try {
+                stream.flushData();
+            } catch (IOException ioe) {
+                response.setErrorException(ioe);
+                setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
+            }
+            break;
+        }
+        case AVAILABLE: {
+            request.setAvailable(stream.getInputBuffer().available());
+            break;
+        }
+        case REQ_SET_BODY_REPLAY: {
+            ByteChunk body = (ByteChunk) param;
+            stream.getInputBuffer().insertReplayedBody(body);
+            stream.receivedEndOfStream();
+            break;
+        }
+        case RESET: {
+            stream.getOutputBuffer().reset();
+            break;
+        }
+
+        // Error handling
+        case IS_ERROR: {
+            ((AtomicBoolean) param).set(getErrorState().isError());
+            break;
+        }
+        case CLOSE_NOW: {
+            // No need to block further output. This is called by the error
+            // reporting valve if the response is already committed. It will
+            // flush any remaining response data before this call.
+            // Setting the error state will then cause this stream to be reset.
+            setErrorState(ErrorState.CLOSE_NOW,  null);
+            break;
+        }
+        case DISABLE_SWALLOW_INPUT: {
+            // NO-OP
+            // HTTP/2 has to swallow any input received to ensure that the flow
+            // control windows are correctly tracked.
+            break;
+        }
+        case END_REQUEST: {
+            // NO-OP
+            // This action is geared towards handling HTTP/1.1 expectations and
+            // keep-alive. Does not apply to HTTP/2 streams.
+            break;
+        }
+
+        // Request attribute support
+        case REQ_HOST_ADDR_ATTRIBUTE: {
+            request.remoteAddr().setString(socketWrapper.getRemoteAddr());
+            break;
+        }
+        case REQ_HOST_ATTRIBUTE: {
+            request.remoteHost().setString(socketWrapper.getRemoteHost());
+            break;
+        }
+        case REQ_LOCALPORT_ATTRIBUTE: {
+            request.setLocalPort(socketWrapper.getLocalPort());
+            break;
+        }
+        case REQ_LOCAL_ADDR_ATTRIBUTE: {
+            request.localAddr().setString(socketWrapper.getLocalAddr());
+            break;
+        }
+        case REQ_LOCAL_NAME_ATTRIBUTE: {
+            request.localName().setString(socketWrapper.getLocalName());
+            break;
+        }
+        case REQ_REMOTEPORT_ATTRIBUTE: {
+            request.setRemotePort(socketWrapper.getRemotePort());
+            break;
+        }
+
+        // SSL request attribute support
+        case REQ_SSL_ATTRIBUTE: {
+            try {
+                if (sslSupport != null) {
+                    Object sslO = sslSupport.getCipherSuite();
+                    if (sslO != null) {
+                        request.setAttribute(SSLSupport.CIPHER_SUITE_KEY, sslO);
+                    }
+                    sslO = sslSupport.getPeerCertificateChain();
+                    if (sslO != null) {
+                        request.setAttribute(SSLSupport.CERTIFICATE_KEY, sslO);
+                    }
+                    sslO = sslSupport.getKeySize();
+                    if (sslO != null) {
+                        request.setAttribute(SSLSupport.KEY_SIZE_KEY, sslO);
+                    }
+                    sslO = sslSupport.getSessionId();
+                    if (sslO != null) {
+                        request.setAttribute(SSLSupport.SESSION_ID_KEY, sslO);
+                    }
+                    sslO = sslSupport.getProtocol();
+                    if (sslO != null) {
+                        request.setAttribute(SSLSupport.PROTOCOL_VERSION_KEY, sslO);
+                    }
+                    request.setAttribute(SSLSupport.SESSION_MGR, sslSupport);
+                }
+            } catch (Exception e) {
+                log.warn(sm.getString("streamProcessor.ssl.error"), e);
+            }
+            break;
+        }
+        case REQ_SSL_CERTIFICATE: {
+            // No re-negotiation support in HTTP/2. Either the certificate is
+            // available or it isn't.
+            try {
+                if (sslSupport != null) {
+                    Object sslO = sslSupport.getCipherSuite();
+                    sslO = sslSupport.getPeerCertificateChain();
+                    if (sslO != null) {
+                        request.setAttribute(SSLSupport.CERTIFICATE_KEY, sslO);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn(sm.getString("streamProcessor.ssl.error"), e);
+            }
+            break;
+        }
+
+        // Servlet 3.0 asynchronous support
+        case ASYNC_START: {
+            asyncStateMachine.asyncStart((AsyncContextCallback) param);
+            break;
+        }
+        case ASYNC_COMPLETE: {
+            if (asyncStateMachine.asyncComplete()) {
+                socketWrapper.getEndpoint().getExecutor().execute(this);
+            }
+            break;
+        }
+        case ASYNC_DISPATCH: {
+            if (asyncStateMachine.asyncDispatch()) {
+                socketWrapper.getEndpoint().getExecutor().execute(this);
+            }
+            break;
+        }
+        case ASYNC_DISPATCHED: {
+            asyncStateMachine.asyncDispatched();
+            break;
+        }
+        case ASYNC_ERROR: {
+            asyncStateMachine.asyncError();
+            break;
+        }
+        case ASYNC_IS_ASYNC: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isAsync());
+            break;
+        }
+        case ASYNC_IS_COMPLETING: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isCompleting());
+            break;
+        }
+        case ASYNC_IS_DISPATCHING: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncDispatching());
+            break;
+        }
+        case ASYNC_IS_ERROR: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncError());
+            break;
+        }
+        case ASYNC_IS_STARTED: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncStarted());
+            break;
+        }
+        case ASYNC_IS_TIMINGOUT: {
+            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncTimingOut());
+            break;
+        }
+        case ASYNC_RUN: {
+            asyncStateMachine.asyncRun((Runnable) param);
+            break;
+        }
+        case ASYNC_SETTIMEOUT: {
+            if (param == null) {
+                return;
+            }
+            long timeout = ((Long) param).longValue();
+            setAsyncTimeout(timeout);
+            break;
+        }
+        case ASYNC_TIMEOUT: {
+            AtomicBoolean result = (AtomicBoolean) param;
+            result.set(asyncStateMachine.asyncTimeout());
+            break;
+        }
+
+        // Servlet 3.1 non-blocking I/O
+        case REQUEST_BODY_FULLY_READ: {
+            AtomicBoolean result = (AtomicBoolean) param;
+            result.set(stream.getInputBuffer().isRequestBodyFullyRead());
+            break;
+        }
+        case NB_READ_INTEREST: {
+            stream.getInputBuffer().registerReadInterest();
+            break;
+        }
+        case NB_WRITE_INTEREST: {
+            AtomicBoolean result = (AtomicBoolean) param;
+            result.set(stream.getOutputBuffer().isReady());
+            break;
+        }
+        case DISPATCH_READ: {
+            addDispatch(DispatchType.NON_BLOCKING_READ);
+            break;
+        }
+        case DISPATCH_WRITE: {
+            addDispatch(DispatchType.NON_BLOCKING_WRITE);
+            break;
+        }
+        case DISPATCH_EXECUTE: {
+            socketWrapper.getEndpoint().getExecutor().execute(this);
+            break;
+        }
+
+        // Servlet 3.1 HTTP Upgrade
+        case UPGRADE: {
+            // Unsupported / illegal under HTTP/2
+            throw new UnsupportedOperationException(
+                    sm.getString("streamProcessor.httpupgrade.notsupported"));
+        }
+
+        // Servlet 4.0 Push requests
+        case IS_PUSH_SUPPORTED: {
+            AtomicBoolean result = (AtomicBoolean) param;
+            result.set(stream.isPushSupported());
+            break;
+        }
+        case PUSH_REQUEST: {
+            try {
+                PushToken pushToken = (PushToken) param;
+                pushToken.setResult(stream.push(pushToken.getPushTarget()));
+            } catch (IOException ioe) {
+                response.setErrorException(ioe);
+                setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
+            }
+            break;
+        }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Request getPushTarget() {
+        return pushTarget;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public boolean isCommitted() {
+        return commited;
+    }
+-----CSCI578-----
+
+
+    public MessageBytes remoteAddr() {
+        return remoteAddrMB;
+    }
+-----CSCI578-----
+
+
+    public MessageBytes remoteHost() {
+        return remoteHostMB;
+    }
+-----CSCI578-----
+
+
+    public MessageBytes localAddr() {
+        return localAddrMB;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- Other attributes --------------------
+    // We can use notes for most - need to discuss what is of general interest
+
+    public void setAttribute( String name, Object o ) {
+        attributes.put( name, o );
+    }
+-----CSCI578-----
+
+    public Executor getExecutor() { return executor; }
+-----CSCI578-----
+
+
+    public synchronized void asyncStart(AsyncContextCallback asyncCtxt) {
+        if (state == AsyncState.DISPATCHED) {
+            state = AsyncState.STARTING;
+            this.asyncCtxt = asyncCtxt;
+            lastAsyncStart = System.currentTimeMillis();
+        } else {
+            throw new IllegalStateException(
+                    sm.getString("asyncStateMachine.invalidAsyncState",
+                            "asyncStart()", state));
+        }
+    }
+-----CSCI578-----
+
+
+
+    public synchronized boolean asyncComplete() {
+        pauseNonContainerThread();
+        boolean doComplete = false;
+        if (state == AsyncState.STARTING) {
+            state = AsyncState.MUST_COMPLETE;
+        } else if (state == AsyncState.STARTED) {
+            state = AsyncState.COMPLETING;
+            doComplete = true;
+        } else if (state == AsyncState.TIMING_OUT ||
+                state == AsyncState.ERROR) {
+            state = AsyncState.MUST_COMPLETE;
+        } else if (state == AsyncState.READ_WRITE_OP) {
+            clearNonBlockingListeners();
+            state = AsyncState.MUST_COMPLETE;
+        } else {
+            throw new IllegalStateException(
+                    sm.getString("asyncStateMachine.invalidAsyncState",
+                            "asyncComplete()", state));
+        }
+        return doComplete;
+    }
+-----CSCI578-----
+
+
+
+    public synchronized boolean asyncTimeout() {
+        if (state == AsyncState.STARTED) {
+            state = AsyncState.TIMING_OUT;
+            return true;
+        } else if (state == AsyncState.COMPLETING ||
+                state == AsyncState.DISPATCHING ||
+                state == AsyncState.DISPATCHED) {
+            // NOOP - App called complete() or dispatch() between the the
+            // timeout firing and execution reaching this point
+            return false;
+        } else {
+            throw new IllegalStateException(
+                    sm.getString("asyncStateMachine.invalidAsyncState",
+                            "asyncTimeout()", state));
+        }
+    }
+-----CSCI578-----
+
+
+
+    public synchronized boolean asyncDispatch() {
+        pauseNonContainerThread();
+        boolean doDispatch = false;
+        if (state == AsyncState.STARTING ||
+                state == AsyncState.TIMING_OUT ||
+                state == AsyncState.ERROR) {
+            // In these three cases processing is on a container thread so no
+            // need to transfer processing to a new container thread
+            state = AsyncState.MUST_DISPATCH;
+        } else if (state == AsyncState.STARTED) {
+            state = AsyncState.DISPATCHING;
+            // A dispatch is always required.
+            // If on a non-container thread, need to get back onto a container
+            // thread to complete the processing.
+            // If on a container thread the current request/response are not the
+            // request/response associated with the AsyncContext so need a new
+            // container thread to process the different request/response.
+            doDispatch = true;
+        } else if (state == AsyncState.READ_WRITE_OP) {
+            state = AsyncState.DISPATCHING;
+            // If on a container thread then the socket will be added to the
+            // poller poller when the thread exits the
+            // AbstractConnectionHandler.process() method so don't do a dispatch
+            // here which would add it to the poller a second time.
+            if (!ContainerThreadMarker.isContainerThread()) {
+                doDispatch = true;
+            }
+        } else {
+            throw new IllegalStateException(
+                    sm.getString("asyncStateMachine.invalidAsyncState",
+                            "asyncDispatch()", state));
+        }
+        return doDispatch;
+    }
+-----CSCI578-----
+
+
+
+    public synchronized void asyncDispatched() {
+        if (state == AsyncState.DISPATCHING ||
+                state == AsyncState.MUST_DISPATCH) {
+            state = AsyncState.DISPATCHED;
+        } else {
+            throw new IllegalStateException(
+                    sm.getString("asyncStateMachine.invalidAsyncState",
+                            "asyncDispatched()", state));
+        }
+    }
+-----CSCI578-----
+
+
+
+    public synchronized void asyncError() {
+        if (state == AsyncState.DISPATCHED ||
+                state == AsyncState.TIMING_OUT ||
+                state == AsyncState.READ_WRITE_OP) {
+            clearNonBlockingListeners();
+            state = AsyncState.ERROR;
+        } else {
+            throw new IllegalStateException(
+                    sm.getString("asyncStateMachine.invalidAsyncState",
+                            "asyncError()", state));
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void setCommitted(boolean v) {
+        if (v && !this.commited) {
+            this.commitTime = System.currentTimeMillis();
+        }
+        this.commited = v;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setAvailable(int available) {
+        this.available = available;
+    }
+-----CSCI578-----
+
+
+    public boolean isAsyncError() {
+        return state == AsyncState.ERROR;
+    }
+-----CSCI578-----
+
+
+    public boolean isAsyncTimingOut() {
+        return state == AsyncState.TIMING_OUT;
+    }
+-----CSCI578-----
+
+
+    public void setLocalPort(int port){
+        this.localPort = port;
+    }
+-----CSCI578-----
+
+
+    public void setRemotePort(int port){
+        this.remotePort = port;
+    }
+-----CSCI578-----
+
+
+    public AbstractEndpoint<E> getEndpoint() {
+        return endpoint;
+    }
+-----CSCI578-----
+
+
+
+    public boolean hasExpectation() {
+        return expectation;
+    }
+-----CSCI578-----
+
+
+    // -----------------Error State --------------------
+
+
+    /**
+     * Set the error Exception that occurred during request processing.
+     *
+     * @param ex The exception that occurred
+     */
+    public void setErrorException(Exception ex) {
+        errorException = ex;
+    }
+-----CSCI578-----
+
+
+    /**
+     * The cipher suite being used on this connection.
+     *
+     * @return The name of the cipher suite as returned by the SSL/TLS
+     *        implementation
+     *
+     * @throws IOException If an error occurs trying to obtain the cipher suite
+     */
+    public String getCipherSuite() throws IOException;
+-----CSCI578-----
+
+
+    /**
+     * The client certificate chain (if any).
+     *
+     * @return The certificate chain presented by the client with the peer's
+     *         certificate first, followed by those of any certificate
+     *         authorities
+     *
+     * @throws IOException If an error occurs trying to obtain the certificate
+     *                     chain
+     */
+    public X509Certificate[] getPeerCertificateChain() throws IOException;
+-----CSCI578-----
+
+
+    /**
+     * Get the keysize.
+     *
+     * What we're supposed to put here is ill-defined by the
+     * Servlet spec (S 4.7 again). There are at least 4 potential
+     * values that might go here:
+     *
+     * (a) The size of the encryption key
+     * (b) The size of the MAC key
+     * (c) The size of the key-exchange key
+     * (d) The size of the signature key used by the server
+     *
+     * Unfortunately, all of these values are nonsensical.
+     *
+     * @return The effective key size for the current cipher suite
+     *
+     * @throws IOException If an error occurs trying to obtain the key size
+     */
+    public Integer getKeySize() throws IOException;
+-----CSCI578-----
+
+
+    /**
+     * The current session Id.
+     *
+     * @return The current SSL/TLS session ID
+     *
+     * @throws IOException If an error occurs trying to obtain the session ID
+     */
+    public String getSessionId() throws IOException;
+-----CSCI578-----
+
+
+    /**
+     * @return the protocol String indicating how the SSL socket was created
+     *  e.g. TLSv1 or TLSv1.2 etc.
+     *
+     * @throws IOException If an error occurs trying to obtain the protocol
+     *   information from the socket
+     */
+    public String getProtocol() throws IOException;
+-----CSCI578-----
+
+
+
+    StreamOutputBuffer getOutputBuffer() {
+        return outputBuffer;
+    }
+-----CSCI578-----
+
+
+
+    StreamInputBuffer getInputBuffer() {
+        return inputBuffer;
+    }
+-----CSCI578-----
+
+
+
+    void receivedEndOfStream() {
+        state.recievedEndOfStream();
+    }
+-----CSCI578-----
+
+
+
+    boolean isInputFinished() {
+        return !state.isFrameTypePermitted(FrameType.DATA);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public synchronized void recievedEndOfStream() {
+        stateChange(State.OPEN, State.HALF_CLOSED_REMOTE);
+        stateChange(State.HALF_CLOSED_LOCAL, State.CLOSED_RX);
+    }
+-----CSCI578-----
+
+
+
+    // ---------------------- Properties that are passed through to the EndPoint
+
+    @Override
+    public Executor getExecutor() { return endpoint.getExecutor(); }
+-----CSCI578-----
+
+
+
+    @Override
+    public void receiveEndOfStream(int streamId) throws ConnectionException {
+        Stream stream = getStream(streamId, connectionState.get().isNewStreamAllowed());
+        if (stream != null) {
+            stream.receivedEndOfStream();
+            if (!stream.isActive()) {
+                activeRemoteStreamCount.decrementAndGet();
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    protected boolean flushBufferedWrite() throws IOException {
+        if (stream.getOutputBuffer().flush(false)) {
+            // The buffer wasn't fully flushed so re-register the
+            // stream for write. Note this does not go via the
+            // Response since the write registration state at
+            // that level should remain unchanged. Once the buffer
+            // has been emptied then the code below will call
+            // dispatch() which will enable the
+            // Response to respond to this event.
+            if (stream.getOutputBuffer().isReady()) {
+                // Unexpected
+                throw new IllegalStateException();
+            }
+            return true;
+        }
+        return false;
+    }

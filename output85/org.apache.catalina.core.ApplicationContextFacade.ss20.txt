@@ -1,0 +1,49 @@
+3
+-----CSCI578-----
+
+
+
+    @Override
+    public String getRealPath(String path) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (String) doPrivileged("getRealPath", new Object[]{path});
+        } else {
+            return context.getRealPath(path);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public ClassLoader getClassLoader() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (ClassLoader) doPrivileged("getClassLoader", null);
+        } else {
+            return context.getClassLoader();
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public ClassLoader getClassLoader() {
+        ClassLoader result = context.getLoader().getClassLoader();
+        if (Globals.IS_SECURITY_ENABLED) {
+            ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+            ClassLoader parent = result;
+            while (parent != null) {
+                if (parent == tccl) {
+                    break;
+                }
+                parent = parent.getParent();
+            }
+            if (parent == null) {
+                System.getSecurityManager().checkPermission(
+                        new RuntimePermission("getClassLoader"));
+            }
+        }
+
+        return result;
+    }

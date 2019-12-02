@@ -1,0 +1,91 @@
+3
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Deregister the specified single sign on identifier, and invalidate
+     * any associated sessions.
+     *
+     * @param ssoId Single sign on identifier to deregister
+     */
+    protected void deregister(String ssoId) {
+
+        // Look up and remove the corresponding SingleSignOnEntry
+        SingleSignOnEntry sso = cache.remove(ssoId);
+
+        if (sso == null) {
+            if (containerLog.isDebugEnabled()) {
+                containerLog.debug(sm.getString("singleSignOn.debug.deregisterFail", ssoId));
+            }
+            return;
+        }
+
+        // Expire any associated sessions
+        Set<SingleSignOnSessionKey> ssoKeys = sso.findSessions();
+        if (ssoKeys.size() == 0) {
+            if (containerLog.isDebugEnabled()) {
+                containerLog.debug(sm.getString("singleSignOn.debug.deregisterNone", ssoId));
+            }
+        }
+        for (SingleSignOnSessionKey ssoKey : ssoKeys) {
+            if (containerLog.isDebugEnabled()) {
+                containerLog.debug(sm.getString("singleSignOn.debug.deregister", ssoKey, ssoId));
+            }
+            // Invalidate this session
+            expire(ssoKey);
+        }
+
+        // NOTE:  Clients may still possess the old single sign on cookie,
+        // but it will be removed on the next request since it is no longer
+        // in the cache
+    }
+
+
+
+    /**
+     * Register the specified Principal as being associated with the specified
+     * value for the single sign on identifier.
+     *
+     * @param ssoId Single sign on identifier to register
+     * @param principal Associated user principal that is identified
+     * @param authType Authentication type used to authenticate this
+     *  user principal
+     * @param username Username used to authenticate this user
+     * @param password Password used to authenticate this user
+     */
+    protected void register(String ssoId, Principal principal, String authType,
+                  String username, String password) {
+
+        if (containerLog.isDebugEnabled()) {
+            containerLog.debug(sm.getString("singleSignOn.debug.register", ssoId,
+                    principal != null ? principal.getName() : "", authType));
+        }
+
+        cache.put(ssoId, new SingleSignOnEntry(principal, authType, username, password));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Updates the SingleSignOnEntry to reflect the latest security
+     * information associated with the caller.
+     *
+     * @param principal the <code>Principal</code> returned by the latest
+     *                  call to <code>Realm.authenticate</code>.
+     * @param authType  the type of authenticator used (BASIC, CLIENT_CERT,
+     *                  DIGEST or FORM)
+     * @param username  the username (if any) used for the authentication
+     * @param password  the password (if any) used for the authentication
+     */
+    public synchronized void updateCredentials(Principal principal, String authType,
+                                  String username, String password) {
+        this.principal = principal;
+        this.authType = authType;
+        this.username = username;
+        this.password = password;
+        this.canReauthenticate = (HttpServletRequest.BASIC_AUTH.equals(authType) ||
+                HttpServletRequest.FORM_AUTH.equals(authType));
+    }

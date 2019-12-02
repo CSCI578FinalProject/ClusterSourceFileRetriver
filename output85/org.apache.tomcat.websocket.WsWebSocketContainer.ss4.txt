@@ -1,0 +1,101 @@
+4
+-----CSCI578-----
+
+
+
+    private static String generateWsKeyValue() {
+        byte[] keyBytes = new byte[16];
+        random.nextBytes(keyBytes);
+        return Base64.encodeBase64String(keyBytes);
+    }
+-----CSCI578-----
+
+
+
+    private static List<String> generateExtensionHeaders(List<Extension> extensions) {
+        List<String> result = new ArrayList<>(extensions.size());
+        for (Extension extension : extensions) {
+            StringBuilder header = new StringBuilder();
+            header.append(extension.getName());
+            for (Extension.Parameter param : extension.getParameters()) {
+                header.append(';');
+                header.append(param.getName());
+                String value = param.getValue();
+                if (value != null && value.length() > 0) {
+                    header.append('=');
+                    header.append(value);
+                }
+            }
+            result.add(header.toString());
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    private static Map<String,List<String>> createRequestHeaders(String host,
+            int port, List<String> subProtocols, List<Extension> extensions) {
+
+        Map<String,List<String>> headers = new HashMap<>();
+
+        // Host header
+        List<String> hostValues = new ArrayList<>(1);
+        if (port == -1) {
+            hostValues.add(host);
+        } else {
+            hostValues.add(host + ':' + port);
+        }
+
+        headers.put(Constants.HOST_HEADER_NAME, hostValues);
+
+        // Upgrade header
+        List<String> upgradeValues = new ArrayList<>(1);
+        upgradeValues.add(Constants.UPGRADE_HEADER_VALUE);
+        headers.put(Constants.UPGRADE_HEADER_NAME, upgradeValues);
+
+        // Connection header
+        List<String> connectionValues = new ArrayList<>(1);
+        connectionValues.add(Constants.CONNECTION_HEADER_VALUE);
+        headers.put(Constants.CONNECTION_HEADER_NAME, connectionValues);
+
+        // WebSocket version header
+        List<String> wsVersionValues = new ArrayList<>(1);
+        wsVersionValues.add(Constants.WS_VERSION_HEADER_VALUE);
+        headers.put(Constants.WS_VERSION_HEADER_NAME, wsVersionValues);
+
+        // WebSocket key
+        List<String> wsKeyValues = new ArrayList<>(1);
+        wsKeyValues.add(generateWsKeyValue());
+        headers.put(Constants.WS_KEY_HEADER_NAME, wsKeyValues);
+
+        // WebSocket sub-protocols
+        if (subProtocols != null && subProtocols.size() > 0) {
+            headers.put(Constants.WS_PROTOCOL_HEADER_NAME, subProtocols);
+        }
+
+        // WebSocket extensions
+        if (extensions != null && extensions.size() > 0) {
+            headers.put(Constants.WS_EXTENSIONS_HEADER_NAME,
+                    generateExtensionHeaders(extensions));
+        }
+
+        return headers;
+    }
+-----CSCI578-----
+
+
+
+    private AsynchronousChannelGroup getAsynchronousChannelGroup() {
+        // Use AsyncChannelGroupUtil to share a common group amongst all
+        // WebSocket clients
+        AsynchronousChannelGroup result = asynchronousChannelGroup;
+        if (result == null) {
+            synchronized (asynchronousChannelGroupLock) {
+                if (asynchronousChannelGroup == null) {
+                    asynchronousChannelGroup = AsyncChannelGroupUtil.register();
+                }
+                result = asynchronousChannelGroup;
+            }
+        }
+        return result;
+    }

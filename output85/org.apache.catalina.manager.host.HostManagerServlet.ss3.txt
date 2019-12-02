@@ -1,0 +1,65 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified host.
+     *
+     * @param writer Writer to render results to
+     * @param name host name
+     * @param smClient StringManager for the client's locale
+     */
+    protected synchronized void remove(PrintWriter writer, String name,
+            StringManager smClient) {
+
+        if (debug >= 1) {
+            log(sm.getString("hostManagerServlet.remove", name));
+        }
+
+        // Validate the requested host name
+        if ((name == null) || name.length() == 0) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.invalidHostName", name));
+            return;
+        }
+
+        // Check if host exists
+        if (engine.findChild(name) == null) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.noHost", name));
+            return;
+        }
+
+        // Prevent removing our own host
+        if (engine.findChild(name) == installedHost) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.cannotRemoveOwnHost", name));
+            return;
+        }
+
+        // Remove host
+        // Note that the host will not get physically removed
+        try {
+            Container child = engine.findChild(name);
+            engine.removeChild(child);
+            if ( child instanceof ContainerBase ) ((ContainerBase)child).destroy();
+        } catch (Exception e) {
+            writer.println(smClient.getString("hostManagerServlet.exception",
+                    e.toString()));
+            return;
+        }
+
+        Host host = (StandardHost) engine.findChild(name);
+        if (host == null) {
+            writer.println(smClient.getString(
+                    "hostManagerServlet.remove", name));
+        } else {
+            // Something failed
+            writer.println(smClient.getString(
+                    "hostManagerServlet.removeFailed", name));
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----

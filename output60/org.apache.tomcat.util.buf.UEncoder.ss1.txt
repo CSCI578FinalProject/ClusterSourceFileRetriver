@@ -1,0 +1,96 @@
+5
+-----CSCI578-----
+
+    
+    /**
+     * Utility funtion to re-encode the URL.
+     * Still has problems with charset, since UEncoder mostly
+     * ignores it.
+     */
+    public String encodeURL(String uri) {
+	String outUri=null;
+	try {
+	    // XXX optimize - recycle, etc
+	    CharArrayWriter out = new CharArrayWriter();
+	    urlEncode(out, uri);
+	    outUri=out.toString();
+	} catch (IOException iex) {
+	}
+	return outUri;
+    }
+-----CSCI578-----
+
+
+
+    /** URL Encode string, using a specified encoding.
+     *
+     * @param buf The writer
+     * @param s string to be encoded
+     * @throws IOException If an I/O error occurs
+     */
+    public void urlEncode( Writer buf, String s )
+	throws IOException
+    {
+	if( c2b==null ) {
+	    bb=new ByteChunk(16); // small enough.
+	    c2b=new C2BConverter( bb, encoding );
+	}
+
+	for (int i = 0; i < s.length(); i++) {
+	    int c = (int) s.charAt(i);
+	    if( safeChars.get( c ) ) {
+		if( debug > 0 ) log("Safe: " + (char)c);
+		buf.write((char)c);
+	    } else {
+		if( debug > 0 ) log("Unsafe:  " + (char)c);
+		c2b.convert( (char)c );
+		
+		// "surrogate" - UTF is _not_ 16 bit, but 21 !!!!
+		// ( while UCS is 31 ). Amazing...
+		if (c >= 0xD800 && c <= 0xDBFF) {
+		    if ( (i+1) < s.length()) {
+			int d = (int) s.charAt(i+1);
+			if (d >= 0xDC00 && d <= 0xDFFF) {
+			    if( debug > 0 ) log("Unsafe:  " + c);
+			    c2b.convert( (char)d);
+			    i++;
+			}
+		    }
+		}
+
+		c2b.flushBuffer();
+		
+		urlEncode( buf, bb.getBuffer(), bb.getOffset(),
+			   bb.getLength() );
+		bb.recycle();
+	    }
+	}
+    }
+
+
+    /**
+     */
+    public void urlEncode( Writer buf, byte bytes[], int off, int len)
+	throws IOException
+    {
+	for( int j=off; j< len; j++ ) {
+	    buf.write( '%' );
+	    char ch = Character.forDigit((bytes[j] >> 4) & 0xF, 16);
+	    if( debug > 0 ) log("Encode:  " + ch);
+	    buf.write(ch);
+	    ch = Character.forDigit(bytes[j] & 0xF, 16);
+	    if( debug > 0 ) log("Encode:  " + ch);
+	    buf.write(ch);
+	}
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /** Flush any internal buffers into the ByteOutput or the internal
+     *  byte[]
+     */
+    public  final void flushBuffer() throws IOException {
+	conv.flush();
+    }
+-----CSCI578-----

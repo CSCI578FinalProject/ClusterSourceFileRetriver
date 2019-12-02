@@ -1,0 +1,60 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /** Generate the bytes using the specified encoding
+     */
+    public  final void convert(char c[], int off, int len ) throws IOException {
+	conv.write( c, off, len );
+    }
+
+
+    /** Generate the bytes using the specified encoding
+     */
+    public  final void convert(String s, int off, int len ) throws IOException {
+	conv.write( s, off, len );
+    }
+
+
+    /** Generate the bytes using the specified encoding
+     */
+    public  final void convert(String s ) throws IOException {
+	conv.write( s );
+    }
+
+
+    /** Generate the bytes using the specified encoding
+     */
+    public  final void convert(char c ) throws IOException {
+	conv.write( c );
+    }
+
+
+    /** Convert a message bytes chars to bytes
+     */
+    public final void convert(MessageBytes mb ) throws IOException {
+        int type=mb.getType();
+        if( type==MessageBytes.T_BYTES )
+            return;
+        ByteChunk orig=bb;
+        setByteChunk( mb.getByteChunk());
+        bb.recycle();
+        bb.allocate( 32, -1 );
+        
+        if( type==MessageBytes.T_STR ) {
+            convert( mb.getString() );
+            // System.out.println("XXX Converting " + mb.getString() );
+        } else if( type==MessageBytes.T_CHARS ) {
+            CharChunk charC=mb.getCharChunk();
+            convert( charC.getBuffer(),
+                                charC.getOffset(), charC.getLength());
+            //System.out.println("XXX Converting " + mb.getCharChunk() );
+        } else {
+            if (log.isDebugEnabled())
+                log.debug("XXX unknowon type " + type );
+        }
+        flushBuffer();
+        //System.out.println("C2B: XXX " + bb.getBuffer() + bb.getLength()); 
+        setByteChunk(orig);
+    }

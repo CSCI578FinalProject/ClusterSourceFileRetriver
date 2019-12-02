@@ -1,0 +1,85 @@
+11
+-----CSCI578-----
+
+
+    public void setForcedRemainingCapacity(Integer forcedRemainingCapacity) {
+        this.forcedRemainingCapacity = forcedRemainingCapacity;
+    }
+-----CSCI578-----
+
+
+    public void contextStopping() {
+        this.lastContextStoppedTime.set(System.currentTimeMillis());
+
+        // save the current pool parameters to restore them later
+        int savedCorePoolSize = this.getCorePoolSize();
+        TaskQueue taskQueue =
+                getQueue() instanceof TaskQueue ? (TaskQueue) getQueue() : null;
+        if (taskQueue != null) {
+            // note by slaurent : quite oddly threadPoolExecutor.setCorePoolSize
+            // checks that queue.remainingCapacity()==0. I did not understand
+            // why, but to get the intended effect of waking up idle threads, I
+            // temporarily fake this condition.
+            taskQueue.setForcedRemainingCapacity(Integer.valueOf(0));
+        }
+
+        // setCorePoolSize(0) wakes idle threads
+        this.setCorePoolSize(0);
+
+        // TaskQueue.take() takes care of timing out, so that we are sure that
+        // all threads of the pool are renewed in a limited time, something like
+        // (threadKeepAlive + longest request time)
+
+        if (taskQueue != null) {
+            // ok, restore the state of the queue and pool
+            taskQueue.setForcedRemainingCapacity(null);
+        }
+        this.setCorePoolSize(savedCorePoolSize);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setMinSpareThreads(int minSpareThreads) {
+        this.minSpareThreads = minSpareThreads;
+        if (executor != null) {
+            executor.setCorePoolSize(minSpareThreads);
+        }
+    }
+-----CSCI578-----
+
+
+    public int getCorePoolSize() {
+        return (executor != null) ? executor.getCorePoolSize() : 0;
+    }
+-----CSCI578-----
+
+
+    public int getQueueSize() {
+        return (executor != null) ? executor.getQueue().size() : -1;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public boolean resizePool(int corePoolSize, int maximumPoolSize) {
+        if (executor == null)
+            return false;
+
+        executor.setCorePoolSize(corePoolSize);
+        executor.setMaximumPoolSize(maximumPoolSize);
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setMaxThreads(int maxThreads) {
+        this.maxThreads = maxThreads;
+        if (executor != null) {
+            executor.setMaximumPoolSize(maxThreads);
+        }
+    }

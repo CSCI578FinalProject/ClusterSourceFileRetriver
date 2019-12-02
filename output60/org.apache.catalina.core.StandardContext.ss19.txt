@@ -1,0 +1,130 @@
+6
+-----CSCI578-----
+
+
+
+    /**
+     * Set the location.
+     *
+     * @param location The new location
+     */
+    public void setLocation(String location) {
+
+        //        if ((location == null) || !location.startsWith("/"))
+        //            throw new IllegalArgumentException
+        //                ("Error Page Location must start with a '/'");
+        this.location = RequestUtil.URLDecode(location);
+
+    }
+-----CSCI578-----
+
+
+
+
+    /**
+     * Add an error page for the specified error or Java exception.
+     *
+     * @param errorPage The error page definition to be added
+     */
+    public void addErrorPage(ErrorPage errorPage) {
+        // Validate the input parameters
+        if (errorPage == null)
+            throw new IllegalArgumentException
+                (sm.getString("standardContext.errorPage.required"));
+        String location = errorPage.getLocation();
+        if ((location != null) && !location.startsWith("/")) {
+            if (isServlet22()) {
+                if(log.isDebugEnabled())
+                    log.debug(sm.getString("standardContext.errorPage.warning",
+                                 location));
+                errorPage.setLocation("/" + location);
+            } else {
+                throw new IllegalArgumentException
+                    (sm.getString("standardContext.errorPage.error",
+                                  location));
+            }
+        }
+
+        // Add the specified error page to our internal collections
+        String exceptionType = errorPage.getExceptionType();
+        if (exceptionType != null) {
+            synchronized (exceptionPages) {
+                exceptionPages.put(exceptionType, errorPage);
+            }
+        } else {
+            synchronized (statusPages) {
+                if (errorPage.getErrorCode() == 200) {
+                    this.okErrorPage = errorPage;
+                }
+                statusPages.put(Integer.valueOf(errorPage.getErrorCode()),
+                                errorPage);
+            }
+        }
+        fireContainerEvent("addErrorPage", errorPage);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Are we processing a version 2.2 deployment descriptor?
+     */
+    protected boolean isServlet22() {
+        return XmlIdentifiers.WEB_22_PUBLIC.equals(publicId);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the exception type.
+     */
+    public String getExceptionType() {
+
+        return (this.exceptionType);
+
+    }
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Return the error code.
+     */
+    public int getErrorCode() {
+
+        return (this.errorCode);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the error page for the specified error code or
+     * Java language exception, if it exists; otherwise, no action is taken.
+     *
+     * @param errorPage The error page definition to be removed
+     */
+    public void removeErrorPage(ErrorPage errorPage) {
+
+        String exceptionType = errorPage.getExceptionType();
+        if (exceptionType != null) {
+            synchronized (exceptionPages) {
+                exceptionPages.remove(exceptionType);
+            }
+        } else {
+            synchronized (statusPages) {
+                if (errorPage.getErrorCode() == 200) {
+                    this.okErrorPage = null;
+                }
+                statusPages.remove(Integer.valueOf(errorPage.getErrorCode()));
+            }
+        }
+        fireContainerEvent("removeErrorPage", errorPage);
+
+    }

@@ -1,0 +1,156 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Save all currently active sessions in the appropriate persistence
+     * mechanism, if any.  If persistence is not supported, this method
+     * returns without doing anything.
+     * <p>
+     * Note that by default, this method is not called by the MiddleManager
+     * class. In order to use it, a subclass must specifically call it,
+     * for example in the stop() and/or processPersistenceChecks() methods.
+     */
+    public void unload() {
+
+        if (store == null)
+            return;
+
+        Session sessions[] = findSessions();
+        int n = sessions.length;
+        if (n == 0)
+            return;
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("persistentManager.unloading",
+                             String.valueOf(n)));
+
+        for (int i = 0; i < n; i++)
+            try {
+                swapOut(sessions[i]);
+            } catch (IOException e) {
+                ;   // This is logged in writeSession()
+            }
+
+    }
+
+
+
+    /**
+     * Gracefully terminate the active use of the public methods of this
+     * component.  This method should be the last one called on a given
+     * instance of this component.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that needs to be reported
+     */
+   public void stop() throws LifecycleException {
+
+        if (log.isDebugEnabled())
+            log.debug("Stopping");
+
+        // Validate and update our current component state
+        if (!isStarted()) {
+            log.info(sm.getString("standardManager.notStarted"));
+            return;
+        }
+
+        lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+        setStarted(false);
+
+        if (getStore() != null && saveOnRestart) {
+            unload();
+        } else {
+            // Expire all active sessions
+            Session sessions[] = findSessions();
+            for (int i = 0; i < sessions.length; i++) {
+                StandardSession session = (StandardSession) sessions[i];
+                if (!session.isValid())
+                    continue;
+                session.expire();
+            }
+        }
+
+        if (getStore() != null && getStore() instanceof Lifecycle)
+            ((Lifecycle)getStore()).stop();
+
+        // Require a new random number generator if we are restarted
+        this.random = null;
+
+        if( initialized )
+            destroy();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the started flag
+     */
+    protected void setStarted(boolean started) {
+
+        this.started = started;
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+
+    /**
+     * Indicates whether sessions are saved when the Manager is shut down
+     * properly. This requires the unload() method to be called.
+     */
+    public boolean getSaveOnRestart() {
+
+        return saveOnRestart;
+
+    }
+
+
+    /**
+     * Save all currently active sessions in the appropriate persistence
+     * mechanism, if any.  If persistence is not supported, this method
+     * returns without doing anything.
+     * <p>
+     * Note that by default, this method is not called by the MiddleManager
+     * class. In order to use it, a subclass must specifically call it,
+     * for example in the stop() and/or processPersistenceChecks() methods.
+     */
+    public void unload() {
+
+        if (store == null)
+            return;
+
+        Session sessions[] = findSessions();
+        int n = sessions.length;
+        if (n == 0)
+            return;
+
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("persistentManager.unloading",
+                             String.valueOf(n)));
+
+        for (int i = 0; i < n; i++)
+            try {
+                swapOut(sessions[i]);
+            } catch (IOException e) {
+                ;   // This is logged in writeSession()
+            }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the Store object which manages persistent Session
+     * storage for this Manager.
+     */
+    public Store getStore() {
+
+        return (this.store);
+
+    }

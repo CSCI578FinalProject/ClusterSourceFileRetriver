@@ -1,0 +1,146 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Delete a resource.
+     *
+     * @param req Servlet request
+     * @param resp Servlet response
+     * @return <code>true</code> if the delete is successful
+     * @throws IOException If an IO error occurs
+     */
+    private boolean deleteResource(HttpServletRequest req,
+                                   HttpServletResponse resp)
+            throws IOException {
+
+        String path = getRelativePath(req);
+
+        return deleteResource(path, req, resp, true);
+
+    }
+
+
+
+    /**
+     * Delete a resource.
+     *
+     * @param path Path of the resource which is to be deleted
+     * @param req Servlet request
+     * @param resp Servlet response
+     * @param setStatus Should the response status be set on successful
+     *                  completion
+     * @return <code>true</code> if the delete is successful
+     * @throws IOException If an IO error occurs
+     */
+    private boolean deleteResource(String path, HttpServletRequest req,
+                                   HttpServletResponse resp, boolean setStatus)
+            throws IOException {
+
+        String ifHeader = req.getHeader("If");
+        if (ifHeader == null)
+            ifHeader = "";
+
+        String lockTokenHeader = req.getHeader("Lock-Token");
+        if (lockTokenHeader == null)
+            lockTokenHeader = "";
+
+        if (isLocked(path, ifHeader + lockTokenHeader)) {
+            resp.sendError(WebdavStatus.SC_LOCKED);
+            return false;
+        }
+
+        WebResource resource = resources.getResource(path);
+
+        if (!resource.exists()) {
+            resp.sendError(WebdavStatus.SC_NOT_FOUND);
+            return false;
+        }
+
+        if (!resource.isDirectory()) {
+            if (!resource.delete()) {
+                resp.sendError(WebdavStatus.SC_INTERNAL_SERVER_ERROR);
+                return false;
+            }
+        } else {
+
+            Hashtable<String,Integer> errorList = new Hashtable<>();
+
+            deleteCollection(req, path, errorList);
+            if (!resource.delete()) {
+                errorList.put(path, Integer.valueOf
+                    (WebdavStatus.SC_INTERNAL_SERVER_ERROR));
+            }
+
+            if (!errorList.isEmpty()) {
+                sendReport(req, resp, errorList);
+                return false;
+            }
+        }
+        if (setStatus) {
+            resp.setStatus(WebdavStatus.SC_NO_CONTENT);
+        }
+        return true;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Deletes a collection.
+     * @param req The Servlet request
+     * @param path Path to the collection to be deleted
+     * @param errorList Contains the list of the errors which occurred
+     */
+    private void deleteCollection(HttpServletRequest req,
+                                  String path,
+                                  Hashtable<String,Integer> errorList) {
+
+        if (debug > 1)
+            log("Delete:" + path);
+
+        // Prevent deletion of special subdirectories
+        if (isSpecialPath(path)) {
+            errorList.put(path, Integer.valueOf(WebdavStatus.SC_FORBIDDEN));
+            return;
+        }
+
+        String ifHeader = req.getHeader("If");
+        if (ifHeader == null)
+            ifHeader = "";
+
+        String lockTokenHeader = req.getHeader("Lock-Token");
+        if (lockTokenHeader == null)
+            lockTokenHeader = "";
+
+        String[] entries = resources.list(path);
+
+        for (String entry : entries) {
+            String childName = path;
+            if (!childName.equals("/"))
+                childName += "/";
+            childName += entry;
+
+            if (isLocked(childName, ifHeader + lockTokenHeader)) {
+
+                errorList.put(childName, Integer.valueOf(WebdavStatus.SC_LOCKED));
+
+            } else {
+                WebResource childResource = resources.getResource(childName);
+                if (childResource.isDirectory()) {
+                    deleteCollection(req, childName, errorList);
+                }
+
+                if (!childResource.delete()) {
+                    if (!childResource.isDirectory()) {
+                        // If it's not a collection, then it's an unknown
+                        // error
+                        errorList.put(childName, Integer.valueOf(
+                                WebdavStatus.SC_INTERNAL_SERVER_ERROR));
+                    }
+                }
+            }
+        }
+    }
+-----CSCI578-----

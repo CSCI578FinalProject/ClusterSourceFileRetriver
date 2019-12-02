@@ -1,0 +1,59 @@
+3
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------- Bytes Handling Methods
+
+    /**
+     * Sends the buffer data to the client output, checking the
+     * state of Response and calling the right interceptors.
+     *
+     * @param buf Byte buffer to be written to the response
+     * @param off Offset
+     * @param cnt Length
+     *
+     * @throws IOException An underlying IOException occurred
+     */
+    @Override
+    public void realWriteBytes(byte buf[], int off, int cnt)
+            throws IOException {
+
+        if (closed) {
+            return;
+        }
+        if (coyoteResponse == null) {
+            return;
+        }
+
+        // If we really have something to write
+        if (cnt > 0) {
+            // real write to the adapter
+            outputChunk.setBytes(buf, off, cnt);
+            try {
+                coyoteResponse.doWrite(outputChunk);
+            } catch (IOException e) {
+                // An IOException on a write is almost always due to
+                // the remote client aborting the request.  Wrap this
+                // so that it can be handled better by the error dispatcher.
+                throw new ClientAbortException(e);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write a chunk of bytes.
+     *
+     * @param chunk The bytes to write
+     *
+     * @throws IOException If an I/O error occurs during the write
+     */
+    public void doWrite(ByteChunk chunk) throws IOException {
+        outputBuffer.doWrite(chunk);
+        contentWritten+=chunk.getLength();
+    }
+-----CSCI578-----

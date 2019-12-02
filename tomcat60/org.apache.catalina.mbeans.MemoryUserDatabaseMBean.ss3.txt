@@ -1,0 +1,54 @@
+4
+
+
+    // ------------------------------------------------------------- Operations
+
+
+    /**
+     * Create a new Group and return the corresponding MBean Name.
+     *
+     * @param groupname Group name of the new group
+     * @param description Description of the new group
+     */
+    public String createGroup(String groupname, String description) {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        Group group = database.createGroup(groupname, description);
+        try {
+            MBeanUtils.createMBean(group);
+        } catch (Exception e) {
+            IllegalArgumentException iae = new IllegalArgumentException
+                ("Exception creating group [" + groupname + "] MBean");
+            iae.initCause(e);
+            throw iae;
+        }
+        return (findGroup(groupname));
+
+    }
+
+
+    /**
+     * Return the MBean Name for the specified group name (if any);
+     * otherwise return <code>null</code>.
+     *
+     * @param groupname Group name to look up
+     */
+    public String findGroup(String groupname) {
+
+        UserDatabase database = (UserDatabase) this.resource;
+        Group group = database.findGroup(groupname);
+        if (group == null) {
+            return (null);
+        }
+        try {
+            ObjectName oname =
+                MBeanUtils.createObjectName(managedGroup.getDomain(), group);
+            return (oname.toString());
+        } catch (MalformedObjectNameException e) {
+            IllegalArgumentException iae = new IllegalArgumentException
+                ("Cannot create object name for group [" + groupname + "]");
+            iae.initCause(e);
+            throw iae;
+        }
+
+    }

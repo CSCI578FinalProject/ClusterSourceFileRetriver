@@ -1,0 +1,79 @@
+23
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean isHandshakeComplete() {
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Performs SSL handshake hence is a no-op for the non-secure
+     * implementation.
+     *
+     * @param read  Unused in non-secure implementation
+     * @param write Unused in non-secure implementation
+     * @return Always returns zero
+     * @throws IOException Never for non-secure channel
+     */
+    public int handshake(boolean read, boolean write) throws IOException {
+        return 0;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void processSocket(SocketWrapperBase<NioChannel> socketWrapper,
+            SocketEvent socketStatus, boolean dispatch) {
+        processSocket((NioSocketWrapper) socketWrapper, socketStatus, dispatch);
+    }
+
+
+    protected boolean processSocket(NioSocketWrapper attachment, SocketEvent status, boolean dispatch) {
+        try {
+            if (attachment == null) {
+                return false;
+            }
+            SocketProcessor sc = processorCache.pop();
+            if ( sc == null ) sc = new SocketProcessor(attachment, status);
+            else sc.reset(attachment, status);
+            Executor executor = getExecutor();
+            if (dispatch && executor != null) {
+                executor.execute(sc);
+            } else {
+                sc.run();
+            }
+        } catch (RejectedExecutionException ree) {
+            log.warn(sm.getString("endpoint.executor.fail", attachment.getSocket()), ree);
+            return false;
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            // This means we got an OOM or similar creating a thread, or that
+            // the pool and its queue are full
+            log.error(sm.getString("endpoint.process.fail"), t);
+            return false;
+        }
+        return true;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

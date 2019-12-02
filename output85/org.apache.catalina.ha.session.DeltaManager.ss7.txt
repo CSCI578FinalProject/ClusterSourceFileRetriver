@@ -1,0 +1,65 @@
+3
+-----CSCI578-----
+
+
+    /**
+     * @return <code>true</code> if the state transfer is complete.
+     */
+    public boolean getStateTransfered() {
+        return stateTransfered;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Wait that cluster session state is transfered or timeout after 60 Sec
+     * With stateTransferTimeout == -1 wait that backup is transfered (forever mode)
+     * @param beforeSendTime Start instant of the operation
+     */
+    protected void waitForSendAllSessions(long beforeSendTime) {
+        long reqStart = System.currentTimeMillis();
+        long reqNow = reqStart ;
+        boolean isTimeout = false;
+        if(getStateTransferTimeout() > 0) {
+            // wait that state is transfered with timeout check
+            do {
+                try {
+                    Thread.sleep(100);
+                } catch (Exception sleep) {
+                    //
+                }
+                reqNow = System.currentTimeMillis();
+                isTimeout = ((reqNow - reqStart) > (1000L * getStateTransferTimeout()));
+            } while ((!getStateTransfered()) && (!isTimeout) && (!isNoContextManagerReceived()));
+        } else {
+            if(getStateTransferTimeout() == -1) {
+                // wait that state is transfered
+                do {
+                    try {
+                        Thread.sleep(100);
+                    } catch (Exception sleep) {
+                    }
+                } while ((!getStateTransfered())&& (!isNoContextManagerReceived()));
+                reqNow = System.currentTimeMillis();
+            }
+        }
+        if (isTimeout) {
+            counterNoStateTransfered++ ;
+            log.error(sm.getString("deltaManager.noSessionState", getName(),
+                    new Date(beforeSendTime), Long.valueOf(reqNow - beforeSendTime)));
+        }else if (isNoContextManagerReceived()) {
+            if (log.isWarnEnabled())
+                log.warn(sm.getString("deltaManager.noContextManager", getName(),
+                        new Date(beforeSendTime), Long.valueOf(reqNow - beforeSendTime)));
+        } else {
+            if (log.isInfoEnabled())
+                log.info(sm.getString("deltaManager.sessionReceived",getName(),
+                        new Date(beforeSendTime), Long.valueOf(reqNow - beforeSendTime)));
+        }
+    }
+-----CSCI578-----
+
+
+    public boolean isNoContextManagerReceived() {
+        return noContextManagerReceived;
+    }

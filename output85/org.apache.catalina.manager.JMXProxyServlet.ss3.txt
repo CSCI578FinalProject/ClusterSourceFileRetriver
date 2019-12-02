@@ -1,0 +1,134 @@
+5
+-----CSCI578-----
+
+
+
+    private void invokeOperation(PrintWriter writer, String onameStr, String op,
+            String[] valuesStr) {
+        try {
+            Object retVal = invokeOperationInternal(onameStr, op, valuesStr);
+            if (retVal != null) {
+                writer.println("OK - Operation " + op + " returned:");
+                output("", writer, retVal);
+            } else {
+                writer.println("OK - Operation " + op + " without return value");
+            }
+        } catch (Exception ex) {
+            writer.println("Error - " + ex.toString());
+            ex.printStackTrace(writer);
+        }
+    }
+-----CSCI578-----
+
+
+
+    private void output(String indent, PrintWriter writer, Object result) {
+        if (result instanceof Object[]) {
+            for (Object obj : (Object[]) result) {
+                output("  " + indent, writer, obj);
+            }
+        } else {
+            String strValue;
+            if (result != null) {
+                strValue = result.toString();
+            } else {
+                strValue = "<null>";
+            }
+            writer.println(indent + strValue);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Invokes an operation on an MBean.
+     *
+     * @param onameStr The name of the MBean.
+     * @param operation The name of the operation to invoke.
+     * @param parameters An array of Strings containing the parameters to the
+     *            operation. They will be converted to the appropriate types to
+     *            call the reuested operation.
+     * @return The value returned by the requested operation.
+     */
+    private Object invokeOperationInternal(String onameStr, String operation, String[] parameters)
+            throws OperationsException, MBeanException, ReflectionException {
+        ObjectName oname = new ObjectName(onameStr);
+        MBeanOperationInfo methodInfo = registry.getMethodInfo(oname, operation);
+        MBeanParameterInfo[] signature = methodInfo.getSignature();
+        String[] signatureTypes = new String[signature.length];
+        Object[] values = new Object[signature.length];
+        for (int i = 0; i < signature.length; i++) {
+            MBeanParameterInfo pi = signature[i];
+            signatureTypes[i] = pi.getType();
+            values[i] = registry.convertValue(pi.getType(), parameters[i]);
+        }
+
+        return mBeanServer.invoke(oname, operation, values, signatureTypes);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Find the operation info for a method
+     *
+     * @param oname The bean name
+     * @param opName The operation name
+     * @return the operation info for the specified operation
+     */
+    public MBeanOperationInfo getMethodInfo( ObjectName oname, String opName )
+    {
+        MBeanInfo info=null;
+        try {
+            info=server.getMBeanInfo(oname);
+        } catch (Exception e) {
+            log.info( "Can't find metadata " + oname );
+            return null;
+        }
+        MBeanOperationInfo attInfo[]=info.getOperations();
+        for( int i=0; i<attInfo.length; i++ ) {
+            if( opName.equals(attInfo[i].getName())) {
+                return attInfo[i];
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Invoke a operation on a list of mbeans. Can be used to implement
+     * lifecycle operations.
+     *
+     * @param mbeans list of ObjectName on which we'll invoke the operations
+     * @param operation  Name of the operation ( init, start, stop, etc)
+     * @param failFirst  If false, exceptions will be ignored
+     * @throws Exception Error invoking operation
+     * @since 1.1
+     */
+    @Override
+    public void invoke(List<ObjectName> mbeans, String operation,
+            boolean failFirst ) throws Exception {
+        if( mbeans==null ) {
+            return;
+        }
+        Iterator<ObjectName> itr = mbeans.iterator();
+        while(itr.hasNext()) {
+            ObjectName current = itr.next();
+            try {
+                if(current == null) {
+                    continue;
+                }
+                if(getMethodInfo(current, operation) == null) {
+                    continue;
+                }
+                getMBeanServer().invoke(current, operation,
+                        new Object[] {}, new String[] {});
+
+            } catch( Exception t ) {
+                if( failFirst ) throw t;
+                log.info("Error initializing " + current + " " + t.toString());
+            }
+        }
+    }

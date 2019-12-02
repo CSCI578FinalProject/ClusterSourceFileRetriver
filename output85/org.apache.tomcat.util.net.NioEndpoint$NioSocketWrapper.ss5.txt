@@ -1,0 +1,70 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * Reads a sequence of bytes from this channel into the given buffer.
+     *
+     * @param dst The buffer into which bytes are to be transferred
+     * @return The number of bytes read, possibly zero, or <tt>-1</tt> if the
+     *         channel has reached end-of-stream
+     * @throws IOException If some other I/O error occurs
+     */
+    @Override
+    public int read(ByteBuffer dst) throws IOException {
+        return sc.read(dst);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Object getAttachment() {
+        Poller pol = getPoller();
+        Selector sel = pol!=null?pol.getSelector():null;
+        SelectionKey key = sel!=null?getIOChannel().keyFor(sel):null;
+        Object att = key!=null?key.attachment():null;
+        return att;
+    }
+-----CSCI578-----
+
+
+    public Selector get() throws IOException{
+        if ( SHARED ) {
+            return getSharedSelector();
+        }
+        if ( (!enabled) || active.incrementAndGet() >= maxSelectors ) {
+            if ( enabled ) active.decrementAndGet();
+            return null;
+        }
+        Selector s = null;
+        try {
+            s = selectors.size()>0?selectors.poll():null;
+            if (s == null) {
+                s = Selector.open();
+            }
+            else spare.decrementAndGet();
+
+        }catch (NoSuchElementException x ) {
+            try {
+                s = Selector.open();
+            } catch (IOException iox) {
+            }
+        } finally {
+            if ( s == null ) active.decrementAndGet();//we were unable to find a selector
+        }
+        return s;
+    }
+-----CSCI578-----
+
+
+
+
+    public void put(Selector s) throws IOException {
+        if ( SHARED ) return;
+        if ( enabled ) active.decrementAndGet();
+        if ( enabled && (maxSpareSelectors==-1 || spare.get() < Math.min(maxSpareSelectors,maxSelectors)) ) {
+            spare.incrementAndGet();
+            selectors.offer(s);
+        }
+        else s.close();
+    }

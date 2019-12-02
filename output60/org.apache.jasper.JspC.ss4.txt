@@ -1,0 +1,450 @@
+24
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Locate all jsp files in the webapp. Used if no explicit
+     * jsps are specified.
+     */
+    public void scanFiles( File base ) throws JasperException {
+        Stack<String> dirs = new Stack<String>();
+        dirs.push(base.toString());
+
+        // Make sure default extensions are always included
+        if ((getExtensions() == null) || (getExtensions().size() < 2)) {
+            addExtension("jsp");
+            addExtension("jspx");
+        }
+
+        while (!dirs.isEmpty()) {
+            String s = dirs.pop();
+            File f = new File(s);
+            if (f.exists() && f.isDirectory()) {
+                String[] files = f.list();
+                String ext;
+                for (int i = 0; (files != null) && i < files.length; i++) {
+                    File f2 = new File(s, files[i]);
+                    if (f2.isDirectory()) {
+                        dirs.push(f2.getPath());
+                    } else {
+                        String path = f2.getPath();
+                        String uri = path.substring(uriRoot.length());
+                        ext = files[i].substring(files[i].lastIndexOf('.') +1);
+                        if (getExtensions().contains(ext) ||
+                            jspConfig.isJspPage(uri)) {
+                            pages.add(path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Adds the given file extension to the
+     * list of extensions handled as JSP files.
+     *
+     * @param extension The extension to add, e.g. "myjsp"
+     */
+    protected void addExtension(final String extension) {
+        if(extension != null) {
+            if(extensions == null) {
+                extensions = new Vector();
+            }
+
+            extensions.add(extension);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the list of file extensions
+     * that are treated as JSP files.
+     *
+     * @return The list of extensions
+     */
+    public List getExtensions() {
+        return extensions;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private Reader openWebxmlReader(File file) throws IOException {
+        FileInputStream fis = new FileInputStream(file);
+        try {
+            return webxmlEncoding != null ? new InputStreamReader(fis,
+                    webxmlEncoding) : new InputStreamReader(fis);
+        } catch (IOException ex) {
+            fis.close();
+            throw ex;
+        }
+    }
+-----CSCI578-----
+
+
+
+    /*
+     * Assumes valid xml
+     */
+    private String getElement(Reader reader) throws IOException {
+        StringBuilder result = new StringBuilder();
+        result.append('<');
+        
+        boolean done = false;
+        
+        while (!done) {
+            int current = reader.read();
+            while (current != '>') {
+                if (current < 0) {
+                    throw new EOFException();
+                }
+                result.append((char) current);
+                current = reader.read();
+            }
+            result.append((char) current);
+            
+            int len = result.length();
+            if (len > 4 && result.substring(0, 4).equals("<!--")) {
+                // This is a comment - make sure we are at the end
+                if (len >= 7 && result.substring(len - 3, len).equals("-->")) {
+                    done = true;
+                }
+            } else {
+                done = true;
+            }
+        }
+        
+        
+        return result.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Include the generated web.xml inside the webapp's web.xml.
+     */
+    protected void mergeIntoWebXml() throws IOException {
+
+        File webappBase = new File(uriRoot);
+        File webXml = new File(webappBase, "WEB-INF/web.xml");
+        File webXml2 = new File(webappBase, "WEB-INF/web2.xml");
+        String insertStartMarker =
+            Localizer.getMessage("jspc.webinc.insertStart");
+        String insertEndMarker =
+            Localizer.getMessage("jspc.webinc.insertEnd");
+
+        BufferedReader reader = new BufferedReader(openWebxmlReader(webXml));
+        BufferedReader fragmentReader = new BufferedReader(
+                openWebxmlReader(new File(webxmlFile)));
+        PrintWriter writer = new PrintWriter(openWebxmlWriter(webXml2));
+
+        // Insert the <servlet> and <servlet-mapping> declarations
+        boolean inserted = false;
+        int current = reader.read();
+        while (current > -1) {
+            if (current == '<') {
+                String element = getElement(reader);
+                boolean found = false;
+                if (!inserted) {
+                    for (String before : insertBefore) {
+                        if (element.equals(before)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (found) {
+                    // Insert generated content here
+                    writer.println(insertStartMarker);
+                    while (true) {
+                        String line = fragmentReader.readLine();
+                        if (line == null) {
+                            writer.println();
+                            break;
+                        }
+                        writer.println(line);
+                    }
+                    writer.println(insertEndMarker);
+                    writer.println();
+                    writer.write(element);
+                    inserted = true;
+                } else if (element.equals(insertStartMarker)) {
+                    // Skip the previous auto-generated content
+                    while (true) {
+                        current = reader.read();
+                        if (current < 0) {
+                            throw new EOFException();
+                        }
+                        if (current == '<') {
+                            element = getElement(reader);
+                            if (element.equals(insertEndMarker)) {
+                                break;
+                            }
+                        }
+                    }
+                    current = reader.read();
+                    while (current == '\n' || current == '\r') {
+                        current = reader.read();
+                    }
+                    continue;
+                } else {
+                    writer.write(element);
+                }
+            } else {
+                writer.write(current);
+            }
+            current = reader.read();
+        }
+        writer.close();
+
+        reader.close();
+        fragmentReader.close();
+
+        FileInputStream fis = new FileInputStream(webXml2);
+        FileOutputStream fos = new FileOutputStream(webXml);
+
+        byte buf[] = new byte[512];
+        while (true) {
+            int n = fis.read(buf);
+            if (n < 0) {
+                break;
+            }
+            fos.write(buf, 0, n);
+        }
+
+        fis.close();
+        fos.close();
+
+        webXml2.delete();
+        (new File(webxmlFile)).delete();
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public boolean setInitParameter(String name, String value) {
+        return myParameters.putIfAbsent(name, value) == null;
+    }
+-----CSCI578-----
+
+
+    protected void initServletContext() {
+        try {
+            context =new JspCServletContext
+                (new PrintWriter(System.out),
+                 new URL("file:" + uriRoot.replace('\\','/') + '/'));
+            tldLocationsCache = new TldLocationsCache(context, true);
+        } catch (MalformedURLException me) {
+            System.out.println("**" + me);
+        }
+        if (isValidateTld()) {
+            context.setInitParameter(Constants.XML_VALIDATION_TLD_INIT_PARAM, "true");
+        }
+        if (isValidateXml()) {
+            context.setInitParameter(Constants.XML_VALIDATION_INIT_PARAM, "true");
+        }
+        context.setInitParameter(Constants.XML_BLOCK_EXTERNAL_INIT_PARAM,
+                String.valueOf(isBlockExternal()));
+
+        rctxt = new JspRuntimeContext(context, this);
+        jspConfig = new JspConfig(context);
+        tagPluginManager = new TagPluginManager(context);
+    }
+-----CSCI578-----
+
+
+    public boolean isBlockExternal() {
+        return blockExternal;
+    }
+-----CSCI578-----
+
+
+    public boolean isValidateTld() {
+        return validateTld;
+    }
+-----CSCI578-----
+
+
+    public boolean isValidateXml() {
+        return validateXml;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public void setServletClassName(String className) {
+        this.className = className;
+    }
+-----CSCI578-----
+
+	    
+    /**
+     * The package name into which the servlet class is generated.
+     */
+    public void setServletPackageName(String servletPackageName) {
+        this.basePackageName = servletPackageName;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Adds servlet declaration and mapping for the JSP page servlet to the
+     * generated web.xml fragment.
+     * 
+     * @param file
+     *            Context-relative path to the JSP file, e.g.
+     *            <code>/index.jsp</code>
+     * @param clctxt
+     *            Compilation context of the servlet
+     */
+    public void generateWebMapping( String file, JspCompilationContext clctxt )
+        throws IOException
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("Generating web mapping for file " + file
+                      + " using compilation context " + clctxt);
+        }
+
+        String className = clctxt.getServletClassName();
+        String packageName = clctxt.getServletPackageName();
+
+        String thisServletName;
+        if  ("".equals(packageName)) {
+            thisServletName = className;
+        } else {
+            thisServletName = packageName + '.' + className;
+        }
+
+        if (servletout != null) {
+            servletout.write("\n    <servlet>\n        <servlet-name>");
+            servletout.write(thisServletName);
+            servletout.write("</servlet-name>\n        <servlet-class>");
+            servletout.write(thisServletName);
+            servletout.write("</servlet-class>\n    </servlet>\n");
+        }
+        if (mappingout != null) {
+            mappingout.write("\n    <servlet-mapping>\n        <servlet-name>");
+            mappingout.write(thisServletName);
+            mappingout.write("</servlet-name>\n        <url-pattern>");
+            mappingout.write(file.replace('\\', '/'));
+            mappingout.write("</url-pattern>\n    </servlet-mapping>\n");
+
+        }
+    }
+-----CSCI578-----
+
+
+
+    protected void processFile(String file)
+        throws JasperException
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("Processing file: " + file);
+        }
+
+        ClassLoader originalClassLoader = null;
+
+        try {
+            // set up a scratch/output dir if none is provided
+            if (scratchDir == null) {
+                String temp = System.getProperty("java.io.tmpdir");
+                if (temp == null) {
+                    temp = "";
+                }
+                scratchDir = new File(new File(temp).getAbsolutePath());
+            }
+
+            String jspUri=file.replace('\\','/');
+            JspCompilationContext clctxt = new JspCompilationContext
+                ( jspUri, false,  this, context, null, rctxt );
+
+            /* Override the defaults */
+            if ((targetClassName != null) && (targetClassName.length() > 0)) {
+                clctxt.setServletClassName(targetClassName);
+                targetClassName = null;
+            }
+            if (targetPackage != null) {
+                clctxt.setServletPackageName(targetPackage);
+            }
+
+            originalClassLoader = Thread.currentThread().getContextClassLoader();
+            if( loader==null ) {
+                initClassLoader( clctxt );
+            }
+            Thread.currentThread().setContextClassLoader(loader);
+
+            clctxt.setClassLoader(loader);
+            clctxt.setClassPath(classPath);
+
+            Compiler clc = clctxt.createCompiler();
+
+            // If compile is set, generate both .java and .class, if
+            // .jsp file is newer than .class file;
+            // Otherwise only generate .java, if .jsp file is newer than
+            // the .java file
+            if( clc.isOutDated(compile) ) {
+                if (log.isDebugEnabled()) {
+                    log.debug(jspUri + " is out dated, compiling...");
+                }
+
+                clc.compile(compile, true);
+            }
+
+            // Generate mapping
+            generateWebMapping( file, clctxt );
+            if ( showSuccess ) {
+                log.info( "Built File: " + file );
+            }
+
+        } catch (JasperException je) {
+            Throwable rootCause = je;
+            while (rootCause instanceof JasperException
+                    && ((JasperException) rootCause).getRootCause() != null) {
+                rootCause = ((JasperException) rootCause).getRootCause();
+            }
+            if (rootCause != je) {
+                log.error(Localizer.getMessage("jspc.error.generalException",
+                                               file),
+                          rootCause);
+            }
+
+            // Bugzilla 35114.
+            if(getFailOnError()) {
+                throw je;
+            } else {
+                log.error(je.getMessage());
+            }
+
+        } catch (Exception e) {
+            if ((e instanceof FileNotFoundException) && log.isWarnEnabled()) {
+                log.warn(Localizer.getMessage("jspc.error.fileDoesNotExist",
+                                              e.getMessage()));
+            }
+            throw new JasperException(e);
+        } finally {
+            if(originalClassLoader != null) {
+                Thread.currentThread().setContextClassLoader(originalClassLoader);
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns true if an exception will be thrown in case of a compilation
+     * error.
+     */
+    public boolean getFailOnError() {
+        return failOnError;
+    }
+-----CSCI578-----

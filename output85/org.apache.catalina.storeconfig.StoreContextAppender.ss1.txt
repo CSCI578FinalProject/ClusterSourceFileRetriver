@@ -1,0 +1,204 @@
+14
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Print Context Values. <ul><li> Special handling to default workDir.
+     * </li><li> Don't save path at external context.xml </li><li> Don't
+     * generate docBase for host.appBase webapps <LI></ul>
+     *
+     * @see org.apache.catalina.storeconfig.StoreAppender#isPrintValue(java.lang.Object,
+     *      java.lang.Object, java.lang.String,
+     *      org.apache.catalina.storeconfig.StoreDescription)
+     */
+    @Override
+    public boolean isPrintValue(Object bean, Object bean2, String attrName,
+            StoreDescription desc) {
+        boolean isPrint = super.isPrintValue(bean, bean2, attrName, desc);
+        if (isPrint) {
+            StandardContext context = ((StandardContext) bean);
+            if ("workDir".equals(attrName)) {
+                String defaultWorkDir = getDefaultWorkDir(context);
+                isPrint = !defaultWorkDir.equals(context.getWorkDir());
+            } else if ("path".equals(attrName)) {
+                isPrint = desc.isStoreSeparate()
+                            && desc.isExternalAllowed()
+                            && context.getConfigFile() == null;
+            } else if ("docBase".equals(attrName)) {
+                Container host = context.getParent();
+                if (host instanceof StandardHost) {
+                    File appBase = getAppBase(((StandardHost) host));
+                    File docBase = getDocBase(context,appBase);
+                    isPrint = !appBase.equals(docBase.getParentFile());
+                }
+            }
+        }
+        return isPrint;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the original document root for this Context.  This can be an absolute
+     * pathname, a relative pathname, or a URL.
+     * Is only set as deployment has change docRoot!
+     */
+    public String getOriginalDocBase() {
+
+        return (this.originalDocBase);
+
+    }
+-----CSCI578-----
+
+
+    protected File getAppBase(StandardHost host) {
+
+        File appBase;
+        File file = new File(host.getAppBase());
+        if (!file.isAbsolute())
+            file = new File(System.getProperty("catalina.base"), host
+                    .getAppBase());
+        try {
+            appBase = file.getCanonicalFile();
+        } catch (IOException e) {
+            appBase = file;
+        }
+        return (appBase);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Make default Work Dir.
+     *
+     * @param context The context
+     * @return The default working directory for the context.
+     */
+    protected String getDefaultWorkDir(StandardContext context) {
+        String defaultWorkDir = null;
+        String contextWorkDir = context.getName();
+        if (contextWorkDir.length() == 0)
+            contextWorkDir = "_";
+        if (contextWorkDir.startsWith("/"))
+            contextWorkDir = contextWorkDir.substring(1);
+
+        Container host = context.getParent();
+        if (host instanceof StandardHost) {
+            String hostWorkDir = ((StandardHost) host).getWorkDir();
+            if (hostWorkDir != null) {
+                defaultWorkDir = hostWorkDir + File.separator + contextWorkDir;
+            } else {
+                String engineName = context.getParent().getParent().getName();
+                String hostName = context.getParent().getName();
+                defaultWorkDir = "work" + File.separator + engineName
+                        + File.separator + hostName + File.separator
+                        + contextWorkDir;
+            }
+        }
+        return defaultWorkDir;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Determine if the attribute value needs to be stored.
+     *
+     * @param bean
+     *            orginal bean
+     * @param bean2
+     *            default bean
+     * @param attrName
+     *            attribute name
+     * @param desc
+     *            StoreDescription from bean
+     * @return <code>true</code> if the value should be stored
+     */
+    public boolean isPrintValue(Object bean, Object bean2, String attrName,
+            StoreDescription desc) {
+        boolean printValue = false;
+
+        Object value = IntrospectionUtils.getProperty(bean, attrName);
+        if (value != null) {
+            Object value2 = IntrospectionUtils.getProperty(bean2, attrName);
+            printValue = !value.equals(value2);
+
+        }
+        return printValue;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return True if it's a separate store
+     */
+    public boolean isStoreSeparate() {
+        return storeSeparate;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return Returns the external.
+     */
+    public boolean isExternalAllowed() {
+        return externalAllowed;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * @return the work directory for this Context.
+     */
+    public String getWorkDir() {
+
+        return (this.workDir);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the application root for this Host.  This can be an absolute
+     * pathname, a relative pathname, or a URL.
+     */
+    @Override
+    public String getAppBase() {
+        return (this.appBase);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return host work directory base.
+     */
+    public String getWorkDir() {
+
+        return (workDir);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return a String representation of this component.
+     */
+    @Override
+    public String toString() {
+
+        StringBuilder sb = new StringBuilder();
+        if (getParent() != null) {
+            sb.append(getParent().toString());
+            sb.append(".");
+        }
+        sb.append("StandardContext[");
+        sb.append(getName());
+        sb.append("]");
+        return (sb.toString());
+
+    }

@@ -1,0 +1,167 @@
+12
+-----CSCI578-----
+
+
+
+    /**
+     * Return the <code>HttpSession</code> for which this object
+     * is the facade.
+     */
+    @Override
+    public HttpSession getSession() {
+
+        if (facade == null){
+            if (SecurityUtil.isPackageProtectionEnabled()){
+                final StandardSession fsession = this;
+                facade = AccessController.doPrivileged(
+                        new PrivilegedAction<StandardSessionFacade>(){
+                    @Override
+                    public StandardSessionFacade run(){
+                        return new StandardSessionFacade(fsession);
+                    }
+                });
+            } else {
+                facade = new StandardSessionFacade(this);
+            }
+        }
+        return (facade);
+
+    }
+
+
+
+    /**
+     * Return the <code>HttpSession</code> associated with the
+     * specified session identifier.
+     *
+     * @param id Session identifier for which to look up a session
+     *
+     * @deprecated As of Java Servlet API 2.1 with no replacement.
+     *  This method must return null and will be removed in a
+     *  future version of the API.
+     */
+    @Override
+    @Deprecated
+    public HttpSession getSession(String id) {
+        return (null);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return the <code>SecurityManager</code> only if Security is enabled AND
+     * package protection mechanism is enabled.
+     * @return <code>true</code> if package level protection is enabled
+     */
+    public static boolean isPackageProtectionEnabled(){
+        if (packageDefinitionEnabled && Globals.IS_SECURITY_ENABLED){
+            return true;
+        }
+        return false;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public void log(String msg) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            doPrivileged("log", new Object[]{msg} );
+        } else {
+            context.log(msg);
+        }
+    }
+
+
+
+    /**
+     * @deprecated As of Java Servlet API 2.1, use
+     *  <code>log(String, Throwable)</code> instead
+     */
+    @Override
+    @Deprecated
+    public void log(Exception exception, String msg) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            doPrivileged("log", new Class[]{Exception.class, String.class},
+                         new Object[]{exception,msg});
+        } else {
+            context.log(exception, msg);
+        }
+    }
+
+
+
+    @Override
+    public void log(String message, Throwable throwable) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            doPrivileged("log", new Class[]{String.class, Throwable.class},
+                         new Object[]{message, throwable});
+        } else {
+            context.log(message, throwable);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Object getAttribute(String name) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return doPrivileged("getAttribute", new Object[]{name});
+        } else {
+            return context.getAttribute(name);
+        }
+     }
+-----CSCI578-----
+
+
+
+    @Override
+    @SuppressWarnings("unchecked") // doPrivileged() returns the correct type
+    public Enumeration<String> getAttributeNames() {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            return (Enumeration<String>) doPrivileged(
+                    "getAttributeNames", null);
+        } else {
+            return context.getAttributeNames();
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void setAttribute(String name, Object object) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            doPrivileged("setAttribute", new Object[]{name,object});
+        } else {
+            context.setAttribute(name, object);
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void removeAttribute(String name) {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            doPrivileged("removeAttribute", new Object[]{name});
+        } else {
+            context.removeAttribute(name);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------- ServletContext Methods
+
+    @Override
+    public Object getAttribute(String name) {
+        return (attributes.get(name));
+    }
+-----CSCI578-----

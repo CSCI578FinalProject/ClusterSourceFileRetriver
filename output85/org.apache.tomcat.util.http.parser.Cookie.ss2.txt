@@ -1,0 +1,300 @@
+10
+-----CSCI578-----
+
+
+
+    private static void parseCookieRfc6265(ByteBuffer bb, ServerCookies serverCookies) {
+
+        boolean moreToProcess = true;
+
+        while (moreToProcess) {
+            skipLWS(bb);
+
+            ByteBuffer name = readToken(bb);
+            ByteBuffer value = null;
+
+            skipLWS(bb);
+
+            SkipResult skipResult = skipByte(bb, EQUALS_BYTE);
+            if (skipResult == SkipResult.FOUND) {
+                skipLWS(bb);
+                value = readCookieValueRfc6265(bb);
+                if (value == null) {
+                    logInvalidHeader(bb);
+                    // Invalid cookie value. Skip to the next semi-colon
+                    skipUntilSemiColon(bb);
+                    continue;
+                }
+                skipLWS(bb);
+            }
+
+            skipResult = skipByte(bb, SEMICOLON_BYTE);
+            if (skipResult == SkipResult.FOUND) {
+                // NO-OP
+            } else if (skipResult == SkipResult.NOT_FOUND) {
+                logInvalidHeader(bb);
+                // Invalid cookie. Ignore it and skip to the next semi-colon
+                skipUntilSemiColon(bb);
+                continue;
+            } else {
+                // SkipResult.EOF
+                moreToProcess = false;
+            }
+
+            if (name.hasRemaining()) {
+                ServerCookie sc = serverCookies.addCookie();
+                sc.getName().setBytes(name.array(), name.position(), name.remaining());
+                if (value == null) {
+                    sc.getValue().setBytes(EMPTY_BYTES, 0, EMPTY_BYTES.length);
+                } else {
+                    sc.getValue().setBytes(value.array(), value.position(), value.remaining());
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Similar to readCookieValueRfc6265() but also allows a comma to terminate
+     * the value (as permitted by RFC2109).
+     */
+    private static ByteBuffer readCookieValue(ByteBuffer bb) {
+        boolean quoted = false;
+        if (bb.hasRemaining()) {
+            if (bb.get() == QUOTE_BYTE) {
+                quoted = true;
+            } else {
+                bb.rewind();
+            }
+        }
+        int start = bb.position();
+        int end = bb.limit();
+        while (bb.hasRemaining()) {
+            byte b = bb.get();
+            if (isCookieOctet[(b & 0xFF)]) {
+                // NO-OP
+            } else if (b == SEMICOLON_BYTE || b == COMMA_BYTE || b == SPACE_BYTE || b == TAB_BYTE) {
+                end = bb.position() - 1;
+                bb.position(end);
+                break;
+            } else if (quoted && b == QUOTE_BYTE) {
+                end = bb.position() - 1;
+                break;
+            } else {
+                // Invalid cookie
+                return null;
+            }
+        }
+
+        return new ByteBuffer(bb.bytes, start, end - start);
+    }
+
+
+
+    /**
+     * Similar to readCookieValue() but treats a comma as part of an invalid
+     * value.
+     */
+    private static ByteBuffer readCookieValueRfc6265(ByteBuffer bb) {
+        boolean quoted = false;
+        if (bb.hasRemaining()) {
+            if (bb.get() == QUOTE_BYTE) {
+                quoted = true;
+            } else {
+                bb.rewind();
+            }
+        }
+        int start = bb.position();
+        int end = bb.limit();
+        while (bb.hasRemaining()) {
+            byte b = bb.get();
+            if (isCookieOctet[(b & 0xFF)]) {
+                // NO-OP
+            } else if (b == SEMICOLON_BYTE || b == SPACE_BYTE || b == TAB_BYTE) {
+                end = bb.position() - 1;
+                bb.position(end);
+                break;
+            } else if (quoted && b == QUOTE_BYTE) {
+                end = bb.position() - 1;
+                break;
+            } else {
+                // Invalid cookie
+                return null;
+            }
+        }
+
+        return new ByteBuffer(bb.bytes, start, end - start);
+    }
+-----CSCI578-----
+
+
+
+    private static void skipUntilSemiColon(ByteBuffer bb) {
+        while(bb.hasRemaining()) {
+            if (bb.get() == SEMICOLON_BYTE) {
+                break;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public MessageBytes getName() {
+        return name;
+    }
+-----CSCI578-----
+
+
+    public MessageBytes getValue() {
+        return value;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- utils --------------------
+
+    @Override
+    public String toString() {
+        return "Cookie " + getName() + "=" + getValue() + " ; "
+            + getVersion() + " " + getPath() + " " + getDomain();
+    }
+-----CSCI578-----
+
+
+
+    private static void parseCookieRfc2109(ByteBuffer bb, ServerCookies serverCookies) {
+
+        boolean moreToProcess = true;
+
+        while (moreToProcess) {
+            skipLWS(bb);
+
+            boolean parseAttributes = true;
+
+            ByteBuffer name = readToken(bb);
+            ByteBuffer value = null;
+            ByteBuffer path = null;
+            ByteBuffer domain = null;
+
+            skipLWS(bb);
+
+            SkipResult skipResult = skipByte(bb, EQUALS_BYTE);
+            if (skipResult == SkipResult.FOUND) {
+                skipLWS(bb);
+                value = readCookieValueRfc2109(bb, false);
+                if (value == null) {
+                    skipInvalidCookie(bb);
+                    continue;
+                }
+                skipLWS(bb);
+            }
+
+            skipResult = skipByte(bb, COMMA_BYTE);
+            if (skipResult == SkipResult.FOUND) {
+                parseAttributes = false;
+            }
+            skipResult = skipByte(bb, SEMICOLON_BYTE);
+            if (skipResult == SkipResult.EOF) {
+                parseAttributes = false;
+                moreToProcess = false;
+            } else if (skipResult == SkipResult.NOT_FOUND) {
+                skipInvalidCookie(bb);
+                continue;
+            }
+
+            if (parseAttributes) {
+                skipResult = skipBytes(bb, PATH_BYTES);
+                if (skipResult == SkipResult.FOUND) {
+                    skipLWS(bb);
+                    skipResult = skipByte(bb, EQUALS_BYTE);
+                    if (skipResult != SkipResult.FOUND) {
+                        skipInvalidCookie(bb);
+                        continue;
+                    }
+                    path = readCookieValueRfc2109(bb, true);
+                    if (path == null) {
+                        skipInvalidCookie(bb);
+                        continue;
+                    }
+                    skipLWS(bb);
+
+                    skipResult = skipByte(bb, COMMA_BYTE);
+                    if (skipResult == SkipResult.FOUND) {
+                        parseAttributes = false;
+                    }
+                    skipResult = skipByte(bb, SEMICOLON_BYTE);
+                    if (skipResult == SkipResult.EOF) {
+                        parseAttributes = false;
+                        moreToProcess = false;
+                    } else if (skipResult == SkipResult.NOT_FOUND) {
+                        skipInvalidCookie(bb);
+                        continue;
+                    }
+                }
+            }
+
+            if (parseAttributes) {
+                skipResult = skipBytes(bb, DOMAIN_BYTES);
+                if (skipResult == SkipResult.FOUND) {
+                    skipLWS(bb);
+                    skipResult = skipByte(bb, EQUALS_BYTE);
+                    if (skipResult != SkipResult.FOUND) {
+                        skipInvalidCookie(bb);
+                        continue;
+                    }
+                    domain = readCookieValueRfc2109(bb, false);
+                    if (domain == null) {
+                        skipInvalidCookie(bb);
+                        continue;
+                    }
+
+                    skipResult = skipByte(bb, COMMA_BYTE);
+                    if (skipResult == SkipResult.FOUND) {
+                        parseAttributes = false;
+                    }
+                    skipResult = skipByte(bb, SEMICOLON_BYTE);
+                    if (skipResult == SkipResult.EOF) {
+                        parseAttributes = false;
+                        moreToProcess = false;
+                    } else if (skipResult == SkipResult.NOT_FOUND) {
+                        skipInvalidCookie(bb);
+                        continue;
+                    }
+                }
+            }
+
+            if (name.hasRemaining() && value != null && value.hasRemaining()) {
+                ServerCookie sc = serverCookies.addCookie();
+                sc.setVersion(1);
+                sc.getName().setBytes(name.array(), name.position(), name.remaining());
+                sc.getValue().setBytes(value.array(), value.position(), value.remaining());
+                if (domain != null) {
+                    sc.getDomain().setBytes(domain.array(),  domain.position(),  domain.remaining());
+                }
+                if (path != null) {
+                    sc.getPath().setBytes(path.array(),  path.position(),  path.remaining());
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public MessageBytes getPath() {
+        return path;
+    }
+-----CSCI578-----
+
+
+    public MessageBytes getDomain() {
+        return domain;
+    }
+-----CSCI578-----
+
+
+    public void setVersion(int v) {
+        version = v;
+    }

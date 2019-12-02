@@ -1,0 +1,130 @@
+8
+
+    protected void closeServerSocket() {
+        if (!paused)
+            unlockAccept();
+        try {
+            if( serverSocket!=null)
+                serverSocket.close();
+        } catch(Exception e) {
+            log.error(sm.getString("endpoint.err.close"), e);
+        }
+        serverSocket = null;
+    }
+    
+    // -------------------- Public methods --------------------
+
+    public void initEndpoint() throws IOException, InstantiationException {
+        try {
+            if(factory==null)
+                factory=ServerSocketFactory.getDefault();
+            if(serverSocket==null) {
+                try {
+                    if (inet == null) {
+                        serverSocket = factory.createSocket(port, backlog);
+                    } else {
+                        serverSocket = factory.createSocket(port, backlog, inet);
+                    }
+                } catch (BindException orig) {
+                    String msg;
+                    if (inet == null)
+                        msg = orig.getMessage() + "<null>:" + port;
+                    else
+                        msg = orig.getMessage() + " " +
+                                inet.toString() + ":" + port;
+                    BindException be = new BindException(msg);
+                    be.initCause(orig);
+                    throw be;
+                }
+            }
+            if( serverTimeout >= 0 )
+                serverSocket.setSoTimeout( serverTimeout );
+        } catch( IOException ex ) {
+            throw ex;
+        } catch( InstantiationException ex1 ) {
+            throw ex1;
+        }
+        initialized = true;
+    }
+
+    /**
+     * Returns a server socket which uses all network interfaces on
+     * the host, and is bound to a the specified port.  The socket is
+     * configured with the socket options (such as accept timeout)
+     * given to this factory.
+     *
+     * @param port the port to listen to
+     * @exception IOException for networking errors
+     * @exception InstantiationException for construction errors
+     */
+    public abstract ServerSocket createSocket (int port)
+    throws IOException, InstantiationException;
+
+    /**
+     * Returns a server socket which uses all network interfaces on
+     * the host, is bound to a the specified port, and uses the 
+     * specified connection backlog.  The socket is configured with
+     * the socket options (such as accept timeout) given to this factory.
+     *
+     * @param port the port to listen to
+     * @param backlog how many connections are queued
+     * @exception IOException for networking errors
+     * @exception InstantiationException for construction errors
+     */
+
+    public abstract ServerSocket createSocket (int port, int backlog)
+    throws IOException, InstantiationException;
+
+    /**
+     * Returns a server socket which uses only the specified network
+     * interface on the local host, is bound to a the specified port,
+     * and uses the specified connection backlog.  The socket is configured
+     * with the socket options (such as accept timeout) given to this factory.
+     *
+     * @param port the port to listen to
+     * @param backlog how many connections are queued
+     * @param ifAddress the network interface address to use
+     * @exception IOException for networking errors
+     * @exception InstantiationException for construction errors
+     */
+
+    public abstract ServerSocket createSocket (int port,
+        int backlog, InetAddress ifAddress)
+    throws IOException, InstantiationException;
+
+    public void initSocket( Socket s ) {
+    }
+
+    protected void unlockAccept() {
+        Socket s = null;
+        try {
+            // Need to create a connection to unlock the accept();
+            if (inet == null) {
+                s = new Socket(InetAddress.getByName("localhost").getHostAddress(), port);
+            } else {
+                s = new Socket(inet, port);
+                    // setting soLinger to a small value will help shutdown the
+                    // connection quicker
+                s.setSoLinger(true, 0);
+            }
+        } catch(Exception e) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("endpoint.debug.unlock", "" + port), e);
+            }
+        } finally {
+            if (s != null) {
+                try {
+                    s.close();
+                } catch (Exception e) {
+                    // Ignore
+                }
+            }
+        }
+    }
+
+    public void pauseEndpoint() {
+        if (running && !paused) {
+            paused = true;
+            unlockAccept();
+        }
+    }

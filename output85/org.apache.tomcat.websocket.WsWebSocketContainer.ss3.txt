@@ -1,0 +1,185 @@
+8
+-----CSCI578-----
+
+
+
+    /**
+     * Process response, blocking until HTTP response has been fully received.
+     * @throws ExecutionException
+     * @throws InterruptedException
+     * @throws DeploymentException
+     * @throws TimeoutException
+     */
+    private HttpResponse processResponse(ByteBuffer response,
+            AsyncChannelWrapper channel, long timeout) throws InterruptedException,
+            ExecutionException, DeploymentException, EOFException,
+            TimeoutException {
+
+        Map<String,List<String>> headers = new CaseInsensitiveKeyMap<>();
+
+        int status = 0;
+        boolean readStatus = false;
+        boolean readHeaders = false;
+        String line = null;
+        while (!readHeaders) {
+            // On entering loop buffer will be empty and at the start of a new
+            // loop the buffer will have been fully read.
+            response.clear();
+            // Blocking read
+            Future<Integer> read = channel.read(response);
+            Integer bytesRead = read.get(timeout, TimeUnit.MILLISECONDS);
+            if (bytesRead.intValue() == -1) {
+                throw new EOFException();
+            }
+            response.flip();
+            while (response.hasRemaining() && !readHeaders) {
+                if (line == null) {
+                    line = readLine(response);
+                } else {
+                    line += readLine(response);
+                }
+                if ("\r\n".equals(line)) {
+                    readHeaders = true;
+                } else if (line.endsWith("\r\n")) {
+                    if (readStatus) {
+                        parseHeaders(line, headers);
+                    } else {
+                        status = parseStatus(line);
+                        readStatus = true;
+                    }
+                    line = null;
+                }
+            }
+        }
+
+        return new HttpResponse(status, new WsHandshakeResponse(headers));
+    }
+-----CSCI578-----
+
+
+
+    private void parseHeaders(String line, Map<String,List<String>> headers) {
+        // Treat headers as single values by default.
+
+        int index = line.indexOf(':');
+        if (index == -1) {
+            log.warn(sm.getString("wsWebSocketContainer.invalidHeader", line));
+            return;
+        }
+        // Header names are case insensitive so always use lower case
+        String headerName = line.substring(0, index).trim().toLowerCase(Locale.ENGLISH);
+        // Multi-value headers are stored as a single header and the client is
+        // expected to handle splitting into individual values
+        String headerValue = line.substring(index + 1).trim();
+
+        List<String> values = headers.get(headerName);
+        if (values == null) {
+            values = new ArrayList<>(1);
+            headers.put(headerName, values);
+        }
+        values.add(headerValue);
+    }
+-----CSCI578-----
+
+
+
+    private int parseStatus(String line) throws DeploymentException {
+        // This client only understands HTTP 1.
+        // RFC2616 is case specific
+        String[] parts = line.trim().split(" ");
+        // CONNECT for proxy may return a 1.0 response
+        if (parts.length < 2 || !("HTTP/1.0".equals(parts[0]) || "HTTP/1.1".equals(parts[0]))) {
+            throw new DeploymentException(sm.getString(
+                    "wsWebSocketContainer.invalidStatus", line));
+        }
+        try {
+            return Integer.parseInt(parts[1]);
+        } catch (NumberFormatException nfe) {
+            throw new DeploymentException(sm.getString(
+                    "wsWebSocketContainer.invalidStatus", line));
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private String readLine(ByteBuffer response) {
+        // All ISO-8859-1
+        StringBuilder sb = new StringBuilder();
+
+        char c = 0;
+        while (response.hasRemaining()) {
+            c = (char) response.get();
+            sb.append(c);
+            if (c == 10) {
+                break;
+            }
+        }
+
+        return sb.toString();
+    }
+-----CSCI578-----
+
+
+    Future<Integer> read(ByteBuffer dst);
+
+
+    <B,A extends B> void read(ByteBuffer dst, A attachment,
+            CompletionHandler<Integer,B> handler);
+-----CSCI578-----
+
+
+
+    private static void addHeader(ByteBuffer result, String key, List<String> values) {
+        StringBuilder sb = new StringBuilder();
+
+        Iterator<String> iter = values.iterator();
+        if (!iter.hasNext()) {
+            return;
+        }
+        sb.append(iter.next());
+        while (iter.hasNext()) {
+            sb.append(',');
+            sb.append(iter.next());
+        }
+
+        result.put(key.getBytes(StandardCharsets.ISO_8859_1));
+        result.put(": ".getBytes(StandardCharsets.ISO_8859_1));
+        result.put(sb.toString().getBytes(StandardCharsets.ISO_8859_1));
+        result.put(crlf);
+    }
+-----CSCI578-----
+
+
+
+    private static ByteBuffer createRequest(URI uri, Map<String,List<String>> reqHeaders) {
+        ByteBuffer result = ByteBuffer.allocate(4 * 1024);
+
+        // Request line
+        result.put(GET_BYTES);
+        if (null == uri.getPath() || "".equals(uri.getPath())) {
+            result.put(ROOT_URI_BYTES);
+        } else {
+            result.put(uri.getRawPath().getBytes(StandardCharsets.ISO_8859_1));
+        }
+        String query = uri.getRawQuery();
+        if (query != null) {
+            result.put((byte) '?');
+            result.put(query.getBytes(StandardCharsets.ISO_8859_1));
+        }
+        result.put(HTTP_VERSION_BYTES);
+
+        // Headers
+        Iterator<Entry<String,List<String>>> iter = reqHeaders.entrySet().iterator();
+        while (iter.hasNext()) {
+            Entry<String,List<String>> entry = iter.next();
+            addHeader(result, entry.getKey(), entry.getValue());
+        }
+
+        // Terminating CRLF
+        result.put(crlf);
+
+        result.flip();
+
+        return result;
+    }

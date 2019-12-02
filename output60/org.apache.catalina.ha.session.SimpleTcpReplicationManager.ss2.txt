@@ -1,0 +1,53 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Serialize a session into a byte array<BR>
+     * This method simple calls the writeObjectData method on the session
+     * and returns the byte data from that call
+     * @param session - the session to be serialized
+     * @return a byte array containing the session data, null if the serialization failed
+     */
+    protected byte[] writeSession( Session session )
+    {
+        try
+        {
+            java.io.ByteArrayOutputStream session_data = new java.io.ByteArrayOutputStream();
+            java.io.ObjectOutputStream session_out = new java.io.ObjectOutputStream(session_data);
+            session_out.flush();
+            boolean hasPrincipal = session.getPrincipal() != null;
+            session_out.writeBoolean(hasPrincipal);
+            if ( hasPrincipal )
+            {
+                session_out.writeObject(SerializablePrincipal.createPrincipal((GenericPrincipal)session.getPrincipal()));
+            }//end if
+            ((ReplicatedSession)session).writeObjectData(session_out);
+            return session_data.toByteArray();
+
+        }
+        catch ( Exception x )
+        {
+            log.error("Failed to serialize the session!",x);
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write a serialized version of the contents of this session object to
+     * the specified object output stream, without requiring that the
+     * StandardSession itself have been serialized.
+     *
+     * @param stream The object output stream to write to
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public void writeObjectData(ObjectOutputStream stream)
+        throws IOException {
+
+        super.writeObjectData(stream);
+
+    }

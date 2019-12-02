@@ -1,0 +1,252 @@
+13
+-----CSCI578-----
+
+
+    /**
+     * Return true if bytes are available.
+     */
+    public boolean getAvailable() {
+        return (inputBuffer.available() > 0);
+    }
+-----CSCI578-----
+
+
+    /**
+     * return true if we have parsed parameters
+     */
+    public boolean isParametersParsed() {
+        return parametersParsed;
+    }
+-----CSCI578-----
+
+
+    public void setWorkerThreadName(String workerThreadName) {
+        this.workerThreadName = workerThreadName;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Service method.
+     */
+    public void service(org.apache.coyote.Request req,
+    	                org.apache.coyote.Response res)
+        throws Exception {
+
+        Request request = (Request) req.getNote(ADAPTER_NOTES);
+        Response response = (Response) res.getNote(ADAPTER_NOTES);
+
+        if (request == null) {
+
+            // Create objects
+            request = (Request) connector.createRequest();
+            request.setCoyoteRequest(req);
+            response = (Response) connector.createResponse();
+            response.setCoyoteResponse(res);
+
+            // Link objects
+            request.setResponse(response);
+            response.setRequest(request);
+
+            // Set as notes
+            req.setNote(ADAPTER_NOTES, request);
+            res.setNote(ADAPTER_NOTES, response);
+
+            // Set query string encoding
+            req.getParameters().setQueryStringEncoding
+                (connector.getURIEncoding());
+
+        }
+
+        if (connector.getXpoweredBy()) {
+            response.addHeader("X-Powered-By", POWERED_BY);
+        }
+
+        boolean comet = false;
+
+        try {
+
+            // Parse and set Catalina and configuration specific
+            // request parameters
+            req.getRequestProcessor().setWorkerThreadName(Thread.currentThread().getName());
+            if (postParseRequest(req, request, res, response)) {
+                // Calling the container
+                connector.getContainer().getPipeline().getFirst().invoke(request, response);
+
+                if (request.isComet()) {
+                    if (!response.isClosed() && !response.isError()) {
+                        if (request.getAvailable() || (request.getContentLength() > 0 && (!request.isParametersParsed()))) {
+                            // Invoke a read event right away if there are available bytes
+                            if (event(req, res, SocketStatus.OPEN)) {
+                                comet = true;
+                                res.action(ActionCode.ACTION_COMET_BEGIN, null);
+                            }
+                        } else {
+                            comet = true;
+                            res.action(ActionCode.ACTION_COMET_BEGIN, null);
+                        }
+                    } else {
+                        // Clear the filter chain, as otherwise it will not be reset elsewhere
+                        // since this is a Comet request
+                        request.setFilterChain(null);
+                    }
+                }
+
+            }
+
+            if (!comet) {
+                response.finishResponse();
+                req.action(ActionCode.ACTION_POST_REQUEST , null);
+            }
+
+        } catch (IOException e) {
+            ;
+        } finally {
+            req.getRequestProcessor().setWorkerThreadName(null);
+            // Recycle the wrapper request and response
+            if (!comet) {
+                request.recycle();
+                response.recycle();
+            } else {
+                // Clear converters so that the minimum amount of memory
+                // is used by this processor
+                request.clearEncoders();
+                response.clearEncoders();
+            }
+        }
+
+    }
+-----CSCI578-----
+    
+
+    /**
+     * Return the Pipeline object that manages the Valves associated with
+     * this Container.
+     */
+    public Pipeline getPipeline();
+-----CSCI578-----
+
+
+
+    /**
+     * Indicates whether the generation of an X-Powered-By response header for
+     * servlet-generated responses is enabled or disabled for this Connector.
+     *
+     * @return true if generation of X-Powered-By response header is enabled,
+     * false otherwise
+     */
+    public boolean getXpoweredBy() {
+        return xpoweredBy;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Perform whatever actions are required to flush and close the output
+     * stream or writer, in a single operation.
+     *
+     * @exception IOException if an input/output error occurs
+     */
+    public void finishResponse() 
+        throws IOException {
+        // Writing leftover bytes
+        outputBuffer.close();
+    }
+-----CSCI578-----
+
+
+
+    public final Object getNote(int pos) {
+        return notes[pos];
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the Response with which this Request is associated.
+     *
+     * @param response The new associated response
+     */
+    public void setResponse(org.apache.catalina.connector.Response response) {
+        this.response = response;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the Request with which this Response is associated.
+     *
+     * @param request The new associated request
+     */
+    public void setRequest(org.apache.catalina.connector.Request request) {
+        this.request = (Request) request;
+    }
+-----CSCI578-----
+
+    
+    
+    /**
+     * Close the output buffer. This tries to calculate the response size if 
+     * the response has not been committed yet.
+     * 
+     * @throws IOException An underlying IOException occurred
+     */
+    public void close()
+        throws IOException {
+
+        if (closed)
+            return;
+        if (suspended)
+            return;
+
+        if ((!coyoteResponse.isCommitted()) && (coyoteResponse.getContentLengthLong() == -1) &&
+                !coyoteResponse.getRequest().method().equals("HEAD")) {
+            // If this didn't cause a commit of the response, the final content
+            // length can be calculated. Only do this if this is not a HEAD
+            // request since in that case no body should have been written and
+            // setting a value of zero here will result in an explicit content
+            // length of zero being set on the response.
+            if (!coyoteResponse.isCommitted()) {
+                coyoteResponse.setContentLength(bb.getLength());
+            }
+        }
+
+        doFlush(false);
+        closed = true;
+
+        // The request should have been completely read by the time the response
+        // is closed. Further reads of the input a) are pointless and b) really
+        // confuse AJP (bug 50189) so close the input buffer to prevent them.
+        Request req = (Request) coyoteResponse.getRequest().getNote(
+                CoyoteAdapter.ADAPTER_NOTES);
+        req.inputBuffer.close();
+        
+        coyoteResponse.finish();
+
+    }
+-----CSCI578-----
+
+
+
+    public void close()
+        throws IOException {
+        ob.close();
+    }
+-----CSCI578-----
+
+
+
+    public void close() {
+
+        // We don't close the PrintWriter - super() is not called,
+        // so the stream can be reused. We close ob.
+        try {
+            ob.close();
+        } catch (IOException ex ) {
+            ;
+        }
+        error = false;
+
+    }

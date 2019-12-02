@@ -1,0 +1,173 @@
+9
+-----CSCI578-----
+
+
+    private void processModules() {
+        Enumeration keys=props.keys();
+        int plen=6;
+        
+        while( keys.hasMoreElements() ) {
+            String k=(String)keys.nextElement();
+            if( ! k.startsWith( "class." ) )
+                continue;
+
+            String name= k.substring( plen );
+            String propValue=props.getProperty( k );
+
+            if( log.isDebugEnabled()) log.debug("Register " + name + " " + propValue );
+            modules.put( name, propValue );
+        }
+    }
+-----CSCI578-----
+
+
+    /** Should register the request types it can handle,
+     *   same style as apache2.
+     */
+    public void init() throws IOException {
+    }
+-----CSCI578-----
+
+
+    private String[] split(String s, String delim ) {
+         Vector v=new Vector();
+        StringTokenizer st=new StringTokenizer(s, delim );
+        while( st.hasMoreTokens() ) {
+            v.addElement( st.nextToken());
+        }
+        String res[]=new String[ v.size() ];
+        for( int i=0; i<res.length; i++ ) {
+            res[i]=(String)v.elementAt(i);
+        }
+        return res;
+    }
+-----CSCI578-----
+
+    
+    public void start() throws IOException
+    {
+        long t1=System.currentTimeMillis();
+        // We must have at least 3 handlers:
+        // channel is the 'transport'
+        // request is the request processor or 'global' chain
+        // container is the 'provider'
+        // Additional handlers may exist and be used internally
+        // or be chained to create one of the standard handlers 
+
+        String handlers[]=defaultHandlers;
+        // backward compat
+        String workers=props.getProperty( "handler.list", null );
+        if( workers!=null ) {
+            handlers= split( workers, ",");
+        }
+
+        // Load additional component declarations
+        processModules();
+        
+        for( int i=0; i<handlers.length; i++ ) {
+            String name= handlers[i];
+            JkHandler w=getWorkerEnv().getHandler( name );
+            if( w==null ) {
+                newHandler( name, "", name );
+            }
+        }
+
+        // Process properties - and add aditional handlers.
+        processProperties();
+
+        for( int i=0; i<wEnv.getHandlerCount(); i++ ) {
+            if( wEnv.getHandler(i) != null ) {
+                try {
+                    wEnv.getHandler(i).init();
+                } catch( IOException ex) {
+                    if( "apr".equals(wEnv.getHandler(i).getName() )) {
+                        log.info( "APR not loaded, disabling jni components: " + ex.toString());
+                    } else {
+                        log.error( "error initializing " + wEnv.getHandler(i).getName(), ex );
+                    }
+                }
+            }
+        }
+
+        started=true;
+        long t2=System.currentTimeMillis();
+        startTime=t2-t1;
+
+        this.saveProperties();
+        log.info("Jk running ID=" + wEnv.getLocalId() + " time=" + initTime + "/" + startTime +
+                 "  config=" + propFile);
+    }
+-----CSCI578-----
+
+    
+    public int getLocalId() {
+        return localId;
+    }
+-----CSCI578-----
+
+
+    // -------------------- Usefull methods --------------------
+    
+    public WorkerEnv getWorkerEnv() {
+        if( wEnv==null ) { 
+            wEnv=new WorkerEnv();
+        }
+        return wEnv;
+    }
+-----CSCI578-----
+
+
+    public  void saveProperties() {
+        if( !saveProperties) return;
+        
+        if(propsF == null) {
+            log.warn("No properties file specified. Unable to save");
+            return;
+        }
+        // Temp - to check if it works
+        File outFile= new File(propsF.getParentFile(), propsF.getName()+".save");
+        log.debug("Saving properties " + outFile );
+        try {
+            props.store( new FileOutputStream(outFile), "AUTOMATICALLY GENERATED" );
+        } catch(IOException ex ){
+            log.warn("Unable to save to "+outFile,ex);
+        }
+    }
+-----CSCI578-----
+
+
+    private JkHandler newHandler( String type, String localName, String fullName )
+    {
+        JkHandler handler;
+        String classN=modules.getProperty(type);
+        if( classN == null ) {
+            log.error("No class name for " + fullName + " " + type );
+            return null;
+        }
+        try {
+            Class channelclass = Class.forName(classN);
+            handler=(JkHandler)channelclass.newInstance();
+        } catch (Throwable ex) {
+            handler=null;
+            log.error( "Can't create " + fullName, ex );
+            return null;
+        }
+        if( this.domain != null ) {
+            try {
+                ObjectName handlerOname = new ObjectName
+                    (this.domain + ":" + "type=JkHandler,name=" + fullName);
+                Registry.getRegistry(null, null).registerComponent(handler, handlerOname, classN);
+            } catch (Exception e) {
+                log.error( "Error registering " + fullName, e );
+            }
+
+        }
+        wEnv.addHandler( fullName, handler );
+        return handler;
+    }
+-----CSCI578-----
+
+
+    public String getJkHome() {
+        return getWorkerEnv().getJkHome();
+    }

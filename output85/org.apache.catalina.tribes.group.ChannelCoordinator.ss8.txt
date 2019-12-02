@@ -1,0 +1,53 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Send a message to one or more recipients.
+     * @param message ChannelMessage - the message to be sent
+     * @param destination Member[] - the destinations
+     * @throws ChannelException - if an error happens, the ChannelSender MUST report
+     * individual send failures on a per member basis, using ChannelException.addFaultyMember
+     * @see ChannelException#addFaultyMember(Member,java.lang.Exception)
+     */
+    public void sendMessage(ChannelMessage message, Member[] destination) throws ChannelException;
+-----CSCI578-----
+
+
+    /**
+     * Send a message to one or more members in the cluster
+     * @param destination Member[] - the destinations, null or zero length means all
+     * @param msg ClusterMessage - the message to send
+     * @param payload TBA
+     */
+    @Override
+    public void sendMessage(Member[] destination, ChannelMessage msg, InterceptorPayload payload)
+            throws ChannelException {
+        if ( destination == null ) destination = membershipService.getMembers();
+        if ((msg.getOptions()&Channel.SEND_OPTIONS_MULTICAST) == Channel.SEND_OPTIONS_MULTICAST) {
+            membershipService.broadcast(msg);
+        } else {
+            clusterSender.sendMessage(msg,destination);
+        }
+        if ( Logs.MESSAGES.isTraceEnabled() ) {
+            Logs.MESSAGES.trace("ChannelCoordinator - Sent msg:" + new UniqueId(msg.getUniqueId()) +
+                    " at " + new java.sql.Timestamp(System.currentTimeMillis()) + " to " +
+                    Arrays.toNameString(destination));
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Broadcasts a message to all members.
+     * @param message The message to broadcast
+     * @throws ChannelException Message broadcast failed
+     */
+    public void broadcast(ChannelMessage message) throws ChannelException;
+-----CSCI578-----
+
+
+    /**
+     * @return a list of all the members in the cluster.
+     */
+    public Member[] getMembers();

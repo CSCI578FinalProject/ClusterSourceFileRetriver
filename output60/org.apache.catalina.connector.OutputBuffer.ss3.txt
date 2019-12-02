@@ -1,0 +1,84 @@
+5
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------- Bytes Handling Methods
+
+
+    /** 
+     * Sends the buffer data to the client output, checking the
+     * state of Response and calling the right interceptors.
+     * 
+     * @param buf Byte buffer to be written to the response
+     * @param off Offset
+     * @param cnt Length
+     * 
+     * @throws IOException An underlying IOException occurred
+     */
+    public void realWriteBytes(byte buf[], int off, int cnt)
+	throws IOException {
+
+        if (closed)
+            return;
+        if (coyoteResponse == null)
+            return;
+
+        // If we really have something to write
+        if (cnt > 0) {
+            // real write to the adapter
+            outputChunk.setBytes(buf, off, cnt);
+            try {
+                coyoteResponse.doWrite(outputChunk);
+            } catch (IOException e) {
+                // An IOException on a write is almost always due to
+                // the remote client aborting the request.  Wrap this
+                // so that it can be handled better by the error dispatcher.
+                throw new ClientAbortException(e);
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write a chunk of bytes.
+     */
+    public void doWrite(ByteChunk chunk/*byte buffer[], int pos, int count*/)
+        throws IOException
+    {
+        outputBuffer.doWrite(chunk, this);
+        bytesWritten+=chunk.getLength();
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /** Write the response. The caller ( tomcat ) owns the chunks.
+     *
+     * @param chunk data to write
+     * @param response used to allow buffers that can be shared by multiple responses.
+     * 
+     * @throws IOException
+     */
+    public int doWrite(ByteChunk chunk, Response response)
+        throws IOException;
+-----CSCI578-----
+
+
+
+    /**
+     * End the current request. It is acceptable to write extra bytes using
+     * buffer.doWrite during the execution of this method.
+     */
+    public long end()
+        throws IOException {
+
+        // Write end chunk
+        buffer.doWrite(END_CHUNK, null);
+        
+        return 0;
+
+    }

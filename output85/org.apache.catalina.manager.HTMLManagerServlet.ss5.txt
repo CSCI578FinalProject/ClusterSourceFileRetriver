@@ -1,0 +1,179 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    protected void sslConnectorCiphers(HttpServletRequest request,
+            HttpServletResponse response) throws ServletException, IOException {
+        request.setAttribute("cipherList", getConnectorCiphers());
+        getServletContext().getRequestDispatcher(
+                connectorCiphersJspPath).forward(request, response);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Invalidate specified sessions.
+     *
+     * @param cn Name of the application for which sessions are to be
+     *           invalidated
+     * @param sessionIds the session ids of the sessions
+     * @param smClient  StringManager for the client's locale
+     * @return number of invalidated sessions
+     */
+    protected int invalidateSessions(ContextName cn, String[] sessionIds,
+            StringManager smClient) {
+        if (null == sessionIds) {
+            return 0;
+        }
+        int nbAffectedSessions = 0;
+        for (int i = 0; i < sessionIds.length; ++i) {
+            String sessionId = sessionIds[i];
+            HttpSession session =
+                getSessionForNameAndId(cn, sessionId, smClient).getSession();
+            if (null == session) {
+                // Shouldn't happen, but let's play nice...
+                if (debug >= 1) {
+                    log("WARNING: can't invalidate null session " + sessionId);
+                }
+                continue;
+            }
+            try {
+                session.invalidate();
+                ++nbAffectedSessions;
+                if (debug >= 1) {
+                    log("Invalidating session id " + sessionId);
+                }
+            } catch (IllegalStateException ise) {
+                if (debug >= 1) {
+                    log("Can't invalidate already invalidated session id " + sessionId);
+                }
+            }
+        }
+        return nbAffectedSessions;
+    }
+-----CSCI578-----
+
+
+    protected Session getSessionForNameAndId(ContextName cn, String id,
+            StringManager smClient) {
+
+        List<Session> sessions = getSessionsForName(cn, smClient);
+        if (sessions.isEmpty()) return null;
+        for(Session session : sessions) {
+            if (session.getId().equals(id)) {
+                return session;
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Display session details.
+     *
+     * @param req The Servlet request
+     * @param resp The Servlet response
+     * @param cn Name of the application for which the sessions will be listed
+     * @param sessionId the session id
+     * @param smClient StringManager for the client's locale
+     * @throws ServletException Propagated Servlet error
+     * @throws IOException An IO error occurred
+     */
+    protected void displaySessionDetailPage(HttpServletRequest req,
+            HttpServletResponse resp, ContextName cn, String sessionId,
+            StringManager smClient) throws ServletException, IOException {
+        Session session = getSessionForNameAndId(cn, sessionId, smClient);
+        //strong>NOTE</strong> - This header will be overridden
+        // automatically if a <code>RequestDispatcher.forward()</code> call is
+        // ultimately invoked.
+        resp.setHeader("Pragma", "No-cache"); // HTTP 1.0
+        resp.setHeader("Cache-Control", "no-cache,no-store,max-age=0"); // HTTP 1.1
+        resp.setDateHeader("Expires", 0); // 0 means now
+        req.setAttribute("currentSession", session);
+        getServletContext().getRequestDispatcher(resp.encodeURL(sessionDetailJspPath)).include(req, resp);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Handle session operations.
+     *
+     * @param cn Name of the application for the sessions operation
+     * @param req The Servlet request
+     * @param resp The Servlet response
+     * @param smClient StringManager for the client's locale
+     * @throws ServletException Propagated Servlet error
+     * @throws IOException An IO error occurred
+     */
+    protected void doSessions(ContextName cn, HttpServletRequest req,
+            HttpServletResponse resp, StringManager smClient)
+            throws ServletException, IOException {
+        req.setAttribute("path", cn.getPath());
+        req.setAttribute("version", cn.getVersion());
+        String action = req.getParameter("action");
+        if (debug >= 1) {
+            log("sessions: Session action '" + action +
+                    "' for web application '" + cn.getDisplayName() + "'");
+        }
+        if ("sessionDetail".equals(action)) {
+            String sessionId = req.getParameter("sessionId");
+            displaySessionDetailPage(req, resp, cn, sessionId, smClient);
+            return;
+        } else if ("invalidateSessions".equals(action)) {
+            String[] sessionIds = req.getParameterValues("sessionIds");
+            int i = invalidateSessions(cn, sessionIds, smClient);
+            req.setAttribute(APPLICATION_MESSAGE, "" + i + " sessions invalidated.");
+        } else if ("removeSessionAttribute".equals(action)) {
+            String sessionId = req.getParameter("sessionId");
+            String name = req.getParameter("attributeName");
+            boolean removed =
+                removeSessionAttribute(cn, sessionId, name, smClient);
+            String outMessage = removed ? "Session attribute '" + name + "' removed." : "Session did not contain any attribute named '" + name + "'";
+            req.setAttribute(APPLICATION_MESSAGE, outMessage);
+            displaySessionDetailPage(req, resp, cn, sessionId, smClient);
+            return;
+        } // else
+        displaySessionsListPage(cn, req, resp, smClient);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Removes an attribute from an HttpSession
+     * @param cn Name of the application hosting the session from which the
+     *           attribute is to be removed
+     * @param sessionId the session id
+     * @param attributeName the attribute name
+     * @param smClient  StringManager for the client's locale
+     * @return true if there was an attribute removed, false otherwise
+     */
+    protected boolean removeSessionAttribute(ContextName cn, String sessionId,
+            String attributeName, StringManager smClient) {
+        HttpSession session =
+            getSessionForNameAndId(cn, sessionId, smClient).getSession();
+        if (null == session) {
+            // Shouldn't happen, but let's play nice...
+            if (debug >= 1) {
+                log("WARNING: can't remove attribute '" + attributeName + "' for null session " + sessionId);
+            }
+            return false;
+        }
+        boolean wasPresent = (null != session.getAttribute(attributeName));
+        try {
+            session.removeAttribute(attributeName);
+        } catch (IllegalStateException ise) {
+            if (debug >= 1) {
+                log("Can't remote attribute '" + attributeName + "' for invalidated session id " + sessionId);
+            }
+        }
+        return wasPresent;
+    }
+-----CSCI578-----
+
+
+    public String getVersion() {
+        return version;
+    }

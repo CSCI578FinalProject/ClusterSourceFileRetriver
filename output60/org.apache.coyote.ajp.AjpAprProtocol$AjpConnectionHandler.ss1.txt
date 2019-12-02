@@ -1,0 +1,304 @@
+9
+-----CSCI578-----
+
+
+
+    /**
+     * Finish AJP response.
+     */
+    protected void finish()
+        throws IOException {
+
+        if (!response.isCommitted()) {
+            // Validate and write response headers
+            try {
+                prepareResponse();
+            } catch (IOException e) {
+                // Set error flag
+                error = true;
+            }
+        }
+
+        if (finished)
+            return;
+
+        finished = true;
+
+        // Swallow the unread body packet if present
+        if (first && request.getContentLengthLong() > 0) {
+            receive();
+        }
+
+        // Add the end message
+        if (outputBuffer.position() + endMessageArray.length > outputBuffer.capacity()) {
+            flush();
+        }
+        outputBuffer.put(endMessageArray);
+        flush();
+
+    }
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------- ActionHook Methods
+
+
+    /**
+     * Send an action to the connector.
+     *
+     * @param actionCode Type of the action
+     * @param param Action parameter
+     */
+    public void action(ActionCode actionCode, Object param) {
+
+        if (actionCode == ActionCode.ACTION_COMMIT) {
+
+            if (response.isCommitted())
+                return;
+
+            // Validate and write response headers
+            try {
+                prepareResponse();
+            } catch (IOException e) {
+                // Set error flag
+                error = true;
+            }
+
+        } else if (actionCode == ActionCode.ACTION_CLIENT_FLUSH) {
+
+            if (!response.isCommitted()) {
+                // Validate and write response headers
+                try {
+                    prepareResponse();
+                } catch (IOException e) {
+                    // Set error flag
+                    error = true;
+                    return;
+                }
+            }
+
+            try {
+                flush();
+                // Send explicit flush message
+                if (Socket.sendb(socket, flushMessageBuffer, 0,
+                                 flushMessageBuffer.position()) < 0) {
+                    error = true;
+                }
+            } catch (IOException e) {
+                // Set error flag
+                error = true;
+            }
+
+        } else if (actionCode == ActionCode.ACTION_CLOSE) {
+            // Close
+
+            // End the processing of the current request, and stop any further
+            // transactions with the client
+
+            try {
+                finish();
+            } catch (IOException e) {
+                // Set error flag
+                error = true;
+            }
+
+        } else if (actionCode == ActionCode.ACTION_START) {
+
+            started = true;
+
+        } else if (actionCode == ActionCode.ACTION_STOP) {
+
+            started = false;
+
+        } else if (actionCode == ActionCode.ACTION_REQ_SSL_ATTRIBUTE ) {
+
+            if (!certificates.isNull()) {
+                ByteChunk certData = certificates.getByteChunk();
+                X509Certificate jsseCerts[] = null;
+                ByteArrayInputStream bais =
+                    new ByteArrayInputStream(certData.getBytes(),
+                            certData.getStart(),
+                            certData.getLength());
+                // Fill the  elements.
+                try {
+                    CertificateFactory cf;
+                    if (clientCertProvider == null) {
+                        cf = CertificateFactory.getInstance("X.509");
+                    } else {
+                        cf = CertificateFactory.getInstance("X.509",
+                                clientCertProvider);
+                    }
+                    while(bais.available() > 0) {
+                        X509Certificate cert = (X509Certificate)
+                            cf.generateCertificate(bais);
+                        if(jsseCerts == null) {
+                            jsseCerts = new X509Certificate[1];
+                            jsseCerts[0] = cert;
+                        } else {
+                            X509Certificate [] temp = new X509Certificate[jsseCerts.length+1];
+                            System.arraycopy(jsseCerts,0,temp,0,jsseCerts.length);
+                            temp[jsseCerts.length] = cert;
+                            jsseCerts = temp;
+                        }
+                    }
+                } catch (java.security.cert.CertificateException e) {
+                    log.error(sm.getString("ajpprocessor.certs.fail"), e);
+                    return;
+                } catch (NoSuchProviderException e) {
+                    log.error(sm.getString("ajpprocessor.certs.fail"), e);
+                    return;
+                }
+                request.setAttribute(AprEndpoint.CERTIFICATE_KEY, jsseCerts);
+            }
+
+        } else if (actionCode == ActionCode.ACTION_REQ_HOST_ATTRIBUTE) {
+
+            // Get remote host name using a DNS resolution
+            if (request.remoteHost().isNull()) {
+                try {
+                    request.remoteHost().setString(InetAddress.getByName
+                            (request.remoteAddr().toString()).getHostName());
+                } catch (IOException iex) {
+                    // Ignore
+                }
+            }
+
+        } else if (actionCode == ActionCode.ACTION_REQ_LOCAL_ADDR_ATTRIBUTE) {
+
+            // Automatically populated during prepareRequest() when using
+            // modern AJP forwarder, otherwise copy from local name
+            if (request.localAddr().isNull()) {
+                request.localAddr().setString(request.localName().toString());
+            }
+
+        } else if (actionCode == ActionCode.ACTION_REQ_SET_BODY_REPLAY) {
+
+            // Set the given bytes as the content
+            ByteChunk bc = (ByteChunk) param;
+            int length = bc.getLength();
+            bodyBytes.setBytes(bc.getBytes(), bc.getStart(), length);
+            request.setContentLength(length);
+            first = false;
+            empty = false;
+            replay = true;
+            endOfStream = false;
+        }
+
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public boolean isCommitted() {
+        return commited;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * When committing the response, we have to validate the set of headers, as
+     * well as setup the response filters.
+     */
+    protected void prepareResponse() throws IOException {
+
+        response.setCommitted(true);
+
+        responseHeaderMessage.reset();
+        responseHeaderMessage.appendByte(Constants.JK_AJP13_SEND_HEADERS);
+
+        // HTTP header contents
+        responseHeaderMessage.appendInt(response.getStatus());
+        String message = null;
+        if (org.apache.coyote.Constants.USE_CUSTOM_STATUS_MSG_IN_HEADER &&
+                HttpMessages.isSafeInHttpHeader(response.getMessage())) {
+            message = response.getMessage();
+        }
+        if (message == null){
+            message = HttpMessages.getMessage(response.getStatus());
+        }
+        if (message == null) {
+            // mod_jk + httpd 2.x fails with a null status message - bug 45026
+            message = Integer.toString(response.getStatus());
+        }
+        tmpMB.setString(message);
+        responseHeaderMessage.appendBytes(tmpMB);
+
+        // Special headers
+        MimeHeaders headers = response.getMimeHeaders();
+        String contentType = response.getContentType();
+        if (contentType != null) {
+            headers.setValue("Content-Type").setString(contentType);
+        }
+        String contentLanguage = response.getContentLanguage();
+        if (contentLanguage != null) {
+            headers.setValue("Content-Language").setString(contentLanguage);
+        }
+        long contentLength = response.getContentLengthLong();
+        if (contentLength >= 0) {
+            headers.setValue("Content-Length").setLong(contentLength);
+        }
+
+        // Other headers
+        int numHeaders = headers.size();
+        responseHeaderMessage.appendInt(numHeaders);
+        for (int i = 0; i < numHeaders; i++) {
+            MessageBytes hN = headers.getName(i);
+            int hC = Constants.getResponseAjpIndex(hN.toString());
+            if (hC > 0) {
+                responseHeaderMessage.appendInt(hC);
+            }
+            else {
+                responseHeaderMessage.appendBytes(hN);
+            }
+            MessageBytes hV=headers.getValue(i);
+            responseHeaderMessage.appendBytes(hV);
+        }
+
+        // Write to buffer
+        responseHeaderMessage.end();
+        outputBuffer.put(responseHeaderMessage.getBuffer(), 0, responseHeaderMessage.getLen());
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Callback to write data from the buffer.
+     */
+    protected void flush()
+        throws IOException {
+        if (outputBuffer.position() > 0) {
+            if ((socket != 0) && Socket.sendbb(socket, 0, outputBuffer.position()) < 0) {
+                // There are no re-tries so clear the buffer to prevent a
+                // possible overflow if the buffer is used again. BZ53119.
+                outputBuffer.clear();
+                throw new IOException(sm.getString("ajpprocessor.failedsend"));
+            }
+            outputBuffer.clear();
+        }
+    }
+-----CSCI578-----
+    
+
+    public static final int getResponseAjpIndex(String header)
+    {
+        Integer i = responseTransHash.get(header);
+        if (i == null)
+            return 0;
+        else
+            return i.intValue();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Send data over a network using internally set ByteBuffer
+     */
+    public static native int sendbb(long sock,
+                                   int offset, int len);
+-----CSCI578-----

@@ -1,0 +1,66 @@
+4
+-----CSCI578-----
+
+    
+    public void init(FilterConfig filterConfig) throws ServletException {
+        
+        @SuppressWarnings("unchecked") // Servlet 2.5 doesn't use generics
+        Enumeration paramNames = filterConfig.getInitParameterNames();
+        
+        while (paramNames.hasMoreElements()) {
+            String paramName = (String) paramNames.nextElement();
+            if (!IntrospectionUtils.setProperty(this, paramName,
+                    filterConfig.getInitParameter(paramName))) {
+                String msg = sm.getString("filterbase.noSuchProperty",
+                        paramName, this.getClass().getName());
+                if (isConfigProblemFatal()) {
+                    throw new ServletException(msg);
+                } else {
+                    getLogger().warn(msg);
+                }
+            }
+        }    
+    }
+-----CSCI578-----
+
+
+    protected abstract Log getLogger();
+-----CSCI578-----
+
+
+    @Override
+    public void init(FilterConfig filterConfig) throws ServletException {
+        // Set the parameters
+        super.init(filterConfig);
+        
+        try {
+            Class<?> clazz = Class.forName(randomClass);
+            randomSource = (Random) clazz.newInstance();
+        } catch (ClassNotFoundException e) {
+            ServletException se = new ServletException(sm.getString(
+                    "csrfPrevention.invalidRandomClass", randomClass), e);
+            throw se;
+        } catch (InstantiationException e) {
+            ServletException se = new ServletException(sm.getString(
+                    "csrfPrevention.invalidRandomClass", randomClass), e);
+            throw se;
+        } catch (IllegalAccessException e) {
+            ServletException se = new ServletException(sm.getString(
+                    "csrfPrevention.invalidRandomClass", randomClass), e);
+            throw se;
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Determines if an exception when calling a setter or an unknown
+     * configuration attribute triggers the failure of the this filter which in
+     * turn will prevent the web application from starting.
+     *
+     * @return <code>true</code> if a problem should trigger the failure of this
+     *         filter, else <code>false</code>
+     */
+    protected boolean isConfigProblemFatal() {
+        return false;
+    }

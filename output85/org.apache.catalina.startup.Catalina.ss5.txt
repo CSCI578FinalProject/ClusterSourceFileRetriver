@@ -1,0 +1,140 @@
+8
+-----CSCI578-----
+
+
+
+    public void stopServer() {
+        stopServer(null);
+    }
+
+
+    public void stopServer(String[] arguments) {
+
+        if (arguments != null) {
+            arguments(arguments);
+        }
+
+        Server s = getServer();
+        if (s == null) {
+            // Create and execute our Digester
+            Digester digester = createStopDigester();
+            File file = configFile();
+            try (FileInputStream fis = new FileInputStream(file)) {
+                InputSource is =
+                    new InputSource(file.toURI().toURL().toString());
+                is.setByteStream(fis);
+                digester.push(this);
+                digester.parse(is);
+            } catch (Exception e) {
+                log.error("Catalina.stop: ", e);
+                System.exit(1);
+            }
+        } else {
+            // Server object already present. Must be running as a service
+            try {
+                s.stop();
+            } catch (LifecycleException e) {
+                log.error("Catalina.stop: ", e);
+            }
+            return;
+        }
+
+        // Stop the existing server
+        s = getServer();
+        if (s.getPort()>0) {
+            try (Socket socket = new Socket(s.getAddress(), s.getPort());
+                    OutputStream stream = socket.getOutputStream()) {
+                String shutdown = s.getShutdown();
+                for (int i = 0; i < shutdown.length(); i++) {
+                    stream.write(shutdown.charAt(i));
+                }
+                stream.flush();
+            } catch (ConnectException ce) {
+                log.error(sm.getString("catalina.stopServer.connectException",
+                                       s.getAddress(),
+                                       String.valueOf(s.getPort())));
+                log.error("Catalina.stop: ", ce);
+                System.exit(1);
+            } catch (IOException e) {
+                log.error("Catalina.stop: ", e);
+                System.exit(1);
+            }
+        } else {
+            log.error(sm.getString("catalina.stopServer"));
+            System.exit(1);
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the address on which we listen to for shutdown commands.
+     */
+    public String getAddress();
+-----CSCI578-----
+
+
+    /**
+     * Create and configure the Digester we will be using for shutdown.
+     * @return the digester to process the stop operation
+     */
+    protected Digester createStopDigester() {
+
+        // Initialize the digester
+        Digester digester = new Digester();
+        digester.setUseContextClassLoader(true);
+
+        // Configure the rules we need for shutting down
+        digester.addObjectCreate("Server",
+                                 "org.apache.catalina.core.StandardServer",
+                                 "className");
+        digester.addSetProperties("Server");
+        digester.addSetNext("Server",
+                            "setServer",
+                            "org.apache.catalina.Server");
+
+        return (digester);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * @return the shutdown command string we are waiting for.
+     */
+    public String getShutdown();
+-----CSCI578-----
+
+
+
+    /**
+     * @return the port number we listen to for shutdown commands.
+     */
+    public int getPort();
+-----CSCI578-----
+
+
+
+    public Server getServer() {
+        return server;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a File object representing our configuration file.
+     * @return the main configuration file
+     */
+    protected File configFile() {
+
+        File file = new File(configFile);
+        if (!file.isAbsolute()) {
+            file = new File(Bootstrap.getCatalinaBase(), configFile);
+        }
+        return (file);
+
+    }
+-----CSCI578-----

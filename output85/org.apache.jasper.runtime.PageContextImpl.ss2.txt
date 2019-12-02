@@ -1,0 +1,161 @@
+7
+-----CSCI578-----
+
+
+    @Override
+    public void forward(final String relativeUrlPath) throws ServletException,
+            IOException {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                AccessController.doPrivileged(
+                        new PrivilegedExceptionAction<Void>() {
+                    @Override
+                    public Void run() throws Exception {
+                        doForward(relativeUrlPath);
+                        return null;
+                    }
+                });
+            } catch (PrivilegedActionException e) {
+                Exception ex = e.getException();
+                if (ex instanceof IOException) {
+                    throw (IOException) ex;
+                } else {
+                    throw (ServletException) ex;
+                }
+            }
+        } else {
+            doForward(relativeUrlPath);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void include(String relativeUrlPath) throws ServletException,
+            IOException {
+        JspRuntimeLibrary
+                .include(request, response, relativeUrlPath, out, true);
+    }
+
+
+    @Override
+    public void include(final String relativeUrlPath, final boolean flush)
+            throws ServletException, IOException {
+        if (SecurityUtil.isPackageProtectionEnabled()) {
+            try {
+                AccessController.doPrivileged(
+                        new PrivilegedExceptionAction<Void>() {
+                    @Override
+                    public Void run() throws Exception {
+                        doInclude(relativeUrlPath, flush);
+                        return null;
+                    }
+                });
+            } catch (PrivilegedActionException e) {
+                Exception ex = e.getException();
+                if (ex instanceof IOException) {
+                    throw (IOException) ex;
+                } else {
+                    throw (ServletException) ex;
+                }
+            }
+        } else {
+            doInclude(relativeUrlPath, flush);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @SuppressWarnings("deprecation") // Still jave to support old JSP EL
+    private void doHandlePageException(Throwable t) throws IOException,
+            ServletException {
+
+        if (errorPageURL != null && !errorPageURL.equals("")) {
+
+            /*
+             * Set request attributes. Do not set the
+             * javax.servlet.error.exception attribute here (instead, set in the
+             * generated servlet code for the error page) in order to prevent
+             * the ErrorReportValve, which is invoked as part of forwarding the
+             * request to the error page, from throwing it if the response has
+             * not been committed (the response will have been committed if the
+             * error page is a JSP page).
+             */
+            request.setAttribute(PageContext.EXCEPTION, t);
+            request.setAttribute(RequestDispatcher.ERROR_STATUS_CODE,
+                    Integer.valueOf(HttpServletResponse.SC_INTERNAL_SERVER_ERROR));
+            request.setAttribute(RequestDispatcher.ERROR_REQUEST_URI,
+                    ((HttpServletRequest) request).getRequestURI());
+            request.setAttribute(RequestDispatcher.ERROR_SERVLET_NAME,
+                    config.getServletName());
+            try {
+                forward(errorPageURL);
+            } catch (IllegalStateException ise) {
+                include(errorPageURL);
+            }
+
+            // The error page could be inside an include.
+
+            Object newException =
+                    request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
+
+            // t==null means the attribute was not set.
+            if ((newException != null) && (newException == t)) {
+                request.removeAttribute(RequestDispatcher.ERROR_EXCEPTION);
+            }
+
+            // now clear the error code - to prevent double handling.
+            request.removeAttribute(RequestDispatcher.ERROR_STATUS_CODE);
+            request.removeAttribute(RequestDispatcher.ERROR_REQUEST_URI);
+            request.removeAttribute(RequestDispatcher.ERROR_SERVLET_NAME);
+            request.removeAttribute(PageContext.EXCEPTION);
+
+        } else {
+            // Otherwise throw the exception wrapped inside a ServletException.
+            // Set the exception as the root cause in the ServletException
+            // to get a stack trace for the real problem
+            if (t instanceof IOException)
+                throw (IOException) t;
+            if (t instanceof ServletException)
+                throw (ServletException) t;
+            if (t instanceof RuntimeException)
+                throw (RuntimeException) t;
+
+            Throwable rootCause = null;
+            if (t instanceof JspException || t instanceof ELException ||
+                    t instanceof javax.servlet.jsp.el.ELException) {
+                rootCause =t.getCause();
+            }
+
+            if (rootCause != null) {
+                throw new ServletException(t.getClass().getName() + ": "
+                        + t.getMessage(), rootCause);
+            }
+
+            throw new ServletException(t);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the <code>SecurityManager</code> only if Security is enabled AND
+     * package protection mechanism is enabled.
+     * @return <code>true</code> if package protection is enabled
+     */
+    public static boolean isPackageProtectionEnabled(){
+        if (packageDefinitionEnabled && Constants.IS_SECURITY_ENABLED){
+            return true;
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+    private void doInclude(String relativeUrlPath, boolean flush)
+            throws ServletException, IOException {
+        JspRuntimeLibrary.include(request, response, relativeUrlPath, out,
+                flush);
+    }

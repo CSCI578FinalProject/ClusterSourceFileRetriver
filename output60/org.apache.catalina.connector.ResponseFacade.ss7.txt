@@ -1,0 +1,192 @@
+13
+-----CSCI578-----
+
+
+
+    public boolean isCommitted() {
+
+        if (response == null) {
+            throw new IllegalStateException(
+                            sm.getString("responseFacade.nullResponse"));
+        }
+
+        return (response.isAppCommitted());
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Application commit flag accessor.
+     */
+    public boolean isAppCommitted() {
+        return (this.appCommitted || isCommitted() || isSuspended()
+                || ((getContentLength() > 0) 
+                    && (getContentCount() >= getContentLength())));
+    }
+-----CSCI578-----
+
+
+
+    public void resetBuffer() {
+
+        if (isCommitted())
+            throw new IllegalStateException
+                (/*sm.getString("responseBase.reset.ise")*/);
+
+        response.resetBuffer();
+
+    }
+-----CSCI578-----
+
+
+
+    public void reset() {
+
+        if (isCommitted())
+            throw new IllegalStateException
+                (/*sm.getString("responseBase.reset.ise")*/);
+
+        response.reset();
+
+    }
+-----CSCI578-----
+
+
+
+    public void addCookie(Cookie cookie) {
+
+        if (isCommitted())
+            return;
+
+        response.addCookie(cookie);
+
+    }
+-----CSCI578-----
+
+
+
+    public void sendError(int sc, String msg)
+        throws IOException {
+
+        if (isCommitted())
+            throw new IllegalStateException
+                (/*sm.getString("responseBase.reset.ise")*/);
+
+        response.setAppCommitted(true);
+
+        response.sendError(sc, msg);
+
+    }
+
+
+
+    public void sendError(int sc)
+        throws IOException {
+
+        if (isCommitted())
+            throw new IllegalStateException
+                (/*sm.getString("responseBase.reset.ise")*/);
+
+        response.setAppCommitted(true);
+
+        response.sendError(sc);
+
+    }
+-----CSCI578-----
+
+
+
+    public void sendRedirect(String location)
+        throws IOException {
+
+        if (isCommitted())
+            throw new IllegalStateException
+                (/*sm.getString("responseBase.reset.ise")*/);
+
+        response.setAppCommitted(true);
+
+        response.sendRedirect(location);
+
+    }
+-----CSCI578-----
+
+
+
+    public void setDateHeader(String name, long date) {
+
+        if (isCommitted())
+            return;
+
+        if(Globals.IS_SECURITY_ENABLED) {
+            AccessController.doPrivileged(new DateHeaderPrivilegedAction
+                                             (name, date, false));
+        } else {
+            response.setDateHeader(name, date);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public void addDateHeader(String name, long date) {
+
+        if (isCommitted())
+            return;
+
+        if(Globals.IS_SECURITY_ENABLED) {
+            AccessController.doPrivileged(new DateHeaderPrivilegedAction
+                                             (name, date, true));
+        } else {
+            response.addDateHeader(name, date);
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public void setHeader(String name, String value) {
+
+        if (isCommitted())
+            return;
+
+        response.setHeader(name, value);
+
+    }
+-----CSCI578-----
+
+
+
+    public void addHeader(String name, String value) {
+
+        if (isCommitted())
+            return;
+
+        response.addHeader(name, value);
+
+    }
+-----CSCI578-----
+
+
+
+    public void setStatus(int sc) {
+
+        if (isCommitted())
+            return;
+
+        response.setStatus(sc);
+
+    }
+
+
+
+    public void setStatus(int sc, String sm) {
+
+        if (isCommitted())
+            return;
+
+        response.setStatus(sc, sm);
+    }
+-----CSCI578-----

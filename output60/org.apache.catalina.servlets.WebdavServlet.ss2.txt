@@ -1,0 +1,104 @@
+4
+-----CSCI578-----
+
+
+
+    /**
+     * Initialize this servlet.
+     */
+    public void init() throws ServletException {
+
+        if (getServletConfig().getInitParameter("debug") != null)
+            debug = Integer.parseInt(getServletConfig().getInitParameter("debug"));
+
+        if (getServletConfig().getInitParameter("input") != null)
+            input = Integer.parseInt(getServletConfig().getInitParameter("input"));
+
+        if (getServletConfig().getInitParameter("output") != null)
+            output = Integer.parseInt(getServletConfig().getInitParameter("output"));
+
+        listings = Boolean.parseBoolean(getServletConfig().getInitParameter("listings"));
+
+        if (getServletConfig().getInitParameter("readonly") != null)
+            readOnly = Boolean.parseBoolean(getServletConfig().getInitParameter("readonly"));
+
+        if (getServletConfig().getInitParameter("sendfileSize") != null)
+            sendfileSize =
+                Integer.parseInt(getServletConfig().getInitParameter("sendfileSize")) * 1024;
+
+        fileEncoding = getServletConfig().getInitParameter("fileEncoding");
+
+        globalXsltFile = getServletConfig().getInitParameter("globalXsltFile");
+        contextXsltFile = getServletConfig().getInitParameter("contextXsltFile");
+        localXsltFile = getServletConfig().getInitParameter("localXsltFile");
+        readmeFile = getServletConfig().getInitParameter("readmeFile");
+
+        if (getServletConfig().getInitParameter("useAcceptRanges") != null)
+            useAcceptRanges = Boolean.parseBoolean(getServletConfig().getInitParameter("useAcceptRanges"));
+
+        // Sanity check on the specified buffer sizes
+        if (input < 256)
+            input = 256;
+        if (output < 256)
+            output = 256;
+
+        if (debug > 0) {
+            log("DefaultServlet.init:  input buffer size=" + input +
+                ", output buffer size=" + output);
+        }
+
+        // Load the proxy dir context.
+        resources = (ProxyDirContext) getServletContext()
+            .getAttribute(Globals.RESOURCES_ATTR);
+        if (resources == null) {
+            try {
+                resources =
+                    (ProxyDirContext) new InitialContext()
+                    .lookup(RESOURCES_JNDI_NAME);
+            } catch (NamingException e) {
+                // Failed
+                throw new ServletException("No resources", e);
+            }
+        }
+
+        if (resources == null) {
+            throw new UnavailableException("No resources");
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Initialize this servlet.
+     */
+    public void init()
+        throws ServletException {
+
+        super.init();
+
+        if (getServletConfig().getInitParameter("secret") != null)
+            secret = getServletConfig().getInitParameter("secret");
+
+        if (getServletConfig().getInitParameter("maxDepth") != null)
+            maxDepth = Integer.parseInt(
+                    getServletConfig().getInitParameter("maxDepth"));
+
+        if (getServletConfig().getInitParameter("allowSpecialPaths") != null)
+            allowSpecialPaths = Boolean.parseBoolean(
+                    getServletConfig().getInitParameter("allowSpecialPaths"));
+
+        // Load the MD5 helper used to calculate signatures.
+        try {
+            md5Helper = MessageDigest.getInstance("MD5");
+        } catch (NoSuchAlgorithmException e) {
+            throw new UnavailableException("No MD5");
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----

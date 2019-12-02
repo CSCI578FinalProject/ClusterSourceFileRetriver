@@ -1,0 +1,112 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Variable to hold the <code>load()</code> prepared statement.
+     */
+    protected PreparedStatement preparedLoadSql = null;
+
+
+    /**
+     * Load the Session associated with the id <code>id</code>.
+     * If no such session is found <code>null</code> is returned.
+     *
+     * @param id a value of type <code>String</code>
+     * @return the stored <code>Session</code>
+     * @exception ClassNotFoundException if an error occurs
+     * @exception IOException if an input/output error occurred
+     */
+    public Session load(String id)
+            throws ClassNotFoundException, IOException {
+        ResultSet rst = null;
+        StandardSession _session = null;
+        ClassLoader classLoader = null;
+        ObjectInputStream ois = null;
+        org.apache.catalina.Context context = (org.apache.catalina.Context) manager.getContainer();
+        Log containerLog = context.getLogger();
+        Loader loader = context.getLoader();
+        if (loader != null) {
+            classLoader = loader.getClassLoader();
+        }
+ 
+        synchronized (this) {
+            int numberOfTries = 2;
+            while (numberOfTries > 0) {
+                Connection _conn = getConnection();
+                if (_conn == null) {
+                    return (null);
+                }
+
+                ClassLoader oldThreadContextCL = Thread.currentThread().getContextClassLoader();
+                try {
+                    if (preparedLoadSql == null) {
+                        String loadSql = "SELECT " + sessionIdCol + ", "
+                                + sessionDataCol + " FROM " + sessionTable
+                                + " WHERE " + sessionIdCol + " = ? AND "
+                                + sessionAppCol + " = ?";
+                        preparedLoadSql = _conn.prepareStatement(loadSql);
+                    }
+
+                    preparedLoadSql.setString(1, id);
+                    preparedLoadSql.setString(2, getName());
+                    rst = preparedLoadSql.executeQuery();
+                    if (rst.next()) {
+                        if (classLoader != null) {
+                            Thread.currentThread().setContextClassLoader(classLoader);
+                        }
+                        ois = getObjectInputStream(rst.getBinaryStream(2));
+
+                        if (containerLog.isDebugEnabled()) {
+                            containerLog.debug(
+                                    sm.getString(getStoreName() + ".loading", id, sessionTable));
+                        }
+
+                        _session = (StandardSession) manager.createEmptySession();
+                        _session.readObjectData(ois);
+                        _session.setManager(manager);
+                    } else if (containerLog.isDebugEnabled()) {
+                        containerLog.debug(getStoreName() + ": No persisted data object found");
+                    }
+                    // Break out after the finally block
+                    numberOfTries = 0;
+                } catch (SQLException e) {
+                    containerLog.error(sm.getString(getStoreName() + ".SQLException", e));
+                    if (dbConnection != null)
+                        close(dbConnection);
+                } finally {
+                    try {
+                        if (rst != null) {
+                            rst.close();
+                        }
+                    } catch (SQLException e) {
+                        // Ignore
+                    }
+                    if (ois != null) {
+                        try {
+                            ois.close();
+                        } catch (IOException e) {
+                            // Ignore
+                        }
+                    }
+                    Thread.currentThread().setContextClassLoader(oldThreadContextCL);
+                    release(_conn);
+                }
+                numberOfTries--;
+            }
+        }
+
+        return (_session);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    /**
+     * Get a session from the recycled ones or create a new empty one.
+     * The PersistentManager manager does not need to create session data
+     * because it reads it from the Store.
+     */                                                                         
+    public Session createEmptySession();

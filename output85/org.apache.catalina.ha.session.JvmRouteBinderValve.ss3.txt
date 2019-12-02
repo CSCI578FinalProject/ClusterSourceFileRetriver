@@ -1,0 +1,286 @@
+9
+-----CSCI578-----
+
+
+    /**
+     * handle possible session turn over.
+     *
+     * @see JvmRouteBinderValve#handleJvmRoute(Request, String, String)
+     * @param request current request
+     */
+    protected void handlePossibleTurnover(Request request) {
+        String sessionID = request.getRequestedSessionId() ;
+        if (sessionID != null) {
+            long t1 = System.currentTimeMillis();
+            String jvmRoute = getLocalJvmRoute(request);
+            if (jvmRoute == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("jvmRoute.missingJvmRouteAttribute"));
+                }
+                return;
+            }
+            handleJvmRoute( request, sessionID, jvmRoute);
+            if (log.isDebugEnabled()) {
+                long t2 = System.currentTimeMillis();
+                long time = t2 - t1;
+                log.debug(sm.getString("jvmRoute.turnoverInfo", Long.valueOf(time)));
+            }
+        }
+    }
+
+
+    /**
+     * Handle jvmRoute stickiness after tomcat instance failed. After this
+     * correction a new Cookie send to client with new jvmRoute and the
+     * SessionID change propagate to the other cluster nodes.
+     *
+     * @param request current request
+     * @param sessionId
+     *            request SessionID from Cookie
+     * @param localJvmRoute
+     *            local jvmRoute
+     */
+    protected void handleJvmRoute(
+            Request request, String sessionId, String localJvmRoute) {
+        // get requested jvmRoute.
+        String requestJvmRoute = null;
+        int index = sessionId.indexOf('.');
+        if (index > 0) {
+            requestJvmRoute = sessionId
+                    .substring(index + 1, sessionId.length());
+        }
+        if (requestJvmRoute != null && !requestJvmRoute.equals(localJvmRoute)) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("jvmRoute.failover", requestJvmRoute,
+                        localJvmRoute, sessionId));
+            }
+            Session catalinaSession = null;
+            try {
+                catalinaSession = getManager(request).findSession(sessionId);
+            } catch (IOException e) {
+                // Hups!
+            }
+            String id = sessionId.substring(0, index);
+            String newSessionID = id + "." + localJvmRoute;
+            // OK - turnover the session and inform other cluster nodes
+            if (catalinaSession != null) {
+                changeSessionID(request, sessionId, newSessionID,
+                        catalinaSession);
+                numberOfSessions++;
+            } else {
+                try {
+                    catalinaSession = getManager(request).findSession(newSessionID);
+                } catch (IOException e) {
+                    // Hups!
+                }
+                if (catalinaSession != null) {
+                    // session is rewrite at other request, rewrite this also
+                    changeRequestSessionID(request, sessionId, newSessionID);
+                } else {
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("jvmRoute.cannotFindSession",sessionId));
+                    }
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * handle possible session turn over.
+     *
+     * @see JvmRouteBinderValve#handleJvmRoute(Request, String, String)
+     * @param request current request
+     */
+    protected void handlePossibleTurnover(Request request) {
+        String sessionID = request.getRequestedSessionId() ;
+        if (sessionID != null) {
+            long t1 = System.currentTimeMillis();
+            String jvmRoute = getLocalJvmRoute(request);
+            if (jvmRoute == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("jvmRoute.missingJvmRouteAttribute"));
+                }
+                return;
+            }
+            handleJvmRoute( request, sessionID, jvmRoute);
+            if (log.isDebugEnabled()) {
+                long t2 = System.currentTimeMillis();
+                long time = t2 - t1;
+                log.debug(sm.getString("jvmRoute.turnoverInfo", Long.valueOf(time)));
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * The string manager for this package.
+     */
+    protected static final StringManager sm = StringManager.getManager(JvmRouteBinderValve.class);
+
+
+    /**
+     * get ClusterManager
+     *
+     * @param request current request
+     * @return manager or null
+     */
+    protected Manager getManager(Request request) {
+        Manager manager = request.getContext().getManager();
+        if (log.isDebugEnabled()) {
+            if(manager != null) {
+                log.debug(sm.getString("jvmRoute.foundManager", manager,  request.getContext().getName()));
+            } else {
+                log.debug(sm.getString("jvmRoute.notFoundManager", request.getContext().getName()));
+            }
+        }
+        return manager;
+    }
+-----CSCI578-----
+
+
+    /**
+     * change session id and send to all cluster nodes
+     *
+     * @param request current request
+     * @param sessionId
+     *            original session id
+     * @param newSessionID
+     *            new session id for node migration
+     * @param catalinaSession
+     *            current session with original session id
+     */
+    protected void changeSessionID(Request request, String sessionId,
+            String newSessionID, Session catalinaSession) {
+        fireLifecycleEvent("Before session migration", catalinaSession);
+        catalinaSession.getManager().changeSessionId(catalinaSession, newSessionID);
+        changeRequestSessionID(request, sessionId, newSessionID);
+        fireLifecycleEvent("After session migration", catalinaSession);
+        if (log.isDebugEnabled()) {
+            log.debug(sm.getString("jvmRoute.changeSession", sessionId,
+                    newSessionID));
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * get jvmroute from engine
+     *
+     * @param request current request
+     * @return return jvmRoute from ManagerBase or null
+     */
+    protected String getLocalJvmRoute(Request request) {
+        Manager manager = getManager(request);
+        if(manager instanceof ManagerBase) {
+            return ((ManagerBase) manager).getJvmRoute();
+        }
+        return null ;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Change Request Session id
+     * @param request current request
+     * @param sessionId
+     *            original session id
+     * @param newSessionID
+     *            new session id for node migration
+     */
+    protected void changeRequestSessionID(Request request, String sessionId, String newSessionID) {
+        request.changeSessionId(newSessionID);
+
+        // set original sessionid at request, to allow application detect the
+        // change
+        if (sessionIdAttribute != null && !"".equals(sessionIdAttribute)) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("jvmRoute.set.orignalsessionid",sessionIdAttribute,sessionId));
+            }
+            request.setAttribute(sessionIdAttribute, sessionId);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Change the session ID of the current session to a new randomly generated
+     * session ID.
+     *
+     * @param session   The session to change the session ID for
+     */
+    public void changeSessionId(Session session);
+
+
+
+    /**
+     * Change the session ID of the current session to a specified session ID.
+     *
+     * @param session   The session to change the session ID for
+     * @param newId   new session ID
+     */
+    public void changeSessionId(Session session, String newId);
+-----CSCI578-----
+
+
+
+    /**
+     * Change the ID of the session that this request is associated with. There
+     * are several things that may trigger an ID change. These include moving
+     * between nodes in a cluster and session fixation prevention during the
+     * authentication process.
+     *
+     * @param newSessionId   The session to change the session ID for
+     */
+    public void changeSessionId(String newSessionId) {
+        // This should only ever be called if there was an old session ID but
+        // double check to be sure
+        if (requestedSessionId != null && requestedSessionId.length() > 0) {
+            requestedSessionId = newSessionId;
+        }
+
+        Context context = getContext();
+        if (context != null
+                && !context.getServletContext()
+                        .getEffectiveSessionTrackingModes()
+                        .contains(SessionTrackingMode.COOKIE)) {
+            return;
+        }
+
+        if (response != null) {
+            Cookie newCookie =
+                ApplicationSessionCookieConfig.createSessionCookie(context,
+                        newSessionId, isSecure());
+            response.addSessionCookieInternal(newCookie);
+        }
+    }
+
+
+    /**
+     * Changes the session ID of the session associated with this request.
+     *
+     * @return the old session ID before it was changed
+     * @see javax.servlet.http.HttpSessionIdListener
+     * @since Servlet 3.1
+     */
+    @Override
+    public String changeSessionId() {
+
+        Session session = this.getSessionInternal(false);
+        if (session == null) {
+            throw new IllegalStateException(
+                sm.getString("coyoteRequest.changeSessionId"));
+        }
+
+        Manager manager = this.getContext().getManager();
+        manager.changeSessionId(session);
+
+        String newSessionId = session.getId();
+        this.changeSessionId(newSessionId);
+
+        return newSessionId;
+    }

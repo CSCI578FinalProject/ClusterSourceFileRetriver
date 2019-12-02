@@ -1,0 +1,195 @@
+8
+-----CSCI578-----
+
+
+    private final void bufferOverflow() throws IOException {
+        throw new IOException(getLocalizeMessage("jsp.error.overflow"));
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write a single character.
+     */
+    @Override
+    public void write(int c) throws IOException {
+        ensureOpen();
+        if (bufferSize == 0) {
+            initOut();
+            out.write(c);
+        }
+        else {
+            if (nextChar >= bufferSize)
+                if (autoFlush)
+                    flushBuffer();
+                else
+                    bufferOverflow();
+            cb[nextChar++] = (char) c;
+        }
+    }
+
+
+    /**
+     * Write a portion of an array of characters.
+     *
+     * <p> Ordinarily this method stores characters from the given array into
+     * this stream's buffer, flushing the buffer to the underlying stream as
+     * needed.  If the requested length is at least as large as the buffer,
+     * however, then this method will flush the buffer and write the characters
+     * directly to the underlying stream.  Thus redundant
+     * <code>DiscardableBufferedWriter</code>s will not copy data unnecessarily.
+     *
+     * @param  cbuf  A character array
+     * @param  off   Offset from which to start reading characters
+     * @param  len   Number of characters to write
+     */
+    @Override
+    public void write(char cbuf[], int off, int len)
+    throws IOException
+    {
+        ensureOpen();
+
+        if (bufferSize == 0) {
+            initOut();
+            out.write(cbuf, off, len);
+            return;
+        }
+
+        if ((off < 0) || (off > cbuf.length) || (len < 0) ||
+                ((off + len) > cbuf.length) || ((off + len) < 0)) {
+            throw new IndexOutOfBoundsException();
+        } else if (len == 0) {
+            return;
+        }
+
+        if (len >= bufferSize) {
+            /* If the request length exceeds the size of the output buffer,
+             flush the buffer and then write the data directly.  In this
+             way buffered streams will cascade harmlessly. */
+            if (autoFlush)
+                flushBuffer();
+            else
+                bufferOverflow();
+            initOut();
+            out.write(cbuf, off, len);
+            return;
+        }
+
+        int b = off, t = off + len;
+        while (b < t) {
+            int d = min(bufferSize - nextChar, t - b);
+            System.arraycopy(cbuf, b, cb, nextChar, d);
+            b += d;
+            nextChar += d;
+            if (nextChar >= bufferSize)
+                if (autoFlush)
+                    flushBuffer();
+                else
+                    bufferOverflow();
+        }
+
+    }
+
+
+    /**
+     * Write an array of characters.  This method cannot be inherited from the
+     * Writer class because it must suppress I/O exceptions.
+     */
+    @Override
+    public void write(char buf[]) throws IOException {
+        write(buf, 0, buf.length);
+    }
+
+
+    /**
+     * Write a portion of a String.
+     *
+     * @param  s     String to be written
+     * @param  off   Offset from which to start reading characters
+     * @param  len   Number of characters to be written
+     */
+    @Override
+    public void write(String s, int off, int len) throws IOException {
+        ensureOpen();
+        if (bufferSize == 0) {
+            initOut();
+            out.write(s, off, len);
+            return;
+        }
+        int b = off, t = off + len;
+        while (b < t) {
+            int d = min(bufferSize - nextChar, t - b);
+            s.getChars(b, b + d, cb, nextChar);
+            b += d;
+            nextChar += d;
+            if (nextChar >= bufferSize)
+                if (autoFlush)
+                    flushBuffer();
+                else
+                    bufferOverflow();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Our own little min method, to avoid loading java.lang.Math if we've run
+     * out of file descriptors and we're trying to print a stack trace.
+     */
+    private static int min(int a, int b) {
+        if (a < b) return a;
+        return b;
+    }
+-----CSCI578-----
+
+
+    /* Methods that do terminate lines */
+
+    /**
+     * Terminate the current line by writing the line separator string.  The
+     * line separator string is defined by the system property
+     * <code>line.separator</code>, and is not necessarily a single newline
+     * character (<code>'\n'</code>).
+     *
+     * Need to change this from PrintWriter because the default
+     * println() writes  to the sink directly instead of through the
+     * write method...
+     */
+    @Override
+    public void println() throws IOException {
+        newLine();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Write a line separator.  The line separator string is defined by the
+     * system property <tt>line.separator</tt>, and is not necessarily a single
+     * newline ('\n') character.
+     *
+     * @exception  IOException  If an I/O error occurs
+     */
+
+    @Override
+    public void newLine() throws IOException {
+        write(System.lineSeparator());
+    }
+-----CSCI578-----
+
+
+    /** check to make sure that the stream has not been closed */
+    private void ensureOpen() throws IOException {
+        if (response == null || closed)
+            throw new IOException("Stream closed");
+    }
+-----CSCI578-----
+
+
+    private void initOut() throws IOException {
+        if (out == null) {
+            out = response.getWriter();
+        }
+    }

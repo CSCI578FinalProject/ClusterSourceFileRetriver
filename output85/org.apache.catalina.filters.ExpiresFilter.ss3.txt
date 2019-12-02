@@ -1,0 +1,76 @@
+4
+-----CSCI578-----
+
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + "[excludedResponseStatusCode=[" +
+                intsToCommaDelimitedString(this.excludedResponseStatusCodes) +
+                "], default=" + this.defaultExpiresConfiguration + ", byType=" +
+                this.expiresConfigurationByContentType + "]";
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void init(FilterConfig filterConfig) throws ServletException {
+        for (Enumeration<String> names = filterConfig.getInitParameterNames(); names.hasMoreElements();) {
+            String name = names.nextElement();
+            String value = filterConfig.getInitParameter(name);
+
+            try {
+                if (name.startsWith(PARAMETER_EXPIRES_BY_TYPE)) {
+                    String contentType = name.substring(
+                            PARAMETER_EXPIRES_BY_TYPE.length()).trim();
+                    ExpiresConfiguration expiresConfiguration = parseExpiresConfiguration(value);
+                    this.expiresConfigurationByContentType.put(contentType,
+                            expiresConfiguration);
+                } else if (name.equalsIgnoreCase(PARAMETER_EXPIRES_DEFAULT)) {
+                    ExpiresConfiguration expiresConfiguration = parseExpiresConfiguration(value);
+                    this.defaultExpiresConfiguration = expiresConfiguration;
+                } else if (name.equalsIgnoreCase(PARAMETER_EXPIRES_EXCLUDED_RESPONSE_STATUS_CODES)) {
+                    this.excludedResponseStatusCodes = commaDelimitedListToIntArray(value);
+                } else {
+                    log.warn(sm.getString(
+                            "expiresFilter.unknownParameterIgnored", name,
+                            value));
+                }
+            } catch (RuntimeException e) {
+                throw new ServletException(sm.getString(
+                        "expiresFilter.exceptionProcessingParameter", name,
+                        value), e);
+            }
+        }
+
+        log.debug(sm.getString("expiresFilter.filterInitialized",
+                this.toString()));
+    }
+-----CSCI578-----
+
+
+    /**
+     * Convert an array of ints into a comma delimited string
+     * @param ints The int array
+     * @return a comma separated string
+     */
+    protected static String intsToCommaDelimitedString(int[] ints) {
+        if (ints == null) {
+            return "";
+        }
+
+        StringBuilder result = new StringBuilder();
+
+        for (int i = 0; i < ints.length; i++) {
+            result.append(ints[i]);
+            if (i < (ints.length - 1)) {
+                result.append(", ");
+            }
+        }
+        return result.toString();
+    }
+-----CSCI578-----
+
+
+    public String getExcludedResponseStatusCodes() {
+        return intsToCommaDelimitedString(excludedResponseStatusCodes);
+    }

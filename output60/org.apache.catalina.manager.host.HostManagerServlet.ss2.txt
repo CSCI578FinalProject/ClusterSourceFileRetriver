@@ -1,0 +1,260 @@
+9
+-----CSCI578-----
+
+
+
+    /**
+     * Process a GET request for the specified resource.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    public void doGet(HttpServletRequest request,
+                      HttpServletResponse response)
+        throws IOException, ServletException {
+
+        // Verify that we were not accessed using the invoker servlet
+        if (request.getAttribute(Globals.INVOKED_ATTR) != null)
+            throw new UnavailableException
+                (sm.getString("hostManagerServlet.cannotInvoke"));
+
+        // Identify the request parameters that we need
+        String command = request.getPathInfo();
+        if (command == null)
+            command = request.getServletPath();
+        String name = request.getParameter("name");
+  
+        // Prepare our output writer to generate the response message
+        response.setContentType("text/plain; charset=" + Constants.CHARSET);
+        PrintWriter writer = response.getWriter();
+
+        // Process the requested command
+        if (command == null) {
+            writer.println(sm.getString("hostManagerServlet.noCommand"));
+        } else if (command.equals("/add")) {
+            add(request, writer, name, false);
+        } else if (command.equals("/remove")) {
+            remove(writer, name);
+        } else if (command.equals("/list")) {
+            list(writer);
+        } else if (command.equals("/start")) {
+            start(writer, name);
+        } else if (command.equals("/stop")) {
+            stop(writer, name);
+        } else {
+            writer.println(sm.getString("hostManagerServlet.unknownCommand",
+                                        command));
+        }
+
+        // Finish up the response
+        writer.flush();
+        writer.close();
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Render a list of the currently active Contexts in our virtual host.
+     *
+     * @param writer Writer to render to
+     */
+    protected void list(PrintWriter writer) {
+
+        if (debug >= 1)
+            log("list: Listing hosts for engine '" 
+                + engine.getName() + "'");
+
+        writer.println(sm.getString("hostManagerServlet.listed",
+                                    engine.getName()));
+        Container[] hosts = engine.findChildren();
+        for (int i = 0; i < hosts.length; i++) {
+            Host host = (Host) hosts[i];
+            String name = host.getName();
+            String[] aliases = host.findAliases();
+            StringBuffer buf = new StringBuffer();
+            if (aliases.length > 0) {
+                buf.append(aliases[0]);
+                for (int j = 1; j < aliases.length; j++) {
+                    buf.append(',').append(aliases[j]);
+                }
+            }
+            writer.println(sm.getString("hostManagerServlet.listitem",
+                                        name, buf.toString()));
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of alias names for this Host.  If none are defined,
+     * a zero length array is returned.
+     */
+    public String[] findAliases();
+-----CSCI578-----
+
+
+
+    /**
+     * Remove the specified host.
+     *
+     * @param writer Writer to render results to
+     * @param name host name
+     */
+    protected synchronized void remove(PrintWriter writer, String name) {
+
+        if (debug >= 1) {
+            log("remove: Removing host '" + name + "'");
+        }
+
+        // Validate the requested host name
+        if ((name == null) || name.length() == 0) {
+            writer.println(sm.getString("hostManagerServlet.invalidHostName", name));
+            return;
+        }
+
+        // Check if host exists
+        if (engine.findChild(name) == null) {
+            writer.println
+                (sm.getString("hostManagerServlet.noHost", name));
+            return;
+        }
+
+        // Prevent removing our own host
+        if (engine.findChild(name) == host) {
+            writer.println
+                (sm.getString("hostManagerServlet.cannotRemoveOwnHost", name));
+            return;
+        }
+
+        // Remove host
+        // Note that the host will not get physically removed
+        try {
+            Container child = engine.findChild(name);
+            engine.removeChild(child);
+            if ( child instanceof ContainerBase ) ((ContainerBase)child).destroy();
+        } catch (Exception e) {
+            writer.println(sm.getString("hostManagerServlet.exception",
+                                        e.toString()));
+            return;
+        }
+        
+        Host host = (StandardHost) engine.findChild(name);
+        if (host == null) {
+            writer.println(sm.getString("hostManagerServlet.remove", name));
+        } else {
+            // Something failed
+            writer.println(sm.getString("hostManagerServlet.removeFailed", name));
+        }
+        
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Start the host with the specified name.
+     *
+     * @param writer Writer to render to
+     * @param name Host name
+     */
+    protected void start(PrintWriter writer, String name) {
+
+        if (debug >= 1)
+            log("start: Starting host with name '" + name + "'");
+
+        // Validate the requested host name
+        if ((name == null) || name.length() == 0) {
+            writer.println(sm.getString("hostManagerServlet.invalidHostName", name));
+            return;
+        }
+
+        // Check if host exists
+        if (engine.findChild(name) == null) {
+            writer.println
+                (sm.getString("hostManagerServlet.noHost", name));
+            return;
+        }
+
+        // Prevent starting our own host
+        if (engine.findChild(name) == host) {
+            writer.println
+                (sm.getString("hostManagerServlet.cannotStartOwnHost", name));
+            return;
+        }
+
+        // Start host
+        try {
+            ((Lifecycle) engine.findChild(name)).start();
+            writer.println
+                (sm.getString("hostManagerServlet.started", name));
+        } catch (Throwable t) {
+            getServletContext().log
+                (sm.getString("hostManagerServlet.startFailed", name), t);
+            writer.println
+                (sm.getString("hostManagerServlet.startFailed", name));
+            writer.println(sm.getString("hostManagerServlet.exception",
+                                        t.toString()));
+            return;
+        }
+        
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Start the host with the specified name.
+     *
+     * @param writer Writer to render to
+     * @param name Host name
+     */
+    protected void stop(PrintWriter writer, String name) {
+
+        if (debug >= 1)
+            log("stop: Stopping host with name '" + name + "'");
+
+        // Validate the requested host name
+        if ((name == null) || name.length() == 0) {
+            writer.println(sm.getString("hostManagerServlet.invalidHostName", name));
+            return;
+        }
+
+        // Check if host exists
+        if (engine.findChild(name) == null) {
+            writer.println
+                (sm.getString("hostManagerServlet.noHost", name));
+            return;
+        }
+
+        // Prevent starting our own host
+        if (engine.findChild(name) == host) {
+            writer.println
+                (sm.getString("hostManagerServlet.cannotStopOwnHost", name));
+            return;
+        }
+
+        // Start host
+        try {
+            ((Lifecycle) engine.findChild(name)).stop();
+            writer.println
+                (sm.getString("hostManagerServlet.stopped", name));
+        } catch (Throwable t) {
+            getServletContext().log
+                (sm.getString("hostManagerServlet.stopFailed", name), t);
+            writer.println
+                (sm.getString("hostManagerServlet.stopFailed", name));
+            writer.println(sm.getString("hostManagerServlet.exception",
+                                        t.toString()));
+            return;
+        }
+        
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

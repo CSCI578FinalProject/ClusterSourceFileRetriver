@@ -1,0 +1,59 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * The set of SimpleDateFormat formats to use in getDateHeader().
+     *
+     * Notice that because SimpleDateFormat is not thread-safe, we can't
+     * declare formats[] as a static variable.
+     */
+    protected final SimpleDateFormat formats[] = {
+        new SimpleDateFormat(FastHttpDateFormat.RFC1123_DATE, Locale.US),
+        new SimpleDateFormat("EEEEEE, dd-MMM-yy HH:mm:ss zzz", Locale.US),
+        new SimpleDateFormat("EEE MMMM d HH:mm:ss yyyy", Locale.US)
+    }
+
+
+
+    /**
+     * Return the value of the specified date header, if any; otherwise
+     * return -1.
+     *
+     * @param name Name of the requested date header
+     * @return the date as a long
+     *
+     * @exception IllegalArgumentException if the specified header value
+     *  cannot be converted to a date
+     */
+    @Override
+    public long getDateHeader(String name) {
+
+        String value = getHeader(name);
+        if (value == null) {
+            return (-1L);
+        }
+
+        // Attempt to convert the date header in a variety of formats
+        long result = FastHttpDateFormat.parseDate(value, formats);
+        if (result != (-1L)) {
+            return result;
+        }
+        throw new IllegalArgumentException(value);
+
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public long getDateHeader(String name) {
+
+        if (request == null) {
+            throw new IllegalStateException(
+                            sm.getString("requestFacade.nullRequest"));
+        }
+
+        return request.getDateHeader(name);
+    }

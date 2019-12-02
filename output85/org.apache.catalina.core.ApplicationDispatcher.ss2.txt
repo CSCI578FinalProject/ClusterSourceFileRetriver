@@ -1,0 +1,100 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Include the response from another resource in the current response.
+     * Any runtime exception, IOException, or ServletException thrown by the
+     * called servlet will be propagated to the caller.
+     *
+     * @param request The servlet request that is including this one
+     * @param response The servlet response to be appended to
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet exception occurs
+     */
+    @Override
+    public void include(ServletRequest request, ServletResponse response)
+        throws ServletException, IOException
+    {
+        if (Globals.IS_SECURITY_ENABLED) {
+            try {
+                PrivilegedInclude dp = new PrivilegedInclude(request,response);
+                AccessController.doPrivileged(dp);
+            } catch (PrivilegedActionException pe) {
+                Exception e = pe.getException();
+
+                if (e instanceof ServletException)
+                    throw (ServletException) e;
+                throw (IOException) e;
+            }
+        } else {
+            doInclude(request, response);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void doInclude(ServletRequest request, ServletResponse response)
+            throws ServletException, IOException {
+
+        // Set up to handle the specified request and response
+        State state = new State(request, response, true);
+
+        if (WRAP_SAME_OBJECT) {
+            // Check SRV.8.2 / SRV.14.2.5.1 compliance
+            checkSameObjects(request, response);
+        }
+
+        // Create a wrapped response to use for this request
+        wrapResponse(state);
+
+        // Handle an HTTP named dispatcher include
+        if (name != null) {
+
+            ApplicationHttpRequest wrequest =
+                (ApplicationHttpRequest) wrapRequest(state);
+            wrequest.setAttribute(Globals.NAMED_DISPATCHER_ATTR, name);
+            if (servletPath != null)
+                wrequest.setServletPath(servletPath);
+            wrequest.setAttribute(Globals.DISPATCHER_TYPE_ATTR,
+                    DispatcherType.INCLUDE);
+            wrequest.setAttribute(Globals.DISPATCHER_REQUEST_PATH_ATTR,
+                    getCombinedPath());
+            invoke(state.outerRequest, state.outerResponse, state);
+        }
+
+        // Handle an HTTP path based include
+        else {
+
+            ApplicationHttpRequest wrequest =
+                (ApplicationHttpRequest) wrapRequest(state);
+            String contextPath = context.getPath();
+            if (requestURI != null)
+                wrequest.setAttribute(RequestDispatcher.INCLUDE_REQUEST_URI,
+                                      requestURI);
+            if (contextPath != null)
+                wrequest.setAttribute(RequestDispatcher.INCLUDE_CONTEXT_PATH,
+                                      contextPath);
+            if (servletPath != null)
+                wrequest.setAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH,
+                                      servletPath);
+            if (pathInfo != null)
+                wrequest.setAttribute(RequestDispatcher.INCLUDE_PATH_INFO,
+                                      pathInfo);
+            if (queryString != null) {
+                wrequest.setAttribute(RequestDispatcher.INCLUDE_QUERY_STRING,
+                                      queryString);
+                wrequest.setQueryParams(queryString);
+            }
+
+            wrequest.setAttribute(Globals.DISPATCHER_TYPE_ATTR,
+                    DispatcherType.INCLUDE);
+            wrequest.setAttribute(Globals.DISPATCHER_REQUEST_PATH_ATTR,
+                    getCombinedPath());
+            invoke(state.outerRequest, state.outerResponse, state);
+        }
+
+    }

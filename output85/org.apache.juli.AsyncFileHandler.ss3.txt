@@ -1,0 +1,93 @@
+10
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Configure from <code>LogManager</code> properties.
+     */
+    private void configure() {
+
+        Timestamp ts = new Timestamp(System.currentTimeMillis());
+        String tsString = ts.toString().substring(0, 19);
+        date = tsString.substring(0, 10);
+
+        String className = this.getClass().getName(); //allow classes to override
+
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+
+        // Retrieve configuration of logging file name
+        rotatable = Boolean.parseBoolean(getProperty(className + ".rotatable", "true"));
+        if (directory == null)
+            directory = getProperty(className + ".directory", "logs");
+        if (prefix == null)
+            prefix = getProperty(className + ".prefix", "juli.");
+        if (suffix == null)
+            suffix = getProperty(className + ".suffix", ".log");
+        String sBufferSize = getProperty(className + ".bufferSize", String.valueOf(bufferSize));
+        try {
+            bufferSize = Integer.parseInt(sBufferSize);
+        } catch (NumberFormatException ignore) {
+            //no op
+        }
+        // Get encoding for the logging file
+        String encoding = getProperty(className + ".encoding", null);
+        if (encoding != null && encoding.length() > 0) {
+            try {
+                setEncoding(encoding);
+            } catch (UnsupportedEncodingException ex) {
+                // Ignore
+            }
+        }
+
+        // Get logging level for the handler
+        setLevel(Level.parse(getProperty(className + ".level", "" + Level.ALL)));
+
+        // Get filter configuration
+        String filterName = getProperty(className + ".filter", null);
+        if (filterName != null) {
+            try {
+                setFilter((Filter) cl.loadClass(filterName).newInstance());
+            } catch (Exception e) {
+                // Ignore
+            }
+        }
+
+        // Set formatter
+        String formatterName = getProperty(className + ".formatter", null);
+        if (formatterName != null) {
+            try {
+                setFormatter((Formatter) cl.loadClass(formatterName).newInstance());
+            } catch (Exception e) {
+                // Ignore and fallback to defaults
+                setFormatter(new OneLineFormatter());
+            }
+        } else {
+            setFormatter(new OneLineFormatter());
+        }
+
+        // Set error manager
+        setErrorManager(new ErrorManager());
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private String getProperty(String name, String defaultValue) {
+        String value = LogManager.getLogManager().getProperty(name);
+        if (value == null) {
+            value = defaultValue;
+        } else {
+            value = value.trim();
+        }
+        return value;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

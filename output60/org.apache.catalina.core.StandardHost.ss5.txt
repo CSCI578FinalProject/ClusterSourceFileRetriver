@@ -1,0 +1,48 @@
+3
+-----CSCI578-----
+
+
+    public void destroy() throws Exception {
+        // destroy our child containers, if any
+        Container children[] = findChildren();
+        super.destroy();
+        for (int i = 0; i < children.length; i++) {
+            if(children[i] instanceof StandardContext)
+                ((StandardContext)children[i]).destroy();
+        }
+      
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /** Destroy needs to clean up the context completely.
+     *
+     * The problem is that undoing all the config in start() and restoring
+     * a 'fresh' state is impossible. After stop()/destroy()/init()/start()
+     * we should have the same state as if a fresh start was done - i.e
+     * read modified web.xml, etc. This can only be done by completely
+     * removing the context object and remapping a new one, or by cleaning
+     * up everything.
+     *
+     * XXX Should this be done in stop() ?
+     *
+     */
+    public void destroy() throws Exception {
+        if( oname != null ) {
+            // Send j2ee.object.deleted notification
+            Notification notification =
+                new Notification("j2ee.object.deleted", this.getObjectName(),
+                                sequenceNumber++);
+            broadcaster.sendNotification(notification);
+        }
+        super.destroy();
+
+        // Notify our interested LifecycleListeners
+        lifecycle.fireLifecycleEvent(DESTROY_EVENT, null);
+
+        synchronized (instanceListenersLock) {
+            instanceListeners = new String[0];
+        }
+
+    }

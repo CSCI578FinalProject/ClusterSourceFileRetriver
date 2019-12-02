@@ -1,0 +1,101 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Return a PreparedStatement configured to perform the SELECT required
+     * to retrieve user credentials for the specified username.
+     *
+     * @param dbConnection The database connection to be used
+     * @param username Username for which credentials should be retrieved
+     * @return the prepared statement
+     * @exception SQLException if a database error occurs
+     */
+    protected PreparedStatement credentials(Connection dbConnection,
+                                            String username)
+        throws SQLException {
+
+        if (preparedCredentials == null) {
+            StringBuilder sb = new StringBuilder("SELECT ");
+            sb.append(userCredCol);
+            sb.append(" FROM ");
+            sb.append(userTable);
+            sb.append(" WHERE ");
+            sb.append(userNameCol);
+            sb.append(" = ?");
+
+            if(containerLog.isDebugEnabled()) {
+                containerLog.debug("credentials query: " + sb.toString());
+            }
+
+            preparedCredentials =
+                dbConnection.prepareStatement(sb.toString());
+        }
+
+        if (username == null) {
+            preparedCredentials.setNull(1,java.sql.Types.VARCHAR);
+        } else {
+            preparedCredentials.setString(1, username);
+        }
+
+        return (preparedCredentials);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Get the password for the specified user.
+     * @param username The user name
+     * @return the password associated with the given principal's user name.
+     */
+    @Override
+    protected synchronized String getPassword(String username) {
+
+        // Look up the user's credentials
+        String dbCredentials = null;
+
+        // Number of tries is the number of attempts to connect to the database
+        // during this login attempt (if we need to open the database)
+        // This needs rewritten with better pooling support, the existing code
+        // needs signature changes since the Prepared statements needs cached
+        // with the connections.
+        // The code below will try twice if there is a SQLException so the
+        // connection may try to be opened again. On normal conditions (including
+        // invalid login - the above is only used once.
+        int numberOfTries = 2;
+        while (numberOfTries > 0) {
+            try {
+                // Ensure that we have an open database connection
+                open();
+
+                PreparedStatement stmt = credentials(dbConnection, username);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        dbCredentials = rs.getString(1);
+                    }
+
+                    dbConnection.commit();
+
+                    if (dbCredentials != null) {
+                        dbCredentials = dbCredentials.trim();
+                    }
+
+                    return dbCredentials;
+                }
+            } catch (SQLException e) {
+                // Log the problem for posterity
+                containerLog.error(sm.getString("jdbcRealm.exception"), e);
+            }
+
+            // Close the connection so that it gets reopened next time
+            if (dbConnection != null) {
+                close(dbConnection);
+            }
+
+            numberOfTries--;
+        }
+
+        return null;
+    }

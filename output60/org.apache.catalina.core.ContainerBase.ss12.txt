@@ -1,0 +1,63 @@
+3
+-----CSCI578-----
+
+
+    public void destroy() {
+        if( oname != null )
+            Registry.getRegistry(null, null).unregisterComponent(oname);
+        if (randomIS!=null) {
+            try {
+                randomIS.close();
+            } catch (IOException ioe) {
+                log.warn("Failed to close randomIS.");
+            }
+            randomIS=null;
+        }
+
+        initialized=false;
+        oname = null;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the Manager with which this Container is associated.
+     *
+     * @param manager The newly associated Manager
+     */
+    public synchronized void setManager(Manager manager) {
+
+        // Change components if necessary
+        Manager oldManager = this.manager;
+        if (oldManager == manager)
+            return;
+        this.manager = manager;
+
+        // Stop the old component if necessary
+        if (oldManager instanceof Lifecycle) {
+            try {
+                ((Lifecycle) oldManager).stop();
+                if (oldManager instanceof ManagerBase) {
+                    ((ManagerBase) oldManager).destroy();
+                }
+            } catch (LifecycleException e) {
+                log.error("ContainerBase.setManager: stop-destroy: ", e);
+            }
+        }
+
+        // Start the new component if necessary
+        if (manager != null)
+            manager.setContainer(this);
+        if (started && manager instanceof Lifecycle) {
+            try {
+                ((Lifecycle) manager).start();
+            } catch (LifecycleException e) {
+                log.error("ContainerBase.setManager: start: ", e);
+            }
+        }
+
+        // Report this property change to interested listeners
+        support.firePropertyChange("manager", oldManager, this.manager);
+    }
+-----CSCI578-----

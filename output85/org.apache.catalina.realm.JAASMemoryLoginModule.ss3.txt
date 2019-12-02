@@ -1,0 +1,137 @@
+4
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private String getCatalinaBase() {
+        // Have to get this via a callback as that is the only link we have back
+        // to the defining Realm. Can't use the system property as that may not
+        // be set/correct in an embedded scenario
+
+        if (callbackHandler == null) {
+            return null;
+        }
+
+        Callback callbacks[] = new Callback[1];
+        callbacks[0] = new TextInputCallback("catalinaBase");
+
+        String result = null;
+
+        try {
+            callbackHandler.handle(callbacks);
+            result = ((TextInputCallback) callbacks[0]).getText();
+        } catch (IOException | UnsupportedCallbackException e) {
+            return null;
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Initialize this <code>LoginModule</code> with the specified
+     * configuration information.
+     *
+     * @param subject The <code>Subject</code> to be authenticated
+     * @param callbackHandler A <code>CallbackHandler</code> for communicating
+     *  with the end user as necessary
+     * @param sharedState State information shared with other
+     *  <code>LoginModule</code> instances
+     * @param options Configuration information for this specific
+     *  <code>LoginModule</code> instance
+     */
+    @Override
+    public void initialize(Subject subject, CallbackHandler callbackHandler,
+                           Map<String,?> sharedState, Map<String,?> options) {
+        if (log.isDebugEnabled()) {
+            log.debug("Init");
+        }
+
+        // Save configuration values
+        this.subject = subject;
+        this.callbackHandler = callbackHandler;
+        this.sharedState = sharedState;
+        this.options = options;
+
+        // Perform instance-specific initialization
+        Object option = options.get("pathname");
+        if (option instanceof String) {
+            this.pathname = (String) option;
+        }
+
+        CredentialHandler credentialHandler = null;
+        option = options.get("credentialHandlerClassName");
+        if (option instanceof String) {
+            try {
+                Class<?> clazz = Class.forName((String) option);
+                credentialHandler = (CredentialHandler) clazz.newInstance();
+            } catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
+                throw new IllegalArgumentException(e);
+            }
+        }
+        if (credentialHandler == null) {
+            credentialHandler = new MessageDigestCredentialHandler();
+        }
+
+        for (Entry<String,?> entry : options.entrySet()) {
+            if ("pathname".equals(entry.getKey())) {
+                continue;
+            }
+            if ("credentialHandlerClassName".equals(entry.getKey())) {
+                continue;
+            }
+            // Skip any non-String values since any value we are interested in
+            // will be a String.
+            if (entry.getValue() instanceof String) {
+                IntrospectionUtils.setProperty(credentialHandler, entry.getKey(),
+                        (String) entry.getValue());
+            }
+        }
+        setCredentialHandler(credentialHandler);
+
+        // Load our defined Principals
+        load();
+    }
+-----CSCI578-----
+
+
+
+    // ---------------------------------------------------------- Realm Methods
+    // ------------------------------------------------------ Protected Methods
+
+    /**
+     * Load the contents of our configuration file.
+     */
+    protected void load() {
+        // Validate the existence of our configuration file
+        File file = new File(pathname);
+        if (!file.isAbsolute()) {
+            String catalinaBase = getCatalinaBase();
+            if (catalinaBase == null) {
+                log.warn("Unable to determine Catalina base to load file " + pathname);
+                return;
+            } else {
+                file = new File(catalinaBase, pathname);
+            }
+        }
+        if (!file.canRead()) {
+            log.warn("Cannot load configuration file " + file.getAbsolutePath());
+            return;
+        }
+
+        // Load the contents of our configuration file
+        Digester digester = new Digester();
+        digester.setValidating(false);
+        digester.addRuleSet(new MemoryRuleSet());
+        try {
+            digester.push(this);
+            digester.parse(file);
+        } catch (Exception e) {
+            log.warn("Error processing configuration file " + file.getAbsolutePath(), e);
+            return;
+        } finally {
+            digester.reset();
+        }
+    }

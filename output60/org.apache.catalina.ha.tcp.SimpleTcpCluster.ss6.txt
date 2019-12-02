@@ -1,0 +1,41 @@
+3
+-----CSCI578-----
+
+
+   public ClusterManager cloneFromTemplate();
+-----CSCI578-----
+
+
+    /**
+     * Create new Manager without add to cluster (comes with start the manager)
+     * 
+     * @param name
+     *            Context Name of this manager
+     * @see org.apache.catalina.Cluster#createManager(java.lang.String)
+     * @see #registerManager(Manager)
+     * @see DeltaManager#start()
+     */
+    public synchronized Manager createManager(String name) {
+        if (log.isDebugEnabled()) log.debug("Creating ClusterManager for context " + name + " using class " + getManagerClassName());
+        Manager manager = null;
+        try {
+            manager = managerTemplate.cloneFromTemplate();
+            ((ClusterManager)manager).setName(name);
+        } catch (Exception x) {
+            log.error("Unable to clone cluster manager, defaulting to org.apache.catalina.ha.session.DeltaManager", x);
+            manager = new org.apache.catalina.ha.session.DeltaManager();
+        } finally {
+            if ( manager != null && (manager instanceof ClusterManager)) ((ClusterManager)manager).setCluster(this);
+        }
+        return manager;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @deprecated use getManagerTemplate().getClass().getName() instead.
+     * @return String
+     */
+    public String getManagerClassName() {
+        return managerTemplate.getClass().getName();
+    }

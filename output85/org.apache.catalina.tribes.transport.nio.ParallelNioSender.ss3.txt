@@ -1,0 +1,442 @@
+24
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public synchronized void sendMessage(Member[] destination, ChannelMessage msg)
+            throws ChannelException {
+        long start = System.currentTimeMillis();
+        this.setUdpBased((msg.getOptions()&Channel.SEND_OPTIONS_UDP) == Channel.SEND_OPTIONS_UDP);
+        byte[] data = XByteBuffer.createDataPackage((ChannelData)msg);
+        NioSender[] senders = setupForSend(destination);
+        connect(senders);
+        setData(senders,data);
+
+        int remaining = senders.length;
+        ChannelException cx = null;
+        try {
+            //loop until complete, an error happens, or we timeout
+            long delta = System.currentTimeMillis() - start;
+            boolean waitForAck = (Channel.SEND_OPTIONS_USE_ACK &
+                    msg.getOptions()) == Channel.SEND_OPTIONS_USE_ACK;
+            while ( (remaining>0) && (delta<getTimeout()) ) {
+                try {
+                    remaining -= doLoop(selectTimeout, getMaxRetryAttempts(),waitForAck,msg);
+                } catch (Exception x ) {
+                    if (log.isTraceEnabled()) log.trace("Error sending message", x);
+                    int faulty = (cx == null)?0:cx.getFaultyMembers().length;
+                    if ( cx == null ) {
+                        if ( x instanceof ChannelException ) cx = (ChannelException)x;
+                        else cx = new ChannelException(sm.getString("parallelNioSender.send.failed"), x);
+                    } else {
+                        if (x instanceof ChannelException) {
+                            cx.addFaultyMember(((ChannelException) x).getFaultyMembers());
+                        }
+                    }
+                    //count down the remaining on an error
+                    if (faulty < cx.getFaultyMembers().length) {
+                        remaining -= (cx.getFaultyMembers().length - faulty);
+                    }
+                }
+                //bail out if all remaining senders are failing
+                if ( cx != null && cx.getFaultyMembers().length == remaining ) throw cx;
+                delta = System.currentTimeMillis() - start;
+            }
+            if ( remaining > 0 ) {
+                //timeout has occurred
+                ChannelException cxtimeout = new ChannelException(sm.getString(
+                        "parallelNioSender.operation.timedout", Long.toString(getTimeout())));
+                if (cx == null) {
+                    cx = new ChannelException(sm.getString("parallelNioSender.operation.timedout",
+                            Long.toString(getTimeout())));
+                }
+                for (int i=0; i<senders.length; i++ ) {
+                    if (!senders[i].isComplete()) {
+                        cx.addFaultyMember(senders[i].getDestination(),cxtimeout);
+                    }
+                }
+                throw cx;
+            } else if ( cx != null ) {
+                //there was an error
+                throw cx;
+            }
+        } catch (Exception x ) {
+            try { this.disconnect(); } catch (Exception e) {/*Ignore*/}
+            if ( x instanceof ChannelException ) throw (ChannelException)x;
+            else throw new ChannelException(x);
+        }
+
+    }
+-----CSCI578-----
+
+
+    private void setData(NioSender[] senders, byte[] data) throws ChannelException {
+        ChannelException x = null;
+        for (int i=0; i<senders.length; i++ ) {
+            try {
+                senders[i].setMessage(data);
+            }catch ( IOException io ) {
+                if ( x==null ) x = new ChannelException(io);
+                x.addFaultyMember(senders[i].getDestination(),io);
+            }
+        }
+        if ( x != null ) throw x;
+    }
+-----CSCI578-----
+
+
+
+    public boolean isComplete() {
+        return complete;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void connect(NioSender[] senders) throws ChannelException {
+        ChannelException x = null;
+        for (int i=0; i<senders.length; i++ ) {
+            try {
+                senders[i].connect();
+            }catch ( IOException io ) {
+                if ( x==null ) x = new ChannelException(io);
+                x.addFaultyMember(senders[i].getDestination(),io);
+            }
+        }
+        if ( x != null ) throw x;
+    }
+
+
+    @Override
+    public void connect() {
+        //do nothing, we connect on demand
+        setConnected(true);
+    }
+
+
+
+    @Override
+    public synchronized void disconnect() {
+        setConnected(false);
+        try {close(); }catch (Exception x){/*Ignore*/}
+    }
+-----CSCI578-----
+
+
+    /**
+    * sendMessage
+    *
+    * @param data ChannelMessage
+    * @throws IOException
+    * TODO Implement this org.apache.catalina.tribes.transport.IDataSender method
+    */
+    public void setMessage(byte[] data) throws IOException {
+        setMessage(data,0,data.length);
+    }
+
+
+    public void setMessage(byte[] data,int offset, int length) throws IOException {
+        if (data != null) {
+            synchronized (this) {
+                current = data;
+                remaining = length;
+                ackbuf.clear();
+                if (writebuf != null) {
+                    writebuf.clear();
+                } else {
+                    writebuf = getBuffer(length);
+                }
+                if (writebuf.capacity() < length) {
+                    writebuf = getBuffer(length);
+                }
+
+                // TODO use ByteBuffer.wrap to avoid copying the data.
+                writebuf.put(data,offset,length);
+                writebuf.flip();
+                if (isConnected()) {
+                    if (isUdpBased())
+                        dataChannel.register(getSelector(), SelectionKey.OP_WRITE, this);
+                    else
+                        socketChannel.register(getSelector(), SelectionKey.OP_WRITE, this);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public Selector getSelector() {
+        return selector;
+    }
+-----CSCI578-----
+
+
+    /**
+     * The message options is a 32 bit flag set
+     * that triggers interceptors and message behavior.
+     * @see Channel#send(Member[], Serializable, int)
+     * @see ChannelInterceptor#getOptionFlag
+     * @return int - the option bits set for this message
+     */
+    public int getOptions();
+
+
+    /**
+     * sets the option bits for this message
+     * @param options int
+     * @see #getOptions()
+     */
+    public void setOptions(int options);
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Resets the buffer
+     */
+    public void clear() {
+        bufSize = 0;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns an array of members that failed and the reason they failed.
+     * @return FaultyMember[]
+     */
+    public FaultyMember[] getFaultyMembers() {
+        if ( this.faultyMembers==null ) return EMPTY_LIST;
+        return faultyMembers.toArray(new FaultyMember[faultyMembers.size()]);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Creates a complete data package
+     * @param cdata - the message data to be contained within the package
+     * @return - a full package (header,size,data,footer)
+     */
+    public static byte[] createDataPackage(ChannelData cdata) {
+//        return createDataPackage(cdata.getDataPackage());
+        //avoid one extra byte array creation
+        int dlength = cdata.getDataPackageLength();
+        int length = getDataPackageLength(dlength);
+        byte[] data = new byte[length];
+        int offset = 0;
+        System.arraycopy(START_DATA, 0, data, offset, START_DATA.length);
+        offset += START_DATA.length;
+        toBytes(dlength,data, START_DATA.length);
+        offset += 4;
+        cdata.getDataPackage(data,offset);
+        offset += dlength;
+        System.arraycopy(END_DATA, 0, data, offset, END_DATA.length);
+        offset += END_DATA.length;
+        return data;
+    }
+
+
+    public static byte[] createDataPackage(byte[] data, int doff, int dlength, byte[] buffer, int bufoff) {
+        if ( (buffer.length-bufoff) > getDataPackageLength(dlength) ) {
+            throw new ArrayIndexOutOfBoundsException(sm.getString("xByteBuffer.unableCreate"));
+        }
+        System.arraycopy(START_DATA, 0, buffer, bufoff, START_DATA.length);
+        toBytes(data.length,buffer, bufoff+START_DATA.length);
+        System.arraycopy(data, doff, buffer, bufoff+START_DATA.length + 4, dlength);
+        System.arraycopy(END_DATA, 0, buffer, bufoff+START_DATA.length + 4 + data.length, END_DATA.length);
+        return buffer;
+    }
+
+
+    public static byte[] createDataPackage(byte[] data) {
+        int length = getDataPackageLength(data.length);
+        byte[] result = new byte[length];
+        return createDataPackage(data,0,data.length,result,0);
+    }
+-----CSCI578-----
+
+
+
+    public static int getDataPackageLength(int datalength) {
+        int length =
+            START_DATA.length + //header length
+            4 + //data length indicator
+            datalength + //actual data length
+            END_DATA.length; //footer length
+        return length;
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Serializes the ChannelData object into a byte[] array
+     * @return byte[]
+     */
+    public byte[] getDataPackage()  {
+        int length = getDataPackageLength();
+        byte[] data = new byte[length];
+        int offset = 0;
+        return getDataPackage(data,offset);
+    }
+
+
+    public byte[] getDataPackage(byte[] data, int offset)  {
+        byte[] addr = address.getData(false);
+        XByteBuffer.toBytes(options,data,offset);
+        offset += 4; //options
+        XByteBuffer.toBytes(timestamp,data,offset);
+        offset += 8; //timestamp
+        XByteBuffer.toBytes(uniqueId.length,data,offset);
+        offset += 4; //uniqueId.length
+        System.arraycopy(uniqueId,0,data,offset,uniqueId.length);
+        offset += uniqueId.length; //uniqueId data
+        XByteBuffer.toBytes(addr.length,data,offset);
+        offset += 4; //addr.length
+        System.arraycopy(addr,0,data,offset,addr.length);
+        offset += addr.length; //addr data
+        XByteBuffer.toBytes(message.getLength(),data,offset);
+        offset += 4; //message.length
+        System.arraycopy(message.getBytesDirect(),0,data,offset,message.getLength());
+        offset += message.getLength(); //message data
+        return data;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Converts a boolean and put it in a byte array.
+     * @param bool the integer
+     * @param data the byte buffer in which the boolean will be placed
+     * @param offset the offset in the byte array
+     * @return the byte array
+     */
+    public static byte[] toBytes(boolean bool, byte[] data, int offset) {
+        data[offset] = (byte)(bool?1:0);
+        return data;
+    }
+
+
+
+    /**
+     * Converts an integer to four bytes.
+     * @param n the integer
+     * @param b the byte buffer in which the integer will be placed
+     * @param offset the offset in the byte array
+     * @return four bytes in an array
+     */
+    public static byte[] toBytes(int n, byte[] b, int offset) {
+        b[offset+3] = (byte) (n);
+        n >>>= 8;
+        b[offset+2] = (byte) (n);
+        n >>>= 8;
+        b[offset+1] = (byte) (n);
+        n >>>= 8;
+        b[offset+0] = (byte) (n);
+        return b;
+    }
+
+
+    /**
+     * Converts an long to eight bytes.
+     * @param n the long
+     * @param b the byte buffer in which the integer will be placed
+     * @param offset the offset in the byte array
+     * @return eight bytes in an array
+     */
+    public static byte[] toBytes(long n, byte[] b, int offset) {
+        b[offset+7] = (byte) (n);
+        n >>>= 8;
+        b[offset+6] = (byte) (n);
+        n >>>= 8;
+        b[offset+5] = (byte) (n);
+        n >>>= 8;
+        b[offset+4] = (byte) (n);
+        n >>>= 8;
+        b[offset+3] = (byte) (n);
+        n >>>= 8;
+        b[offset+2] = (byte) (n);
+        n >>>= 8;
+        b[offset+1] = (byte) (n);
+        n >>>= 8;
+        b[offset+0] = (byte) (n);
+        return b;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void sendMessage(Member[] destination, ChannelMessage msg, InterceptorPayload payload) throws ChannelException {
+        if ( access.addAndGet(1) == 1 ) txStart = System.currentTimeMillis();
+        long bytes = XByteBuffer.getDataPackageLength(((ChannelData)msg).getDataPackageLength());
+        try {
+            super.sendMessage(destination, msg, payload);
+        }catch ( ChannelException x ) {
+            msgTxErr.addAndGet(1);
+            if ( access.get() == 1 ) access.addAndGet(-1);
+            throw x;
+        }
+        mbTx += (bytes*destination.length)/(1024d*1024d);
+        mbAppTx += bytes/(1024d*1024d);
+        if ( access.addAndGet(-1) == 0 ) {
+            long stop = System.currentTimeMillis();
+            timeTx += (stop - txStart) / 1000d;
+            if ((msgTxCnt.get() / interval) >= lastCnt) {
+                lastCnt++;
+                report(timeTx);
+            }
+        }
+        msgTxCnt.addAndGet(1);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void messageReceived(ChannelMessage msg) {
+        if ( rxStart == 0 ) rxStart = System.currentTimeMillis();
+        long bytes = XByteBuffer.getDataPackageLength(((ChannelData)msg).getDataPackageLength());
+        mbRx += bytes/(1024d*1024d);
+        msgRxCnt.addAndGet(1);
+        if ( msgRxCnt.get() % interval == 0 ) report(timeTx);
+        super.messageReceived(msg);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Complete clone
+     * @return ClusterData
+     */
+    @Override
+    public Object deepclone() {
+        byte[] d = this.getDataPackage();
+        return ChannelData.getDataFromPackage(d);
+    }
+-----CSCI578-----
+
+    @Override
+    public void broadcast(ChannelMessage message) throws ChannelException {
+        if (impl==null || (impl.startLevel & Channel.MBR_TX_SEQ)!=Channel.MBR_TX_SEQ )
+            throw new ChannelException(sm.getString("mcastService.noStart"));
+
+        byte[] data = XByteBuffer.createDataPackage((ChannelData)message);
+        if (data.length>McastServiceImpl.MAX_PACKET_SIZE) {
+            throw new ChannelException(sm.getString("mcastService.exceed.maxPacketSize",
+                    Integer.toString(data.length) ,
+                    Integer.toString(McastServiceImpl.MAX_PACKET_SIZE)));
+        }
+        DatagramPacket packet = new DatagramPacket(data,0,data.length);
+        try {
+            impl.send(false, packet);
+        } catch (Exception x) {
+            throw new ChannelException(x);
+        }
+    }
+-----CSCI578-----

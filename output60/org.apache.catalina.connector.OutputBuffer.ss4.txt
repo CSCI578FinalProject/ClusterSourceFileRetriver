@@ -1,0 +1,60 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Flush bytes or chars contained in the buffer.
+     * 
+     * @throws IOException An underlying IOException occurred
+     */
+    protected void doFlush(boolean realFlush)
+        throws IOException {
+
+        if (suspended)
+            return;
+
+        try {
+            doFlush = true;
+            if (initial) {
+                coyoteResponse.sendHeaders();
+                initial = false;
+            }
+            if (bb.getLength() > 0) {
+                bb.flushBuffer();
+            }
+        } finally {
+            doFlush = false;
+        }
+
+        if (realFlush) {
+            coyoteResponse.action(ActionCode.ACTION_CLIENT_FLUSH, 
+                                  coyoteResponse);
+            // If some exception occurred earlier, or if some IOE occurred
+            // here, notify the servlet with an IOE
+            if (coyoteResponse.isExceptionPresent()) {
+                throw new ClientAbortException
+                    (coyoteResponse.getErrorException());
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public boolean isExceptionPresent() {
+        return ( errorException != null );
+    }
+-----CSCI578-----
+
+
+
+    /** Signal that we're done with the headers, and body will follow.
+     *  Any implementation needs to notify ContextManager, to allow
+     *  interceptors to fix headers.
+     */
+    public void sendHeaders() throws IOException {
+        action(ActionCode.ACTION_COMMIT, this);
+        commited = true;
+    }

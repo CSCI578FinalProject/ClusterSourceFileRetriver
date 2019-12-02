@@ -1,0 +1,87 @@
+3
+-----CSCI578-----
+
+
+
+    /**
+     * Increment the error count value used when monitoring.
+     */
+    public void incrementErrorCount();
+-----CSCI578-----
+
+
+
+    /**
+     * Return the error message that was set with <code>sendError()</code>
+     * for this Response.
+     */
+    public String getMessage() {
+        return coyoteResponse.getMessage();
+    }
+
+
+
+    /**
+     * Send an error response with the specified status and a
+     * default message.
+     *
+     * @param status HTTP status code to send
+     *
+     * @exception IllegalStateException if this response has
+     *  already been committed
+     * @exception IOException if an input/output error occurs
+     */
+    public void sendError(int status) 
+        throws IOException {
+        sendError(status, null);
+    }
+
+
+
+    /**
+     * Send an error response with the specified status and message.
+     *
+     * @param status HTTP status code to send
+     * @param message Corresponding message to send
+     *
+     * @exception IllegalStateException if this response has
+     *  already been committed
+     * @exception IOException if an input/output error occurs
+     */
+    public void sendError(int status, String message) 
+        throws IOException {
+
+        if (isCommitted())
+            throw new IllegalStateException
+                (sm.getString("coyoteResponse.sendError.ise"));
+
+        // Ignore any call from an included servlet
+        if (included)
+            return; 
+
+        Wrapper wrapper = getRequest().getWrapper();
+        if (wrapper != null) {
+            wrapper.incrementErrorCount();
+        } 
+
+        setError();
+
+        coyoteResponse.setStatus(status);
+        coyoteResponse.setMessage(message);
+
+        // Clear any data content that has been buffered
+        resetBuffer();
+
+        // Cause the response to be finished (from the application perspective)
+        setSuspended(true);
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the Request with which this Response is associated.
+     */
+    public org.apache.catalina.connector.Request getRequest() {
+        return (this.request);
+    }

@@ -1,0 +1,114 @@
+9
+-----CSCI578-----
+
+
+    /**
+     * Unlock the server socket accept using a bogus connection.
+     */
+    protected void unlockAccept() {
+        // Only try to unlock the acceptor if it is necessary
+        boolean unlockRequired = false;
+        for (Acceptor acceptor : acceptors) {
+            if (acceptor.getState() == AcceptorState.RUNNING) {
+                unlockRequired = true;
+                break;
+            }
+        }
+        if (!unlockRequired) {
+            return;
+        }
+
+        InetSocketAddress saddr = null;
+        try {
+            // Need to create a connection to unlock the accept();
+            if (address == null) {
+                saddr = new InetSocketAddress("localhost", getLocalPort());
+            } else {
+                saddr = new InetSocketAddress(address, getLocalPort());
+            }
+            try (java.net.Socket s = new java.net.Socket()) {
+                int stmo = 2 * 1000;
+                int utmo = 2 * 1000;
+                if (getSocketProperties().getSoTimeout() > stmo)
+                    stmo = getSocketProperties().getSoTimeout();
+                if (getSocketProperties().getUnlockTimeout() > utmo)
+                    utmo = getSocketProperties().getUnlockTimeout();
+                s.setSoTimeout(stmo);
+                s.setSoLinger(getSocketProperties().getSoLingerOn(),getSocketProperties().getSoLingerTime());
+                if (getLog().isDebugEnabled()) {
+                    getLog().debug("About to unlock socket for:"+saddr);
+                }
+                s.connect(saddr,utmo);
+                if (getDeferAccept()) {
+                    /*
+                     * In the case of a deferred accept / accept filters we need to
+                     * send data to wake up the accept. Send OPTIONS * to bypass
+                     * even BSD accept filters. The Acceptor will discard it.
+                     */
+                    OutputStreamWriter sw;
+
+                    sw = new OutputStreamWriter(s.getOutputStream(), "ISO-8859-1");
+                    sw.write("OPTIONS * HTTP/1.0\r\n" +
+                             "User-Agent: Tomcat wakeup connection\r\n\r\n");
+                    sw.flush();
+                }
+                if (getLog().isDebugEnabled()) {
+                    getLog().debug("Socket unlock completed for:"+saddr);
+                }
+
+                // Wait for upto 1000ms acceptor threads to unlock
+                long waitLeft = 1000;
+                for (Acceptor acceptor : acceptors) {
+                    while (waitLeft > 0 &&
+                            acceptor.getState() == AcceptorState.RUNNING) {
+                        Thread.sleep(50);
+                        waitLeft -= 50;
+                    }
+                }
+            }
+        } catch(Exception e) {
+            if (getLog().isDebugEnabled()) {
+                getLog().debug(sm.getString("endpoint.debug.unlock", "" + getPort()), e);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    public int getUnlockTimeout() {
+        return unlockTimeout;
+    }
+-----CSCI578-----
+
+    public SocketProperties getSocketProperties() {
+        return socketProperties;
+    }
+-----CSCI578-----
+
+    public Handler<S> getHandler() { return handler; }
+-----CSCI578-----
+
+
+    protected abstract boolean getDeferAccept();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Pause the endpoint, which will stop it accepting new connections.
+     */
+    public void pause() {
+        if (running && !paused) {
+            paused = true;
+            unlockAccept();
+            getHandler().pause();
+        }
+    }
+-----CSCI578-----
+
+    public int getPort() { return port; }
+-----CSCI578-----
+
+
+    public abstract int getLocalPort();

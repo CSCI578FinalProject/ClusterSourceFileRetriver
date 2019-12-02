@@ -1,0 +1,48 @@
+3
+-----CSCI578-----
+
+    
+    public boolean isPaused() {
+	return paused;
+    }
+-----CSCI578-----
+
+    
+    public void runIt(Object perThrData[]) {
+
+        // Create per-thread cache
+        if (endpoint.isRunning()) {
+
+            // Loop if endpoint is paused
+            while (endpoint.isPaused()) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    // Ignore
+                }
+            }
+
+            // Accept a new connection
+            Socket s = null;
+            try {
+                s = endpoint.acceptSocket();
+            } finally {
+                // Continue accepting on another thread...
+                if (endpoint.isRunning()) {
+                    endpoint.tp.runIt(this);
+                }
+            }
+
+            // Process the connection
+            if (null != s) {
+                endpoint.processSocket(s, (TcpConnection) perThrData[0], (Object[]) perThrData[1]);
+            }
+
+        }
+    }
+-----CSCI578-----
+
+
+    public boolean isRunning() {
+	return running;
+    }

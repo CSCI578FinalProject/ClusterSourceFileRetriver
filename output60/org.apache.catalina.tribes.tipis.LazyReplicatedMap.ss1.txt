@@ -1,0 +1,125 @@
+12
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /**
+     * Returns the message for this exception
+     * @return String
+     * @see java.lang.Exception#getMessage()
+     */
+    public String getMessage() {
+        StringBuffer buf = new StringBuffer(super.getMessage());
+        if (faultyMembers==null || faultyMembers.size() == 0 ) {
+            buf.append("; No faulty members identified.");
+        } else {
+            buf.append("; Faulty members:");
+            for ( int i=0; i<faultyMembers.size(); i++ ) {
+                FaultyMember mbr = (FaultyMember)faultyMembers.get(i);
+                buf.append(mbr.getMember().getName());
+                buf.append("; ");
+            }
+        }
+        return buf.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * publish info about a map pair (key/value) to other nodes in the cluster
+     * @param key Object
+     * @param value Object
+     * @return Member - the backup node
+     * @throws ChannelException
+     */
+    @Override
+    protected Member[] publishEntryInfo(Object key, Object value) throws ChannelException {
+        if  (! (key instanceof Serializable && value instanceof Serializable)  ) return new Member[0];
+        Member[] members = getMapMembers();
+        int firstIdx = getNextBackupIndex();
+        int nextIdx = firstIdx;
+        Member[] backup = new Member[0];
+
+        //there are no backups
+        if ( members.length == 0 || firstIdx == -1 ) return backup;
+
+        boolean success = false;
+        do {
+            //select a backup node
+            Member next = members[nextIdx];
+
+            //increment for the next round of back up selection
+            nextIdx = nextIdx + 1;
+            if ( nextIdx >= members.length ) nextIdx = 0;
+
+            if (next == null) {
+                continue;
+            }
+            MapMessage msg = null;
+            try {
+                backup = wrap(next);
+                //publish the backup data to one node
+                msg = new MapMessage(getMapContextName(), MapMessage.MSG_BACKUP, false,
+                                     (Serializable) key, (Serializable) value, null, channel.getLocalMember(false), backup);
+                if ( log.isTraceEnabled() )
+                    log.trace("Publishing backup data:"+msg+" to: "+next.getName());
+                UniqueId id = getChannel().send(backup, msg, getChannelSendOptions());
+                if ( log.isTraceEnabled() )
+                    log.trace("Data published:"+msg+" msg Id:"+id);
+                //we published out to a backup, mark the test success
+                success = true;
+            }catch ( ChannelException x ) {
+                log.error("Unable to replicate backup key:"+key+" to backup:"+next+". Reason:"+x.getMessage(),x);
+            }
+            try {
+                //publish the data out to all nodes
+                Member[] proxies = excludeFromSet(backup, getMapMembers());
+                if (success && proxies.length > 0 ) {
+                    msg = new MapMessage(getMapContextName(), MapMessage.MSG_PROXY, false,
+                                         (Serializable) key, null, null, channel.getLocalMember(false),backup);
+                    if ( log.isTraceEnabled() )
+                    log.trace("Publishing proxy data:"+msg+" to: "+Arrays.toNameString(proxies));
+                    getChannel().send(proxies, msg, getChannelSendOptions());
+                }
+            }catch  ( ChannelException x ) {
+                //log the error, but proceed, this should only happen if a node went down,
+                //and if the node went down, then it can't receive the message, the others
+                //should still get it.
+                log.error("Unable to replicate proxy key:"+key+" to backup:"+next+". Reason:"+x.getMessage(),x);
+            }
+        } while ( !success && (firstIdx!=nextIdx));
+        return backup;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    /**
+     * Returns the name of this node, should be unique within the group.
+     */
+    public String getName();
+-----CSCI578-----
+
+    
+    public static String toNameString(Member[] data) {
+        return toNameString(data,0,data!=null?data.length:0);
+    }
+
+    
+    public static String toNameString(Member[] data, int offset, int length) {
+        StringBuffer buf = new StringBuffer("{");
+        if ( data != null && length > 0 ) {
+            buf.append(data[offset++].getName());
+            for (int i = offset; i < length; i++) {
+                buf.append(", ").append(data[i].getName());
+            }
+        }
+        buf.append("}");
+        return buf.toString();
+    }
+-----CSCI578-----

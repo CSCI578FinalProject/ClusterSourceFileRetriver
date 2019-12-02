@@ -1,0 +1,73 @@
+25
+
+
+    /**
+     * Add a property change listener to this component.
+     *
+     * @param listener The listener to add
+     */
+    public void addPropertyChangeListener(PropertyChangeListener listener) {
+
+        support.addPropertyChangeListener(listener);
+
+    }
+
+
+    /**
+     * The configuration information registry for our managed beans.
+     */
+    private static Registry registry = createRegistry();
+
+    /**
+     * Create and configure (if necessary) and return the registry of
+     * managed object descriptions.
+     */
+    public synchronized static Registry createRegistry() {
+
+        if (registry == null) {
+            registry = Registry.getRegistry(null, null);
+            ClassLoader cl=ServerLifecycleListener.class.getClassLoader();
+
+            registry.loadDescriptors("org.apache.catalina.mbeans",  cl);
+            registry.loadDescriptors("org.apache.catalina.authenticator", cl);
+            registry.loadDescriptors("org.apache.catalina.core", cl);
+            registry.loadDescriptors("org.apache.catalina", cl);
+            registry.loadDescriptors("org.apache.catalina.deploy", cl);
+            registry.loadDescriptors("org.apache.catalina.loader", cl);
+            registry.loadDescriptors("org.apache.catalina.realm", cl);
+            registry.loadDescriptors("org.apache.catalina.session", cl);
+            registry.loadDescriptors("org.apache.catalina.startup", cl);
+            registry.loadDescriptors("org.apache.catalina.users", cl);
+            registry.loadDescriptors("org.apache.catalina.ha", cl);
+            registry.loadDescriptors("org.apache.catalina.connector", cl);
+            registry.loadDescriptors("org.apache.catalina.valves",  cl);
+        }
+        return (registry);
+
+    }
+
+
+    /**
+     * The <code>MBeanServer</code> for this application.
+     */
+    private static MBeanServer mserver = createServer();
+
+
+    /**
+     * Create and configure (if necessary) and return the
+     * <code>MBeanServer</code> with which we will be
+     * registering our <code>DynamicMBean</code> implementations.
+     */
+    public synchronized static MBeanServer createServer() {
+
+        if (mserver == null) {
+            try {
+                mserver = Registry.getRegistry(null, null).getMBeanServer();
+            } catch (Throwable t) {
+                t.printStackTrace(System.out);
+                System.exit(1);
+            }
+        }
+        return (mserver);
+
+    }

@@ -1,0 +1,421 @@
+17
+-----CSCI578-----
+
+
+    public void init() throws IOException {
+        try {
+            mserver = getMBeanServer();
+
+            if( enabled ) {
+                loadAdapter();
+            }
+            if( log4jEnabled) {
+                try {
+                    registerObject("org.apache.log4j.jmx.HierarchyDynamicMBean" ,
+                                   "log4j:hierarchy=default");
+                    if(log.isInfoEnabled())
+                         log.info("Registering the JMX hierarchy for Log4J ");
+                } catch( Throwable t ) {
+                    if(log.isInfoEnabled())
+                        log.info("Can't enable log4j mx: ",t);
+                }
+            }
+        } catch( Throwable t ) {
+            log.error( "Init error", t );
+        }
+    }
+-----CSCI578-----
+
+
+    MBeanServer getMBeanServer() {
+        MBeanServer server;
+        if( MBeanServerFactory.findMBeanServer(null).size() > 0 ) {
+            server=(MBeanServer)MBeanServerFactory.findMBeanServer(null).get(0);
+        } else {
+            server=MBeanServerFactory.createMBeanServer();
+        }
+        return (server);
+    }
+-----CSCI578-----
+
+
+    /** Initialize the worker. After this call the worker will be
+     *  ready to accept new requests.
+     */
+    public void loadAdapter() throws IOException {
+        boolean httpAdapterLoaded = false;
+        boolean jrmpAdapterLoaded = false;
+        
+        if ((httpport != -1) && classExists("mx4j.adaptor.http.HttpAdaptor")) {
+            try {
+                httpServerName = registerObject("mx4j.adaptor.http.HttpAdaptor",
+                                                "Http:name=HttpAdaptor");
+
+                        
+                if( httphost!=null )
+                    mserver.setAttribute(httpServerName, new Attribute("Host", httphost));
+                mserver.setAttribute(httpServerName, new Attribute("Port", new Integer(httpport)));
+
+                if( "none".equals(authmode) || "basic".equals(authmode) || "digest".equals(authmode) )
+                    mserver.setAttribute(httpServerName, new Attribute("AuthenticationMethod", authmode));
+
+                if( authuser!=null && authpassword!=null )
+                    mserver.invoke(httpServerName, "addAuthorization",
+                        new Object[] {
+                            authuser,
+                            authpassword},
+                        new String[] { "java.lang.String", "java.lang.String" });
+
+                if(useXSLTProcessor) {
+                    ObjectName processorName = registerObject("mx4j.adaptor.http.XSLTProcessor",
+                                                          "Http:name=XSLTProcessor");
+                    mserver.setAttribute(httpServerName, new Attribute("ProcessorName", processorName));
+                }
+
+                // starts the server
+                mserver.invoke(httpServerName, "start", null, null);
+
+                log.info( "Started MX4J console on host " + httphost + " at port " + httpport);
+                
+                httpAdapterLoaded = true;
+
+            } catch( Throwable t ) {
+                httpServerName=null;
+                log.error( "Can't load the MX4J http adapter ", t );
+            }
+        }
+
+        if ((httpport != -1) && (!httpAdapterLoaded) && classExists("mx4j.tools.adaptor.http.HttpAdaptor")) {
+            try {
+                httpServerName = registerObject("mx4j.tools.adaptor.http.HttpAdaptor",
+                                                "Http:name=HttpAdaptor");
+
+                        
+                if( httphost!=null )
+                    mserver.setAttribute(httpServerName, new Attribute("Host", httphost));
+                mserver.setAttribute(httpServerName, new Attribute("Port", new Integer(httpport)));
+
+                if( "none".equals(authmode) || "basic".equals(authmode) || "digest".equals(authmode) )
+                    mserver.setAttribute(httpServerName, new Attribute("AuthenticationMethod", authmode));
+
+                if( authuser!=null && authpassword!=null )
+                    mserver.invoke(httpServerName, "addAuthorization",
+                        new Object[] {
+                            authuser,
+                            authpassword},
+                        new String[] { "java.lang.String", "java.lang.String" });
+
+               if(useXSLTProcessor) {
+                    ObjectName processorName = registerObject("mx4j.tools.adaptor.http.XSLTProcessor",
+                                                          "Http:name=XSLTProcessor");
+                    mserver.setAttribute(httpServerName, new Attribute("ProcessorName", processorName));
+		}
+                // starts the server
+                mserver.invoke(httpServerName, "start", null, null);
+                if(log.isInfoEnabled())
+                    log.info( "Started MX4J console on host " + httphost + " at port " + httpport);
+                
+                httpAdapterLoaded = true;
+
+            } catch( Throwable t ) {
+                httpServerName=null;
+                log.error( "Can't load the MX4J http adapter ", t );
+            }
+        }
+
+        if ((jrmpport != -1) && classExists("mx4j.tools.naming.NamingService")) {
+            try {
+                jrmpServerName = registerObject("mx4j.tools.naming.NamingService",
+                                                "Naming:name=rmiregistry");
+				mserver.setAttribute(jrmpServerName, new Attribute("Port", 
+				                                     new Integer(jrmpport)));
+                mserver.invoke(jrmpServerName, "start", null, null);
+                if(log.isInfoEnabled())
+                    log.info( "Creating " + jrmpServerName );
+
+                // Create the JRMP adaptor
+                ObjectName adaptor = registerObject("mx4j.adaptor.rmi.jrmp.JRMPAdaptor",
+                                                    "Adaptor:protocol=jrmp");
+
+
+                mserver.setAttribute(adaptor, new Attribute("JNDIName", "jrmp"));
+
+                mserver.invoke( adaptor, "putNamingProperty",
+                        new Object[] {
+                            javax.naming.Context.INITIAL_CONTEXT_FACTORY,
+                            "com.sun.jndi.rmi.registry.RegistryContextFactory"},
+                        new String[] { "java.lang.Object", "java.lang.Object" });
+
+                String jrpmurl = "rmi://" + jrmphost + ":" + Integer.toString(jrmpport) ;
+                                        
+                mserver.invoke( adaptor, "putNamingProperty",
+                        new Object[] {
+                            javax.naming.Context.PROVIDER_URL,
+                            jrpmurl},
+                        new String[] { "java.lang.Object", "java.lang.Object" });
+
+                // Registers the JRMP adaptor in JNDI and starts it
+                mserver.invoke(adaptor, "start", null, null);
+                if(log.isInfoEnabled())
+                    log.info( "Creating " + adaptor + " on host " + jrmphost + " at port " + jrmpport);
+
+                jrmpAdapterLoaded = true;
+
+            } catch( Exception ex ) {
+                jrmpServerName = null;
+                log.error( "MX4j RMI adapter not loaded: " + ex.toString());
+            }
+        }
+
+        if ((httpport != -1) && (! httpAdapterLoaded) && classExists("com.sun.jdmk.comm.HtmlAdaptorServer")) {
+            try {
+                httpServerName=registerObject("com.sun.jdmk.comm.HtmlAdaptorServer",
+                                              "Adaptor:name=html,port=" + httpport);
+                if(log.isInfoEnabled())
+                    log.info("Registering the JMX_RI html adapter " + httpServerName + " at port " + httpport);
+
+                mserver.setAttribute(httpServerName,
+                                     new Attribute("Port", new Integer(httpport)));
+
+                mserver.invoke(httpServerName, "start", null, null);
+
+                httpAdapterLoaded = true;
+            } catch( Throwable t ) {
+                httpServerName = null;
+                log.error( "Can't load the JMX_RI http adapter " + t.toString()  );
+            }
+        }
+
+        if ((!httpAdapterLoaded) && (!jrmpAdapterLoaded))
+            log.warn( "No adaptors were loaded but mx.enabled was defined.");
+
+    }
+-----CSCI578-----
+
+
+    private ObjectName registerObject(String className, String oName) 
+        throws Exception {
+        Class c = Class.forName(className);
+        Object o = c.newInstance();
+        ObjectName objN = new ObjectName(oName);
+        mserver.registerMBean(o, objN);
+        return objN;
+    }
+-----CSCI578-----
+
+
+
+    private static boolean classExists(String className) {
+        try {
+            Thread.currentThread().getContextClassLoader().loadClass(className);
+            return true;
+        } catch(Throwable e) {
+            if (log.isInfoEnabled())
+                log.info( "className [" + className + "] does not exist");
+            return false;
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * <p> Is info logging currently enabled? </p>
+     *
+     * <p> Call this method to prevent having to perform expensive operations
+     * (for example, <code>String</code> concatenation)
+     * when the log level is more than info. </p>
+     */
+    public boolean isInfoEnabled();
+-----CSCI578-----
+
+
+    /*
+     * War remvoe from watchDir
+     * 
+     * @see org.apache.catalina.ha.deploy.FileChangeListener#fileRemoved(java.io.File)
+     */
+    public void fileRemoved(File removeWar) {
+        try {
+            String contextName = getContextName(removeWar);
+            if (log.isInfoEnabled())
+                log.info("Removing webapp[" + contextName + "]");
+            remove(contextName, true);
+        } catch (Exception x) {
+            log.error("Unable to remove WAR file", x);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Gracefully terminate the active use of the public methods of this
+     * component. This method should be the last one called on a given instance
+     * of this component.
+     * 
+     * @exception LifecycleException
+     *                if this component detects a fatal error that needs to be
+     *                reported
+     */
+    public void stop() throws LifecycleException {
+
+        // Validate and update our current component state
+        if (!started)
+            throw new LifecycleException(sm
+                    .getString("jvmRoute.valve.notStarted"));
+        lifecycle.fireLifecycleEvent(STOP_EVENT, null);
+        started = false;
+        cluster = null;
+        numberOfSessions = 0;
+        if (log.isInfoEnabled())
+            log.info(sm.getString("jvmRoute.valve.stopped"));
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * New cluster member is registered
+     * 
+     * @see MembershipListener#memberAdded(Member)
+     */
+    public void memberAdded(Member member) {
+        try {
+            hasMembers = channel.hasMembers();
+            if (log.isInfoEnabled()) log.info("Replication member added:" + member);
+            // Notify our interested LifecycleListeners
+            lifecycle.fireLifecycleEvent(BEFORE_MEMBERREGISTER_EVENT, member);
+            // Notify our interested LifecycleListeners
+            lifecycle.fireLifecycleEvent(AFTER_MEMBERREGISTER_EVENT, member);
+        } catch (Exception x) {
+            log.error("Unable to connect to replication system.", x);
+        }
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Cluster member is gone
+     * 
+     * @see MembershipListener#memberDisappeared(Member)
+     */
+    public void memberDisappeared(Member member) {
+        try {
+            hasMembers = channel.hasMembers();            
+            if (log.isInfoEnabled()) log.info("Received member disappeared:" + member);
+            // Notify our interested LifecycleListeners
+            lifecycle.fireLifecycleEvent(BEFORE_MEMBERUNREGISTER_EVENT, member);
+            // Notify our interested LifecycleListeners
+            lifecycle.fireLifecycleEvent(AFTER_MEMBERUNREGISTER_EVENT, member);
+        } catch (Exception x) {
+            log.error("Unable remove cluster node from replication system.", x);
+        }
+    }
+-----CSCI578-----
+
+    
+    public void report(double timeTx) {
+        StringBuffer buf = new StringBuffer("ThroughputInterceptor Report[\n\tTx Msg:");
+        buf.append(msgTxCnt).append(" messages\n\tSent:");
+        buf.append(df.format(mbTx));
+        buf.append(" MB (total)\n\tSent:");
+        buf.append(df.format(mbAppTx));
+        buf.append(" MB (application)\n\tTime:");
+        buf.append(df.format(timeTx));
+        buf.append(" seconds\n\tTx Speed:");
+        buf.append(df.format(mbTx/timeTx));
+        buf.append(" MB/sec (total)\n\tTxSpeed:");
+        buf.append(df.format(mbAppTx/timeTx));
+        buf.append(" MB/sec (application)\n\tError Msg:");
+        buf.append(msgTxErr).append("\n\tRx Msg:");
+        buf.append(msgRxCnt);
+        buf.append(" messages\n\tRx Speed:");
+        buf.append(df.format(mbRx/((double)((System.currentTimeMillis()-rxStart)/1000))));
+        buf.append(" MB/sec (since 1st msg)\n\tReceived:");
+        buf.append(df.format(mbRx)).append(" MB]\n");
+        if ( log.isInfoEnabled() ) log.info(buf);
+    }
+-----CSCI578-----
+
+
+
+    private void cacheContext() {
+        try {
+            File workDir=new File( getWorkPath() );
+
+            File ctxSer=new File( workDir, "_tomcat_context.ser");
+            FileOutputStream fos=new FileOutputStream( ctxSer );
+            ObjectOutputStream oos=new ObjectOutputStream( fos );
+            oos.writeObject(this);
+            oos.close();
+            fos.close();
+        } catch( Throwable t ) {
+            if(log.isInfoEnabled())
+                log.info("Error saving context.ser ", t);
+        }
+    }
+-----CSCI578-----
+
+
+
+    public void expireSession( String sessionId ) {
+        Session s = sessions.get(sessionId);
+        if (s == null) {
+            if(log.isInfoEnabled())
+                log.info("Session not found " + sessionId);
+            return;
+        }
+        s.expire();
+    }
+-----CSCI578-----
+
+  
+    public String getLastAccessedTime( String sessionId ) {
+        Session s = sessions.get(sessionId);
+        if (s == null) {
+            if(log.isInfoEnabled())
+                log.info("Session not found " + sessionId);
+            return "";
+        }
+        return new Date(s.getLastAccessedTime()).toString();
+    }
+-----CSCI578-----
+
+
+    public String getCreationTime( String sessionId ) {
+        Session s = sessions.get(sessionId);
+        if (s == null) {
+            if(log.isInfoEnabled())
+                log.info("Session not found " + sessionId);
+            return "";
+        }
+        return new Date(s.getCreationTime()).toString();
+    }
+-----CSCI578-----
+
+
+    public void destroy() {
+        try {
+            if(log.isInfoEnabled())
+                log.info("Stoping JMX ");
+
+            if( httpServerName!=null ) {
+                mserver.invoke(httpServerName, "stop", null, null);
+            }
+            if( jrmpServerName!=null ) {
+                mserver.invoke(jrmpServerName, "stop", null, null);
+            }
+        } catch( Throwable t ) {
+            log.error( "Destroy error" + t );
+        }
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Returns true if there are any members in the group,
+     * this call is the same as <code>getMembers().length>0</code>
+     * @return boolean - true if there are any members automatically discovered
+     */
+    public boolean hasMembers() ;

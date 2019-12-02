@@ -1,0 +1,263 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Unbinds the named object. Removes the terminal atomic name in name
+     * from the target context--that named by all but the terminal atomic
+     * part of name.
+     * <p>
+     * This method is idempotent. It succeeds even if the terminal atomic
+     * name is not bound in the target context, but throws
+     * NameNotFoundException if any of the intermediate contexts do not exist.
+     *
+     * @param name the name to bind; may not be empty
+     * @exception NameNotFoundException if an intermediate context does not
+     * exist
+     * @exception NamingException if a naming exception is encountered
+     */
+    public void unbind(String name)
+        throws NamingException {
+
+        File file = file(name);
+
+        if (file == null)
+            throw new NamingException
+                (sm.getString("resources.notFound", name));
+
+        if (!file.delete())
+            throw new NamingException
+                (sm.getString("resources.unbindFailed", name));
+
+    }
+
+
+
+    /**
+     * Destroys the named context and removes it from the namespace. Any
+     * attributes associated with the name are also removed. Intermediate
+     * contexts are not destroyed.
+     * <p>
+     * This method is idempotent. It succeeds even if the terminal atomic
+     * name is not bound in the target context, but throws
+     * NameNotFoundException if any of the intermediate contexts do not exist.
+     *
+     * In a federated naming system, a context from one naming system may be
+     * bound to a name in another. One can subsequently look up and perform
+     * operations on the foreign context using a composite name. However, an
+     * attempt destroy the context using this composite name will fail with
+     * NotContextException, because the foreign context is not a "subcontext"
+     * of the context in which it is bound. Instead, use unbind() to remove
+     * the binding of the foreign context. Destroying the foreign context
+     * requires that the destroySubcontext() be performed on a context from
+     * the foreign context's "native" naming system.
+     *
+     * @param name the name of the context to be destroyed; may not be empty
+     * @exception NameNotFoundException if an intermediate context does not
+     * exist
+     * @exception NotContextException if the name is bound but does not name
+     * a context, or does not name a context of the appropriate type
+     */
+    public void destroySubcontext(String name)
+        throws NamingException {
+        unbind(name);
+    }
+
+
+
+    /**
+     * Binds a name to an object, along with associated attributes. If attrs
+     * is null, the resulting binding will have the attributes associated
+     * with obj if obj is a DirContext, and no attributes otherwise. If attrs
+     * is non-null, the resulting binding will have attrs as its attributes;
+     * any attributes associated with obj are ignored.
+     *
+     * @param name the name to bind; may not be empty
+     * @param obj the object to bind; possibly null
+     * @param attrs the attributes to associate with the binding
+     * @exception NameAlreadyBoundException if name is already bound
+     * @exception InvalidAttributesException if some "mandatory" attributes
+     * of the binding are not supplied
+     * @exception NamingException if a naming exception is encountered
+     */
+    public void bind(String name, Object obj, Attributes attrs)
+        throws NamingException {
+
+        // Note: No custom attributes allowed
+
+        File file = new File(base, name);
+        if (file.exists())
+            throw new NameAlreadyBoundException
+                (sm.getString("resources.alreadyBound", name));
+
+        rebind(name, obj, attrs);
+
+    }
+
+
+
+    /**
+     * Binds a name to an object, along with associated attributes,
+     * overwriting any existing binding. If attrs is null and obj is a
+     * DirContext, the attributes from obj are used. If attrs is null and obj
+     * is not a DirContext, any existing attributes associated with the object
+     * already bound in the directory remain unchanged. If attrs is non-null,
+     * any existing attributes associated with the object already bound in
+     * the directory are removed and attrs is associated with the named
+     * object. If obj is a DirContext and attrs is non-null, the attributes
+     * of obj are ignored.
+     *
+     * @param name the name to bind; may not be empty
+     * @param obj the object to bind; possibly null
+     * @param attrs the attributes to associate with the binding
+     * @exception InvalidAttributesException if some "mandatory" attributes
+     * of the binding are not supplied
+     * @exception NamingException if a naming exception is encountered
+     */
+    public void rebind(String name, Object obj, Attributes attrs)
+        throws NamingException {
+
+        // Note: No custom attributes allowed
+        // Check obj type
+
+        File file = new File(base, name);
+
+        InputStream is = null;
+        if (obj instanceof Resource) {
+            try {
+                is = ((Resource) obj).streamContent();
+            } catch (IOException e) {
+            }
+        } else if (obj instanceof InputStream) {
+            is = (InputStream) obj;
+        } else if (obj instanceof DirContext) {
+            if (file.exists()) {
+                if (!file.delete())
+                    throw new NamingException
+                        (sm.getString("resources.bindFailed", name));
+            }
+            if (!file.mkdir())
+                throw new NamingException
+                    (sm.getString("resources.bindFailed", name));
+        }
+        if (is == null)
+            throw new NamingException
+                (sm.getString("resources.bindFailed", name));
+
+        // Open os
+
+        FileOutputStream os = null;
+        byte buffer[] = new byte[BUFFER_SIZE];
+        int len = -1;
+        try {
+            os = new FileOutputStream(file);
+            while (true) {
+                len = is.read(buffer);
+                if (len == -1)
+                    break;
+                os.write(buffer, 0, len);
+            }
+        } catch (IOException e) {
+            NamingException ne = new NamingException
+                    (sm.getString("resources.bindFailed", e));
+            ne.initCause(e);
+            throw ne;
+        } finally {
+            if (os != null) {
+                try {
+                    os.close();
+                } catch (IOException e) {
+                }
+            }
+            try {
+                is.close();
+            } catch (IOException e) {
+            }
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Binds a name to an object, along with associated attributes,
+     * overwriting any existing binding. If attrs is null and obj is a
+     * DirContext, the attributes from obj are used. If attrs is null and obj
+     * is not a DirContext, any existing attributes associated with the object
+     * already bound in the directory remain unchanged. If attrs is non-null,
+     * any existing attributes associated with the object already bound in
+     * the directory are removed and attrs is associated with the named
+     * object. If obj is a DirContext and attrs is non-null, the attributes
+     * of obj are ignored.
+     *
+     * @param name the name to bind; may not be empty
+     * @param obj the object to bind; possibly null
+     * @param attrs the attributes to associate with the binding
+     * @exception InvalidAttributesException if some "mandatory" attributes
+     * of the binding are not supplied
+     * @exception NamingException if a naming exception is encountered
+     */
+    public void rebind(String name, Object obj, Attributes attrs)
+        throws NamingException {
+
+        // Note: No custom attributes allowed
+        // Check obj type
+
+        File file = new File(base, name);
+
+        InputStream is = null;
+        if (obj instanceof Resource) {
+            try {
+                is = ((Resource) obj).streamContent();
+            } catch (IOException e) {
+            }
+        } else if (obj instanceof InputStream) {
+            is = (InputStream) obj;
+        } else if (obj instanceof DirContext) {
+            if (file.exists()) {
+                if (!file.delete())
+                    throw new NamingException
+                        (sm.getString("resources.bindFailed", name));
+            }
+            if (!file.mkdir())
+                throw new NamingException
+                    (sm.getString("resources.bindFailed", name));
+        }
+        if (is == null)
+            throw new NamingException
+                (sm.getString("resources.bindFailed", name));
+
+        // Open os
+
+        FileOutputStream os = null;
+        byte buffer[] = new byte[BUFFER_SIZE];
+        int len = -1;
+        try {
+            os = new FileOutputStream(file);
+            while (true) {
+                len = is.read(buffer);
+                if (len == -1)
+                    break;
+                os.write(buffer, 0, len);
+            }
+        } catch (IOException e) {
+            NamingException ne = new NamingException
+                    (sm.getString("resources.bindFailed", e));
+            ne.initCause(e);
+            throw ne;
+        } finally {
+            if (os != null) {
+                try {
+                    os.close();
+                } catch (IOException e) {
+                }
+            }
+            try {
+                is.close();
+            } catch (IOException e) {
+            }
+        }
+
+    }

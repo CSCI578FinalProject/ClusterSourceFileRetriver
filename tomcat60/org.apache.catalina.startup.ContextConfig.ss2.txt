@@ -1,0 +1,111 @@
+15
+
+
+    protected String getHostConfigPath(String resourceName) {
+        StringBuffer result = new StringBuffer();
+        Container container = context;
+        Container host = null;
+        Container engine = null;
+        while (container != null) {
+            if (container instanceof Host)
+                host = container;
+            if (container instanceof Engine)
+                engine = container;
+            container = container.getParent();
+        }
+        if (engine != null) {
+            result.append(engine.getName()).append('/');
+        }
+        if (host != null) {
+            result.append(host.getName()).append('/');
+        }
+        result.append(resourceName);
+        return result.toString();
+    }
+
+
+    /**
+     * Process a "destroy" event for this Context.
+     */
+    protected synchronized void destroy() {
+        // Called from StandardContext.destroy()
+        if (log.isDebugEnabled())
+            log.debug(sm.getString("contextConfig.destroy"));
+
+        // Changed to getWorkPath per Bugzilla 35819.
+        String workDir = ((StandardContext) context).getWorkPath();
+        if (workDir != null)
+            ExpandWar.delete(new File(workDir));
+    }
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Process events for an associated Context.
+     *
+     * @param event The lifecycle event that has occurred
+     */
+    public void lifecycleEvent(LifecycleEvent event) {
+
+        // Identify the context we are associated with
+        try {
+            context = (Context) event.getLifecycle();
+        } catch (ClassCastException e) {
+            log.error(sm.getString("contextConfig.cce", event.getLifecycle()), e);
+            return;
+        }
+
+        // Process the event that has occurred
+        if (event.getType().equals(Lifecycle.START_EVENT)) {
+            start();
+        } else if (event.getType().equals(StandardContext.BEFORE_START_EVENT)) {
+            beforeStart();
+        } else if (event.getType().equals(StandardContext.AFTER_START_EVENT)) {
+            // Restore docBase for management tools
+            if (originalDocBase != null) {
+                context.setDocBase(originalDocBase);
+            }
+        } else if (event.getType().equals(Lifecycle.STOP_EVENT)) {
+            stop();
+        } else if (event.getType().equals(Lifecycle.INIT_EVENT)) {
+            init();
+        } else if (event.getType().equals(Lifecycle.DESTROY_EVENT)) {
+            destroy();
+        }
+
+    }
+
+
+    /**
+     * Get config base.
+     */
+    protected File getConfigBase() {
+        File configBase =
+            new File(System.getProperty("catalina.base"), "conf");
+        if (!configBase.exists()) {
+            return null;
+        } else {
+            return configBase;
+        }
+    }
+
+
+    protected String getBaseDir() {
+        Container engineC=context.getParent().getParent();
+        if( engineC instanceof StandardEngine ) {
+            return ((StandardEngine)engineC).getBaseDir();
+        }
+        return System.getProperty("catalina.base");
+    }
+
+    /** 
+     * Get the host associated with this Container (if any).
+     */
+    protected Host getHost(Container child) {
+        while(child != null && ! (child instanceof Host) ) {
+            child = child.getParent();
+        }
+        return (Host)child;
+    }

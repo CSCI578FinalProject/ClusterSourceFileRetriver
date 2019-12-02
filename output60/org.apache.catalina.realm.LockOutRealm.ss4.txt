@@ -1,0 +1,33 @@
+5
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /*
+     * After a failed authentication, add the record of the failed
+     * authentication. 
+     */
+    private void registerAuthFailure(String username) {
+        LockRecord lockRecord = null;
+        synchronized (this) {
+            if (!failedUsers.containsKey(username)) {
+                lockRecord = new LockRecord(); 
+                failedUsers.put(username, lockRecord);
+            } else {
+                lockRecord = failedUsers.get(username);
+                if (lockRecord.getFailures() >= failureCount &&
+                        ((System.currentTimeMillis() -
+                                lockRecord.getLastFailureTime())/1000)
+                                > lockOutTime) {
+                    // User was previously locked out but lockout has now
+                    // expired so reset failure count
+                    lockRecord.setFailures(0);
+                }
+            }
+        }
+        lockRecord.registerFailure();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

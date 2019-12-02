@@ -1,0 +1,268 @@
+17
+-----CSCI578-----
+
+
+    public Iterator<String> getLocalparts() {
+        return soapHeaders.keySet().iterator();
+    }
+-----CSCI578-----
+
+
+    public String getPortName(int i) {
+        return this.portNames.get(i);
+    }
+-----CSCI578-----
+
+
+    public void setJaxrpcmappingfile(String jaxrpcmappingfile) {
+        this.jaxrpcmappingfile = jaxrpcmappingfile;
+    }
+-----CSCI578-----
+
+
+    public String[] getServiceqname() {
+        return (this.serviceqname);
+    }
+
+
+    public String getServiceqname(int i) {
+        return this.serviceqname[i];
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getPortlink(String serviceendpoint) {
+        return (String) this.getProperty(serviceendpoint);
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getNamespaceuri(String localpart) {
+        return soapHeaders.get(localpart);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified web service in the naming context.
+     *
+     * @param service the web service descriptor
+     */
+    public void addService(ContextService service) {
+
+        if (service.getWsdlfile() != null) {
+            URL wsdlURL = null;
+
+            try {
+                wsdlURL = new URL(service.getWsdlfile());
+            } catch (MalformedURLException e) {
+                // Ignore and carry on
+            }
+            if (wsdlURL == null) {
+                try {
+                    wsdlURL = ((Context) container).
+                                                    getServletContext().
+                                                    getResource(service.getWsdlfile());
+                } catch (MalformedURLException e) {
+                    // Ignore and carry on
+                }
+            }
+            if (wsdlURL == null) {
+                try {
+                    wsdlURL = ((Context) container).
+                                                    getServletContext().
+                                                    getResource("/" + service.getWsdlfile());
+                    logger.debug("  Changing service ref wsdl file for /"
+                                + service.getWsdlfile());
+                } catch (MalformedURLException e) {
+                    logger.error(sm.getString("naming.wsdlFailed", e));
+                }
+            }
+            if (wsdlURL == null)
+                service.setWsdlfile(null);
+            else
+                service.setWsdlfile(wsdlURL.toString());
+        }
+
+        if (service.getJaxrpcmappingfile() != null) {
+            URL jaxrpcURL = null;
+
+            try {
+                jaxrpcURL = new URL(service.getJaxrpcmappingfile());
+            } catch (MalformedURLException e) {
+                // Ignore and carry on
+            }
+            if (jaxrpcURL == null) {
+                try {
+                    jaxrpcURL = ((Context) container).
+                                                    getServletContext().
+                                                    getResource(service.getJaxrpcmappingfile());
+                } catch (MalformedURLException e) {
+                    // Ignore and carry on
+                }
+            }
+            if (jaxrpcURL == null) {
+                try {
+                    jaxrpcURL = ((Context) container).
+                                                    getServletContext().
+                                                    getResource("/" + service.getJaxrpcmappingfile());
+                    logger.debug("  Changing service ref jaxrpc file for /"
+                                + service.getJaxrpcmappingfile());
+                } catch (MalformedURLException e) {
+                    logger.error(sm.getString("naming.wsdlFailed", e));
+                }
+            }
+            if (jaxrpcURL == null)
+                service.setJaxrpcmappingfile(null);
+            else
+                service.setJaxrpcmappingfile(jaxrpcURL.toString());
+        }
+
+        // Create a reference to the resource.
+        Reference ref = new ServiceRef
+            (service.getName(), service.getType(), service.getServiceqname(),
+             service.getWsdlfile(), service.getJaxrpcmappingfile());
+        // Adding the additional port-component-ref, if any
+        Iterator<String> portcomponent = service.getServiceendpoints();
+        while (portcomponent.hasNext()) {
+            String serviceendpoint = portcomponent.next();
+            StringRefAddr refAddr = new StringRefAddr(ServiceRef.SERVICEENDPOINTINTERFACE, serviceendpoint);
+            ref.add(refAddr);
+            String portlink = service.getPortlink(serviceendpoint);
+            refAddr = new StringRefAddr(ServiceRef.PORTCOMPONENTLINK, portlink);
+            ref.add(refAddr);
+        }
+        // Adding the additional parameters, if any
+        Iterator<String> handlers = service.getHandlers();
+        while (handlers.hasNext()) {
+            String handlername = handlers.next();
+            ContextHandler handler = service.getHandler(handlername);
+            HandlerRef handlerRef = new HandlerRef(handlername, handler.getHandlerclass());
+            Iterator<String> localParts = handler.getLocalparts();
+            while (localParts.hasNext()) {
+                String localPart = localParts.next();
+                String namespaceURI = handler.getNamespaceuri(localPart);
+                handlerRef.add(new StringRefAddr(HandlerRef.HANDLER_LOCALPART, localPart));
+                handlerRef.add(new StringRefAddr(HandlerRef.HANDLER_NAMESPACE, namespaceURI));
+            }
+            Iterator<String> params = handler.listProperties();
+            while (params.hasNext()) {
+                String paramName = params.next();
+                String paramValue = (String) handler.getProperty(paramName);
+                handlerRef.add(new StringRefAddr(HandlerRef.HANDLER_PARAMNAME, paramName));
+                handlerRef.add(new StringRefAddr(HandlerRef.HANDLER_PARAMVALUE, paramValue));
+            }
+            for (int i = 0; i < handler.getSoapRolesSize(); i++) {
+                handlerRef.add(new StringRefAddr(HandlerRef.HANDLER_SOAPROLE, handler.getSoapRole(i)));
+            }
+            for (int i = 0; i < handler.getPortNamesSize(); i++) {
+                handlerRef.add(new StringRefAddr(HandlerRef.HANDLER_PORTNAME, handler.getPortName(i)));
+            }
+            ((ServiceRef) ref).addHandler(handlerRef);
+        }
+
+        try {
+            if (logger.isDebugEnabled()) {
+                logger.debug("  Adding service ref "
+                             + service.getName() + "  " + ref);
+            }
+            createSubcontexts(envCtx, service.getName());
+            envCtx.bind(service.getName(), ref);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.bindFailed", e));
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    public void addHandler(HandlerRef handler) {
+        handlers.add(handler);
+    }
+-----CSCI578-----
+
+
+    public String getSoapRole(int i) {
+        return this.soapRoles.get(i);
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Create all intermediate subcontexts.
+     */
+    private void createSubcontexts(javax.naming.Context ctx, String name)
+        throws NamingException {
+        javax.naming.Context currentContext = ctx;
+        StringTokenizer tokenizer = new StringTokenizer(name, "/");
+        while (tokenizer.hasMoreTokens()) {
+            String token = tokenizer.nextToken();
+            if ((!token.equals("")) && (tokenizer.hasMoreTokens())) {
+                try {
+                    currentContext = currentContext.createSubcontext(token);
+                } catch (NamingException e) {
+                    // Silent catch. Probably an object is already bound in
+                    // the context.
+                    currentContext =
+                        (javax.naming.Context) currentContext.lookup(token);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public int getSoapRolesSize() {
+        return this.soapRoles.size();
+    }
+-----CSCI578-----
+
+
+    public int getPortNamesSize() {
+        return this.portNames.size();
+    }
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return a String representation of this object.
+     */
+    @Override
+    public String toString() {
+
+        StringBuilder sb = new StringBuilder("ContextHandler[");
+        sb.append("name=");
+        sb.append(getName());
+        if (handlerclass != null) {
+            sb.append(", class=");
+            sb.append(handlerclass);
+        }
+        if (this.soapHeaders != null) {
+            sb.append(", soap-headers=");
+            sb.append(this.soapHeaders);
+        }
+        if (this.getSoapRolesSize() > 0) {
+            sb.append(", soap-roles=");
+            sb.append(soapRoles);
+        }
+        if (this.getPortNamesSize() > 0) {
+            sb.append(", port-name=");
+            sb.append(portNames);
+        }
+        if (this.listProperties() != null) {
+            sb.append(", init-param=");
+            sb.append(this.listProperties());
+        }
+        sb.append("]");
+        return (sb.toString());
+    }

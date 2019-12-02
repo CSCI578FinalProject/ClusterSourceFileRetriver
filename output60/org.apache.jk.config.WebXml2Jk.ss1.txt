@@ -1,0 +1,222 @@
+18
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public static void main(String args[] ) {
+        try {
+            if( args.length == 1 &&
+                ( "-?".equals(args[0]) || "-h".equals( args[0])) ) {
+                System.out.println("Usage: ");
+                System.out.println("  WebXml2Jk [OPTIONS]");
+                System.out.println();
+                System.out.println("  -docBase DIR        The location of the webapp. Required");
+                System.out.println("  -group GROUP        Group, if you have multiple tomcats with diffrent content. " );
+                System.out.println("                      The default is 'lb', and should be used in most cases");
+                System.out.println("  -host HOSTNAME      Canonical hostname - for virtual hosts");
+                System.out.println("  -context /CPATH     Context path where the app will be mounted");
+                return;
+            }
+
+            WebXml2Jk w2jk=new WebXml2Jk();
+
+            /* do ant-style property setting */
+            IntrospectionUtils.processArgs( w2jk, args, new String[] {},
+                                            null, new Hashtable());
+            w2jk.execute();
+        } catch( Exception ex ) {
+            ex.printStackTrace();
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    void generate(MappingGenerator gen ) throws IOException {
+        gen.generateStart();
+        log.info("Generating mappings for servlets " );
+        for( Node mapN=getChild( webN, "servlet-mapping" );
+             mapN != null; mapN = getNext( mapN ) ) {
+            
+            String serv=getChildContent( mapN, "servlet-name");
+            String url=getChildContent( mapN, "url-pattern");
+            
+            gen.generateServletMapping( serv, url );
+        }
+
+        log.info("Generating mappings for filters " );
+        for( Node mapN=getChild( webN, "filter-mapping" );
+             mapN != null; mapN = getNext( mapN ) ) {
+            
+            String filter=getChildContent( mapN, "filter-name");
+            String url=getChildContent( mapN, "url-pattern");
+
+            gen.generateFilterMapping(  filter, url );
+        }
+
+
+        for( Node mapN=getChild( webN, "error-page" );
+             mapN != null; mapN = getNext( mapN ) ) {
+            String errorCode= getChildContent( mapN, "error-code" );
+            String location= getChildContent( mapN, "location" );
+
+            if( errorCode!=null && ! "".equals( errorCode ) ) {
+                try {
+                    int err=new Integer( errorCode ).intValue();
+                    gen.generateErrorPage(  err, location );
+                } catch( Exception ex ) {
+                    log.error( "Format error " + location, ex);
+                }
+            }
+        }
+
+        Node lcN=getChild( webN, "login-config" );
+        if( lcN!=null ) {
+            log.info("Generating mapping for login-config " );
+            
+            String authMeth=getContent( getChild( lcN, "auth-method"));
+            if( authMeth == null ) authMeth="BASIC";
+
+            Node n1=getChild( lcN, "form-login-config");
+            String loginPage= getChildContent( n1, "form-login-page");
+            String errPage= getChildContent( n1, "form-error-page");
+
+	    if(loginPage != null) {
+		int lpos = loginPage.lastIndexOf("/");
+		String jscurl = loginPage.substring(0,lpos+1) + "j_security_check";
+                gen.generateLoginConfig( jscurl, errPage, authMeth );
+	    }
+        }
+
+        log.info("Generating mappings for security constraints " );
+        for( Node mapN=getChild( webN, "security-constraint" );
+             mapN != null; mapN = getNext( mapN )) {
+
+            Vector methods=new Vector();
+            Vector urls=new Vector();
+            Vector roles=new Vector();
+            boolean isSSL=false;
+            
+            Node wrcN=getChild( mapN, "web-resource-collection");
+            for( Node uN=getChild(wrcN, "http-method");
+                 uN!=null; uN=getNext( uN )) {
+                methods.addElement( getContent( uN ));
+            }
+            for( Node uN=getChild(wrcN, "url-pattern");
+                 uN!=null; uN=getNext( uN )) {
+                urls.addElement( getContent( uN ));
+            }
+
+            // Not used at the moment
+            Node acN=getChild( mapN, "auth-constraint");
+            for( Node rN=getChild(acN, "role-name");
+                 rN!=null; rN=getNext( rN )) {
+                roles.addElement(getContent( rN ));
+            }
+
+            Node ucN=getChild( mapN, "user-data-constraint");
+            String transp=getContent(getChild( ucN, "transport-guarantee"));
+            if( transp!=null ) {
+                if( "INTEGRAL".equalsIgnoreCase( transp ) ||
+                    "CONFIDENTIAL".equalsIgnoreCase( transp ) ) {
+                    isSSL=true;
+                }
+            }
+
+            gen.generateConstraints( urls, methods, roles, isSSL );
+        }
+        gen.generateEnd();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    // -------------------- Main and ant wrapper --------------------
+    
+    public void execute() {
+        try {
+            if( docBase== null) {
+                log.error("No docbase - please specify the base directory of you web application ( -docBase PATH )");
+                return;
+            }
+            if( cpath== null) {
+                log.error("No context - please specify the mount ( -context PATH )");
+                return;
+            }
+            File docbF=new File(docBase);
+            File wXmlF=new File( docBase, "WEB-INF/web.xml");
+
+            Document wXmlN=readXml(wXmlF);
+            if( wXmlN == null ) return;
+
+            webN = wXmlN.getDocumentElement();
+            if( webN==null ) {
+                log.error("Can't find web-app");
+                return;
+            }
+
+            jkDir=new File( docbF, "WEB-INF/jk2" );
+            jkDir.mkdirs();
+            
+            MappingGenerator generator=new GeneratorJk2();
+            generator.setWebXmlReader( this );
+            generate( generator );
+
+            generator=new GeneratorJk1();
+            generator.setWebXmlReader( this );
+            generate( generator );
+
+            generator=new GeneratorApache2();
+            generator.setWebXmlReader( this );
+            generate( generator );
+
+        } catch( Exception ex ) {
+            ex.printStackTrace();
+        }
+    }
+-----CSCI578-----
+
+
+    /** Get the first child's content ( i.e. it's included TEXT node )
+     */
+    public static String getChildContent( Node parent, String name ) {
+        Node first=parent.getFirstChild();
+        if( first==null ) return null;
+        for (Node node = first; node != null;
+             node = node.getNextSibling()) {
+            //System.out.println("getNode: " + name + " " + node.getNodeName());
+            if( name.equals( node.getNodeName() ) ) {
+                return getContent( node );
+            }
+        }
+        return null;
+    }
+-----CSCI578-----
+
+
+    
+    // -------------------- DOM utils --------------------
+
+    /** Get the content of a node
+     */
+    public static String getContent(Node n ) {
+        if( n==null ) return null;
+        Node n1=n.getFirstChild();
+        // XXX Check if it's a text node
+
+        String s1=n1.getNodeValue();
+        return s1.trim();
+    }
+-----CSCI578-----

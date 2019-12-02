@@ -1,0 +1,141 @@
+5
+-----CSCI578-----
+
+
+    /**
+     * remove the complete queued object list
+     * FIXME extract some method
+     */
+    public LinkObject remove() {
+        LinkObject element;
+        boolean gotLock;
+        long time = 0;
+
+        if (!enabled) {
+            if (log.isInfoEnabled())
+                log.info("FastQueue.remove: queue disabled, remove aborted");
+            return null;
+        }
+
+        if (timeWait) {
+            time = System.currentTimeMillis();
+        }
+        gotLock = lock.lockRemove();
+        try {
+
+            if (!gotLock) {
+                if (enabled) {
+                    if (log.isInfoEnabled())
+                        log.info("FastQueue.remove: Remove aborted although queue enabled");
+                } else {
+                    if (log.isInfoEnabled())
+                        log.info("FastQueue.remove: queue disabled, remove aborted");
+                }
+                return null;
+            }
+
+            if (log.isTraceEnabled()) {
+                log.trace("FastQueue.remove: remove starting with size " + size);
+            }
+            if (checkLock) {
+                if (inRemove)
+                    log.warn("FastQueue.remove: Detected other remove");
+                inRemove = true;
+                if (inMutex)
+                    log.warn("FastQueue.remove: Detected other mutex in remove");
+                inMutex = true;
+            }
+
+            element = first;
+
+            first = last = null;
+            size = 0;
+
+            if (checkLock) {
+                if (!inMutex)
+                    log.warn("FastQueue.remove: Cancelled by other mutex in remove");
+                inMutex = false;
+                if (!inRemove)
+                    log.warn("FastQueue.remove: Cancelled by other remove");
+                inRemove = false;
+            }
+            if (log.isTraceEnabled()) {
+                log.trace("FastQueue.remove: remove ending with size " + size);
+            }
+
+            if (timeWait) {
+                time = System.currentTimeMillis();
+            }
+        } finally {
+            lock.unlockRemove();
+        }
+        return element;
+    }
+-----CSCI578-----
+
+    
+    public LinkObject removeFromQueue() {
+        return queue.remove();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Acquires the lock by the remove thread and sets the remove flag.
+     * If any add thread already acquired the lock or the queue is
+     * empty, the remove thread will block until the lock is released
+     * and the queue is not empty.
+     */
+    public synchronized boolean lockRemove() {
+        removeLocked=false;
+        removeEnabled=true;
+        if ( ( addLocked || ! dataAvailable ) && removeEnabled ) {
+            remover=Thread.currentThread();
+            do {
+                try {
+                    wait(removeWaitTimeout);
+                } catch ( InterruptedException e ) {
+                    Thread.currentThread().interrupted();
+                }
+            } while ( ( addLocked || ! dataAvailable ) && removeEnabled );
+            remover=null;
+        }
+        if ( removeEnabled ) {
+            removeLocked=true;
+        } 
+        return removeLocked;
+    }
+
+
+    /**
+     * Releases the lock by the remove thread and reset the add flag.
+     * Notify all waiting add threads,
+     * that the lock has been released by the remove thread.
+     */
+    public synchronized void unlockRemove() {
+        removeLocked=false;
+        dataAvailable=false;
+        notifyAll();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Releases the lock by the remove thread and reset the add flag.
+     * Notify all waiting add threads,
+     * that the lock has been released by the remove thread.
+     */
+    public synchronized void unlockRemove() {
+        removeLocked=false;
+        dataAvailable=false;
+        notifyAll();
+    }
+-----CSCI578-----
+
+
+    /**
+     * unlock queue for next remove 
+     */
+    public void unlockRemove() {
+        lock.unlockRemove();
+    }

@@ -1,0 +1,72 @@
+5
+-----CSCI578-----
+
+
+
+    /**
+     * Remove an existing Host.
+     *
+     * @param name MBean Name of the comonent to remove
+     *
+     * @exception Exception if a component cannot be removed
+     */
+    public void removeHost(String name) throws Exception {
+
+        // Acquire a reference to the component to be removed
+        ObjectName oname = new ObjectName(name);
+        String hostName = oname.getKeyProperty("host");
+        Service service = getService(oname);
+        Engine engine = (Engine) service.getContainer();
+        Host host = (Host) engine.findChild(hostName);
+
+        // Remove this component from its parent component
+        if(host!=null) {
+            if(host instanceof StandardHost)
+                ((StandardHost)host).destroy();
+            else
+                engine.removeChild(host);
+        }
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    
+    private Service getService(ObjectName oname) throws Exception {
+    
+        String domain = oname.getDomain();
+        Server server = ServerFactory.getServer();
+        Service[] services = server.findServices();
+        StandardService service = null;
+        for (int i = 0; i < services.length; i++) {
+            service = (StandardService) services[i];
+            if (domain.equals(service.getObjectName().getDomain())) {
+                break;
+            }
+        }
+        if (!service.getObjectName().getDomain().equals(domain)) {
+            throw new Exception("Service with the domain is not found");
+        }        
+        return service;
+
+    }
+-----CSCI578-----
+
+
+    public ObjectName getObjectName() {
+        return oname;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return the JMX service names.
+     */
+    public ObjectName[] getServiceNames() {
+        ObjectName onames[]=new ObjectName[ services.length ];
+        for( int i=0; i<services.length; i++ ) {
+            onames[i]=((StandardService)services[i]).getObjectName();
+        }
+        return onames;
+    }

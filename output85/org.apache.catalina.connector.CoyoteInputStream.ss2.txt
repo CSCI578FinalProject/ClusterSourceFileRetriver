@@ -1,0 +1,38 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Close the stream
+     * Since we re-cycle, we can't allow the call to super.close()
+     * which would permanently disable us.
+     */
+    @Override
+    public void close() throws IOException {
+
+        if (SecurityUtil.isPackageProtectionEnabled()){
+            try{
+                AccessController.doPrivileged(
+                    new PrivilegedExceptionAction<Void>(){
+
+                        @Override
+                        public Void run() throws IOException{
+                            ib.close();
+                            return null;
+                        }
+
+                });
+            } catch(PrivilegedActionException pae){
+                Exception e = pae.getException();
+                if (e instanceof IOException){
+                    throw (IOException)e;
+                } else {
+                    throw new RuntimeException(e.getMessage(), e);
+                }
+            }
+        } else {
+             ib.close();
+        }
+    }
+-----CSCI578-----

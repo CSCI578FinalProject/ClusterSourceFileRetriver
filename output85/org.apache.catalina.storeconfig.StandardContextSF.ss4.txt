@@ -1,0 +1,74 @@
+2
+-----CSCI578-----
+
+
+    /**
+     * Filter out the default watched resources, to remove standard ones.
+     *
+     * @param context The context instance
+     * @param wresources The raw watched resources list
+     * @return The filtered watched resources
+     * @throws Exception Configuration storing error
+     * TODO relative watched resources
+     * TODO absolute handling configFile
+     * TODO Filename case handling for Windows?
+     * TODO digester variable substitution $catalina.base, $catalina.home
+     */
+    protected String[] filterWatchedResources(StandardContext context,
+            String[] wresources) throws Exception {
+        File configBase = configBase(context);
+        String confContext = new File(System.getProperty("catalina.base"),
+                "conf/context.xml").getCanonicalPath();
+        String confWeb = new File(System.getProperty("catalina.base"),
+                "conf/web.xml").getCanonicalPath();
+        String confHostDefault = new File(configBase, "context.xml.default")
+                .getCanonicalPath();
+        String configFile = (context.getConfigFile() != null ? new File(context.getConfigFile().toURI()).getCanonicalPath() : null);
+        String webxml = "WEB-INF/web.xml" ;
+
+        List<String> resource = new ArrayList<>();
+        for (int i = 0; i < wresources.length; i++) {
+
+            if (wresources[i].equals(confContext))
+                continue;
+            if (wresources[i].equals(confWeb))
+                continue;
+            if (wresources[i].equals(confHostDefault))
+                continue;
+            if (wresources[i].equals(configFile))
+                continue;
+            if (wresources[i].equals(webxml))
+                continue;
+            resource.add(wresources[i]);
+        }
+        return resource.toArray(new String[resource.size()]);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Return a File object representing the "configuration root" directory for
+     * our associated Host.
+     * @param context The context instance
+     * @return a file to the configuration base path
+     */
+    protected File configBase(Context context) {
+
+        File file = new File(System.getProperty("catalina.base"), "conf");
+        Container host = context.getParent();
+
+        if (host instanceof Host) {
+            Container engine = host.getParent();
+            if (engine instanceof Engine) {
+                file = new File(file, engine.getName());
+            }
+            file = new File(file, host.getName());
+            try {
+                file = file.getCanonicalFile();
+            } catch (IOException e) {
+                log.error(e);
+            }
+        }
+        return (file);
+
+    }

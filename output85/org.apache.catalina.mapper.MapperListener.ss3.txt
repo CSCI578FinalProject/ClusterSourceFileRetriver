@@ -1,0 +1,166 @@
+11
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------- Lifecycle Methods
+
+    @Override
+    public void startInternal() throws LifecycleException {
+
+        setState(LifecycleState.STARTING);
+
+        Engine engine = service.getContainer();
+        if (engine == null) {
+            return;
+        }
+
+        findDefaultHost();
+
+        addListeners(engine);
+
+        Container[] conHosts = engine.findChildren();
+        for (Container conHost : conHosts) {
+            Host host = (Host) conHost;
+            if (!LifecycleState.NEW.equals(host.getState())) {
+                // Registering the host will register the context and wrappers
+                registerHost(host);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Set default host.
+     *
+     * @param defaultHostName Default host name
+     */
+    public void setDefaultHostName(String defaultHostName) {
+        this.defaultHostName = defaultHostName;
+    }
+-----CSCI578-----
+
+
+    /**
+     * @return the default host name for this Engine.
+     */
+    public String getDefaultHost();
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------------ Protected Methods
+
+    private void findDefaultHost() {
+
+        Engine engine = service.getContainer();
+        String defaultHost = engine.getDefaultHost();
+
+        boolean found = false;
+
+        if (defaultHost != null && defaultHost.length() >0) {
+            Container[] containers = engine.findChildren();
+
+            for (Container container : containers) {
+                Host host = (Host) container;
+                if (defaultHost.equalsIgnoreCase(host.getName())) {
+                    found = true;
+                    break;
+                }
+
+                String[] aliases = host.findAliases();
+                for (String alias : aliases) {
+                    if (defaultHost.equalsIgnoreCase(alias)) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if(found) {
+            mapper.setDefaultHostName(defaultHost);
+        } else {
+            log.warn(sm.getString("mapperListener.unknownDefaultHost",
+                    defaultHost, service));
+        }
+    }
+-----CSCI578-----
+
+
+    // ------------------------------------------------------------- Properties
+
+    /**
+     * @return the <code>Engine</code> that handles requests for all
+     * <code>Connectors</code> associated with this Service.
+     */
+    public Engine getContainer();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * @return the set of alias names for this Host.  If none are defined,
+     * a zero length array is returned.
+     */
+    public String[] findAliases();
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Register host.
+     */
+    private void registerHost(Host host) {
+
+        String[] aliases = host.findAliases();
+        mapper.addHost(host.getName(), aliases, host);
+
+        for (Container container : host.findChildren()) {
+            if (container.getState().isAvailable()) {
+                registerContext((Context) container);
+            }
+        }
+        if(log.isDebugEnabled()) {
+            log.debug(sm.getString("mapperListener.registerHost",
+                    host.getName(), domain, service));
+        }
+    }
+
+
+
+    /**
+     * Unregister host.
+     */
+    private void unregisterHost(Host host) {
+
+        String hostname = host.getName();
+
+        mapper.removeHost(hostname);
+
+        if(log.isDebugEnabled()) {
+            log.debug(sm.getString("mapperListener.unregisterHost", hostname,
+                    domain, service));
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void stopInternal() throws LifecycleException {
+        setState(LifecycleState.STOPPING);
+
+        Engine engine = service.getContainer();
+        if (engine == null) {
+            return;
+        }
+        removeListeners(engine);
+    }

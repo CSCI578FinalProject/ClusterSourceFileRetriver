@@ -1,0 +1,96 @@
+2
+-----CSCI578-----
+
+
+
+    // ------------------------------------------------ Session Package Methods
+
+
+    /**
+     * Read a serialized version of the contents of this session object from
+     * the specified object input stream, without requiring that the
+     * StandardSession itself have been serialized.
+     *
+     * @param stream The object input stream to read from
+     *
+     * @exception ClassNotFoundException if an unknown class is specified
+     * @exception IOException if an input/output error occurs
+     */
+    public void readObjectData(ObjectInputStream stream)
+        throws ClassNotFoundException, IOException {
+
+        doReadObject(stream);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Read a serialized version of this session object from the specified
+     * object input stream.
+     * <p>
+     * <b>IMPLEMENTATION NOTE</b>:  The reference to the owning Manager
+     * is not restored by this method, and must be set explicitly.
+     *
+     * @param stream The input stream to read from
+     *
+     * @exception ClassNotFoundException if an unknown class is specified
+     * @exception IOException if an input/output error occurs
+     */
+    protected void doReadObject(ObjectInputStream stream)
+        throws ClassNotFoundException, IOException {
+
+        // Deserialize the scalar instance variables (except Manager)
+        authType = null;        // Transient only
+        creationTime = ((Long) stream.readObject()).longValue();
+        lastAccessedTime = ((Long) stream.readObject()).longValue();
+        maxInactiveInterval = ((Integer) stream.readObject()).intValue();
+        isNew = ((Boolean) stream.readObject()).booleanValue();
+        isValid = ((Boolean) stream.readObject()).booleanValue();
+        thisAccessedTime = ((Long) stream.readObject()).longValue();
+        principal = null;        // Transient only
+        //        setId((String) stream.readObject());
+        id = (String) stream.readObject();
+        if (manager.getContext().getLogger().isDebugEnabled())
+            manager.getContext().getLogger().debug
+                ("readObject() loading session " + id);
+
+        // Deserialize the attribute count and attribute values
+        if (attributes == null)
+            attributes = new ConcurrentHashMap<>();
+        int n = ((Integer) stream.readObject()).intValue();
+        boolean isValidSave = isValid;
+        isValid = true;
+        for (int i = 0; i < n; i++) {
+            String name = (String) stream.readObject();
+            final Object value;
+            try {
+                value = stream.readObject();
+            } catch (WriteAbortedException wae) {
+                if (wae.getCause() instanceof NotSerializableException) {
+                    // Skip non serializable attributes
+                    continue;
+                }
+                throw wae;
+            }
+            if (manager.getContext().getLogger().isDebugEnabled())
+                manager.getContext().getLogger().debug("  loading attribute '" + name +
+                    "' with value '" + value + "'");
+            // Handle the case where the filter configuration was changed while
+            // the web application was stopped.
+            if (exclude(name, value)) {
+                continue;
+            }
+            attributes.put(name, value);
+        }
+        isValid = isValidSave;
+
+        if (listeners == null) {
+            listeners = new ArrayList<>();
+        }
+
+        if (notes == null) {
+            notes = new Hashtable<>();
+        }
+    }

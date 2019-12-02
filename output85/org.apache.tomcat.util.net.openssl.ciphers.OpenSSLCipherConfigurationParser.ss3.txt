@@ -1,0 +1,62 @@
+3
+-----CSCI578-----
+
+
+    public static LinkedHashSet<Cipher> parse(String expression) {
+        if (!initialized) {
+            init();
+        }
+        String[] elements = expression.split(SEPARATOR);
+        LinkedHashSet<Cipher> ciphers = new LinkedHashSet<>();
+        Set<Cipher> removedCiphers = new HashSet<>();
+        for (String element : elements) {
+            if (element.startsWith(DELETE)) {
+                String alias = element.substring(1);
+                if (aliases.containsKey(alias)) {
+                    remove(ciphers, alias);
+                }
+            } else if (element.startsWith(EXCLUDE)) {
+                String alias = element.substring(1);
+                if (aliases.containsKey(alias)) {
+                    removedCiphers.addAll(aliases.get(alias));
+                } else {
+                    log.warn(sm.getString("jsse.openssl.unknownElement", alias));
+                }
+            } else if (element.startsWith(TO_END)) {
+                String alias = element.substring(1);
+                if (aliases.containsKey(alias)) {
+                    moveToEnd(ciphers, alias);
+                }
+            } else if ("@STRENGTH".equals(element)) {
+                strengthSort(ciphers);
+                break;
+            } else if (aliases.containsKey(element)) {
+                add(ciphers, element);
+            } else if (element.contains(AND)) {
+                String[] intersections = element.split("\\" + AND);
+                if(intersections.length > 0 && aliases.containsKey(intersections[0])) {
+                    List<Cipher> result = new ArrayList<>(aliases.get(intersections[0]));
+                    for(int i = 1; i < intersections.length; i++) {
+                        if(aliases.containsKey(intersections[i])) {
+                            result.retainAll(aliases.get(intersections[i]));
+                        }
+                    }
+                     ciphers.addAll(result);
+                }
+            }
+        }
+        ciphers.removeAll(removedCiphers);
+        return ciphers;
+    }
+-----CSCI578-----
+
+
+    static void add(final LinkedHashSet<Cipher> ciphers, final String alias) {
+        ciphers.addAll(aliases.get(alias));
+    }
+-----CSCI578-----
+
+
+    static void remove(final Set<Cipher> ciphers, final String alias) {
+        ciphers.removeAll(aliases.get(alias));
+    }

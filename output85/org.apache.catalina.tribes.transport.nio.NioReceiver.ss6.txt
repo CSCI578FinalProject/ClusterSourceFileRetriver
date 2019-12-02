@@ -1,0 +1,47 @@
+9
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+
+    protected void bind() throws IOException {
+        // allocate an unbound server socket channel
+        serverChannel = ServerSocketChannel.open();
+        // Get the associated ServerSocket to bind it with
+        ServerSocket serverSocket = serverChannel.socket();
+        // create a new Selector for use below
+        this.selector.set(Selector.open());
+        // set the port the server channel will listen to
+        //serverSocket.bind(new InetSocketAddress(getBind(), getTcpListenPort()));
+        bind(serverSocket,getPort(),getAutoBind());
+        // set non-blocking mode for the listening socket
+        serverChannel.configureBlocking(false);
+        // register the ServerSocketChannel with the Selector
+        serverChannel.register(this.selector.get(), SelectionKey.OP_ACCEPT);
+
+        //set up the datagram channel
+        if (this.getUdpPort()>0) {
+            datagramChannel = DatagramChannel.open();
+            configureDatagraChannel();
+            //bind to the address to avoid security checks
+            bindUdp(datagramChannel.socket(),getUdpPort(),getAutoBind());
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void configureDatagraChannel() throws IOException {
+        datagramChannel.configureBlocking(false);
+        datagramChannel.socket().setSendBufferSize(getUdpTxBufSize());
+        datagramChannel.socket().setReceiveBufferSize(getUdpRxBufSize());
+        datagramChannel.socket().setReuseAddress(getSoReuseAddress());
+        datagramChannel.socket().setSoTimeout(getTimeout());
+        datagramChannel.socket().setTrafficClass(getSoTrafficClass());
+    }

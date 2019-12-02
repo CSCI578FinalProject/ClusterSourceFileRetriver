@@ -1,0 +1,105 @@
+8
+-----CSCI578-----
+
+
+
+    // ----------------------------------------------------------------------
+    // Inherited abstract methods
+
+    @Override
+    protected PooledConnectionAndInfo
+        getPooledConnectionAndInfo(String username, String password)
+        throws SQLException {
+
+        final PoolKey key = getPoolKey(username);
+        ObjectPool<PooledConnectionAndInfo> pool;
+        PooledConnectionManager manager;
+        synchronized(this) {
+            manager = managers.get(key);
+            if (manager == null) {
+                try {
+                    registerPool(username, password);
+                    manager = managers.get(key);
+                } catch (NamingException e) {
+                    throw new SQLException("RegisterPool failed", e);
+                }
+            }
+            pool = ((CPDSConnectionFactory) manager).getPool();
+        }
+
+        PooledConnectionAndInfo info = null;
+        try {
+            info = pool.borrowObject();
+        }
+        catch (NoSuchElementException ex) {
+            throw new SQLException(
+                    "Could not retrieve connection info from pool", ex);
+        }
+        catch (Exception e) {
+            // See if failure is due to CPDSConnectionFactory authentication failure
+            try {
+                testCPDS(username, password);
+            } catch (Exception ex) {
+                throw new SQLException(
+                        "Could not retrieve connection info from pool", ex);
+            }
+            // New password works, so kill the old pool, create a new one, and borrow
+            manager.closePool(username);
+            synchronized (this) {
+                managers.remove(key);
+            }
+            try {
+                registerPool(username, password);
+                pool = getPool(key);
+            } catch (NamingException ne) {
+                throw new SQLException("RegisterPool failed", ne);
+            }
+            try {
+                info = pool.borrowObject();
+            } catch (Exception ex) {
+                throw new SQLException(
+                        "Could not retrieve connection info from pool", ex);
+            }
+        }
+        return info;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Closes the connection pool associated with the given user.
+     *
+     * @param username user name
+     * @throws SQLException if an error occurs closing idle connections in the pool
+     */
+    void closePool(String username) throws SQLException;
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns the object pool used to pool connections created by this factory.
+     *
+     * @return ObjectPool managing pooled connections
+     */
+    public ObjectPool<PooledConnectionAndInfo> getPool() {
+        return _pool;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the object pool associated with the given PoolKey.
+     *
+     * @param key PoolKey identifying the pool
+     * @return the GenericObjectPool pooling connections for the username and datasource
+     * specified by the PoolKey
+     */
+    private ObjectPool<PooledConnectionAndInfo> getPool(PoolKey key) {
+        CPDSConnectionFactory mgr = (CPDSConnectionFactory) managers.get(key);
+        return mgr == null ? null : mgr.getPool();
+    }
+-----CSCI578-----
+-----CSCI578-----

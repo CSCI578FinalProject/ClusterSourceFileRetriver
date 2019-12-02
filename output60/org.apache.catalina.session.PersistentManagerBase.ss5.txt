@@ -1,0 +1,185 @@
+10
+-----CSCI578-----
+
+
+
+    /**
+     * Implements the Manager interface, direct call to processExpires and processPersistenceChecks
+     */
+	public void processExpires() {
+
+        long timeNow = System.currentTimeMillis();
+        Session sessions[] = findSessions();
+        int expireHere = 0 ;
+        if(log.isDebugEnabled())
+             log.debug("Start expire sessions " + getName() + " at " + timeNow + " sessioncount " + sessions.length);
+        for (int i = 0; i < sessions.length; i++) {
+            if (!sessions[i].isValid()) {
+                expiredSessions++;
+                expireHere++;
+            }
+        }
+        processPersistenceChecks();
+        if ((getStore() != null) && (getStore() instanceof StoreBase)) {
+            ((StoreBase) getStore()).processExpires();
+        }
+
+        long timeEnd = System.currentTimeMillis();
+        if(log.isDebugEnabled())
+             log.debug("End expire sessions " + getName() + " processingTime " + (timeEnd - timeNow) + " expired sessions: " + expireHere);
+        processingTime += (timeEnd - timeNow);
+
+	}
+-----CSCI578-----
+
+
+    // --------------------------------------------------------- Protected Methods
+
+    /**
+     * Called by our background reaper thread to check if Sessions
+     * saved in our store are subject of being expired. If so expire
+     * the Session and remove it from the Store.
+     *
+     */
+    public void processExpires() {
+        long timeNow = System.currentTimeMillis();
+        String[] keys = null;
+
+         if(!started) {
+            return;
+        }
+
+        try {
+            keys = keys();
+        } catch (IOException e) {
+            manager.getContainer().getLogger().error("Error getting keys", e);
+            return;
+        }
+        if (manager.getContainer().getLogger().isDebugEnabled()) {
+            manager.getContainer().getLogger().debug(getStoreName()+ ": processExpires check number of " + keys.length + " sessions" );
+        }
+
+        for (int i = 0; i < keys.length; i++) {
+            try {
+                StandardSession session = (StandardSession) load(keys[i]);
+                if (session == null) {
+                    continue;
+                }
+                int timeIdle = (int) ((timeNow - session.thisAccessedTime) / 1000L);
+                if (timeIdle < session.getMaxInactiveInterval()) {
+                    continue;
+                }
+                if (manager.getContainer().getLogger().isDebugEnabled()) {
+                    manager.getContainer().getLogger().debug(getStoreName()+ ": processExpires expire store session " + keys[i] );
+                }
+                if ( ( (PersistentManagerBase) manager).isLoaded( keys[i] )) {
+                    // recycle old backup session
+                    session.recycle();
+                } else {
+                    // expire swapped out session
+                    session.expire();
+                }
+                remove(keys[i]);
+            } catch (Exception e) {
+                manager.getContainer().getLogger().error("Session: "+keys[i]+"; ", e);
+                try {
+                    remove(keys[i]);
+                } catch (IOException e2) {
+                    manager.getContainer().getLogger().error("Error removing key", e2);
+                }
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the maximum time interval, in seconds, between client requests
+     * before the servlet container will invalidate the session.  A negative
+     * time indicates that the session should never time out.
+     */
+    public int getMaxInactiveInterval() {
+
+        return (this.maxInactiveInterval);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Return the descriptive short name of this Manager implementation.
+     */
+    public String getName() {
+
+        return (name);
+
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Return true, if the session id is loaded in memory
+     * otherwise false is returned
+     *
+     * @param id The session id for the session to be searched for
+     */
+    public boolean isLoaded( String id ){
+        try {
+            if ( super.findSession(id) != null )
+                return true;
+        } catch (IOException e) {
+            log.error("checking isLoaded for id, " + id + ", "+e.getMessage(), e);
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Release all object references, and initialize instance variables, in
+     * preparation for reuse of this object.
+     */
+    public void recycle() {
+
+        // Reset the instance variables associated with this Session
+        attributes.clear();
+        setAuthType(null);
+        creationTime = 0L;
+        expiring = false;
+        id = null;
+        lastAccessedTime = 0L;
+        maxInactiveInterval = -1;
+        notes.clear();
+        setPrincipal(null);
+        isNew = false;
+        isValid = false;
+        manager = null;
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the active Session, associated with this Manager, with the
+     * specified session id (if any); otherwise return <code>null</code>.
+     *
+     * @param id The session id for the session to be returned
+     *
+     * @exception IllegalStateException if a new session cannot be
+     *  instantiated for any reason
+     * @exception IOException if an input/output error occurs while
+     *  processing this request
+     */
+    public Session findSession(String id) throws IOException {
+        if (id == null) {
+            return null;
+        }
+        return sessions.get(id);
+    }

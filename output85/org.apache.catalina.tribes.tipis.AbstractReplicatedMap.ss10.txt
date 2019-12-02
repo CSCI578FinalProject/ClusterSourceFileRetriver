@@ -1,0 +1,173 @@
+10
+-----CSCI578-----
+
+
+    /**
+     * Set the last replicate time.
+     * @param lastTimeReplicated New timestamp
+     */
+    public void setLastTimeReplicated(long lastTimeReplicated);
+-----CSCI578-----
+
+
+
+    /**
+     * Replicates any changes to the object since the last time
+     * The object has to be primary, ie, if the object is a proxy or a backup, it will not be replicated<br>
+     * @param key The object to replicate
+     * @param complete - if set to true, the object is replicated to its backup
+     * if set to false, only objects that implement ReplicatedMapEntry and the isDirty() returns true will
+     * be replicated
+     */
+    public void replicate(Object key, boolean complete) {
+        if ( log.isTraceEnabled() )
+            log.trace("Replicate invoked on key:"+key);
+        MapEntry<K,V> entry = innerMap.get(key);
+        if ( entry == null ) return;
+        if ( !entry.isSerializable() ) return;
+        if (entry.isPrimary() && entry.getBackupNodes()!= null && entry.getBackupNodes().length > 0) {
+            //check to see if we need to replicate this object isDirty()||complete || isAccessReplicate()
+            ReplicatedMapEntry rentry = null;
+            if (entry.getValue() instanceof ReplicatedMapEntry) rentry = (ReplicatedMapEntry)entry.getValue();
+            boolean isDirty = rentry != null && rentry.isDirty();
+            boolean isAccess = rentry != null && rentry.isAccessReplicate();
+            boolean repl = complete || isDirty || isAccess;
+
+            if (!repl) {
+                if ( log.isTraceEnabled() )
+                    log.trace("Not replicating:"+key+", no change made");
+
+                return;
+            }
+            //check to see if the message is diffable
+            MapMessage msg = null;
+            if (rentry != null && rentry.isDiffable() && (isDirty || complete)) {
+                rentry.lock();
+                try {
+                    //construct a diff message
+                    msg = new MapMessage(mapContextName, getReplicateMessageType(),
+                                         true, (Serializable) entry.getKey(), null,
+                                         rentry.getDiff(),
+                                         entry.getPrimary(),
+                                         entry.getBackupNodes());
+                    rentry.resetDiff();
+                } catch (IOException x) {
+                    log.error(sm.getString("abstractReplicatedMap.unable.diffObject"), x);
+                } finally {
+                    rentry.unlock();
+                }
+            }
+            if (msg == null && complete) {
+                //construct a complete
+                msg = new MapMessage(mapContextName, getReplicateMessageType(),
+                                     false, (Serializable) entry.getKey(),
+                                     (Serializable) entry.getValue(),
+                                     null, entry.getPrimary(),entry.getBackupNodes());
+            }
+            if (msg == null) {
+                //construct a access message
+                msg = new MapMessage(mapContextName, MapMessage.MSG_ACCESS,
+                        false, (Serializable) entry.getKey(), null, null, entry.getPrimary(),
+                        entry.getBackupNodes());
+            }
+            try {
+                if ( channel!=null && entry.getBackupNodes()!= null && entry.getBackupNodes().length > 0 ) {
+                    if (rentry != null) rentry.setLastTimeReplicated(System.currentTimeMillis());
+                    channel.send(entry.getBackupNodes(), msg, channelSendOptions);
+                }
+            } catch (ChannelException x) {
+                log.error(sm.getString("abstractReplicatedMap.unable.replicate"), x);
+            }
+        } //end if
+
+    }
+
+
+    /**
+     * This can be invoked by a periodic thread to replicate out any changes.
+     * For maps that don't store objects that implement ReplicatedMapEntry, this
+     * method should be used infrequently to avoid large amounts of data transfer
+     * @param complete boolean
+     */
+    public void replicate(boolean complete) {
+        Iterator<Map.Entry<K,MapEntry<K,V>>> i = innerMap.entrySet().iterator();
+        while (i.hasNext()) {
+            Map.Entry<?,?> e = i.next();
+            replicate(e.getKey(), complete);
+        } //while
+
+    }
+-----CSCI578-----
+
+
+    /**
+     * Resets the current diff state and resets the dirty flag
+     */
+    public void resetDiff();
+-----CSCI578-----
+
+
+    /**
+     * If this returns true, to replicate that an object has been accessed
+     * @return boolean
+     */
+    public boolean isAccessReplicate();
+-----CSCI578-----
+
+
+    /**
+     * Has the object changed since last replication
+     * and is not in a locked state
+     * @return boolean
+     */
+    public boolean isDirty();
+-----CSCI578-----
+
+
+    protected abstract int getReplicateMessageType();
+-----CSCI578-----
+
+
+    /**
+     * If this returns true, the map will extract the diff using getDiff()
+     * Otherwise it will serialize the entire object.
+     * @return boolean
+     */
+    public boolean isDiffable();
+
+
+    /**
+     * Returns a diff and sets the dirty map to false
+     * @return Serialized diff data
+     * @throws IOException IO error serializing
+     */
+    public byte[] getDiff() throws IOException;
+-----CSCI578-----
+
+
+    /**
+     * If this returns true, the map will extract the diff using getDiff()
+     * Otherwise it will serialize the entire object.
+     * @return boolean
+     */
+    public boolean isDiffable();
+-----CSCI578-----
+
+
+    /**
+     * Lock during serialization
+     */
+    public void lock();
+
+
+    /**
+     * Unlock after serialization
+     */
+    public void unlock();
+-----CSCI578-----
+
+
+    /**
+     * Unlock after serialization
+     */
+    public void unlock();

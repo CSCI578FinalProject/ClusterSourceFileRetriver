@@ -1,0 +1,76 @@
+5
+
+
+    protected Pattern getSessionAttributeNamePattern() {
+        return sessionAttributeNamePattern;
+    }
+    
+    
+    /**
+     * {@inheritDoc}
+     * <p>
+     * This implementation excludes session attributes from distribution if the:
+     * <ul>
+     * <li>attribute name matches {@link #getSessionAttributeNameFilter()}</li>
+     * </ul>
+     */
+    public boolean willAttributeDistribute(String name, Object value) {
+        Pattern sessionAttributeNamePattern = getSessionAttributeNamePattern();
+        if (sessionAttributeNamePattern != null) {
+            if (!sessionAttributeNamePattern.matcher(name).matches()) {
+                if (getWarnOnSessionAttributeFilterFailure() || log.isDebugEnabled()) {
+                    String msg = sm.getString("managerBase.sessionAttributeNameFilter",
+                            name, sessionAttributeNamePattern);
+                    if (getWarnOnSessionAttributeFilterFailure()) {
+                        log.warn(msg);
+                    } else {
+                        log.debug(msg);
+                    }
+                }
+                return false;
+            }
+        }
+
+        Pattern sessionAttributeValueClassNamePattern = getSessionAttributeValueClassNamePattern();
+        if (value != null && sessionAttributeValueClassNamePattern != null) {
+            if (!sessionAttributeValueClassNamePattern.matcher(
+                    value.getClass().getName()).matches()) {
+                if (getWarnOnSessionAttributeFilterFailure() || log.isDebugEnabled()) {
+                    String msg = sm.getString("managerBase.sessionAttributeValueClassNameFilter",
+                            name, value.getClass().getName(), sessionAttributeNamePattern);
+                    if (getWarnOnSessionAttributeFilterFailure()) {
+                        log.warn(msg);
+                    } else {
+                        log.debug(msg);
+                    }
+                }
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+
+    /**
+     * Should a warn level log message be generated if a session attribute is
+     * not persisted / replicated / restored.
+     *
+     * @return {@code true} if a warn level log message should be generated
+     */
+    public boolean getWarnOnSessionAttributeFilterFailure() {
+        return warnOnSessionAttributeFilterFailure;
+    }
+
+
+    /**
+     * Provides {@link #getSessionAttributeValueClassNameFilter()} as a
+     * pre-compiled regular expression pattern.
+     *
+     * @return The pre-compiled pattern used to filter session attributes based
+     *         on the implementation class name of the value. {@code null} means
+     *         no filter is applied.
+     */
+    protected Pattern getSessionAttributeValueClassNamePattern() {
+        return sessionAttributeValueClassNamePattern;
+    }

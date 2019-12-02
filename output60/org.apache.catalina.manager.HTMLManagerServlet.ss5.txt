@@ -1,0 +1,192 @@
+7
+-----CSCI578-----
+
+
+    /**
+     * Stop the web application at the specified context path.
+     *
+     * @see ManagerServlet#stop(PrintWriter, String)
+     *
+     * @param path Context path of the application to be stopped
+     * @return message String
+     */
+    protected String stop(String path) {
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.stop(printWriter, path);
+
+        return stringWriter.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Start the web application at the specified context path.
+     *
+     * @see ManagerServlet#start(PrintWriter, String)
+     *
+     * @param path Context path of the application to be started
+     * @return message String
+     */
+    public String start(String path) {
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.start(printWriter, path);
+
+        return stringWriter.toString();
+    }
+-----CSCI578-----
+
+    // --------------------------------------------------------- Public Methods
+
+    /**
+     * Process a GET request for the specified resource.
+     *
+     * @param request The servlet request we are processing
+     * @param response The servlet response we are creating
+     *
+     * @exception IOException if an input/output error occurs
+     * @exception ServletException if a servlet-specified error occurs
+     */
+    public void doGet(HttpServletRequest request,
+                      HttpServletResponse response)
+        throws IOException, ServletException {
+
+        // Identify the request parameters that we need
+        String command = request.getPathInfo();
+
+        String path = request.getParameter("path");
+        String deployPath = request.getParameter("deployPath");
+        String deployConfig = request.getParameter("deployConfig");
+        String deployWar = request.getParameter("deployWar");
+
+        // Prepare our output writer to generate the response message
+        response.setContentType("text/html; charset=" + Constants.CHARSET);
+
+        String message = "";
+        // Process the requested command
+        if (command == null || command.equals("/")) {
+        } else if (command.equals("/deploy")) {
+            message = deployInternal(deployConfig, deployPath, deployWar);
+        } else if (command.equals("/list")) {
+        } else if (command.equals("/reload")) {
+            message = reload(path);
+        } else if (command.equals("/undeploy")) {
+            message = undeploy(path);
+        } else if (command.equals("/expire")) {
+            message = expireSessions(path, request);
+        } else if (command.equals("/sessions")) {
+            try {
+                doSessions(path, request, response);
+                return;
+            } catch (Exception e) {
+                log("HTMLManagerServlet.sessions[" + path + "]", e);
+                message = sm.getString("managerServlet.exception",
+                        e.toString());
+            }
+        } else if (command.equals("/start")) {
+            message = start(path);
+        } else if (command.equals("/stop")) {
+            message = stop(path);
+        } else if (command.equals("/findleaks")) {
+            message = findleaks();
+        } else {
+            message =
+                sm.getString("managerServlet.unknownCommand", command);
+        }
+
+        list(request, response, message);
+    }
+-----CSCI578-----
+
+
+    /**
+     * Deploy an application for the specified path from the specified
+     * web application archive.
+     *
+     * @param config URL of the context configuration file to be deployed
+     * @param path Context path of the application to be deployed
+     * @param war URL of the web application archive to be deployed
+     * @return message String
+     */
+    protected String deployInternal(String config, String path, String war) {
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.deploy(printWriter, config, path, war, false);
+
+        return stringWriter.toString();
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Find potential memory leaks caused by web application reload.
+     *
+     * @see ManagerServlet#findleaks(PrintWriter) 
+     *
+     * @return message String
+     */
+    protected String findleaks() {
+
+        StringBuilder msg = new StringBuilder();
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.findleaks(printWriter);
+
+        if (stringWriter.getBuffer().length() > 0) {
+            msg.append(sm.getString("htmlManagerServlet.findleaksList"));
+            msg.append(stringWriter.toString());
+        } else {
+            msg.append(sm.getString("htmlManagerServlet.findleaksNone"));
+        }
+
+        return msg.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Reload the web application at the specified context path.
+     *
+     * @see ManagerServlet#reload(PrintWriter, String)
+     *
+     * @param path Context path of the application to be restarted
+     * @return message String
+     */
+    protected String reload(String path) {
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.reload(printWriter, path);
+
+        return stringWriter.toString();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Undeploy the web application at the specified context path.
+     *
+     * @see ManagerServlet#undeploy(PrintWriter, String)
+     *
+     * @param path Context path of the application to be undeployd
+     * @return message String
+     */
+    protected String undeploy(String path) {
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter printWriter = new PrintWriter(stringWriter);
+
+        super.undeploy(printWriter, path);
+
+        return stringWriter.toString();
+    }

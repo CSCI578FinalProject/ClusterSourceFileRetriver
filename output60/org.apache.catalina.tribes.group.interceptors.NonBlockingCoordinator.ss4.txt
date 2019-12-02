@@ -1,0 +1,85 @@
+11
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    public ChannelData createData(CoordinationMessage msg, MemberImpl local) {
+        msg.write();
+        ChannelData data = new ChannelData(true);
+        data.setAddress(local);
+        data.setMessage(msg.getBuffer());
+        data.setOptions(Channel.SEND_OPTIONS_USE_ACK);
+        data.setTimestamp(System.currentTimeMillis());
+        return data;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    public void reset() {
+        bufSize = 0;
+    }
+-----CSCI578-----
+
+    
+    
+
+    public synchronized XByteBuffer getBuffer(int minSize, boolean discard) {
+        XByteBuffer buffer = (XByteBuffer)(queue.size()>0?queue.remove(0):null);
+        if ( buffer != null ) addAndGet(-buffer.getCapacity());
+        if ( buffer == null ) buffer = new XByteBuffer(minSize,discard);
+        else if ( buffer.getCapacity() <= minSize ) buffer.expand(minSize);
+        buffer.setDiscard(discard);
+        buffer.reset();
+        return buffer;
+    }
+-----CSCI578-----
+
+
+
+    public XByteBuffer getBuffer(int minSize, boolean discard) {
+        XByteBuffer buffer = (XByteBuffer)queue.poll();
+        if ( buffer != null ) size.addAndGet(-buffer.getCapacity());
+        if ( buffer == null ) buffer = new XByteBuffer(minSize,discard);
+        else if ( buffer.getCapacity() <= minSize ) buffer.expand(minSize);
+        buffer.setDiscard(discard);
+        buffer.reset();
+        return buffer;
+    }
+-----CSCI578-----
+
+    
+    public int getCapacity() {
+        return buf.length;
+    }
+-----CSCI578-----
+
+    
+    public synchronized int addAndGet(int val) {
+        size = size + (val);
+        return size;
+    }
+-----CSCI578-----
+
+
+    public void setDiscard(boolean discard) {
+        this.discard = discard;
+    }
+-----CSCI578-----
+
+
+    public synchronized void returnBuffer(XByteBuffer buffer) {
+        if ( (size + buffer.getCapacity()) <= maxSize ) {
+            addAndGet(buffer.getCapacity());
+            queue.add(buffer);
+        }
+    }
+-----CSCI578-----
+
+
+    public void returnBuffer(XByteBuffer buffer) {
+        if ( (size.get() + buffer.getCapacity()) <= maxSize ) {
+            size.addAndGet(buffer.getCapacity());
+            queue.offer(buffer);
+        }
+    }

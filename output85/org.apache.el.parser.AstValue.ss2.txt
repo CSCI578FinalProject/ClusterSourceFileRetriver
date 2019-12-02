@@ -1,0 +1,532 @@
+38
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private final Target getTarget(EvaluationContext ctx) throws ELException {
+        // evaluate expr-a to value-a
+        Object base = this.children[0].getValue(ctx);
+
+        // if our base is null (we know there are more properties to evaluate)
+        if (base == null) {
+            throw new PropertyNotFoundException(MessageFactory.get(
+                    "error.unreachable.base", this.children[0].getImage()));
+        }
+
+        // set up our start/end
+        Object property = null;
+        int propCount = this.jjtGetNumChildren();
+
+        int i = 1;
+        // Evaluate any properties or methods before our target
+        ELResolver resolver = ctx.getELResolver();
+        while (i < propCount) {
+            if (i + 2 < propCount &&
+                    this.children[i + 1] instanceof AstMethodParameters) {
+                // Method call not at end of expression
+                base = resolver.invoke(ctx, base,
+                        this.children[i].getValue(ctx), null,
+                        ((AstMethodParameters)
+                                this.children[i + 1]).getParameters(ctx));
+                i += 2;
+            } else if (i + 2 == propCount &&
+                    this.children[i + 1] instanceof AstMethodParameters) {
+                // Method call at end of expression
+                ctx.setPropertyResolved(false);
+                property = this.children[i].getValue(ctx);
+                i += 2;
+
+                if (property == null) {
+                    throw new PropertyNotFoundException(MessageFactory.get(
+                            "error.unreachable.property", property));
+                }
+            } else if (i + 1 < propCount) {
+                // Object with property not at end of expression
+                property = this.children[i].getValue(ctx);
+                ctx.setPropertyResolved(false);
+                base = resolver.getValue(ctx, base, property);
+                i++;
+
+            } else {
+                // Object with property at end of expression
+                ctx.setPropertyResolved(false);
+                property = this.children[i].getValue(ctx);
+                i++;
+
+                if (property == null) {
+                    throw new PropertyNotFoundException(MessageFactory.get(
+                            "error.unreachable.property", property));
+                }
+            }
+            if (base == null) {
+                throw new PropertyNotFoundException(MessageFactory.get(
+                        "error.unreachable.property", property));
+            }
+        }
+
+        Target t = new Target();
+        t.base = base;
+        t.property = property;
+        return t;
+    }
+-----CSCI578-----
+
+
+  public Object getValue(EvaluationContext ctx) throws ELException;
+-----CSCI578-----
+
+
+    @Override
+    public ELResolver getELResolver() {
+        return elContext.getELResolver();
+    }
+-----CSCI578-----
+
+
+    public Object[] getParameters(EvaluationContext ctx) {
+        ArrayList<Object> params = new ArrayList<>();
+        for (int i = 0; i < this.jjtGetNumChildren(); i++) {
+            params.add(this.jjtGetChild(i).getValue(ctx));
+        }
+        return params.toArray(new Object[params.size()]);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setPropertyResolved(boolean resolved) {
+        elContext.setPropertyResolved(resolved);
+    }
+
+
+    @Override
+    public void setPropertyResolved(Object base, Object property) {
+        elContext.setPropertyResolved(base, property);
+    }
+-----CSCI578-----
+
+
+  public String getImage();
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx) throws ELException {
+        Object value = children[1].getValue(ctx);
+
+        children[0].setValue(ctx, value);
+
+        return value;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Class<?> getType(EvaluationContext ctx) throws ELException {
+        Object value = children[1].getValue(ctx);
+
+        children[0].setValue(ctx, value);
+
+        return children[1].getType(ctx);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        return this.children[0].getValue(ctx);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        StringBuilder sb = new StringBuilder(16);
+        Object obj = null;
+        if (this.children != null) {
+            for (int i = 0; i < this.children.length; i++) {
+                obj = this.children[i].getValue(ctx);
+                if (obj != null) {
+                    sb.append(ELSupport.coerceToString(ctx, obj));
+                }
+            }
+        }
+        return sb.toString();
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        return this.children[0].getValue(ctx);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        Object obj0 = this.children[0].getValue(ctx);
+        Object obj1 = this.children[1].getValue(ctx);
+        return ELArithmetic.divide(obj0, obj1);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        return this.children[0].getValue(ctx);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        Object obj = this.children[0].getValue(ctx);
+        if (obj == null) {
+            return Boolean.TRUE;
+        } else if (obj instanceof String) {
+            return Boolean.valueOf(((String) obj).length() == 0);
+        } else if (obj instanceof Object[]) {
+            return Boolean.valueOf(((Object[]) obj).length == 0);
+        } else if (obj instanceof Collection<?>) {
+            return Boolean.valueOf(((Collection<?>) obj).isEmpty());
+        } else if (obj instanceof Map<?,?>) {
+            return Boolean.valueOf(((Map<?,?>) obj).isEmpty());
+        }
+        return Boolean.FALSE;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Class<?> getType(EvaluationContext ctx) throws ELException {
+        VariableMapper varMapper = ctx.getVariableMapper();
+        if (varMapper != null) {
+            ValueExpression expr = varMapper.resolveVariable(this.image);
+            if (expr != null) {
+                return expr.getType(ctx.getELContext());
+            }
+        }
+        ctx.setPropertyResolved(false);
+        Class<?> result = ctx.getELResolver().getType(ctx, null, this.image);
+        if (!ctx.isPropertyResolved()) {
+            throw new PropertyNotFoundException(MessageFactory.get(
+                    "error.resolver.unhandled.null", this.image));
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean isReadOnly(EvaluationContext ctx) throws ELException {
+        VariableMapper varMapper = ctx.getVariableMapper();
+        if (varMapper != null) {
+            ValueExpression expr = varMapper.resolveVariable(this.image);
+            if (expr != null) {
+                return expr.isReadOnly(ctx.getELContext());
+            }
+        }
+        ctx.setPropertyResolved(false);
+        boolean result = ctx.getELResolver().isReadOnly(ctx, null, this.image);
+        if (!ctx.isPropertyResolved()) {
+            throw new PropertyNotFoundException(MessageFactory.get(
+                    "error.resolver.unhandled.null", this.image));
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setValue(EvaluationContext ctx, Object value)
+            throws ELException {
+        VariableMapper varMapper = ctx.getVariableMapper();
+        if (varMapper != null) {
+            ValueExpression expr = varMapper.resolveVariable(this.image);
+            if (expr != null) {
+                expr.setValue(ctx.getELContext(), value);
+                return;
+            }
+        }
+        ctx.setPropertyResolved(false);
+        ctx.getELResolver().setValue(ctx, null, this.image, value);
+        if (!ctx.isPropertyResolved()) {
+            throw new PropertyNotFoundException(MessageFactory.get(
+                    "error.resolver.unhandled.null", this.image));
+        }
+    }
+-----CSCI578-----
+
+
+
+    private final MethodExpression getMethodExpression(EvaluationContext ctx)
+            throws ELException {
+        Object obj = null;
+
+        // case A: ValueExpression exists, getValue which must
+        // be a MethodExpression
+        VariableMapper varMapper = ctx.getVariableMapper();
+        ValueExpression ve = null;
+        if (varMapper != null) {
+            ve = varMapper.resolveVariable(this.image);
+            if (ve != null) {
+                obj = ve.getValue(ctx);
+            }
+        }
+
+        // case B: evaluate the identity against the ELResolver, again, must be
+        // a MethodExpression to be able to invoke
+        if (ve == null) {
+            ctx.setPropertyResolved(false);
+            obj = ctx.getELResolver().getValue(ctx, null, this.image);
+        }
+
+        // finally provide helpful hints
+        if (obj instanceof MethodExpression) {
+            return (MethodExpression) obj;
+        } else if (obj == null) {
+            throw new MethodNotFoundException("Identity '" + this.image
+                    + "' was null and was unable to invoke");
+        } else {
+            throw new ELException(
+                    "Identity '"
+                            + this.image
+                            + "' does not reference a MethodExpression instance, returned type: "
+                            + obj.getClass().getName());
+        }
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public MethodInfo getMethodInfo(EvaluationContext ctx,
+            Class<?>[] paramTypes) throws ELException {
+        return this.getMethodExpression(ctx).getMethodInfo(ctx.getELContext());
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx) throws ELException {
+        List<Object> result = new ArrayList<>();
+
+        if (children != null) {
+            for (Node child : children) {
+                result.add(child.getValue(ctx));
+            }
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx) throws ELException {
+        Map<Object,Object> result = new HashMap<>();
+
+        if (children != null) {
+            for (Node child : children) {
+                AstMapEntry mapEntry = (AstMapEntry) child;
+                Object key = mapEntry.children[0].getValue(ctx);
+                Object value = mapEntry.children[1].getValue(ctx);
+                result.put(key, value);
+            }
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx)
+            throws ELException {
+        Object obj0 = this.children[0].getValue(ctx);
+        Object obj1 = this.children[1].getValue(ctx);
+        return ELArithmetic.add(obj0, obj1);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx) throws ELException {
+
+        // Evaluate and throw away
+        children[0].getValue(ctx);
+
+        return children[1].getValue(ctx);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx) throws ELException {
+        Set<Object> result = new HashSet<>();
+
+        if (children != null) {
+            for (Node child : children) {
+                result.add(child.getValue(ctx));
+            }
+        }
+
+        return result;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Class<?> getType(EvaluationContext ctx) throws ELException {
+        Target t = getTarget(ctx);
+        ctx.setPropertyResolved(false);
+        Class<?> result = ctx.getELResolver().getType(ctx, t.base, t.property);
+        if (!ctx.isPropertyResolved()) {
+            throw new PropertyNotFoundException(MessageFactory.get(
+                    "error.resolver.unhandled", t.base, t.property));
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Object getValue(EvaluationContext ctx) throws ELException {
+        Object base = this.children[0].getValue(ctx);
+        int propCount = this.jjtGetNumChildren();
+        int i = 1;
+        Object suffix = null;
+        ELResolver resolver = ctx.getELResolver();
+        while (base != null && i < propCount) {
+            suffix = this.children[i].getValue(ctx);
+            if (i + 1 < propCount &&
+                    (this.children[i+1] instanceof AstMethodParameters)) {
+                AstMethodParameters mps =
+                    (AstMethodParameters) this.children[i+1];
+                if (base instanceof Optional && "orElseGet".equals(suffix) &&
+                        mps.jjtGetNumChildren() == 1) {
+                    Node paramFoOptional = mps.jjtGetChild(0);
+                    if (!(paramFoOptional instanceof AstLambdaExpression ||
+                            paramFoOptional instanceof LambdaExpression)) {
+                        throw new ELException(MessageFactory.get(
+                                "stream.optional.paramNotLambda", suffix));
+                    }
+                }
+                // This is a method
+                Object[] paramValues = mps.getParameters(ctx);
+                base = resolver.invoke(ctx, base, suffix,
+                        getTypesFromValues(paramValues), paramValues);
+                i+=2;
+            } else {
+                // This is a property
+                if (suffix == null) {
+                    return null;
+                }
+
+                ctx.setPropertyResolved(false);
+                base = resolver.getValue(ctx, base, suffix);
+                i++;
+            }
+        }
+        if (!ctx.isPropertyResolved()) {
+            throw new PropertyNotFoundException(MessageFactory.get(
+                    "error.resolver.unhandled", base, suffix));
+        }
+        return base;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public boolean isReadOnly(EvaluationContext ctx) throws ELException {
+        Target t = getTarget(ctx);
+        ctx.setPropertyResolved(false);
+        boolean result =
+            ctx.getELResolver().isReadOnly(ctx, t.base, t.property);
+        if (!ctx.isPropertyResolved()) {
+            throw new PropertyNotFoundException(MessageFactory.get(
+                    "error.resolver.unhandled", t.base, t.property));
+        }
+        return result;
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setValue(EvaluationContext ctx, Object value)
+            throws ELException {
+        Target t = getTarget(ctx);
+        ctx.setPropertyResolved(false);
+        ELResolver resolver = ctx.getELResolver();
+
+        // coerce to the expected type
+        Class<?> targetClass = resolver.getType(ctx, t.base, t.property);
+        resolver.setValue(ctx, t.base, t.property,
+                ELSupport.coerceToType(ctx, value, targetClass));
+        if (!ctx.isPropertyResolved()) {
+            throw new PropertyNotFoundException(MessageFactory.get(
+                    "error.resolver.unhandled", t.base, t.property));
+        }
+    }
+-----CSCI578-----
+
+  public Class<?> getType(EvaluationContext ctx) throws ELException;
+-----CSCI578-----
+
+  public void setValue(EvaluationContext ctx, Object value) throws ELException;
+-----CSCI578-----
+
+
+    @Override
+    public Class<?> getType(EvaluationContext ctx)
+            throws ELException {
+        return this.children[0].getType(ctx);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setValue(EvaluationContext ctx, Object value)
+            throws ELException {
+        this.children[0].setValue(ctx, value);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public Class<?> getType(EvaluationContext ctx)
+            throws ELException {
+        return this.children[0].getType(ctx);
+    }
+-----CSCI578-----
+
+
+    @Override
+    public void setValue(EvaluationContext ctx, Object value)
+            throws ELException {
+        this.children[0].setValue(ctx, value);
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public Class<?> getType(EvaluationContext ctx) throws ELException {
+        // Evaluate and throw away
+        children[0].getType(ctx);
+
+        return children[1].getType(ctx);
+    }

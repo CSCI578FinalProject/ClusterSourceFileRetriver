@@ -1,0 +1,52 @@
+2
+
+
+    /**
+     * Return a Set containing the resource paths of resources member of the
+     * specified collection. Each path will be a String starting with
+     * a "/" character. The returned set is immutable.
+     *
+     * @param path Collection path
+     */
+    public Set getResourcePaths(String path) {
+
+        // Validate the path argument
+        if (path == null) {
+            return null;
+        }
+        if (!path.startsWith("/")) {
+            throw new IllegalArgumentException
+                (sm.getString("applicationContext.resourcePaths.iae", path));
+        }
+
+        path = RequestUtil.normalize(path);
+        if (path == null)
+            return (null);
+
+        DirContext resources = context.getResources();
+        if (resources != null) {
+            return (getResourcePathsInternal(resources, path));
+        }
+        return (null);
+
+    }
+
+
+    /**
+     * Internal implementation of getResourcesPath() logic.
+     *
+     * @param resources Directory context to search
+     * @param path Collection path
+     */
+    private Set getResourcePathsInternal(DirContext resources, String path) {
+
+        ResourceSet set = new ResourceSet();
+        try {
+            listCollectionPaths(set, resources, path);
+        } catch (NamingException e) {
+            return (null);
+        }
+        set.setLocked(true);
+        return (set);
+
+    }

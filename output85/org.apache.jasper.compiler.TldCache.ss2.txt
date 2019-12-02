@@ -1,0 +1,67 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public TaglibXml getTaglibXml(TldResourcePath tldResourcePath) throws JasperException {
+        TaglibXmlCacheEntry cacheEntry = tldResourcePathTaglibXmlMap.get(tldResourcePath);
+        long lastModified[] = getLastModified(tldResourcePath);
+        if (lastModified[0] != cacheEntry.getWebAppPathLastModified() ||
+                lastModified[1] != cacheEntry.getEntryLastModified()) {
+            synchronized (cacheEntry) {
+                if (lastModified[0] != cacheEntry.getWebAppPathLastModified() ||
+                        lastModified[1] != cacheEntry.getEntryLastModified()) {
+                    // Re-parse TLD
+                    TaglibXml updatedTaglibXml;
+                    try {
+                        updatedTaglibXml = tldParser.parse(tldResourcePath);
+                    } catch (IOException | SAXException e) {
+                        throw new JasperException(e);
+                    }
+                    cacheEntry.setTaglibXml(updatedTaglibXml);
+                    cacheEntry.setWebAppPathLastModified(lastModified[0]);
+                    cacheEntry.setEntryLastModified(lastModified[1]);
+                }
+            }
+        }
+        return cacheEntry.getTaglibXml();
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private long[] getLastModified(TldResourcePath tldResourcePath) {
+        long[] result = new long[2];
+        result[0] = -1;
+        result[1] = -1;
+        try {
+            String webappPath = tldResourcePath.getWebappPath();
+            if (webappPath != null) {
+                // webappPath will be null for JARs containing TLDs that are on
+                // the class path but not part of the web application
+                URL url = servletContext.getResource(tldResourcePath.getWebappPath());
+                URLConnection conn = url.openConnection();
+                result[0] = conn.getLastModified();
+                if ("file".equals(url.getProtocol())) {
+                    // Reading the last modified time opens an input stream so we
+                    // need to make sure it is closed again otherwise the TLD file
+                    // will be locked until GC runs.
+                    conn.getInputStream().close();
+                }
+            }
+            try (Jar jar = tldResourcePath.openJar()) {
+                if (jar != null) {
+                    result[1] = jar.getLastModified(tldResourcePath.getEntryName());
+                }
+            }
+        } catch (IOException e) {
+            // Ignore (shouldn't happen)
+        }
+        return result;
+    }

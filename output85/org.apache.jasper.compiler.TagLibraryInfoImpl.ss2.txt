@@ -1,0 +1,154 @@
+17
+-----CSCI578-----
+
+
+    public List<TagFileXml> getTagFiles() {
+        return tagFiles;
+    }
+-----CSCI578-----
+
+
+    public String getShortName() {
+        return shortName;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public ValidatorXml getValidator() {
+        return validator;
+    }
+-----CSCI578-----
+
+
+    public String getInfo() {
+        return info;
+    }
+-----CSCI578-----
+
+
+    public List<FunctionInfo> getFunctions() {
+        return functions;
+    }
+-----CSCI578-----
+
+
+    public List<TagXml> getTags() {
+        return tags;
+    }
+-----CSCI578-----
+
+
+
+    public Long getLastModified(String resource) {
+        return getLastModified(resource, tagJar);
+    }
+
+
+
+    public Long getLastModified(String resource, Jar tagJar) {
+        long result = -1;
+        URLConnection uc = null;
+        try {
+            if (tagJar != null) {
+                if (resource.startsWith("/")) {
+                    resource = resource.substring(1);
+                }
+                result = tagJar.getLastModified(resource);
+            } else {
+                URL jspUrl = getResource(resource);
+                if (jspUrl == null) {
+                    incrementRemoved();
+                    return Long.valueOf(result);
+                }
+                uc = jspUrl.openConnection();
+                if (uc instanceof JarURLConnection) {
+                    JarEntry jarEntry = ((JarURLConnection) uc).getJarEntry();
+                    if (jarEntry != null) {
+                        result = jarEntry.getTime();
+                    } else {
+                        result = uc.getLastModified();
+                    }
+                } else {
+                    result = uc.getLastModified();
+                }
+            }
+        } catch (IOException e) {
+            if (log.isDebugEnabled()) {
+                log.debug(Localizer.getMessage(
+                        "jsp.error.lastModified", getJspFile()), e);
+            }
+            result = -1;
+        } finally {
+            if (uc != null) {
+                try {
+                    uc.getInputStream().close();
+                } catch (IOException e) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(Localizer.getMessage(
+                                "jsp.error.lastModified", getJspFile()), e);
+                    }
+                    result = -1;
+                }
+            }
+        }
+        return Long.valueOf(result);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * The cache that maps URIs, resource paths and parsed TLD files for the
+     * various tag libraries 'exposed' by the web application.
+     * A tag library is 'exposed' either explicitly in
+     * web.xml or implicitly via the uri tag in the TLD
+     * of a taglib deployed in a jar file (WEB-INF/lib).
+     *
+     * @return the instance of the TldLocationsCache
+     *  for the web-application.
+     */
+    public TldCache getTldCache();
+-----CSCI578-----
+
+
+    public String getTlibVersion() {
+        return tlibVersion;
+    }
+-----CSCI578-----
+
+
+    public void addDependant(String d, Long lastModified) {
+        if (!dependants.containsKey(d) && !jspFile.equals(d))
+                dependants.put(d, lastModified);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public Jar openJar() throws IOException {
+        if (entryName == null) {
+            return null;
+        } else {
+            return JarFactory.newInstance(url);
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Returns the name of the JAR entry that contains the TLD.
+     * May be null to indicate the URL refers directly to the TLD itself.
+     *
+     * @return the name of the JAR entry that contains the TLD
+     */
+    public String getEntryName() {
+        return entryName;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public String getUri() {
+        return uri;
+    }

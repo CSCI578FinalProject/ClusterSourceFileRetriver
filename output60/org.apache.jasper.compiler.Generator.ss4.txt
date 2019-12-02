@@ -1,0 +1,594 @@
+37
+-----CSCI578-----
+
+
+    /**
+     * Generates the _jspInit() method for instantiating the tag handler pools.
+     * For tag file, _jspInit has to be invoked manually, and the ServletConfig
+     * object explicitly passed.
+     * 
+     * In JSP 2.1, we also instantiate an ExpressionFactory
+     */
+    private void generateInit() {
+
+        if (ctxt.isTagFile()) {
+            out.printil("private void _jspInit(ServletConfig config) {");
+        } else {
+            out.printil("public void _jspInit() {");
+        }
+
+        out.pushIndent();
+        if (isPoolingEnabled) {
+            for (int i = 0; i < tagHandlerPoolNames.size(); i++) {
+                out.printin(tagHandlerPoolNames.elementAt(i));
+                out.print(" = org.apache.jasper.runtime.TagHandlerPool.getTagHandlerPool(");
+                if (ctxt.isTagFile()) {
+                    out.print("config");
+                } else {
+                    out.print("getServletConfig()");
+                }
+                out.println(");");
+            }
+        }
+        
+        out.printin(VAR_EXPRESSIONFACTORY);
+        out.print(" = _jspxFactory.getJspApplicationContext(");
+        if (ctxt.isTagFile()) {
+            out.print("config");
+        } else {
+            out.print("getServletConfig()");
+        }
+        out.println(".getServletContext()).getExpressionFactory();");
+
+        out.printin(VAR_ANNOTATIONPROCESSOR);
+        out.print(" = (org.apache.AnnotationProcessor) ");
+        if (ctxt.isTagFile()) {
+            out.print("config");
+        } else {
+            out.print("getServletConfig()");
+        }
+        out.println(".getServletContext().getAttribute(org.apache.AnnotationProcessor.class.getName());");
+
+        out.popIndent();
+        out.printil("}");
+        out.println();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Declare general-purpose methods (shared by servlet and tag handler
+     * preamble generation)
+     */
+    private void genPreambleMethods() {
+        // Method used to get compile time file dependencies
+        out.printil("public Object getDependants() {");
+        out.pushIndent();
+        out.printil("return _jspx_dependants;");
+        out.popIndent();
+        out.printil("}");
+        out.println();
+        
+        generateInit();
+        generateDestroy();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Generates the _jspDestroy() method which is responsible for calling the
+     * release() method on every tag handler in any of the tag handler pools.
+     */
+    private void generateDestroy() {
+
+        out.printil("public void _jspDestroy() {");
+        out.pushIndent();
+        
+        if (isPoolingEnabled) {
+            for (int i = 0; i < tagHandlerPoolNames.size(); i++) {
+                                out.printin(tagHandlerPoolNames.elementAt(i));
+                                out.println(".release();");
+            }
+        }
+        
+        out.popIndent();
+        out.printil("}");
+        out.println();
+    }
+-----CSCI578-----
+
+
+    /**
+     * Generate preamble imports (shared by servlet and tag handler preamble
+     * generation)
+     */
+    private void genPreambleImports() {
+        @SuppressWarnings("unchecked")
+		Iterator<String> iter = pageInfo.getImports().iterator();
+        while (iter.hasNext()) {
+            out.printin("import ");
+            out.print(iter.next());
+            out.println(";");
+        }
+
+        out.println();
+    }
+-----CSCI578-----
+
+
+    public List getImports() {
+        return imports;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Generation of static initializers in preamble. For example, dependant
+     * list, el function map, prefix map. (shared by servlet and tag handler
+     * preamble generation)
+     */
+    private void genPreambleStaticInitializers() {
+        out.printil("private static final JspFactory _jspxFactory = JspFactory.getDefaultFactory();");
+        out.println();
+
+        // Static data for getDependants()
+        out.printil("private static java.util.List _jspx_dependants;");
+        out.println();
+        @SuppressWarnings("unchecked")
+		List<String> dependants = pageInfo.getDependants();
+        Iterator<String> iter = dependants.iterator();
+        if (!dependants.isEmpty()) {
+            out.printil("static {");
+            out.pushIndent();
+            out.printin("_jspx_dependants = new java.util.ArrayList(");
+            out.print("" + dependants.size());
+            out.println(");");
+            while (iter.hasNext()) {
+                out.printin("_jspx_dependants.add(\"");
+                out.print(iter.next());
+                out.println("\");");
+            }
+            out.popIndent();
+            out.printil("}");
+            out.println();
+        }
+    }
+-----CSCI578-----
+
+
+    public List getDependants() {
+        return dependants;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Generates declarations. This includes "info" of the page directive, and
+     * scriptlet declarations.
+     */
+    private void generateDeclarations(Node.Nodes page) throws JasperException {
+
+        class DeclarationVisitor extends Node.Visitor {
+
+            private boolean getServletInfoGenerated = false;
+
+            /*
+             * Generates getServletInfo() method that returns the value of the
+             * page directive's 'info' attribute, if present.
+             * 
+             * The Validator has already ensured that if the translation unit
+             * contains more than one page directive with an 'info' attribute,
+             * their values match.
+             */
+            @Override
+			public void visit(Node.PageDirective n) throws JasperException {
+
+                if (getServletInfoGenerated) {
+                    return;
+                }
+
+                String info = n.getAttributeValue("info");
+                if (info == null)
+                    return;
+
+                getServletInfoGenerated = true;
+                out.printil("public String getServletInfo() {");
+                out.pushIndent();
+                out.printin("return ");
+                out.print(quote(info));
+                out.println(";");
+                out.popIndent();
+                out.printil("}");
+                out.println();
+            }
+
+            @Override
+			public void visit(Node.Declaration n) throws JasperException {
+                n.setBeginJavaLine(out.getJavaLine());
+                out.printMultiLn(new String(n.getText()));
+                out.println();
+                n.setEndJavaLine(out.getJavaLine());
+            }
+
+            // Custom Tags may contain declarations from tag plugins.
+            @Override
+			public void visit(Node.CustomTag n) throws JasperException {
+                if (n.useTagPlugin()) {
+                    if (n.getAtSTag() != null) {
+                        n.getAtSTag().visit(this);
+                    }
+                    visitBody(n);
+                    if (n.getAtETag() != null) {
+                        n.getAtETag().visit(this);
+                    }
+                } else {
+                    visitBody(n);
+                }
+            }
+        }
+
+        out.println();
+        page.visit(new DeclarationVisitor());
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Returns true if tag handler pooling is enabled, false otherwise.
+     */
+    public boolean isPoolingEnabled();
+-----CSCI578-----
+
+
+    public Set<String> getVarInfoNames() {
+        return varInfoNames;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Compiles list of tag handler pool names.
+     */
+    private void compileTagHandlerPoolList(Node.Nodes page)
+            throws JasperException {
+
+        class TagHandlerPoolVisitor extends Node.Visitor {
+
+            private Vector<String> names;
+
+            /*
+             * Constructor
+             * 
+             * @param v Vector of tag handler pool names to populate
+             */
+            TagHandlerPoolVisitor(Vector<String> v) {
+                names = v;
+            }
+
+            /*
+             * Gets the name of the tag handler pool for the given custom tag
+             * and adds it to the list of tag handler pool names unless it is
+             * already contained in it.
+             */
+            @Override
+			public void visit(Node.CustomTag n) throws JasperException {
+
+                if (!n.implementsSimpleTag()) {
+                    String name = createTagHandlerPoolName(n.getPrefix(), n
+                            .getLocalName(), n.getAttributes(), 
+                            n.getNamedAttributeNodes(), n.hasEmptyBody());
+                    n.setTagHandlerPoolName(name);
+                    if (!names.contains(name)) {
+                        names.add(name);
+                    }
+                }
+                visitBody(n);
+            }
+
+            /*
+             * Creates the name of the tag handler pool whose tag handlers may
+             * be (re)used to service this action.
+             * 
+             * @return The name of the tag handler pool
+             */
+            private String createTagHandlerPoolName(String prefix,
+                    String shortName, Attributes attrs, Node.Nodes namedAttrs,
+                    boolean hasEmptyBody) {
+                String poolName = null;
+
+                poolName = "_jspx_tagPool_" + prefix + "_" + shortName;
+                if (attrs != null) {
+                    String[] attrNames =
+                        new String[attrs.getLength() + namedAttrs.size()];
+                    for (int i = 0; i < attrNames.length; i++) {
+                        attrNames[i] = attrs.getQName(i);
+                    }
+                    for (int i = 0; i < namedAttrs.size(); i++) {
+                        attrNames[attrs.getLength() + i] =
+                            ((NamedAttribute) namedAttrs.getNode(i)).getQName();
+                    }
+                    Arrays.sort(attrNames, Collections.reverseOrder());
+                    if (attrNames.length > 0) {
+                        poolName = poolName + "&";
+                    }
+                    for (int i = 0; i < attrNames.length; i++) {
+                        poolName = poolName + "_" + attrNames[i];
+                    }
+                }
+                if (hasEmptyBody) {
+                    poolName = poolName + "_nobody";
+                }
+                return JspUtil.makeJavaIdentifier(poolName);
+            }
+        }
+
+        page.visit(new TagHandlerPoolVisitor(tagHandlerPoolNames));
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Prints the given string.
+     *
+     * If the string spans multiple lines, the line count will be adjusted
+     * accordingly.
+     */
+    public void printMultiLn(String s) {
+        int index = 0;
+
+        // look for hidden newlines inside strings
+        while ((index=s.indexOf('\n',index)) > -1 ) {
+            javaLine++;
+            index++;
+        }
+
+	writer.print(s);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    private void declareTemporaryScriptingVars(Node.Nodes page)
+            throws JasperException {
+
+        class ScriptingVarVisitor extends Node.Visitor {
+
+            private Vector<String> vars;
+
+            ScriptingVarVisitor() {
+                vars = new Vector<String>();
+            }
+
+            @Override
+			public void visit(Node.CustomTag n) throws JasperException {
+                // XXX - Actually there is no need to declare those
+                // "_jspx_" + varName + "_" + nestingLevel variables when we are
+                // inside a JspFragment.
+
+                if (n.getCustomNestingLevel() > 0) {
+                    TagVariableInfo[] tagVarInfos = n.getTagVariableInfos();
+                    VariableInfo[] varInfos = n.getVariableInfos();
+
+                    if (varInfos.length > 0) {
+                        for (int i = 0; i < varInfos.length; i++) {
+                            String varName = varInfos[i].getVarName();
+                            String tmpVarName = "_jspx_" + varName + "_"
+                                    + n.getCustomNestingLevel();
+                            if (!vars.contains(tmpVarName)) {
+                                vars.add(tmpVarName);
+                                out.printin(varInfos[i].getClassName());
+                                out.print(" ");
+                                out.print(tmpVarName);
+                                out.print(" = ");
+                                out.print(null);
+                                out.println(";");
+                            }
+                        }
+                    } else {
+                        for (int i = 0; i < tagVarInfos.length; i++) {
+                            String varName = tagVarInfos[i].getNameGiven();
+                            if (varName == null) {
+                                varName = n.getTagData().getAttributeString(
+                                        tagVarInfos[i].getNameFromAttribute());
+                            } else if (tagVarInfos[i].getNameFromAttribute() != null) {
+                                // alias
+                                continue;
+                            }
+                            String tmpVarName = "_jspx_" + varName + "_"
+                                    + n.getCustomNestingLevel();
+                            if (!vars.contains(tmpVarName)) {
+                                vars.add(tmpVarName);
+                                out.printin(tagVarInfos[i].getClassName());
+                                out.print(" ");
+                                out.print(tmpVarName);
+                                out.print(" = ");
+                                out.print(null);
+                                out.println(";");
+                            }
+                        }
+                    }
+                }
+
+                visitBody(n);
+            }
+        }
+
+        page.visit(new ScriptingVarVisitor());
+    }
+-----CSCI578-----
+
+
+    public boolean hasJspRoot() {
+        return hasJspRoot;
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public boolean hasDynamicAttributes() {
+        return dynamicAttrsMapName != null;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    // -------------------- Formatting --------------------
+
+    public void pushIndent() {
+	virtual_indent += TAB_WIDTH;
+	if (virtual_indent >= 0 && virtual_indent <= SPACES.length())
+	    indent = virtual_indent;
+    }
+-----CSCI578-----
+
+
+    public void popIndent() {
+	virtual_indent -= TAB_WIDTH;
+	if (virtual_indent >= 0 && virtual_indent <= SPACES.length())
+	    indent = virtual_indent;
+    }
+-----CSCI578-----
+
+
+    public boolean isErrorPage() {
+        return isErrorPage;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Is generation of X-Powered-By response header enabled/disabled?
+     */
+    public boolean isXpoweredBy();
+-----CSCI578-----
+
+
+    public boolean isThreadSafe() {
+        return isThreadSafe;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Generates the beginning of the static portion of the servlet.
+     */
+    private void generatePreamble(Node.Nodes page) throws JasperException {
+
+        String servletPackageName = ctxt.getServletPackageName();
+        String servletClassName = ctxt.getServletClassName();
+        String serviceMethodName = Constants.SERVICE_METHOD_NAME;
+
+        // First the package name:
+        genPreamblePackage(servletPackageName);
+
+        // Generate imports
+        genPreambleImports();
+
+        // Generate class declaration
+        out.printin("public final class ");
+        out.print(servletClassName);
+        out.print(" extends ");
+        out.println(pageInfo.getExtends());
+        out.printin("    implements org.apache.jasper.runtime.JspSourceDependent");
+        if (!pageInfo.isThreadSafe()) {
+            out.println(",");
+            out.printin("                 SingleThreadModel");
+        }
+        out.println(" {");
+        out.pushIndent();
+
+        // Class body begins here
+        generateDeclarations(page);
+
+        // Static initializations here
+        genPreambleStaticInitializers();
+
+        // Class variable declarations
+        genPreambleClassVariableDeclarations();
+
+        // Constructor
+        // generateConstructor(className);
+
+        // Methods here
+        genPreambleMethods();
+
+        // Now the service method
+        out.printin("public void ");
+        out.print(serviceMethodName);
+        out.println("(HttpServletRequest request, HttpServletResponse response)");
+        out.println("        throws java.io.IOException, ServletException {");
+
+        out.pushIndent();
+        out.println();
+
+        // Local variable declarations
+        out.printil("PageContext pageContext = null;");
+
+        if (pageInfo.isSession())
+            out.printil("HttpSession session = null;");
+
+        if (pageInfo.isErrorPage()) {
+            out.printil("Throwable exception = org.apache.jasper.runtime.JspRuntimeLibrary.getThrowable(request);");
+            out.printil("if (exception != null) {");
+            out.pushIndent();
+            out.printil("response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);");
+            out.popIndent();
+            out.printil("}");
+        }
+
+        out.printil("ServletContext application = null;");
+        out.printil("ServletConfig config = null;");
+        out.printil("JspWriter out = null;");
+        out.printil("Object page = this;");
+
+        out.printil("JspWriter _jspx_out = null;");
+        out.printil("PageContext _jspx_page_context = null;");
+        out.println();
+
+        declareTemporaryScriptingVars(page);
+        out.println();
+
+        out.printil("try {");
+        out.pushIndent();
+
+        out.printin("response.setContentType(");
+        out.print(quote(pageInfo.getContentType()));
+        out.println(");");
+
+        if (ctxt.getOptions().isXpoweredBy()) {
+            out.printil("response.addHeader(\"X-Powered-By\", \"JSP/2.1\");");
+        }
+
+        out
+                .printil("pageContext = _jspxFactory.getPageContext(this, request, response,");
+        out.printin("\t\t\t");
+        out.print(quote(pageInfo.getErrorPage()));
+        out.print(", " + pageInfo.isSession());
+        out.print(", " + pageInfo.getBuffer());
+        out.print(", " + pageInfo.isAutoFlush());
+        out.println(");");
+        out.printil("_jspx_page_context = pageContext;");
+
+        out.printil("application = pageContext.getServletContext();");
+        out.printil("config = pageContext.getServletConfig();");
+
+        if (pageInfo.isSession())
+            out.printil("session = pageContext.getSession();");
+        out.printil("out = pageContext.getOut();");
+        out.printil("_jspx_out = out;");
+        out.println();
+    }

@@ -1,0 +1,62 @@
+2
+-----CSCI578-----
+
+
+
+    /**
+     * Set the entropy increaser value.
+     *
+     * @param entropy The new entropy increaser value
+     */
+    public void setEntropy(String entropy) {
+
+        String oldEntropy = entropy;
+        this.entropy = entropy;
+        support.firePropertyChange("entropy", oldEntropy, this.entropy);
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the entropy increaser value, or compute a semi-useful value
+     * if this String has not yet been set.
+     */
+    public String getEntropy() {
+
+        // Calculate a semi-useful value if this has not been set
+        if (this.entropy == null) {
+            // Use APR to get a crypto secure entropy value
+            byte[] result = new byte[32];
+            boolean apr = false;
+            try {
+                String methodName = "random";
+                Class<?> paramTypes[] = new Class[2];
+                paramTypes[0] = result.getClass();
+                paramTypes[1] = int.class;
+                Object paramValues[] = new Object[2];
+                paramValues[0] = result;
+                paramValues[1] = new Integer(32);
+                Method method = Class.forName("org.apache.tomcat.jni.OS")
+                    .getMethod(methodName, paramTypes);
+                method.invoke(null, paramValues);
+                apr = true;
+            } catch (Throwable t) {
+                // Ignore
+            }
+            if (apr) {
+                try {
+                    setEntropy(new String(result, "ISO-8859-1"));
+                } catch (UnsupportedEncodingException ux) {
+                    // ISO-8859-1 should always be supported
+                    throw new Error(ux);
+                }
+            } else {
+                setEntropy(this.toString());
+            }
+        }
+
+        return (this.entropy);
+
+    }

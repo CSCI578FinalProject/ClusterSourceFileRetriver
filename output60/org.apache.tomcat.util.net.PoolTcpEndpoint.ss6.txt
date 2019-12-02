@@ -1,0 +1,129 @@
+15
+-----CSCI578-----
+
+
+    public void stopEndpoint() {
+        if (running) {
+            if (lf) {
+                tp.shutdown();
+            }
+            running = false;
+            if (serverSocket != null) {
+                closeServerSocket();
+            }
+            if (!lf) {
+                threadStop();
+            }
+            initialized=false ;
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Stop the background processing thread.
+     */
+    private void threadStop() {
+        thread = null;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Stop the thread pool
+     */
+    public synchronized void shutdown() {
+        if(!stopThePool) {
+            stopThePool = true;
+            if (monitor != null) {
+                monitor.terminate();
+                monitor = null;
+            }
+            for(int i = 0; i < currentThreadCount - currentThreadsBusy; i++) {
+                try {
+                    pool[i].terminate();
+                } catch(Throwable t) {
+                    /*
+		     * Do nothing... The show must go on, we are shutting
+		     * down the pool and nothing should stop that.
+		     */
+		    log.error("Ignored exception while shutting down thread pool", t);
+                }
+            }
+            currentThreadsBusy = currentThreadCount = 0;
+            pool = null;
+            notifyAll();
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    public void startEndpoint() throws IOException, InstantiationException {
+        if (!initialized) {
+            initEndpoint();
+        }
+        if (lf) {
+            tp.start();
+        }
+        running = true;
+        paused = false;
+        if (lf) {
+            listener = new LeaderFollowerWorkerThread(this);
+            tp.runIt(listener);
+        } else {
+            maxThreads = getMaxThreads();
+            threadStart();
+        }
+    }
+-----CSCI578-----
+
+
+    public int getMaxThreads() {
+        return tp.getMaxThreads();
+    }
+-----CSCI578-----
+    
+    
+    //
+    // You may wonder what you see here ... basically I am trying
+    // to maintain a stack of threads. This way locality in time
+    // is kept and there is a better chance to find residues of the
+    // thread in memory next time it runs.
+    //
+
+    /**
+     * Executes a given Runnable on a thread in the pool, block if needed.
+     */
+    public void runIt(ThreadPoolRunnable r) {
+        if(null == r) {
+            throw new NullPointerException();
+        }
+
+        ControlRunnable c = findControlRunnable();
+        c.runIt(r);
+    }
+-----CSCI578-----
+
+
+    public int getMaxThreads() {
+        return maxThreads;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    public int getMaxThreads() {
+        return tp.getMaxThreads();   
+    }
+-----CSCI578-----
+
+
+    public int getMaxThreads() {
+        return tp.getMaxThreads();   
+    }

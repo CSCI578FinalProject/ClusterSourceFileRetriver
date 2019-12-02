@@ -1,0 +1,288 @@
+12
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Start this host.
+     *
+     * @exception LifecycleException if this component detects a fatal error
+     *  that prevents it from being started
+     */
+    public synchronized void start() throws LifecycleException {
+        if( started ) {
+            return;
+        }
+        if( ! initialized )
+            init();
+
+        // Look for a realm - that may have been configured earlier. 
+        // If the realm is added after context - it'll set itself.
+        if( realm == null ) {
+            ObjectName realmName=null;
+            try {
+                realmName=new ObjectName( domain + ":type=Realm,host=" + getName());
+                if( mserver.isRegistered(realmName ) ) {
+                    mserver.invoke(realmName, "init", 
+                            new Object[] {},
+                            new String[] {}
+                    );            
+                }
+            } catch( Throwable t ) {
+                log.debug("No realm for this host " + realmName);
+            }
+        }
+            
+        // Set error report valve
+        if ((errorReportValveClass != null)
+            && (!errorReportValveClass.equals(""))) {
+            try {
+                boolean found = false;
+                if(errorReportValveObjectName != null) {
+                    ObjectName[] names = 
+                        ((StandardPipeline)pipeline).getValveObjectNames();
+                    for (int i=0; !found && i<names.length; i++)
+                        if(errorReportValveObjectName.equals(names[i]))
+                            found = true ;
+                    }
+                    if(!found) {          	
+                        Valve valve = (Valve) Class.forName(errorReportValveClass)
+                        .newInstance();
+                        addValve(valve);
+                        errorReportValveObjectName = ((ValveBase)valve).getObjectName() ;
+                    }
+            } catch (Throwable t) {
+                log.error(sm.getString
+                    ("standardHost.invalidErrorReportValveClass", 
+                     errorReportValveClass), t);
+            }
+        }
+        if(log.isDebugEnabled()) {
+            if (xmlValidation)
+                log.debug(sm.getString("standardHost.validationEnabled"));
+            else
+                log.debug(sm.getString("standardHost.validationDisabled"));
+        }
+        super.start();
+
+    }
+-----CSCI578-----
+
+
+    public ObjectName[] getValveObjectNames() {
+
+    	ArrayList valveList = new ArrayList();
+        Valve current = first;
+        if (current == null) {
+        	current = basic;
+        }
+        while (current != null) {
+        	if (current instanceof ValveBase) {
+        		valveList.add(((ValveBase) current).getObjectName());
+        	}
+        	current = current.getNext();
+        }
+
+        return ((ObjectName[]) valveList.toArray(new ObjectName[0]));
+
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the next Valve in the pipeline containing this Valve, if any.
+     */
+    public Valve getNext();
+
+
+
+    /**
+     * <p>Perform request processing as required by this Valve.</p>
+     *
+     * <p>An individual Valve <b>MAY</b> perform the following actions, in
+     * the specified order:</p>
+     * <ul>
+     * <li>Examine and/or modify the properties of the specified Request and
+     *     Response.
+     * <li>Examine the properties of the specified Request, completely generate
+     *     the corresponding Response, and return control to the caller.
+     * <li>Examine the properties of the specified Request and Response, wrap
+     *     either or both of these objects to supplement their functionality,
+     *     and pass them on.
+     * <li>If the corresponding Response was not generated (and control was not
+     *     returned, call the next Valve in the pipeline (if there is one) by
+     *     executing <code>getNext().invoke()</code>.
+     * <li>Examine, but not modify, the properties of the resulting Response
+     *     (which was created by a subsequently invoked Valve or Container).
+     * </ul>
+     *
+     * <p>A Valve <b>MUST NOT</b> do any of the following things:</p>
+     * <ul>
+     * <li>Change request properties that have already been used to direct
+     *     the flow of processing control for this request (for instance,
+     *     trying to change the virtual host to which a Request should be
+     *     sent from a pipeline attached to a Host or Context in the
+     *     standard implementation).
+     * <li>Create a completed Response <strong>AND</strong> pass this
+     *     Request and Response on to the next Valve in the pipeline.
+     * <li>Consume bytes from the input stream associated with the Request,
+     *     unless it is completely generating the response, or wrapping the
+     *     request before passing it on.
+     * <li>Modify the HTTP headers included with the Response after the
+     *     <code>getNext().invoke()</code> method has returned.
+     * <li>Perform any actions on the output stream associated with the
+     *     specified Response after the <code>getNext().invoke()</code> method has
+     *     returned.
+     * </ul>
+     *
+     * @param request The servlet request to be processed
+     * @param response The servlet response to be created
+     *
+     * @exception IOException if an input/output error occurs, or is thrown
+     *  by a subsequently invoked Valve, Filter, or Servlet
+     * @exception ServletException if a servlet error occurs, or is thrown
+     *  by a subsequently invoked Valve, Filter, or Servlet
+     */
+    public void invoke(Request request, Response response)
+        throws IOException, ServletException;
+-----CSCI578-----
+
+    
+    public void init() {
+        if( initialized ) return;
+        initialized=true;
+        
+        // already registered.
+        if( getParent() == null ) {
+            try {
+                // Register with the Engine
+                ObjectName serviceName=new ObjectName(domain + 
+                                        ":type=Engine");
+
+                HostConfig deployer = new HostConfig();
+                addLifecycleListener(deployer);                
+                if( mserver.isRegistered( serviceName )) {
+                    if(log.isDebugEnabled())
+                        log.debug("Registering "+ serviceName +" with the Engine");
+                    mserver.invoke( serviceName, "addChild",
+                            new Object[] { this },
+                            new String[] { "org.apache.catalina.Container" } );
+                }
+            } catch( Exception ex ) {
+                log.error("Host registering failed!",ex);
+            }
+        }
+        
+        if( oname==null ) {
+            // not registered in JMX yet - standalone mode
+            try {
+                StandardEngine engine=(StandardEngine)parent;
+                domain=engine.getName();
+                if(log.isDebugEnabled())
+                    log.debug( "Register host " + getName() + " with domain "+ domain );
+                oname=new ObjectName(domain + ":type=Host,host=" +
+                        this.getName());
+                controller = oname;
+                Registry.getRegistry(null, null)
+                    .registerComponent(this, oname, null);
+            } catch( Throwable t ) {
+                log.error("Host registering failed!", t );
+            }
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+    
+    
+    /**
+     * Return the canonical, fully qualified, name of the virtual host
+     * this Container represents.
+     */
+    public String getName() {
+
+        return (name);
+
+    }
+-----CSCI578-----
+
+
+    public ObjectName getObjectName() {
+        return oname;
+    }
+-----CSCI578-----
+
+
+    public ObjectName[] getValveObjectNames() {
+        return ((StandardPipeline)pipeline).getValveObjectNames();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Return a String representation of this component.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer();
+        if (getParent() != null) {
+            sb.append(getParent().toString());
+            sb.append(".");
+        }
+        sb.append("StandardHost[");
+        sb.append(getName());
+        sb.append("]");
+        return (sb.toString());
+
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- JMX  --------------------
+    /**
+      * Return the MBean Names of the Valves assoicated with this Host
+      *
+      * @exception Exception if an MBean cannot be created or registered
+      */
+     public String [] getValveNames()
+         throws Exception
+    {
+         Valve [] valves = this.getValves();
+         String [] mbeanNames = new String[valves.length];
+         for (int i = 0; i < valves.length; i++) {
+             if( valves[i] == null ) continue;
+             if( ((ValveBase)valves[i]).getObjectName() == null ) continue;
+             mbeanNames[i] = ((ValveBase)valves[i]).getObjectName().toString();
+         }
+
+         return mbeanNames;
+
+     }
+-----CSCI578-----
+
+
+
+    /**
+     * Return the set of Valves in the pipeline associated with this
+     * Container, including the basic Valve (if any).  If there are no
+     * such Valves, a zero-length array is returned.
+     */
+    public Valve[] getValves() {
+
+    	ArrayList valveList = new ArrayList();
+        Valve current = first;
+        if (current == null) {
+        	current = basic;
+        }
+        while (current != null) {
+        	valveList.add(current);
+        	current = current.getNext();
+        }
+
+        return ((Valve[]) valveList.toArray(new Valve[0]));
+
+    }

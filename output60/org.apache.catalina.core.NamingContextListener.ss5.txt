@@ -1,0 +1,120 @@
+8
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Set the specified resource link in the naming context.
+     */
+    public void addResourceLink(ContextResourceLink resourceLink) {
+
+        // Create a reference to the resource.
+        Reference ref = new ResourceLinkRef
+            (resourceLink.getType(), resourceLink.getGlobal(),
+             resourceLink.getFactory(),null);
+        Iterator i = resourceLink.listProperties();
+        while (i.hasNext()) {
+            String key = i.next().toString();
+            Object val = resourceLink.getProperty(key);
+            if (val!=null) {
+                StringRefAddr refAddr = new StringRefAddr(key, val.toString());
+                ref.add(refAddr);
+            }
+        }
+
+        javax.naming.Context ctx =
+            "UserTransaction".equals(resourceLink.getName())
+            ? compCtx : envCtx;
+        try {
+            if (logger.isDebugEnabled())
+                log.debug("  Adding resource link " + resourceLink.getName());
+            createSubcontexts(envCtx, resourceLink.getName());
+            ctx.bind(resourceLink.getName(), ref);
+        } catch (NamingException e) {
+            logger.error(sm.getString("naming.bindFailed", e));
+        }
+
+        ResourceLinkFactory.registerGlobalResourceAccess(
+                getGlobalNamingContext(), resourceLink.getName(), resourceLink.getGlobal());
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    public static void registerGlobalResourceAccess(Context globalContext, String localName,
+            String globalName) {
+        validateGlobalContext(globalContext);
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        Map<String,String> registrations = globalResourceRegistrations.get(cl);
+        if (registrations == null) {
+            // Web application initialization is single threaded so this is
+            // safe.
+            registrations = new HashMap<String,String>();
+            globalResourceRegistrations.put(cl, registrations);
+        }
+        registrations.put(localName, globalName);
+    }
+
+
+
+    public static void deregisterGlobalResourceAccess(Context globalContext, String localName) {
+        validateGlobalContext(globalContext);
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        Map<String,String> registrations = globalResourceRegistrations.get(cl);
+        if (registrations != null) {
+            registrations.remove(localName);
+        }
+    }
+
+
+
+    public static void deregisterGlobalResourceAccess(Context globalContext) {
+        validateGlobalContext(globalContext);
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        globalResourceRegistrations.remove(cl);
+    }
+-----CSCI578-----
+
+
+    public String getFactory() {
+        return factory;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private static void validateGlobalContext(Context globalContext) {
+        if (ResourceLinkFactory.globalContext != null &&
+                ResourceLinkFactory.globalContext != globalContext) {
+            throw new SecurityException("Caller provided invalid global context");
+        }
+    }
+-----CSCI578-----
+    
+    
+    // --------------------------------------------------------- Public Methods
+
+
+    /**
+     * Return a String representation of this object.
+     */
+    public String toString() {
+
+        StringBuffer sb = new StringBuffer("ContextResourceLink[");
+        sb.append("name=");
+        sb.append(getName());
+        if (getType() != null) {
+            sb.append(", type=");
+            sb.append(getType());
+        }
+        if (getGlobal() != null) {
+            sb.append(", global=");
+            sb.append(getGlobal());
+        }
+        sb.append("]");
+        return (sb.toString());
+
+    }

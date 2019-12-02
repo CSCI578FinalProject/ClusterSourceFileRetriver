@@ -1,0 +1,763 @@
+43
+-----CSCI578-----
+
+
+    private int decodeRequest( Msg msg, MsgContext ep, MessageBytes tmpMB )
+        throws IOException    {
+        // FORWARD_REQUEST handler
+        Request req = checkRequest(ep);
+
+        RequestInfo rp = req.getRequestProcessor();
+        rp.setStage(Constants.STAGE_PARSE);
+        MessageBytes tmpMB2 = (MessageBytes)req.getNote(WorkerEnv.SSL_CERT_NOTE);
+        if(tmpMB2 != null) {
+            tmpMB2.recycle();
+        }
+        req.setStartTime(System.currentTimeMillis());
+        
+        // Translate the HTTP method code to a String.
+        byte methodCode = msg.getByte();
+        if (methodCode != AjpConstants.SC_M_JK_STORED) {
+            String mName=AjpConstants.methodTransArray[(int)methodCode - 1];
+            req.method().setString(mName);
+        }
+
+        msg.getBytes(req.protocol()); 
+        msg.getBytes(req.requestURI());
+
+        msg.getBytes(req.remoteAddr());
+        msg.getBytes(req.remoteHost());
+        msg.getBytes(req.localName());
+        req.setLocalPort(msg.getInt());
+
+        boolean isSSL = msg.getByte() != 0;
+        if( isSSL ) {
+            // XXX req.setSecure( true );
+            req.scheme().setString("https");
+        }
+
+        decodeHeaders( ep, msg, req, tmpMB );
+
+        decodeAttributes( ep, msg, req, tmpMB );
+
+        rp.setStage(Constants.STAGE_PREPARE);
+        MessageBytes valueMB = req.getMimeHeaders().getValue("host");
+        parseHost(valueMB, req);
+        // set cookies on request now that we have all headers
+        req.getCookies().setHeaders(req.getMimeHeaders());
+
+        // Check to see if there should be a body packet coming along
+        // immediately after
+        long cl=req.getContentLengthLong();
+        if(cl > 0) {
+            JkInputStream jkIS = ep.getInputStream();
+            jkIS.setIsReadRequired(true);
+            if(!delayInitialRead) {
+                jkIS.receive();
+            }
+        }
+    
+        if (log.isTraceEnabled()) {
+            log.trace(req.toString());
+         }
+
+        return OK;
+    }
+-----CSCI578-----
+
+        
+    private int decodeAttributes( MsgContext ep, Msg msg, Request req,
+                                  MessageBytes tmpMB) {
+        boolean moreAttr=true;
+
+        while( moreAttr ) {
+            byte attributeCode=msg.getByte();
+            if( attributeCode == AjpConstants.SC_A_ARE_DONE )
+                return 200;
+
+            /* Special case ( XXX in future API make it separate type !)
+             */
+            if( attributeCode == AjpConstants.SC_A_SSL_KEY_SIZE ) {
+                // Bug 1326: it's an Integer.
+                req.setAttribute(SSLSupport.KEY_SIZE_KEY,
+                                 new Integer( msg.getInt()));
+               //Integer.toString(msg.getInt()));
+            }
+
+            if( attributeCode == AjpConstants.SC_A_REQ_ATTRIBUTE ) {
+                // 2 strings ???...
+                msg.getBytes( tmpMB );
+                String n=tmpMB.toString();
+                msg.getBytes( tmpMB );
+                String v=tmpMB.toString();
+                /*
+                 * AJP13 misses to forward the local IP address and the
+                 * remote port. Allow the AJP connector to add this info via
+                 * private request attributes.
+                 * We will accept the forwarded data and remove it from the
+                 * public list of request attributes.
+                 */
+                if(n.equals(AjpConstants.SC_A_REQ_LOCAL_ADDR)) {
+                    req.localAddr().setString(v);
+                } else if(n.equals(AjpConstants.SC_A_REQ_REMOTE_PORT)) {
+                    try {
+                        req.setRemotePort(Integer.parseInt(v));
+                    } catch (NumberFormatException nfe) {
+                    }
+                } else {
+                    req.setAttribute(n, v );
+                    if(log.isTraceEnabled())
+                        log.trace("jk Attribute set " + n + "=" + v);
+                }
+            }
+
+
+            // 1 string attributes
+            switch(attributeCode) {
+            case AjpConstants.SC_A_CONTEXT      :
+                msg.getBytes( tmpMB );
+                // nothing
+                break;
+                
+            case AjpConstants.SC_A_SERVLET_PATH :
+                msg.getBytes( tmpMB );
+                // nothing 
+                break;
+                
+            case AjpConstants.SC_A_REMOTE_USER  :
+                if( tomcatAuthentication ) {
+                    // ignore server
+                    msg.getBytes( tmpMB );
+                } else {
+                    msg.getBytes(req.getRemoteUser());
+                }
+                break;
+                
+            case AjpConstants.SC_A_AUTH_TYPE    :
+                if( tomcatAuthentication ) {
+                    // ignore server
+                    msg.getBytes( tmpMB );
+                } else {
+                    msg.getBytes(req.getAuthType());
+                }
+                break;
+                
+            case AjpConstants.SC_A_QUERY_STRING :
+                msg.getBytes(req.queryString());
+                break;
+                
+            case AjpConstants.SC_A_JVM_ROUTE    :
+                msg.getBytes(req.instanceId());
+                break;
+                
+            case AjpConstants.SC_A_SSL_CERT     :
+                req.scheme().setString( "https" );
+                // Transform the string into certificate.
+                MessageBytes tmpMB2 = (MessageBytes)req.getNote(WorkerEnv.SSL_CERT_NOTE);
+                if(tmpMB2 == null) {
+                    tmpMB2 = MessageBytes.newInstance();
+                    req.setNote(WorkerEnv.SSL_CERT_NOTE, tmpMB2);
+                }
+                // SSL certificate extraction is costy, moved to JkCoyoteHandler
+                msg.getBytes(tmpMB2);
+                break;
+                
+            case AjpConstants.SC_A_SSL_CIPHER   :
+                req.scheme().setString( "https" );
+                msg.getBytes(tmpMB);
+                req.setAttribute(SSLSupport.CIPHER_SUITE_KEY,
+                                 tmpMB.toString());
+                break;
+                
+            case AjpConstants.SC_A_SSL_SESSION  :
+                req.scheme().setString( "https" );
+                msg.getBytes(tmpMB);
+                req.setAttribute(SSLSupport.SESSION_ID_KEY, 
+                                  tmpMB.toString());
+                break;
+                
+            case AjpConstants.SC_A_SECRET  :
+                msg.getBytes(tmpMB);
+                String secret=tmpMB.toString();
+                if(log.isTraceEnabled())
+                    log.trace("Secret: " + secret );
+                // endpoint note
+                ep.setNote( secretNote, secret );
+                break;
+                
+            case AjpConstants.SC_A_STORED_METHOD:
+                msg.getBytes(req.method()); 
+                break;
+                
+            default:
+                break; // ignore, we don't know about it - backward compat
+            }
+        }
+        return 200;
+    }
+-----CSCI578-----
+
+
+    // -------------------- Jk specific methods --------------------
+
+
+    /**
+     * Set the flag saying that the server is sending a body
+     */
+    public void setIsReadRequired(boolean irr) {
+        isReadRequired = irr;
+    }
+-----CSCI578-----
+
+    
+    private void decodeHeaders( MsgContext ep, Msg msg, Request req,
+                                MessageBytes tmpMB ) {
+        // Decode headers
+        MimeHeaders headers = req.getMimeHeaders();
+
+        // Set this every time in case limit has been changed via JMX
+        req.getMimeHeaders().setLimit(maxHeaderCount);
+
+        int hCount = msg.getInt();
+        for(int i = 0 ; i < hCount ; i++) {
+            String hName = null;
+
+            // Header names are encoded as either an integer code starting
+            // with 0xA0, or as a normal string (in which case the first
+            // two bytes are the length).
+            int isc = msg.peekInt();
+            int hId = isc & 0xFF;
+
+            MessageBytes vMB=null;
+            isc &= 0xFF00;
+            if(0xA000 == isc) {
+                msg.getInt(); // To advance the read position
+                hName = AjpConstants.headerTransArray[hId - 1];
+                vMB=headers.addValue( hName );
+            } else {
+                // reset hId -- if the header currently being read
+                // happens to be 7 or 8 bytes long, the code below
+                // will think it's the content-type header or the
+                // content-length header - SC_REQ_CONTENT_TYPE=7,
+                // SC_REQ_CONTENT_LENGTH=8 - leading to unexpected
+                // behaviour.  see bug 5861 for more information.
+                hId = -1;
+                msg.getBytes( tmpMB );
+                ByteChunk bc=tmpMB.getByteChunk();
+                vMB=headers.addValue( bc.getBuffer(),
+                                      bc.getStart(), bc.getLength() );
+            }
+
+            msg.getBytes(vMB);
+
+            if (hId == AjpConstants.SC_REQ_CONTENT_LENGTH ||
+                (hId == -1 && tmpMB.equalsIgnoreCase("Content-Length"))) {
+                // just read the content-length header, so set it
+                long cl = vMB.getLong();
+                if(cl < Integer.MAX_VALUE) 
+                    req.setContentLength( (int)cl );
+            } else if (hId == AjpConstants.SC_REQ_CONTENT_TYPE ||
+                (hId == -1 && tmpMB.equalsIgnoreCase("Content-Type"))) {
+                // just read the content-type header, so set it
+                ByteChunk bchunk = vMB.getByteChunk();
+                req.contentType().setBytes(bchunk.getBytes(),
+                                           bchunk.getOffset(),
+                                           bchunk.getLength());
+            }
+        }
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set the headers from which cookies will be pulled.
+     * This has the side effect of recycling the object.
+     *
+     * @param headers Cookies are lazy-evaluated and will extract the
+     *     information from the provided headers.
+     */
+    // [seguin] added so that an empty Cookies object could be
+    // created, have headers set, then recycled.
+    public void setHeaders(MimeHeaders headers) {
+        recycle();
+        this.headers=headers;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Read an integer from packet, and advance the read position past
+     * it.  Integers are encoded as two unsigned bytes with the
+     * high-order byte first, and, as far as I can tell, in
+     * little-endian order within each byte.  
+     */
+    public abstract int getInt();
+-----CSCI578-----
+
+
+    /**
+     * Parse host.
+     */
+    private void parseHost(MessageBytes valueMB, Request request) 
+        throws IOException {
+
+        if (valueMB == null || valueMB.isNull()) {
+            // HTTP/1.0
+            // Default is what the socket tells us. Overriden if a host is 
+            // found/parsed
+            request.setServerPort(request.getLocalPort());
+            request.serverName().duplicate(request.localName());
+            return;
+        }
+
+        ByteChunk valueBC = valueMB.getByteChunk();
+        byte[] valueB = valueBC.getBytes();
+        int valueL = valueBC.getLength();
+        int valueS = valueBC.getStart();
+        int colonPos = -1;
+        CharChunk hostNameC = (CharChunk)request.getNote(HOSTBUFFER);
+        if(hostNameC == null) {
+            hostNameC = new CharChunk(valueL);
+            request.setNote(HOSTBUFFER, hostNameC);
+        }
+        hostNameC.recycle();
+
+        boolean ipv6 = (valueB[valueS] == '[');
+        boolean bracketClosed = false;
+        for (int i = 0; i < valueL; i++) {
+            char b = (char) valueB[i + valueS];
+            hostNameC.append(b);
+            if (b == ']') {
+                bracketClosed = true;
+            } else if (b == ':') {
+                if (!ipv6 || bracketClosed) {
+                    colonPos = i;
+                    break;
+                }
+            }
+        }
+
+        if (colonPos < 0) {
+            if (request.scheme().equalsIgnoreCase("https")) {
+                // 80 - Default HTTTP port
+                request.setServerPort(443);
+            } else {
+                // 443 - Default HTTPS port
+                request.setServerPort(80);
+            }
+            request.serverName().setChars(hostNameC.getChars(), 
+                                          hostNameC.getStart(), 
+                                          hostNameC.getLength());
+        } else {
+
+            request.serverName().setChars(hostNameC.getChars(), 
+                                          hostNameC.getStart(), colonPos);
+
+            int port = 0;
+            int mult = 1;
+            for (int i = valueL - 1; i > colonPos; i--) {
+                int charValue = HexUtils.getDec(valueB[i + valueS]);
+                if (charValue == -1) {
+                    // Invalid character
+                    throw new CharConversionException("Invalid char in port: " + valueB[i + valueS]); 
+                }
+                port = port + (charValue * mult);
+                mult = 10 * mult;
+            }
+            request.setServerPort(port);
+
+        }
+
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- debug --------------------
+
+    public String toString() {
+        return "R( " + requestURI().toString() + ")";
+    }
+-----CSCI578-----
+
+
+    public JkInputStream getInputStream() {
+        return jkIS;
+    }
+-----CSCI578-----
+
+    
+    /**
+     * Resets the message bytes to an uninitialized state.
+     */
+    public void recycle() {
+        //        buff=null;
+        isSet=false; // XXX
+        start=0;
+        end=0;
+    }
+-----CSCI578-----
+
+
+
+    public MimeHeaders getMimeHeaders() {
+        return headers;
+    }
+-----CSCI578-----
+
+
+    /** Create a new named header , return the MessageBytes
+        container for the new value
+    */
+    public MessageBytes addValue( String name ) {
+         MimeHeaderField mh = createHeader();
+        mh.getName().setString(name);
+        return mh.getValue();
+    }
+
+
+    /** Create a new named header using un-translated byte[].
+        The conversion to chars can be delayed until
+        encoding is known.
+     */
+    public MessageBytes addValue(byte b[], int startN, int len)
+    {
+        MimeHeaderField mhf=createHeader();
+        mhf.getName().setBytes(b, startN, len);
+        return mhf.getValue();
+    }
+
+
+    /** Create a new named header using translated char[].
+     */
+    public MessageBytes addValue(char c[], int startN, int len)
+    {
+        MimeHeaderField mhf=createHeader();
+        mhf.getName().setChars(c, startN, len);
+        return mhf.getValue();
+    }
+-----CSCI578-----
+
+    
+    public MessageBytes method() {
+        return methodMB;
+    }
+-----CSCI578-----
+
+
+    public MessageBytes queryString() {
+        return queryMB;
+    }
+-----CSCI578-----
+
+
+    public MessageBytes requestURI() {
+        return uriMB;
+    }
+-----CSCI578-----
+
+
+
+    public final Object getNote(int pos) {
+        return notes[pos];
+    }
+-----CSCI578-----
+
+
+    // -------------------- Per-Request "notes" --------------------
+
+
+    /** 
+     * Used to store private data. Thread data could be used instead - but 
+     * if you have the req, getting/setting a note is just a array access, may
+     * be faster than ThreadLocal for very frequent operations.
+     * 
+     *  Example use: 
+     *   Jk:
+     *     HandlerRequest.HOSTBUFFER = 10 CharChunk, buffer for Host decoding
+     *     WorkerEnv: SSL_CERT_NOTE=16 - MessageBytes containing the cert
+     *                
+     *   Catalina CoyoteAdapter:
+     *      ADAPTER_NOTES = 1 - stores the HttpServletRequest object ( req/res)             
+     *      
+     *   To avoid conflicts, note in the range 0 - 8 are reserved for the 
+     *   servlet container ( catalina connector, etc ), and values in 9 - 16 
+     *   for connector use. 
+     *   
+     *   17-31 range is not allocated or used.
+     */
+    public final void setNote(int pos, Object value) {
+        notes[pos] = value;
+    }
+-----CSCI578-----
+
+
+    // -------------------- Request data --------------------
+
+
+    public MessageBytes scheme() {
+        return schemeMB;
+    }
+-----CSCI578-----
+
+    
+    public void setServerPort(int serverPort ) {
+        this.serverPort=serverPort;
+    }
+-----CSCI578-----
+
+    
+    /** 
+     * Return the buffer holding the server name, if
+     * any. Use isNull() to check if there is no value
+     * set.
+     * This is the "virtual host", derived from the
+     * Host: header.
+     */
+    public MessageBytes serverName() {
+        return serverNameMB;
+    }
+-----CSCI578-----
+
+    
+    public MessageBytes getRemoteUser() {
+        return remoteUser;
+    }
+-----CSCI578-----
+
+
+    public MessageBytes getAuthType() {
+        return authType;
+    }
+-----CSCI578-----
+
+
+    public MessageBytes localName() {
+        return localNameMB;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- Cookies --------------------
+
+
+    public Cookies getCookies() {
+        return cookies;
+    }
+-----CSCI578-----
+
+
+    public MessageBytes protocol() {
+        return protoMB;
+    }
+-----CSCI578-----
+
+    
+    public int getLocalPort(){
+        return localPort;
+    }
+-----CSCI578-----
+
+
+
+    public MessageBytes contentType() {
+        if (contentTypeMB == null)
+            contentTypeMB = headers.getValue("content-type");
+        return contentTypeMB;
+    }
+-----CSCI578-----
+
+
+
+    // --------------------------------------------------------- Static Methods
+
+    public static int getDec(int index){
+        // Fast for correct values, slower for incorrect ones
+        try {
+            return DEC[index - '0'];
+        } catch (ArrayIndexOutOfBoundsException ex) {
+            return -1;
+        }
+    }
+-----CSCI578-----
+
+
+    public void setStartTime(long startTime) {
+        this.startTime = startTime;
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Sets the content to the specified subarray of bytes.
+     *
+     * @param b the bytes
+     * @param off the start offset of the bytes
+     * @param len the length of the bytes
+     */
+    public void setBytes(byte[] b, int off, int len) {
+        byteC.setBytes( b, off, len );
+        type=T_BYTES;
+        hasStrValue=false;
+        hasHashCode=false;
+        hasIntValue=false;
+        hasLongValue=false;
+        hasDateValue=false;
+    }
+-----CSCI578-----
+
+        
+    public void setLocalPort(int port){
+        this.localPort = port;
+    }
+-----CSCI578-----
+
+
+    /**
+     * Set limit on the number of header fields.
+     */
+    public void setLimit(int limit) {
+        this.limit = limit;
+        if (limit > 0 && headers.length > limit && count < limit) {
+            // shrink header list array
+            MimeHeaderField tmp[] = new MimeHeaderField[limit];
+            System.arraycopy(headers, 0, tmp, 0, count);
+            headers = tmp;
+        }
+    }
+-----CSCI578-----
+
+        
+    public void setRemotePort(int port){
+        this.remotePort = port;
+    }
+-----CSCI578-----
+
+    // ------------------------------------------------------------- Properties
+
+
+    /**
+     * Get the instance id (or JVM route). Curently Ajp is sending it with each
+     * request. In future this should be fixed, and sent only once ( or
+     * 'negociated' at config time so both tomcat and apache share the same name.
+     * 
+     * @return the instance id
+     */
+    public MessageBytes instanceId() {
+        return instanceId;
+    }
+-----CSCI578-----
+
+
+    public abstract void getBytes(MessageBytes mb);
+
+    
+    /**
+     * Copy a chunk of bytes from the packet into an array and advance
+     * the read position past the chunk.  See appendBytes() for details
+     * on the encoding.
+     *
+     * @return The number of bytes copied.
+     */
+    public abstract int getBytes(byte dest[]);
+-----CSCI578-----
+
+
+    public void getBytes(MessageBytes mb) {
+        int length = getInt();
+        if( (length == 0xFFFF) || (length == -1) ) {
+            mb.recycle();
+            return;
+        }
+        mb.setBytes( buf, pos, length );
+        mb.getCharChunk().recycle();
+        pos += length;
+        pos++; // Skip the terminating \0
+    }
+
+    
+    /**
+     * Copy a chunk of bytes from the packet into an array and advance
+     * the read position past the chunk.  See appendBytes() for details
+     * on the encoding.
+     *
+     * @return The number of bytes copied.
+     */
+    public int getBytes(byte dest[]) {
+        int length = getInt();
+        if( length > buf.length ) {
+            // XXX Should be if(pos + length > buff.legth)?
+            log.error("getBytes() buffer overflow " + length + " " + buf.length );
+        }
+	
+        if( (length == 0xFFFF) || (length == -1) ) {
+            log.info("Null string " + length);
+            return 0;
+        }
+
+        System.arraycopy( buf, pos,  dest, 0, length );
+        pos += length;
+        pos++; // Skip terminating \0  XXX I believe this is wrong but harmless
+        return length;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    /**
+     * Register a new Request in the Request pool.
+     */
+    public void registerRequest(Request req, MsgContext ep, int count);
+-----CSCI578-----
+
+
+    /** The high level request object associated with this context
+     */
+    public final void setRequest( Request req ) {
+        this.req=req;
+        req.setInputBuffer(jkIS);
+        Response res = req.getResponse();
+        res.setOutputBuffer(jkIS);
+        res.setHook(this);
+    }
+-----CSCI578-----
+
+
+    private Request checkRequest(MsgContext ep) {
+        Request req=ep.getRequest();
+        if( req==null ) {
+            req=new Request();
+            Response res=new Response();
+            req.setResponse(res);
+            ep.setRequest( req );
+            if( registerRequests ) {
+                synchronized(lock) {
+                    ep.getSource().registerRequest(req, ep, count++);
+                }
+            }
+        }
+        return req;
+    }
+-----CSCI578-----
+
+
+
+    public void setInputBuffer(InputBuffer inputBuffer) {
+        this.inputBuffer = inputBuffer;
+    }
+-----CSCI578-----
+
+
+
+    public void setHook(ActionHook hook) {
+        this.hook = hook;
+    }
+-----CSCI578-----
+
+
+
+    public void setOutputBuffer(OutputBuffer outputBuffer) {
+        this.outputBuffer = outputBuffer;
+    }

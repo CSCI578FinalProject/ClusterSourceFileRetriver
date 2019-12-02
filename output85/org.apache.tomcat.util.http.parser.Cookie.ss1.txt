@@ -1,0 +1,262 @@
+18
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private static void logInvalidHeader(ByteBuffer bb) {
+        UserDataHelper.Mode logMode = invalidCookieLog.getNextMode();
+        if (logMode != null) {
+            String headerValue = new String(bb.array(), bb.position(), bb.limit() - bb.position(),
+                        StandardCharsets.UTF_8);
+            String message = sm.getString("cookie.invalidCookieValue", headerValue);
+            switch (logMode) {
+                case INFO_THEN_DEBUG:
+                    message += sm.getString("cookie.fallToDebug");
+                    //$FALL-THROUGH$
+                case INFO:
+                    log.info(message);
+                    break;
+                case DEBUG:
+                    log.debug(message);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    private static SkipResult skipByte(ByteBuffer bb, byte target) {
+
+        if (!bb.hasRemaining()) {
+            return SkipResult.EOF;
+        }
+        if (bb.get() == target) {
+            return SkipResult.FOUND;
+        }
+
+        bb.rewind();
+        return SkipResult.NOT_FOUND;
+    }
+-----CSCI578-----
+
+
+
+    private static void logInvalidVersion(ByteBuffer value) {
+        UserDataHelper.Mode logMode = invalidCookieVersionLog.getNextMode();
+        if (logMode != null) {
+            String version;
+            if (value == null) {
+                version = sm.getString("cookie.valueNotPresent");
+            } else {
+                version = new String(value.bytes, value.position(),
+                        value.limit() - value.position(), StandardCharsets.UTF_8);
+            }
+            String message = sm.getString("cookie.invalidCookieVersion", version);
+            switch (logMode) {
+                case INFO_THEN_DEBUG:
+                    message += sm.getString("cookie.fallToDebug");
+                    //$FALL-THROUGH$
+                case INFO:
+                    log.info(message);
+                    break;
+                case DEBUG:
+                    log.debug(message);
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Similar to readCookieValueRfc6265() but also allows a comma to terminate
+     * the value (as permitted by RFC2109).
+     */
+    private static ByteBuffer readCookieValue(ByteBuffer bb) {
+        boolean quoted = false;
+        if (bb.hasRemaining()) {
+            if (bb.get() == QUOTE_BYTE) {
+                quoted = true;
+            } else {
+                bb.rewind();
+            }
+        }
+        int start = bb.position();
+        int end = bb.limit();
+        while (bb.hasRemaining()) {
+            byte b = bb.get();
+            if (isCookieOctet[(b & 0xFF)]) {
+                // NO-OP
+            } else if (b == SEMICOLON_BYTE || b == COMMA_BYTE || b == SPACE_BYTE || b == TAB_BYTE) {
+                end = bb.position() - 1;
+                bb.position(end);
+                break;
+            } else if (quoted && b == QUOTE_BYTE) {
+                end = bb.position() - 1;
+                break;
+            } else {
+                // Invalid cookie
+                return null;
+            }
+        }
+
+        return new ByteBuffer(bb.bytes, start, end - start);
+    }
+
+
+
+    /**
+     * Similar to readCookieValue() but treats a comma as part of an invalid
+     * value.
+     */
+    private static ByteBuffer readCookieValueRfc6265(ByteBuffer bb) {
+        boolean quoted = false;
+        if (bb.hasRemaining()) {
+            if (bb.get() == QUOTE_BYTE) {
+                quoted = true;
+            } else {
+                bb.rewind();
+            }
+        }
+        int start = bb.position();
+        int end = bb.limit();
+        while (bb.hasRemaining()) {
+            byte b = bb.get();
+            if (isCookieOctet[(b & 0xFF)]) {
+                // NO-OP
+            } else if (b == SEMICOLON_BYTE || b == SPACE_BYTE || b == TAB_BYTE) {
+                end = bb.position() - 1;
+                bb.position(end);
+                break;
+            } else if (quoted && b == QUOTE_BYTE) {
+                end = bb.position() - 1;
+                break;
+            } else {
+                // Invalid cookie
+                return null;
+            }
+        }
+
+        return new ByteBuffer(bb.bytes, start, end - start);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private static SkipResult skipBytes(ByteBuffer bb, byte[] target) {
+        int mark = bb.position();
+
+        for (int i = 0; i < target.length; i++) {
+            if (!bb.hasRemaining()) {
+                bb.position(mark);
+                return SkipResult.EOF;
+            }
+            if (bb.get() != target[i]) {
+                bb.position(mark);
+                return SkipResult.NOT_FOUND;
+            }
+        }
+        return SkipResult.FOUND;
+    }
+-----CSCI578-----
+
+
+
+    private static ByteBuffer readToken(ByteBuffer bb) {
+        final int start = bb.position();
+        int end = bb.limit();
+        while (bb.hasRemaining()) {
+            if (!HttpParser.isToken(bb.get())) {
+                end = bb.position() - 1;
+                bb.position(end);
+                break;
+            }
+        }
+
+        return new ByteBuffer(bb.bytes, start, end - start);
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    private static void skipLWS(ByteBuffer bb) {
+        while(bb.hasRemaining()) {
+            byte b = bb.get();
+            if (b != TAB_BYTE && b != SPACE_BYTE) {
+                bb.rewind();
+                break;
+            }
+        }
+    }
+-----CSCI578-----
+
+
+
+    public static void parseCookie(byte[] bytes, int offset, int len,
+            ServerCookies serverCookies) {
+
+        // ByteBuffer is used throughout this parser as it allows the byte[]
+        // and position information to be easily passed between parsing methods
+        ByteBuffer bb = new ByteBuffer(bytes, offset, len);
+
+        // Using RFC6265 parsing rules, check to see if the header starts with a
+        // version marker. An RFC2109 version marker may be read using RFC6265
+        // parsing rules. If version 1, use RFC2109. Else use RFC6265.
+
+        skipLWS(bb);
+
+        // Record position in case we need to return.
+        int mark = bb.position();
+
+        SkipResult skipResult = skipBytes(bb, VERSION_BYTES);
+        if (skipResult != SkipResult.FOUND) {
+            // No need to reset position since skipConstant() will have done it
+            parseCookieRfc6265(bb, serverCookies);
+            return;
+        }
+
+        skipLWS(bb);
+
+        skipResult = skipByte(bb, EQUALS_BYTE);
+        if (skipResult != SkipResult.FOUND) {
+            // Need to reset position as skipConstant() will only have reset to
+            // position before it was called
+            bb.position(mark);
+            parseCookieRfc6265(bb, serverCookies);
+            return;
+        }
+
+        skipLWS(bb);
+
+        ByteBuffer value = readCookieValue(bb);
+        if (value != null && value.remaining() == 1) {
+            if (value.get() == (byte) 49) {
+                // $Version=1 -> RFC2109
+                skipLWS(bb);
+                byte b = bb.get();
+                if (b == SEMICOLON_BYTE || b == COMMA_BYTE) {
+                    parseCookieRfc2109(bb, serverCookies);
+                }
+                return;
+            } else {
+                // Unrecognised version.
+                // Ignore this header.
+                value.rewind();
+                logInvalidVersion(value);
+            }
+        } else {
+            // Unrecognised version.
+            // Ignore this header.
+            logInvalidVersion(value);
+        }
+    }
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----
+-----CSCI578-----

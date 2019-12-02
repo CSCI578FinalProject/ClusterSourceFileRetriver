@@ -1,0 +1,91 @@
+1
+-----CSCI578-----
+
+
+    /**
+     * Unwrap the response if we have wrapped it.
+     */
+    private void unwrapResponse(State state) {
+
+        if (state.wrapResponse == null)
+            return;
+
+        if (state.outerRequest.isAsyncStarted()) {
+            if (!state.outerRequest.getAsyncContext().hasOriginalRequestAndResponse()) {
+                return;
+            }
+        }
+
+        ServletResponse previous = null;
+        ServletResponse current = state.outerResponse;
+        while (current != null) {
+
+            // If we run into the container response we are done
+            if ((current instanceof Response)
+                || (current instanceof ResponseFacade))
+                break;
+
+            // Remove the current response if it is our wrapper
+            if (current == state.wrapResponse) {
+                ServletResponse next =
+                  ((ServletResponseWrapper) current).getResponse();
+                if (previous == null)
+                    state.outerResponse = next;
+                else
+                    ((ServletResponseWrapper) previous).setResponse(next);
+                break;
+            }
+
+            // Advance to the next response in the chain
+            previous = current;
+            current = ((ServletResponseWrapper) current).getResponse();
+
+        }
+
+    }
+
+
+
+    /**
+     * Create and return a response wrapper that has been inserted in the
+     * appropriate spot in the response chain.
+     */
+    private ServletResponse wrapResponse(State state) {
+
+        // Locate the response we should insert in front of
+        ServletResponse previous = null;
+        ServletResponse current = state.outerResponse;
+        while (current != null) {
+            if(state.hresponse == null && (current instanceof HttpServletResponse)) {
+                state.hresponse = (HttpServletResponse)current;
+                if(!state.including) // Forward only needs hresponse
+                    return null;
+            }
+            if (!(current instanceof ServletResponseWrapper))
+                break;
+            if (current instanceof ApplicationHttpResponse)
+                break;
+            if (current instanceof ApplicationResponse)
+                break;
+            previous = current;
+            current = ((ServletResponseWrapper) current).getResponse();
+        }
+
+        // Instantiate a new wrapper at this point and insert it in the chain
+        ServletResponse wrapper = null;
+        if ((current instanceof ApplicationHttpResponse) ||
+            (current instanceof Response) ||
+            (current instanceof HttpServletResponse))
+            wrapper =
+                new ApplicationHttpResponse((HttpServletResponse) current,
+                        state.including);
+        else
+            wrapper = new ApplicationResponse(current, state.including);
+        if (previous == null)
+            state.outerResponse = wrapper;
+        else
+            ((ServletResponseWrapper) previous).setResponse(wrapper);
+        state.wrapResponse = wrapper;
+        return (wrapper);
+
+    }

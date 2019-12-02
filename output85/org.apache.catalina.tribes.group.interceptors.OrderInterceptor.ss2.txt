@@ -1,0 +1,57 @@
+6
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void messageReceived(ChannelMessage msg) {
+        if ( !okToProcess(msg.getOptions()) ) {
+            super.messageReceived(msg);
+            return;
+        }
+        int msgnr = XByteBuffer.toInt(msg.getMessage().getBytesDirect(),msg.getMessage().getLength()-4);
+        msg.getMessage().trim(4);
+        MessageOrder order = new MessageOrder(msgnr,(ChannelMessage)msg.deepclone());
+        inLock.writeLock().lock();
+        try {
+            if ( processIncoming(order) ) processLeftOvers(msg.getAddress(),false);
+        } finally {
+            inLock.writeLock().unlock();
+        }
+    }
+-----CSCI578-----
+
+    protected void processLeftOvers(Member member, boolean force) {
+        MessageOrder tmp = incoming.get(member);
+        if ( force ) {
+            Counter cnt = getInCounter(member);
+            cnt.setCounter(Integer.MAX_VALUE);
+        }
+        if ( tmp!= null ) processIncoming(tmp);
+    }
+-----CSCI578-----
+
+
+    protected Counter getInCounter(Member mbr) {
+        Counter cnt = incounter.get(mbr);
+        if ( cnt == null ) {
+            cnt = new Counter();
+            cnt.inc(); //always start at 1 for incoming
+            incounter.put(mbr,cnt);
+        }
+        return cnt;
+    }
+-----CSCI578-----
+-----CSCI578-----
+
+
+    @Override
+    public void memberDisappeared(Member member) {
+        //reset counters - lock free
+        incounter.remove(member);
+        outcounter.remove(member);
+        //clear the remaining queue
+        processLeftOvers(member,true);
+        //notify upwards
+        super.memberDisappeared(member);
+    }

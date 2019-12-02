@@ -1,0 +1,130 @@
+12
+-----CSCI578-----
+
+
+    
+    // -------------------- Jk handler implementation --------------------
+    // Jk Handler mehod
+    public int invoke( Msg msg, MsgContext ep ) 
+        throws IOException {
+        if( ep.isLogTimeEnabled() ) 
+            ep.setLong( MsgContext.TIMER_PRE_REQUEST, System.currentTimeMillis());
+        
+        Request req=ep.getRequest();
+        Response res=req.getResponse();
+
+        if( log.isDebugEnabled() )
+            log.debug( "Invoke " + req + " " + res + " " + req.requestURI().toString());
+        
+        res.setNote( epNote, ep );
+        ep.setStatus( MsgContext.JK_STATUS_HEAD );
+        RequestInfo rp = req.getRequestProcessor();
+        rp.setStage(Constants.STAGE_SERVICE);
+        try {
+            adapter.service( req, res );
+        } catch( Throwable t ) {
+            ep.setStatus(MsgContext.JK_STATUS_ERROR);
+            log.info("Error servicing request " + req,t);
+        }
+        if(ep.getStatus() != MsgContext.JK_STATUS_CLOSED) {
+            res.finish();
+        }
+
+        req.updateCounters();
+        req.recycle();
+        res.recycle();
+        ep.recycle();
+        if( ep.getStatus() == MsgContext.JK_STATUS_ERROR ) {
+            return ERROR;
+        }
+        ep.setStatus( MsgContext.JK_STATUS_NEW );
+        rp.setStage(Constants.STAGE_KEEPALIVE);
+        return OK;
+    }
+-----CSCI578-----
+
+    
+    public final boolean isLogTimeEnabled() {
+        return logTime.isDebugEnabled();
+    }
+-----CSCI578-----
+
+
+    public RequestInfo getRequestProcessor() {
+        return reqProcessorMX;
+    }
+-----CSCI578-----
+
+
+
+    // -------------------- Per-Response "notes" --------------------
+
+
+    public final void setNote(int pos, Object value) {
+        notes[pos] = value;
+    }
+-----CSCI578-----
+
+
+
+    public void finish() throws IOException {
+        action(ActionCode.ACTION_CLOSE, this);
+    }
+-----CSCI578-----
+
+
+    // -------------------- Associated response --------------------
+
+    public Response getResponse() {
+        return response;
+    }
+-----CSCI578-----
+
+
+    public void setStage(int stage) {
+        this.stage = stage;
+    }
+-----CSCI578-----
+
+
+    /** 
+     * Call the service method, and notify all listeners
+     *
+     * @exception Exception if an error happens during handling of
+     *   the request. Common errors are:
+     *   <ul><li>IOException if an input/output error occurs and we are
+     *   processing an included servlet (otherwise it is swallowed and
+     *   handled by the top level error handler mechanism)
+     *       <li>ServletException if a servlet throws an exception and
+     *  we are processing an included servlet (otherwise it is swallowed
+     *  and handled by the top level error handler mechanism)
+     *  </ul>
+     *  Tomcat should be able to handle and log any other exception ( including
+     *  runtime exceptions )
+     */
+    public void service(Request req, Response res)
+            throws Exception;
+-----CSCI578-----
+
+
+    public final void setLong( int i, long l) {
+        timers[i]=l;
+    }
+-----CSCI578-----
+
+
+    public final Request getRequest() {
+        return req;
+    }
+-----CSCI578-----
+
+
+    public final void setStatus( int s ) {
+        status=s;
+    }
+-----CSCI578-----
+
+
+    public final int getStatus() {
+        return status;
+    }

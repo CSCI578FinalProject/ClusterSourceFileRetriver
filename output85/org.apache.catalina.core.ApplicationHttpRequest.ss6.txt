@@ -1,0 +1,42 @@
+2
+-----CSCI578-----
+-----CSCI578-----
+
+
+
+    /**
+     * Returns true if the request specifies a JSESSIONID that is valid within
+     * the context of this ApplicationHttpRequest, false otherwise.
+     *
+     * @return true if the request specifies a JSESSIONID that is valid within
+     * the context of this ApplicationHttpRequest, false otherwise.
+     */
+    @Override
+    public boolean isRequestedSessionIdValid() {
+
+        if (crossContext) {
+
+            String requestedSessionId = getRequestedSessionId();
+            if (requestedSessionId == null)
+                return false;
+            if (context == null)
+                return false;
+            Manager manager = context.getManager();
+            if (manager == null)
+                return false;
+            Session session = null;
+            try {
+                session = manager.findSession(requestedSessionId);
+            } catch (IOException e) {
+                // Ignore
+            }
+            if ((session != null) && session.isValid()) {
+                return true;
+            } else {
+                return false;
+            }
+
+        } else {
+            return super.isRequestedSessionIdValid();
+        }
+    }

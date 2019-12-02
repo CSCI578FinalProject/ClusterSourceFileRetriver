@@ -1,0 +1,52 @@
+5
+-----CSCI578-----
+
+    protected abstract SSLHostConfig.Type getSslConfigType();
+-----CSCI578-----
+
+
+
+    public void setConfigType(Type configType) {
+        this.configType = configType;
+        if (configType == Type.EITHER) {
+            if (configuredProperties.remove(Type.JSSE) == null) {
+                configuredProperties.remove(Type.OPENSSL);
+            }
+        } else {
+            configuredProperties.remove(configType);
+        }
+        for (Map.Entry<Type,Set<String>> entry : configuredProperties.entrySet()) {
+            for (String property : entry.getValue()) {
+                log.warn(sm.getString("sslHostConfig.mismatch",
+                        property, getHostName(), entry.getKey(), configType));
+            }
+        }
+    }
+-----CSCI578-----
+
+    public void addSslHostConfig(SSLHostConfig sslHostConfig) {
+        String key = sslHostConfig.getHostName();
+        if (key == null || key.length() == 0) {
+            throw new IllegalArgumentException(sm.getString("endpoint.noSslHostName"));
+        }
+        SSLHostConfig duplicate = sslHostConfigs.put(key, sslHostConfig);
+        if (duplicate != null) {
+            throw new IllegalArgumentException(sm.getString("endpoint.duplicateSslHostName", key));
+        }
+        sslHostConfig.setConfigType(getSslConfigType());
+    }
+-----CSCI578-----
+
+
+
+    public String getHostName() {
+        return hostName;
+    }
+-----CSCI578-----
+
+
+
+    @Override
+    public void addSslHostConfig(SSLHostConfig sslHostConfig) {
+        getEndpoint().addSslHostConfig(sslHostConfig);
+    }

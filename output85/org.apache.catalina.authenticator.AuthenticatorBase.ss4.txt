@@ -1,0 +1,167 @@
+4
+-----CSCI578-----
+
+
+    /**
+     * Associate the specified single sign on identifier with the specified
+     * Session.
+     *
+     * @param ssoId
+     *            Single sign on identifier
+     * @param session
+     *            Session to be associated
+     */
+    protected void associate(String ssoId, Session session) {
+
+        if (sso == null) {
+            return;
+        }
+        sso.associate(ssoId, session);
+
+    }
+-----CSCI578-----
+
+
+
+    private boolean authenticate(Request request, Response response,
+            ServerAuthContext serverAuthContext, MessageInfo messageInfo) throws IOException {
+
+        if (serverAuthContext == null) {
+            // No JASPIC configuration. Use the standard authenticator.
+            return authenticate(request, response);
+        } else {
+            checkForCachedAuthentication(request, response, false);
+            Subject client = new Subject();
+            AuthStatus authStatus;
+            try {
+                authStatus = serverAuthContext.validateRequest(messageInfo, client, null);
+            } catch (AuthException e) {
+                log.debug(sm.getString("authenticator.loginFail"), e);
+                return false;
+            }
+
+            request.setRequest((HttpServletRequest) messageInfo.getRequestMessage());
+            response.setResponse((HttpServletResponse) messageInfo.getResponseMessage());
+
+            if (authStatus == AuthStatus.SUCCESS) {
+                GenericPrincipal principal = getPrincipal(client);
+                if (log.isDebugEnabled()) {
+                    log.debug("Authenticated user: " + principal);
+                }
+                if (principal == null) {
+                    request.setUserPrincipal(null);
+                    request.setAuthType(null);
+                } else {
+                    request.setNote(Constants.REQ_JASPIC_SUBJECT_NOTE, client);
+                    @SuppressWarnings("rawtypes")// JASPIC API uses raw types
+                    Map map = messageInfo.getMap();
+                    if (map != null && map.containsKey("javax.servlet.http.registerSession")) {
+                        register(request, response, principal, "JASPIC", null, null, true, true);
+                    } else {
+                        register(request, response, principal, "JASPIC", null, null);
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+    }
+-----CSCI578-----
+
+
+
+    private GenericPrincipal getPrincipal(Subject subject) {
+        if (subject == null) {
+            return null;
+        }
+
+        Set<GenericPrincipal> principals = subject.getPrivateCredentials(GenericPrincipal.class);
+        if (principals.isEmpty()) {
+            return null;
+        }
+
+        return principals.iterator().next();
+    }
+-----CSCI578-----
+
+
+
+    /**
+     * Check to see if the user has already been authenticated earlier in the
+     * processing chain or if there is enough information available to
+     * authenticate the user without requiring further user interaction.
+     *
+     * @param request
+     *            The current request
+     * @param response
+     *            The current response
+     * @param useSSO
+     *            Should information available from SSO be used to attempt to
+     *            authenticate the current user?
+     *
+     * @return <code>true</code> if the user was authenticated via the cache,
+     *         otherwise <code>false</code>
+     */
+    protected boolean checkForCachedAuthentication(Request request, HttpServletResponse response, boolean useSSO) {
+
+        // Has the user already been authenticated?
+        Principal principal = request.getUserPrincipal();
+        String ssoId = (String) request.getNote(Constants.REQ_SSOID_NOTE);
+        if (principal != null) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("authenticator.check.found", principal.getName()));
+            }
+            // Associate the session with any existing SSO session. Even if
+            // useSSO is false, this will ensure coordinated session
+            // invalidation at log out.
+            if (ssoId != null) {
+                associate(ssoId, request.getSessionInternal(true));
+            }
+            return true;
+        }
+
+        // Is there an SSO session against which we can try to reauthenticate?
+        if (useSSO && ssoId != null) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("authenticator.check.sso", ssoId));
+            }
+            /*
+             * Try to reauthenticate using data cached by SSO. If this fails,
+             * either the original SSO logon was of DIGEST or SSL (which we
+             * can't reauthenticate ourselves because there is no cached
+             * username and password), or the realm denied the user's
+             * reauthentication for some reason. In either case we have to
+             * prompt the user for a logon
+             */
+            if (reauthenticateFromSSO(ssoId, request)) {
+                return true;
+            }
+        }
+
+        // Has the Connector provided a pre-authenticated Principal that now
+        // needs to be authorized?
+        if (request.getCoyoteRequest().getRemoteUserNeedsAuthorization()) {
+            String username = request.getCoyoteRequest().getRemoteUser().toString();
+            if (username != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("authenticator.check.authorize", username));
+                }
+                Principal authorized = context.getRealm().authenticate(username);
+                if (authorized == null) {
+                    // Realm doesn't recognise user. Create a user with no roles
+                    // from the authenticated user name
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("authenticator.check.authorizeFail", username));
+                    }
+                    authorized = new GenericPrincipal(username, null, null);
+                }
+                String authType = request.getAuthType();
+                if (authType == null || authType.length() == 0) {
+                    authType = getAuthMethod();
+                }
+                register(request, response, authorized, authType, username, null);
+                return true;
+            }
+        }
+        return false;
+    }

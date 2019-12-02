@@ -1,0 +1,53 @@
+4
+-----CSCI578-----
+
+
+
+    @Override
+    protected boolean flushBufferedWrite() throws IOException {
+        if (outputBuffer.hasDataToWrite()) {
+            if (outputBuffer.flushBuffer(false)) {
+                // The buffer wasn't fully flushed so re-register the
+                // socket for write. Note this does not go via the
+                // Response since the write registration state at
+                // that level should remain unchanged. Once the buffer
+                // has been emptied then the code below will call
+                // Adaptor.asyncDispatch() which will enable the
+                // Response to respond to this event.
+                outputBuffer.registerWriteInterest();
+                return true;
+            }
+        }
+        return false;
+    }
+-----CSCI578-----
+
+
+
+    public void registerWriteInterest() {
+        socketWrapper.registerWriteInterest();
+    }
+-----CSCI578-----
+
+
+
+    //------------------------------------------------------ Non-blocking writes
+
+    /**
+     * Writes any remaining buffered data.
+     *
+     * @param block     Should this method block until the buffer is empty
+     * @return  <code>true</code> if data remains in the buffer (which can only
+     *          happen in non-blocking mode) else <code>false</code>.
+     * @throws IOException Error writing data
+     */
+    protected boolean flushBuffer(boolean block) throws IOException  {
+        return socketWrapper.flush(block);
+    }
+-----CSCI578-----
+
+
+
+    public boolean hasDataToWrite() {
+        return socketWrapper.hasDataToWrite();
+    }
