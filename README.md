@@ -1,8 +1,8 @@
-# CallGraphEngine
+# ClusterSourceFileRetriver
 ## What is this repository
-This repo is a fork of https://github.com/gousiosg/java-callgraph. The original app can generate both dynamica and static call graphs given a java project in form of jars. For the sake of our final project which relies on static analysis, I modified the static call graph generation in the original app to meet our needs. Now, the app supports outputing various information that includes: 1. class members: what classes include what methods. `contains:{class_name}\*{method_name}` 2. method dependency: what methods call into what other methods and the type of that call. `M:{method_name}*({call_type})*{method_name}` 3. class dependency: what classes depend on what other classes. `C:{class_name}*{class_name}`
+This app helps retrieve the source code that corresponds to each cluster. As we know, each cluster contains as series of methods. In this app, we will create a txt file named after each cluster to contain all the source code and comments for the methods in that cluster.
 ## How?
-The static analysis code will go through each function in the jar files and establish the caller-callee relationship with the help of Apache BCEL https://commons.apache.org/proper/commons-bcel/ which is a byte code analysis library that helps ocate methods, retrieve method names, and identify method calls.
+This tool will go through all the chars and count `//`, `/*` and `*/` pairs, and `{` and `}` pairs to seperate comments and code as well as different methods. Then, it will parse the clustering results and match each method to those seperated texts.
 ## Input
 The jar files of the two target systems, Tomcat 6.0 and 8.5, are in "tomcat60" and "tomcat85" respectively.
 ## Ouput
